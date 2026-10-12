@@ -21,15 +21,21 @@ export interface Updates {
 }
 
 /**
- * Packaged Windows builds update themselves. macOS waits for signed builds (Squirrel.Mac only
- * installs updates signed by the same Developer ID), and Linux for an AppImage release.
+ * Packaged Windows builds update themselves, and Linux installs from the .deb: electron-builder
+ * writes `deb` to `<resources>/package-type` there (`linuxPackageType`), and electron-updater then
+ * installs the new .deb with `dpkg -i`, asking for the password through pkexec. Other Linux runs
+ * (an unpacked `package:dir` build) have nothing to update. macOS waits for signed builds
+ * (Squirrel.Mac only installs updates signed by the same Developer ID).
  */
 export function updatesSupported(opts: {
   packaged: boolean;
   platform: NodeJS.Platform;
   e2e: boolean;
+  linuxPackageType?: string;
 }): boolean {
-  return opts.packaged && opts.platform === 'win32' && !opts.e2e;
+  if (!opts.packaged || opts.e2e) return false;
+  if (opts.platform === 'win32') return true;
+  return opts.platform === 'linux' && opts.linuxPackageType === 'deb';
 }
 
 const FIRST_CHECK_MS = 30_000;

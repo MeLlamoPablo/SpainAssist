@@ -360,8 +360,8 @@ first and pass `--publish never`.
 
 - **Tool and targets.** electron-builder 26.17.0, pinned. macOS: dmg + zip for the host arch.
   arm64 and x64 are separate builds, with no universal app. Windows: NSIS x64, one-click and
-  per-user. Linux: AppImage x64 with `toolsets.appimage: "1.0.3"`. `.deb` waits for a
-  maintainer address: fpm requires one. Artifacts are named
+  per-user. Linux: `.deb` x64 only (D17), which updates itself through electron-updater's
+  `DebUpdater` (D19). Artifacts are named
   `SpainAssist-<os>-<arch>.<ext>`, with no version, so
   `github.com/MeLlamoPablo/SpainAssist/releases/latest/download/SpainAssist-mac-arm64.dmg`
   always points at the newest stable release. App id `es.spainassist.desktop`, product

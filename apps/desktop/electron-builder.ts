@@ -14,6 +14,7 @@
  * - Signing only happens when its environment variables are set. Without them, macOS builds are
  *   ad-hoc signed (no notarization: Gatekeeper warns once) and Windows builds are unsigned.
  * - Updates (D19): `publish` points the app at this repo's GitHub Releases (electron-updater).
+ * - Linux ships as a .deb, the only Linux target (D17).
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -132,7 +133,8 @@ const config: Configuration = {
   },
   // Where updates come from (D19): written into the app as `app-update.yml` and used for the
   // `latest*.yml` update files next to the installers. CI uploads them to the release itself
-  // (`--publish never`, .github/workflows/release.yml). Only Windows updates itself for now.
+  // (`--publish never`, .github/workflows/release.yml). Windows and the Linux .deb update
+  // themselves; macOS waits for signing.
   publish: { provider: 'github', owner: 'MeLlamoPablo', repo: 'SpainAssist' },
   mac: {
     target: ['dmg', 'zip'],
@@ -155,14 +157,20 @@ const config: Configuration = {
     target: ['nsis'],
     ...(azure ? { azureSignOptions: azure } : {}),
   },
+  // A .deb only (D17): no AppImage, snap or apt repository. Installed apps update themselves from
+  // `latest-linux.yml` (D19): electron-builder writes `package-type` (`deb`) next to
+  // `app-update.yml`, and the .deb's after-install script sets up chrome-sandbox and, on
+  // Ubuntu 24+, an AppArmor profile for it.
   linux: {
-    target: ['AppImage'],
+    target: ['deb'],
     category: 'Office',
     executableName: 'spain-assist',
     synopsis: 'Tu ayuda con los trámites en España',
+    // Published in every .deb's control file (Maintainer, Vendor): no personal address.
+    maintainer: 'Spain Assist <MeLlamoPablo@users.noreply.github.com>',
+    vendor: 'Spain Assist',
   },
-  // Static AppImage runtime: no libfuse2 needed (electron-packaging.md §6.6).
-  toolsets: { appimage: '1.0.3' },
+  deb: { packageName: 'spain-assist' },
 };
 
 export default config;

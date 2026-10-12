@@ -549,8 +549,9 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
 (`research/electron-packaging.md` §6.2–6.3). `corepack pnpm --filter @sa/desktop package`.
 
 - **Targets.** macOS dmg + zip, arm64 and x64 as separate builds (a universal app would carry two
-  copies of every native helper). Windows NSIS x64, per-user, no admin rights. Linux AppImage x64
-  with the static runtime; a `.deb` needs a maintainer contact address, so it waits. App id
+  copies of every native helper). Windows NSIS x64, per-user, no admin rights. Linux: a `.deb` x64
+  only, package `spain-assist` (no AppImage, snap or apt repository; users download it from the
+  release). Its maintainer is the repo owner's GitHub noreply address. App id
   `es.spainassist.desktop`, product name "Spain Assist". The internal name stays
   `SpainAssistant` (the name before the rename to Spain Assist), so userData and the Keychain
   item don't move.
@@ -558,7 +559,8 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
   (`@napi-rs/canvas`) for the host only, so `beforePack` refuses any other target. CI needs one
   runner per target, an Intel Mac included: `.github/workflows/release.yml` builds macOS arm64
   (`macos-15`), macOS x64 (`macos-15-intel`, GitHub's last Intel image, until August 2027) and
-  Windows x64 for each `v*` tag and publishes a GitHub Release.
+  Windows x64, plus Linux x64 (`ubuntu-24.04`), for each `v*` tag and publishes a GitHub
+  Release.
 - **sa-sidecar.** `beforePack` builds it for the target with Go (`CGO_ENABLED=0`, cross-builds
   with `--all`). `extraResources` copies it to `<resources>/vendor/`, outside the ASAR and
   executable. `sidecarBinaryPath` (`@sa/sidecar`) is the one lookup for dev and packaged
@@ -643,12 +645,17 @@ may hold the PIN, and the desktop gives it to the phone with the request.
   and writes `latest.yml` next to the Windows installer. The release workflow uploads
   `latest.yml` and the installer's blockmap (differential downloads) with the installers. The app
   needs no token.
-- **Windows only, for now** (`updatesSupported` in `apps/desktop/src/main/updates/updater.ts`:
-  packaged, `win32`, not e2e). Unsigned NSIS updates work: electron-updater checks the
+- **Windows and the Linux .deb, for now** (`updatesSupported` in
+  `apps/desktop/src/main/updates/updater.ts`: packaged, not e2e, and `win32` or Linux with
+  `<resources>/package-type` = `deb`). Unsigned NSIS updates work: electron-updater checks the
   installer's SHA-512 from `latest.yml`, and a publisher signature only once one is configured.
   macOS waits for Developer ID signing, because Squirrel.Mac refuses an update that isn't signed by
   the same identity. It then needs the arm64 and x64 `latest-mac.yml` merged into one in CI.
-  Linux waits for an AppImage release.
+  On Linux, electron-builder writes `latest-linux.yml` next to the .deb, and electron-updater's
+  `DebUpdater` downloads the new .deb and installs it on quit with `dpkg -i`, behind a pkexec
+  password prompt (sudo in a terminal without polkit). There is no apt repository: the app
+  updates itself, like on Windows. An unpacked build (`package:dir`) has no `package-type` and
+  doesn't update.
 - **Silent.** It checks 30 s after startup and every 4 hours, downloads in the background and
   installs when the app quits (`autoInstallOnAppQuit`). There's no banner. The status still
   reaches the renderer (`updates.status`, `UpdateStatus`) for the must-update screen. Stable
@@ -661,11 +668,12 @@ may hold the PIN, and the desktop gives it to the phone with the request.
 - **`must-update`.** When it's on for this version, the app shows only the must-update screen
   (`MustUpdate.tsx`), not the onboarding and not the shell. Where the app updates itself, main
   checks at once and installs the update as soon as it's downloaded, restarting the app.
-  Elsewhere (macOS, Linux), and when the update fails, the screen links to the latest
+  Elsewhere (macOS), and when the update fails, the screen links to the latest
   release. The flag fails open like every flag: if Unleash can't be reached, the app works. Always
   give it a version constraint: on its own it would block every version, the newest included.
 - **Trust.** Unsigned, whoever can publish a release on the repo can ship code to every Windows
-  install. Keep release rights limited until Windows builds are signed.
+  install, and every .deb install (Linux has no code signing; electron-updater checks only the
+  SHA-512 in `latest-linux.yml`, from the same release). Keep release rights limited.
 
 ## D20 — The DNIe CAN and PIN are typed only on the desktop (2026-10-12)
 

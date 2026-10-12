@@ -28,8 +28,8 @@ Read `SPEC.md` (product), `docs/ARCHITECTURE.md` (how it fits together) and the 
   `corepack pnpm --filter @sa/desktop package` builds them for this OS and CPU only (dmg + zip
   on macOS), and `package:dir` builds only the unpacked app. `package:mac`, `package:win` and
   `package:linux` are for CI runners of that OS. Releases: pushing a `vX.Y.Z` tag on a commit of
-  `master` runs `.github/workflows/release.yml`, which builds macOS arm64, macOS x64 and
-  Windows x64 and publishes a GitHub Release. Packaging needs Go (it builds sa-sidecar for the
+  `master` runs `.github/workflows/release.yml`, which builds macOS arm64, macOS x64,
+  Windows x64 and the Linux x64 `.deb` and publishes a GitHub Release. Packaging needs Go (it builds sa-sidecar for the
   target). Signing is env-driven, so local builds are ad-hoc signed on macOS. Output goes to
   `apps/desktop/dist/` (about 430 MB unpacked plus 330 MB of installers): delete it when done.
 - Never touch `~/.pi` or other global config. Never use real credentials. Automated tests must

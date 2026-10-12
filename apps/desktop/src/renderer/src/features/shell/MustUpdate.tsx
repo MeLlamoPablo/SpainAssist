@@ -37,8 +37,8 @@ const dict = defineDict({
 
 /**
  * Replaces the whole app when this version may no longer be used (the `must-update` flag). Where
- * the app updates itself (Windows), main downloads the update and restarts into it; elsewhere, or
- * when that fails, the user downloads it from the releases page.
+ * the app updates itself (Windows, the Linux .deb), main downloads the update and restarts into
+ * it; elsewhere, or when that fails, the user downloads it from the releases page.
  */
 export function MustUpdate() {
   const t = useT(dict);

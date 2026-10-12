@@ -1,4 +1,5 @@
 import { writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import {
@@ -343,6 +344,7 @@ async function main(): Promise<void> {
       packaged: app.isPackaged,
       platform: process.platform,
       e2e: env.e2e,
+      linuxPackageType: await linuxPackageType(),
     })
       ? await loadAutoUpdater(updatesLog)
       : undefined,
@@ -499,6 +501,18 @@ async function main(): Promise<void> {
   updates.start();
   app.on('before-quit', () => updates.stop());
   log.info('ready', { bridge: 'listening', methods: s.router.methods().length });
+}
+
+/**
+ * How a packaged Linux app was installed: electron-builder writes `deb` (or `rpm`, `pacman`) to
+ * `<resources>/package-type` for those packages, and electron-updater picks its updater from it.
+ */
+async function linuxPackageType(): Promise<string | undefined> {
+  if (process.platform !== 'linux' || !app.isPackaged) return undefined;
+  return readFile(join(process.resourcesPath, 'package-type'), 'utf8').then(
+    (type) => type.trim(),
+    () => undefined,
+  );
 }
 
 /**

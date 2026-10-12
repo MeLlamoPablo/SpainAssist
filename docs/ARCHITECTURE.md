@@ -112,8 +112,8 @@
   `dependencies`, which include the host's external imports. Agent processes run that host as
   Electron-as-Node, so the `runAsNode` fuse stays on. `sa-sidecar` sits in `<resources>/vendor/`,
   outside the ASAR. Chromium is not bundled: it downloads on first use, as described above.
-- **Updates** (D19, `apps/desktop/src/main/updates/`). Packaged Windows builds update themselves
-  silently from GitHub Releases (electron-updater) and install on quit. The `must-update` flag,
+- **Updates** (D19, `apps/desktop/src/main/updates/`). Packaged Windows builds and .deb installs
+  update themselves silently from GitHub Releases (electron-updater) and install on quit. The `must-update` flag,
   which Unleash targets by the version the app sends, replaces the whole UI with the
   must-update screen.
 

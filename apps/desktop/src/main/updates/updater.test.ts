@@ -44,9 +44,17 @@ describe('updatesSupported', () => {
     expect(updatesSupported({ packaged: true, platform: 'win32', e2e: false })).toBe(true);
     expect(updatesSupported({ packaged: false, platform: 'win32', e2e: false })).toBe(false);
     expect(updatesSupported({ packaged: true, platform: 'win32', e2e: true })).toBe(false);
-    // macOS needs signed builds first; Linux an AppImage release.
+    // macOS needs signed builds first.
     expect(updatesSupported({ packaged: true, platform: 'darwin', e2e: false })).toBe(false);
-    expect(updatesSupported({ packaged: true, platform: 'linux', e2e: false })).toBe(false);
+  });
+
+  it('is on for Linux only when installed from the .deb', () => {
+    const linux = { packaged: true, platform: 'linux', e2e: false } as const;
+    expect(updatesSupported({ ...linux, linuxPackageType: 'deb' })).toBe(true);
+    expect(updatesSupported(linux)).toBe(false);
+    expect(updatesSupported({ ...linux, linuxPackageType: 'rpm' })).toBe(false);
+    expect(updatesSupported({ ...linux, linuxPackageType: 'deb', e2e: true })).toBe(false);
+    expect(updatesSupported({ ...linux, linuxPackageType: 'deb', packaged: false })).toBe(false);
   });
 });
 

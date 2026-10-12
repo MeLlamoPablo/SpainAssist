@@ -45,10 +45,11 @@ public repository will be a copy without the encrypted files or this history.
       Signing (`SA_AZURE_SIGNING_ENDPOINT`, `_PUBLISHER`, `_ACCOUNT`, `_PROFILE` plus
       `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`) or a `.pfx`
       (`WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`). electron-builder then signs `sa-sidecar.exe`
-      too; check it with `signtool verify /pa`. Linux has no code signing: publish SHA-256
-      checksums of the AppImage. `.github/workflows/release.yml` builds macOS arm64, macOS x64
-      and Windows x64 on their own runners for every `v*` tag and publishes them, with
-      SHA256SUMS.txt, as a GitHub Release. It has no signing secrets yet, and no Linux x64 job.
+      too; check it with `signtool verify /pa`. Linux has no code signing: SHA256SUMS.txt
+      covers the .deb. `.github/workflows/release.yml` builds macOS arm64, macOS x64,
+      Windows x64 and the Linux x64 .deb on their own runners for every `v*` tag and publishes
+      them, with SHA256SUMS.txt, as a GitHub Release. It has no signing secrets yet. On Linux,
+      also check that an installed .deb updates itself (pkexec prompt on quit, D19).
       Then install the real artifact and test a certificate login
       and the graceful missing-helper behavior there. So far only the unsigned macOS arm64 app
       has been run (2026-10-11); a dev build passing proves nothing about installers.

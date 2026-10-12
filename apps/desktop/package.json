@@ -6,6 +6,7 @@
   "type": "module",
   "description": "SpainAssist desktop app (Electron + React)",
   "author": "Spain Assist",
+  "homepage": "https://github.com/MeLlamoPablo/SpainAssist",
   "main": "./out/main/index.js",
   "scripts": {
     "build:agent": "corepack pnpm --filter @sa/agent build",
