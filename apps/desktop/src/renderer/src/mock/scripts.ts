@@ -898,8 +898,8 @@ export function padronLiveScript(lang: Lang): PStep[] {
         'It can be done online with Lucía’s certificate. Her rental contract is missing; once she uploads it, I’ll apply.',
       ),
       reply: t(
-        'Ya sé cómo empadronarte: lo hago yo online con tu certificado. Solo necesito tu **contrato de alquiler**. Súbelo en **Mis datos** o adjúntalo aquí.',
-        'I know how to register you: I’ll do it online with your certificate. I just need your **rental contract**. Upload it in **My data** or attach it here.',
+        'Ya sé cómo empadronarte: lo hago yo online con tu certificado. Solo necesito tu **contrato de alquiler**. Súbelo en [tus documentos](sa:vault/documents) o adjúntalo aquí.',
+        'I know how to register you: I’ll do it online with your certificate. I just need your **rental contract**. Upload it in [your documents](sa:vault/documents) or attach it here.',
       ),
     },
   ];

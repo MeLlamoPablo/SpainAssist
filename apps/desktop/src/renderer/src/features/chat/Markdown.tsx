@@ -1,11 +1,41 @@
+import { type AppLink, parseAppLink } from '@sa/shared';
 import { memo, type ReactNode } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
+import ReactMarkdown, { type Components, defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { safeExternalUrl } from '../../lib/format';
+import { useAppStore } from '../../store/app';
+import { useProcedureStore } from '../../store/procedures';
+
+const linkClass =
+  'font-medium text-accent-text underline decoration-accent-line decoration-1 underline-offset-[3px] hover:decoration-current';
+
+function openAppLink(link: AppLink) {
+  const { navigate, focusProcedure } = useAppStore.getState();
+  if (link.kind === 'procedure') {
+    if (useProcedureStore.getState().byId[link.id]) focusProcedure(link.id);
+    else navigate({ kind: 'procedures' });
+  } else if (link.kind === 'vault') navigate({ kind: 'vault', tab: link.tab });
+  else navigate({ kind: link.kind });
+}
 
 function MdLink({ href, children }: { href?: string; children?: ReactNode }) {
+  const appLink = parseAppLink(href);
+  if (appLink) {
+    return (
+      <a
+        href={href}
+        onClick={(e) => {
+          e.preventDefault();
+          openAppLink(appLink);
+        }}
+        className={linkClass}
+      >
+        {children}
+      </a>
+    );
+  }
   const url = safeExternalUrl(href);
   if (!url) return <span>{children}</span>;
   return (
@@ -16,7 +46,7 @@ function MdLink({ href, children }: { href?: string; children?: ReactNode }) {
         e.preventDefault();
         void api.invoke('app.openExternal', url);
       }}
-      className="font-medium text-accent-text underline decoration-accent-line decoration-1 underline-offset-[3px] hover:decoration-current"
+      className={linkClass}
     >
       {children}
     </a>
@@ -34,7 +64,13 @@ const components: Components = {
     ),
 };
 
-/** Assistant markdown. Raw HTML is dropped; links open in the system browser. */
+/** Keeps app links (`sa:…`), which the default transform drops as an unknown scheme. */
+const urlTransform = (url: string) => (parseAppLink(url) ? url : defaultUrlTransform(url));
+
+/**
+ * Assistant markdown. Raw HTML is dropped; web links open in the system browser and app links
+ * (`sa:…`, see `parseAppLink`) open that part of the app.
+ */
 export const Markdown = memo(function Markdown({
   text,
   streaming,
@@ -46,7 +82,12 @@ export const Markdown = memo(function Markdown({
 }) {
   return (
     <div className={cn('prose-sa', streaming && 'is-streaming', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        skipHtml
+        urlTransform={urlTransform}
+        components={components}
+      >
         {text}
       </ReactMarkdown>
     </div>

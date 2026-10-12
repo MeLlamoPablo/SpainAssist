@@ -1423,8 +1423,8 @@ function demoConversation(now: number, t: Tr, lang: Lang): ChatItem[] {
       'c-11',
       dayAt(now, 2, 11, 43),
       t(
-        'Tasa del DNI pagada: **12 €**. El justificante está en **Mis datos**.',
-        'DNI fee paid: **€12**. The receipt is in **My data**.',
+        'Tasa del DNI pagada: **12 €**. El justificante está en [tus documentos](sa:vault/documents).',
+        'DNI fee paid: **€12**. The receipt is in [your documents](sa:vault/documents).',
       ),
     ),
     user(
@@ -1512,8 +1512,8 @@ function demoConversation(now: number, t: Tr, lang: Lang): ChatItem[] {
       'c-23',
       at(now, 6),
       t(
-        'Perfecto, lo he guardado en tus datos y he actualizado tus trámites.\n\nPara pedir la cita del DNI hace falta saber dónde y cuándo te va mejor: te lo pregunta en su tarjeta.',
-        'Great, I’ve saved it in your data and updated your procedures.\n\nTo book your DNI appointment it needs to know where and when suits you: it asks on its card.',
+        `Perfecto, lo he guardado en [tus datos](sa:vault/personal) y he actualizado tus trámites.\n\nPara pedir la cita del DNI hace falta saber dónde y cuándo te va mejor: te lo pregunta en [su tarjeta](sa:procedure/${DEMO_IDS.dni}).`,
+        `Great, I’ve saved it in [your data](sa:vault/personal) and updated your procedures.\n\nTo book your DNI appointment it needs to know where and when suits you: it asks on [its card](sa:procedure/${DEMO_IDS.dni}).`,
       ),
     ),
   ];
