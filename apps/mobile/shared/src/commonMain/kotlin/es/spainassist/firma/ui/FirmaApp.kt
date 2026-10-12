@@ -425,11 +425,14 @@ private fun SigningScreen(s: Screen.Signing, actions: FirmaActions, platform: Pl
                 Title(stringResource(Res.string.card_title))
                 Body(stringResource(Res.string.card_body))
             }
-            Actions {
-                away()
-                NfcBanner(s.nfc, actions)
-                if (step.moved) Banner(stringResource(Res.string.card_moved), Tone.Attention)
-                if (!login) Secondary(stringResource(Res.string.cancel_label), actions::cancel)
+            // An empty group would still take its 64 dp gap (a login can't be cancelled here).
+            if (!login || !s.connected || step.moved || s.nfc != NfcAvailability.Ready) {
+                Actions {
+                    away()
+                    NfcBanner(s.nfc, actions)
+                    if (step.moved) Banner(stringResource(Res.string.card_moved), Tone.Attention)
+                    if (!login) Secondary(stringResource(Res.string.cancel_label), actions::cancel)
+                }
             }
         }
         is Step.Working -> Layout(hero = { CardIllustration(active = true) }) {
