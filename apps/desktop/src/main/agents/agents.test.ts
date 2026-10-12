@@ -544,8 +544,20 @@ describe('procedure agents', () => {
       agent!.token,
     );
     assistant.client.emit({ type: 'run_start' });
+    const pdf = (name: string, owner = procedureId) =>
+      app.vault.addDocument({
+        name,
+        mimeType: 'application/pdf',
+        bytes: Buffer.from('%PDF'),
+        source: 'download',
+        procedureId: owner,
+      });
+    const older = await pdf('Antiguo.pdf');
+    await new Promise((resolve) => setTimeout(resolve, 5));
     const c = agent!.client;
     c.emit({ type: 'run_start' });
+    const saved = await pdf('Justificante.pdf');
+    await pdf('De otro trámite.pdf', 'p_other');
     c.emit({ type: 'assistant_start', messageId: 'm1' });
     c.emit({ type: 'assistant_end', messageId: 'm1', text: `Plan listo. ${'x'.repeat(900)}` });
     c.emit({ type: 'run_end' });
@@ -554,7 +566,10 @@ describe('procedure agents', () => {
     const report = assistant.client.followUps.at(-1)!;
     expect(report.startsWith(`${REPORT_PREFIX} ${procedureId} "Renovar el DNI"`)).toBe(true);
     expect(report).toContain('status: planned · next: Elegir oficina (user)]');
-    expect(report.length).toBeLessThan(MAX_REPORT_CHARS + 200);
+    expect(report.length).toBeLessThan(MAX_REPORT_CHARS + 300);
+    // Documents the run saved are named with their ids, so the assistant can link them.
+    expect(report.endsWith(`\nSaved documents: ${saved.id} "Justificante.pdf"`)).toBe(true);
+    expect(report).not.toContain(older.id);
     // The user sees a compact row, not the report as a message.
     const row = conversation().at(-1);
     expect(row).toMatchObject({

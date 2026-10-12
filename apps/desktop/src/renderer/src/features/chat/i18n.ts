@@ -36,6 +36,11 @@ export const chatDict = defineDict({
       close: 'Cerrar',
       unavailable: 'La imagen ya no está disponible.',
     },
+    document: {
+      open: (name: string) => `Abrir ${name}`,
+      download: 'Guardar en Descargas',
+      unavailable: 'Documento no disponible',
+    },
     scrollDown: 'Ir al final',
     panel: {
       today: 'Hoy',
@@ -164,6 +169,11 @@ export const chatDict = defineDict({
       title: 'Page screenshot',
       close: 'Close',
       unavailable: 'The image is no longer available.',
+    },
+    document: {
+      open: (name: string) => `Open ${name}`,
+      download: 'Save to Downloads',
+      unavailable: 'Document unavailable',
     },
     scrollDown: 'Jump to the end',
     panel: {

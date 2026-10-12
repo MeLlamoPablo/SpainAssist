@@ -2,6 +2,7 @@ import { REPORT_PREFIX } from '@sa/agent';
 import {
   type ActivityItem,
   ASSISTANT_AGENT_ID,
+  type DocumentMeta,
   type Language,
   type Procedure,
   REPORT_TOOL,
@@ -18,6 +19,8 @@ import type { ConversationService } from './service';
 
 /** Upward communication is minimal: a report never exceeds this (the assistant lives forever). */
 export const MAX_REPORT_CHARS = 600;
+/** A report names at most this many documents the run saved (newest first). */
+const MAX_REPORT_DOCUMENTS = 5;
 
 export interface CoordinatorDeps {
   procedures: ProcedureService;
@@ -27,6 +30,8 @@ export interface CoordinatorDeps {
   logger: Logger;
   clock: Clock;
   lang(): Language;
+  /** The user's saved documents (the vault's list). */
+  documents(): DocumentMeta[];
 }
 
 /**
@@ -144,6 +149,8 @@ export class Coordinator {
       ? ` · next: ${procedure.nextAction.text} (${procedure.nextAction.owner})`
       : '';
     const header = `${REPORT_PREFIX} ${procedure.id} "${procedure.title}" · status: ${procedure.status}${next}]`;
+    // Ids (and names, never contents) of what the run saved, so the assistant can link them.
+    const saved = this.savedDocuments(procedure.id, result.startedAt);
     const now = this.deps.clock().toISOString();
     const row: ActivityItem = {
       id: this.deps.conversation.newItemId('a'),
@@ -157,7 +164,24 @@ export class Coordinator {
       finishedAt: now,
     };
     this.deps.conversation.upsertItem(row);
-    this.deliverToAssistant(`${header}\n${summary}`);
+    this.deliverToAssistant(`${header}\n${summary}${saved}`);
+  }
+
+  private savedDocuments(procedureId: string, since: string | undefined): string {
+    if (!since) return '';
+    let documents: DocumentMeta[];
+    try {
+      documents = this.deps.documents();
+    } catch (err) {
+      this.deps.logger.warn('saved documents unavailable', { error: errorMessage(err) });
+      return '';
+    }
+    const saved = documents
+      .filter((d) => d.procedureId === procedureId && d.createdAt >= since)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, MAX_REPORT_DOCUMENTS)
+      .map((d) => `${d.id} "${d.name}"`);
+    return saved.length ? `\nSaved documents: ${saved.join('; ')}` : '';
   }
 
   private deliverToAssistant(text: string): void {

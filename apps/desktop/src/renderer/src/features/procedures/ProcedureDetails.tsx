@@ -16,6 +16,7 @@ import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { hostOf } from '../../lib/format';
 import { useVaultStore } from '../../store/vault';
+import { openDocument } from '../vault/document-actions';
 import { procedureDict } from './i18n';
 
 /**
@@ -43,7 +44,7 @@ export function ProcedureDetails({ procedure: p }: { procedure: ProcedureListIte
                 <li key={d.id}>
                   <button
                     type="button"
-                    onClick={() => void api.invoke('vault.openDocument', d.id)}
+                    onClick={() => openDocument(d.id)}
                     title={t.openDocument}
                     className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2 text-left shadow-xs hover:bg-surface-2"
                   >

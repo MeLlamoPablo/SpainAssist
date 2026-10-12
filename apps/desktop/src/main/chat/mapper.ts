@@ -70,6 +70,8 @@ export interface RunResult {
   error?: string;
   /** The last complete assistant message of the run. */
   text: string;
+  /** When the run started (ISO), if it did. */
+  startedAt?: string;
 }
 
 /**
@@ -82,6 +84,7 @@ export class TranscriptMapper {
   private readonly tools = new Map<string, string>();
   private lastError?: string;
   private runText = '';
+  private runStartedAt: string | undefined;
   /** Set when a run ends (read by AgentManager to route reports). */
   lastRun?: RunResult;
 
@@ -100,6 +103,7 @@ export class TranscriptMapper {
       case 'run_start':
         this.lastError = undefined;
         this.runText = '';
+        this.runStartedAt = this.now();
         this.lastRun = undefined;
         sink.setError(undefined);
         sink.setRunning(true);
@@ -114,6 +118,7 @@ export class TranscriptMapper {
         this.lastRun = {
           aborted: Boolean(event.aborted),
           text: this.runText,
+          ...(this.runStartedAt ? { startedAt: this.runStartedAt } : {}),
           ...(error ? { error } : {}),
         };
         if (error) this.reportError(error);

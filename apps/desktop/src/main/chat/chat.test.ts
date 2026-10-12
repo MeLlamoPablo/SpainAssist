@@ -86,7 +86,11 @@ describe('TranscriptMapper', () => {
     const transcript = procedures.transcript(procedureId);
     expect(transcript).toHaveLength(1);
     expect(procedures.get(procedureId)?.runtime).toEqual({ activity: 'idle', unread: true });
-    expect(m.lastRun).toEqual({ aborted: false, text: 'Hola, Lucía.' });
+    expect(m.lastRun).toEqual({
+      aborted: false,
+      text: 'Hola, Lucía.',
+      startedAt: expect.any(String),
+    });
   });
 
   it('streams into the conversation with chat.item + chat.delta for the assistant', () => {

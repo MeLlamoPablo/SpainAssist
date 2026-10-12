@@ -238,6 +238,7 @@ describe('saved data and physical-place prompts', () => {
     const assistant = buildAssistantPrompt({ language: 'es' });
     const links = [...assistant.matchAll(/\((sa:[^)\s]+)\)/g)].map((m) => m[1]);
     expect(links).toContain('sa:vault/documents');
+    expect(links).toContain('sa:document/<id>');
     for (const link of links)
       expect(parseAppLink(link.replace('<id>', 'p_0123456789abcdef')), link).not.toBeNull();
   });

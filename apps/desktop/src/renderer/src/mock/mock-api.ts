@@ -43,6 +43,7 @@ import {
   dniAfterForm,
   existingReply,
   genericReply,
+  LAST_DOCUMENT,
   newProcedurePlan,
   type PStep,
   padronLiveScript,
@@ -547,6 +548,8 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     runs.set(procedureId, token);
     setRuntime(procedureId, { activity: 'working', error: undefined });
     const alive = () => !token.cancelled && state.procedures.has(procedureId);
+    // The document this run saved last: a report's reply may link it (`LAST_DOCUMENT`).
+    let lastDocumentId: string | undefined;
 
     for (const step of steps) {
       if (!alive()) return;
@@ -622,6 +625,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
             createdAt: now(),
           };
           state.documents.unshift(doc);
+          lastDocumentId = doc.id;
           state.documentPreviews.set(doc.id, fakeDocumentPage(step.preview[0], step.preview[1]));
           emit({ type: 'vault.changed' });
           break;
@@ -687,7 +691,10 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
             summary: step.summary,
             finishedAt: t,
           });
-          runAssistant([{ kind: 'say', text: step.reply }]);
+          const reply = lastDocumentId
+            ? step.reply.replaceAll(LAST_DOCUMENT, lastDocumentId)
+            : step.reply;
+          runAssistant([{ kind: 'say', text: reply }]);
           return;
         }
       }

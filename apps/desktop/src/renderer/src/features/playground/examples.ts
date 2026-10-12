@@ -464,6 +464,22 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       ),
     },
   });
+  examples.push({
+    id: 'message-documents',
+    group: 'output',
+    label: t('Mensaje con documentos', 'Message with documents'),
+    code: 'assistant · sa:document/<id>',
+    item: {
+      id: 'playground-message-documents',
+      type: 'assistant',
+      createdAt: PLAYGROUND_TIME,
+      status: 'complete',
+      text: t(
+        '¡Hecho! Aquí tienes el justificante:\n\n[Justificante tasa DNI](sa:document/doc-tasa-dni)\n\nTambién guardé [la solicitud del certificado](sa:document/doc-fnmt). Este ya no está:\n\n[Documento borrado](sa:document/doc-borrado)',
+        'Done! Here’s the receipt:\n\n[DNI fee receipt](sa:document/doc-tasa-dni)\n\nI also saved [the certificate request](sa:document/doc-fnmt). This one is gone:\n\n[Deleted document](sa:document/doc-borrado)',
+      ),
+    },
+  });
   for (const level of ['info', 'success', 'warning', 'error'] as const)
     examples.push({
       id: `notice-${level}`,

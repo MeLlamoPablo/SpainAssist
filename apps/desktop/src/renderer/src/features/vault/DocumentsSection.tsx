@@ -21,6 +21,7 @@ import { useAppStore } from '../../store/app';
 import { useProcedureStore } from '../../store/procedures';
 import { toast } from '../../store/toast';
 import { useVaultStore } from '../../store/vault';
+import { openDocument, useDownloadDocument } from './document-actions';
 import { vaultDict } from './i18n';
 
 function DocIcon({ doc }: { doc: DocumentMeta }) {
@@ -88,19 +89,7 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
     doc.procedureId ? s.byId[doc.procedureId] : undefined,
   );
   const [confirm, setConfirm] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-
-  const download = async () => {
-    setDownloading(true);
-    try {
-      const name = await api.invoke('vault.downloadDocument', doc.id);
-      toast.success(t.documents.downloaded(name));
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setDownloading(false);
-    }
-  };
+  const { download, downloading } = useDownloadDocument(doc.id);
 
   const remove = async () => {
     try {
@@ -141,14 +130,12 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
           icon={Download}
           label={t.documents.download}
           disabled={downloading}
-          onClick={() => void download()}
+          onClick={download}
         />
         <IconButton
           icon={SquareArrowOutUpRight}
           label={t.documents.open}
-          onClick={() =>
-            void api.invoke('vault.openDocument', doc.id).catch((e) => toast.error(errorMessage(e)))
-          }
+          onClick={() => openDocument(doc.id)}
         />
         <IconButton icon={Trash} label={t.documents.remove} onClick={() => setConfirm(true)} />
       </div>

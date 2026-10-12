@@ -8,6 +8,10 @@ describe('parseAppLink', () => {
       kind: 'procedure',
       id: 'p_0123456789abcdef',
     });
+    expect(parseAppLink('sa:document/0f8b3c2e-6a1d-4f7e-9b2a-5c4d3e2f1a0b')).toEqual({
+      kind: 'document',
+      id: '0f8b3c2e-6a1d-4f7e-9b2a-5c4d3e2f1a0b',
+    });
     expect(parseAppLink('sa:vault/documents')).toEqual({ kind: 'vault', tab: 'documents' });
     expect(parseAppLink('sa:vault/personal')).toEqual({ kind: 'vault', tab: 'personal' });
     expect(parseAppLink('sa:vault/credentials')).toEqual({ kind: 'vault', tab: 'credentials' });
@@ -25,6 +29,12 @@ describe('parseAppLink', () => {
       'sa:procedure',
       'sa:procedure/../x',
       'sa:procedure/a/b',
+      'sa:document',
+      'sa:document/',
+      'sa:document/../x',
+      'sa:document/a/b',
+      'sa:document/a b',
+      `sa:document/${'x'.repeat(65)}`,
       'sa:settings/about',
       'sa:procedures/x',
       'sa:unknown',

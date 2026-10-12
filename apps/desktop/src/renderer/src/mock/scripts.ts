@@ -43,7 +43,10 @@ export type PStep =
   /** Ask the user in the conversation (the run pauses until they answer). */
   | { kind: 'ask'; prompt: Prompt; onAnswer: (r: PromptResponse) => PStep[] }
   | { kind: 'document'; name: string; preview: [string, string] }
-  /** End of the run: the agent's short report goes up; the assistant reacts with `reply`. */
+  /**
+   * End of the run: the agent's short report goes up; the assistant reacts with `reply`, where
+   * `LAST_DOCUMENT` stands for the id of the run's last `document`.
+   */
   | { kind: 'report'; summary: string; reply: string; error?: boolean };
 
 export interface ProcedurePlan {
@@ -53,6 +56,11 @@ export interface ProcedurePlan {
   administration?: Administration;
   agent: PStep[];
 }
+
+/** In a report's reply: the id of the document the run saved last. */
+export const LAST_DOCUMENT = '{lastDocument}';
+/** A reply's last line that shows the run's last document as a card. */
+const documentLine = (label: string) => `\n\n[${label}](sa:document/${LAST_DOCUMENT})`;
 
 type L = readonly [es: string, en: string];
 const pick = (t: Tr, l: L) => t(l[0], l[1]);
@@ -66,6 +74,8 @@ export function detectTopic(message: string): string | null {
   const m = message.toLowerCase();
   if (/pasaporte|passport/.test(m)) return 'pasaporte';
   if (/\bdni\b|carn[eé] de identidad|identity card/.test(m)) return 'dni';
+  if (/volante|certificado de (empadronamiento|padr[oó]n)|padr[oó]n certificate/.test(m))
+    return 'volante';
   if (/empadron|padr[oó]n/.test(m)) return 'padron';
   if (/certificado digital|fnmt|digital certificate/.test(m)) return 'certificado';
   if (/\btie\b|\bnie\b|extranjer|residen/.test(m)) return 'tie';
@@ -110,6 +120,8 @@ interface TopicDef {
   next?: { text: L; owner: NextActionOwner };
   report: L;
   reply: L;
+  /** A document the agent downloads and saves before reporting; the reply shows it as a card. */
+  document?: { name: L; preview: [L, L] };
 }
 
 const TOPICS: Record<string, TopicDef> = {
@@ -194,6 +206,47 @@ const TOPICS: Record<string, TopicDef> = {
       'Empadronarte es **gratis** y lo puedo hacer yo online. Solo necesito tu **contrato de alquiler**.',
       'Registering is **free** and I can do it online. I just need your **rental contract**.',
     ],
+  },
+  volante: {
+    title: ['Certificado de empadronamiento', 'Padrón certificate'],
+    intro: [
+      'Vale, descargo tu certificado de empadronamiento.',
+      'OK, I’ll download your padrón certificate.',
+    ],
+    query: ['certificado empadronamiento online Madrid', 'padrón certificate online Madrid'],
+    url: URLS.padron,
+    sourceTitle: ['Certificado de empadronamiento', 'Padrón certificate'],
+    readSummary: [
+      'Gratis y al momento con certificado digital',
+      'Free and instant with a digital certificate',
+    ],
+    administration: { level: 'local', name: 'Ayuntamiento de Madrid' },
+    steps: [
+      { id: 'pedir', title: ['Pedir el certificado', 'Request the certificate'], owner: 'agent' },
+      { id: 'guardar', title: ['Guardarlo en Mis datos', 'Save it to My data'], owner: 'agent' },
+    ],
+    facts: [
+      [
+        ['Coste', 'Cost'],
+        ['Gratis.', 'Free.'],
+      ],
+    ],
+    status: 'done',
+    report: [
+      'Certificado de empadronamiento descargado y guardado.',
+      'Padrón certificate downloaded and saved.',
+    ],
+    reply: [
+      '¡Hecho! Aquí tienes tu certificado de empadronamiento:',
+      'Done! Here’s your padrón certificate:',
+    ],
+    document: {
+      name: ['Certificado de empadronamiento.pdf', 'Padrón certificate.pdf'],
+      preview: [
+        ['Certificado de empadronamiento', 'Padrón certificate'],
+        ['Ayuntamiento de Madrid', 'Madrid City Council'],
+      ],
+    },
   },
   certificado: {
     title: ['Certificado digital (FNMT)', 'Digital certificate (FNMT)'],
@@ -478,6 +531,24 @@ function steps(def: TopicDef, t: Tr, current: number): ProcedureStep[] {
   }));
 }
 
+function saveDocument(document: NonNullable<TopicDef['document']>, t: Tr): PStep[] {
+  const name = pick(t, document.name);
+  return [
+    {
+      kind: 'tool',
+      tool: 'download_save',
+      args: { name },
+      summary: t('Guardado en tus documentos', 'Saved to your documents'),
+      ms: 900,
+    },
+    {
+      kind: 'document',
+      name,
+      preview: [pick(t, document.preview[0]), pick(t, document.preview[1])],
+    },
+  ];
+}
+
 /** What the assistant does for a new need: a short reply, `procedure_start`, the agent's run. */
 export function newProcedurePlan(
   message: string,
@@ -491,9 +562,11 @@ export function newProcedurePlan(
     value: pick(t, value),
   }));
   const firstCurrent =
-    def.status === 'researching'
-      ? 1
-      : def.steps.findIndex((s) => s.owner === (def.next?.owner ?? 'agent'));
+    def.status === 'done'
+      ? def.steps.length
+      : def.status === 'researching'
+        ? 1
+        : def.steps.findIndex((s) => s.owner === (def.next?.owner ?? 'agent'));
   const title = pick(t, def.title);
 
   const agent: PStep[] = [
@@ -552,7 +625,14 @@ export function newProcedurePlan(
         nextAction: def.next ? { text: pick(t, def.next.text), owner: def.next.owner } : null,
       },
     },
-    { kind: 'report', summary: pick(t, def.report), reply: pick(t, def.reply) },
+    ...(def.document ? saveDocument(def.document, t) : []),
+    {
+      kind: 'report',
+      summary: pick(t, def.report),
+      reply:
+        pick(t, def.reply) +
+        (def.document ? documentLine(pick(t, def.document.name).replace(/\.pdf$/, '')) : ''),
+    },
   ];
 
   return {
@@ -764,10 +844,11 @@ export function dniAfterForm(response: PromptResponse, lang: Lang): PStep[] {
         `Cita reservada: ${whenTime}, ${officeShort}. Localizador 8KQ2T7. Justificante en Mis datos. Lucía tiene que ir con el DNI actual y la foto.`,
         `Appointment booked: ${whenTime}, ${officeShort}. Ref. 8KQ2T7. Receipt in My data. Lucía must bring her current DNI and the photo.`,
       ),
-      reply: t(
-        `¡Listo! Tienes cita para el DNI el **${whenTime}** en **${officeShort}**. Te llegará un SMS.\n\nLleva tu DNI actual y la foto.`,
-        `Done! Your DNI appointment is on **${whenTime}** at **${officeShort}**. You’ll get a text.\n\nBring your current DNI and the photo.`,
-      ),
+      reply:
+        t(
+          `¡Listo! Tienes cita para el DNI el **${whenTime}** en **${officeShort}**. Lleva tu DNI actual y la foto. Aquí tienes el justificante:`,
+          `Done! Your DNI appointment is on **${whenTime}** at **${officeShort}**. Bring your current DNI and the photo. Here’s the receipt:`,
+        ) + documentLine(t('Justificante cita DNI', 'DNI appointment receipt')),
     },
   ];
 }

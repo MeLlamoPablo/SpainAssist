@@ -372,6 +372,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     logger: logger.child('coordinator'),
     clock,
     lang,
+    documents: () => vaultFn().listDocuments(),
   });
 
   bridge = new BridgeServer({

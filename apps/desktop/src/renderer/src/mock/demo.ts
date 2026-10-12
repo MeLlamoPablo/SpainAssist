@@ -1418,8 +1418,8 @@ function demoConversation(now: number, t: Tr, lang: Lang): ChatItem[] {
       'c-11',
       dayAt(now, 2, 11, 43),
       t(
-        'Tasa del DNI pagada: **12 €**. El justificante está en [tus documentos](sa:vault/documents).',
-        'DNI fee paid: **€12**. The receipt is in [your documents](sa:vault/documents).',
+        'Tasa del DNI pagada: **12 €**. Aquí tienes el justificante:\n\n[Justificante tasa DNI](sa:document/doc-tasa-dni)',
+        'DNI fee paid: **€12**. Here’s the receipt:\n\n[DNI fee receipt](sa:document/doc-tasa-dni)',
       ),
     ),
     user(
