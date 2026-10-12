@@ -139,7 +139,7 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
                 type="button"
                 title={procedure.title}
                 onClick={() => focusProcedure(procedure.id)}
-                className="min-w-0 truncate font-medium text-accent-text hover:underline"
+                className="min-w-0 truncate text-accent-text hover:underline"
               >
                 {procedure.title}
               </button>
