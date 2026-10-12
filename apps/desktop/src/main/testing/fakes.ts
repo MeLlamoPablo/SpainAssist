@@ -195,6 +195,7 @@ export class MemoryVault implements VaultPort {
       label: input?.label ?? 'DNIe con el móvil',
       policy: DEFAULT_CREDENTIAL_POLICY.dnie,
       createdAt: now(),
+      hasPin: false,
     };
     this.credentials.set(summary.id, { summary, secret: { kind: 'dnie' } });
     return summary;
@@ -204,6 +205,14 @@ export class MemoryVault implements VaultPort {
     const entry = this.credentials.get(id);
     if (entry?.summary.kind !== 'dnie') throw new Error('Not a DNIe credential');
     entry.summary = { ...entry.summary, certificate };
+    return entry.summary;
+  }
+
+  async setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
+    const entry = this.credentials.get(id);
+    if (entry?.summary.kind !== 'dnie') throw new Error('Not a DNIe credential');
+    entry.summary = { ...entry.summary, hasPin: !!pin };
+    entry.secret = pin ? { kind: 'dnie', pin } : { kind: 'dnie' };
     return entry.summary;
   }
 
@@ -286,6 +295,7 @@ export class MemoryVault implements VaultPort {
     const values = [...this.personal.values()].map((p) => p.value);
     for (const c of this.credentials.values())
       if (c.secret.kind === 'clave_permanente') values.push(c.secret.username);
+      else if (c.secret.kind === 'dnie' && c.secret.pin) values.push(c.secret.pin);
     return values.filter((v) => v.trim().length > 0);
   }
 

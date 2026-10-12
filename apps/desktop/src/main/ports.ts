@@ -45,6 +45,7 @@ export type VaultPort = Pick<
   | 'addClaveMovil'
   | 'addDnie'
   | 'setDnieCertificate'
+  | 'setDniePin'
   | 'addCertificate'
   | 'setCredentialPolicy'
   | 'getCredentialSecret'

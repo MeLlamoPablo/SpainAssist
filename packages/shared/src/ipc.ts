@@ -185,6 +185,8 @@ export interface SaMethods {
   'vault.addClaveMovil': [[], CredentialSummary];
   /** "I sign with my DNIe and my phone" (one per vault; adding it again returns it). */
   'vault.addDnie': [[], CredentialSummary];
+  /** Saves (or, with null, forgets) the DNIe PIN. Write-only: no call returns the PIN. */
+  'vault.setDniePin': [[id: string, pin: string | null], CredentialSummary];
   /** Validates the passphrase and extracts certificate metadata. */
   'vault.addCertificate': [[input: AddCertificateInput], CredentialSummary];
   'vault.setCredentialPolicy': [[id: string, policy: CredentialPolicy], CredentialSummary];

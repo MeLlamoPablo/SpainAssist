@@ -160,6 +160,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('vault.addClave', S['vault.addClave'], (input) => s.vault.addClave(input));
   router.register('vault.addClaveMovil', S['vault.addClaveMovil'], () => s.vault.addClaveMovil());
   router.register('vault.addDnie', S['vault.addDnie'], () => s.vault.addDnie());
+  router.register('vault.setDniePin', S['vault.setDniePin'], (id, pin) =>
+    s.vault.setDniePin(id, pin),
+  );
   router.register('vault.addCertificate', S['vault.addCertificate'], (input) =>
     s.vault.addCertificate(input),
   );

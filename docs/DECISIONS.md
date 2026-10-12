@@ -669,6 +669,9 @@ may hold the PIN, and the desktop gives it to the phone with the request.
 
 ## D20 — The DNIe CAN and PIN are typed only on the desktop (2026-10-12)
 
+**Partly superseded by D22:** the PIN is saved in the vault again, and Mis datos has its row
+back. Everything else below still holds.
+
 The CAN and the PIN could be typed on the phone, saved on the phone (the CAN), saved in Mis datos
 (the PIN, D18) or taken from the scanned DNI (the CAN). Too many places, and the phone screen was
 doing two jobs. Now the desktop asks, and the phone only reviews and reads the card.
@@ -721,3 +724,31 @@ it spends the plan the user already pays for.
   Astra only in Codex and Work, as it rolls out, with 5–45 local messages per 5 h; the SIWC docs
   don't list which models plan usage can call, so `deep` may be refused or soon run out on Plus. Unverified against the
   live SIWC route; e2e runs cannot cover it (the mock LLM has no Responses API).
+
+## D22 — The DNIe PIN is saved in the vault, and managed in Mis datos (2026-10-12)
+
+Typing the PIN about once an hour (D20) was friction for users who sign often, and they looked
+for it in Mis datos ("DNIe con el móvil") and didn't find it. The PIN goes back to the vault, like
+the Cl@ve password; D20's "typed only on the desktop" and its refused-PIN protocol stay.
+
+- **Stored on the `dnie` credential.** In `vault.bin`, encrypted like the other credential
+  secrets. `CredentialSummary.hasPin` says whether it's there; nothing returns the PIN to the
+  renderer. Mis datos shows "PIN del DNIe · Guardado" with *Cambiar* and *Borrar*, or "Sin
+  guardar" with *Guardar PIN*. `vault.setDniePin(id, pin | null)` (zod: `DniePin`, or null to
+  delete) is the only write from the renderer.
+- **Saved once the card accepts it.** A PIN typed in the signature card is kept for that request
+  and saved after the first signature with it succeeds, so a typo never gets saved and later
+  costs a try. The in-memory 60-minute cache (`DNIE_PIN_CACHE_MS`) is gone: the vault is the
+  only place the desktop remembers it.
+- **Forgotten when the card says so.** A `sign.need` that refuses the saved PIN, or
+  `pin_blocked`, deletes it from the vault; the card then asks for a new one, as in D20. The
+  phone still never retries a refused PIN, so a stale saved PIN costs at most that one try.
+- **No new desktop confirmation.** With a saved PIN, a signature goes straight to the phone,
+  whose review and the card tap are the consent (D20 dropped D18's Touch ID step). Logins keep
+  `browser.useCertificate`'s consent.
+- **Secrets rule unchanged.** The PIN never reaches the renderer (beyond typing it), agents,
+  logs, learnings or the QR. The bridge still refuses PIN-like keys. `knownSensitiveValues`
+  includes it, so learnings and feedback scrub it if the user writes it in the chat.
+- **Trade-off.** As in D18: malware running as the user can read it from the unlocked vault, as
+  it can the Cl@ve password. Without the card it's useless, and the phone's review and the card
+  tap remain.

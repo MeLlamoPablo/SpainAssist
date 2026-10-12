@@ -316,24 +316,26 @@ phone.
   signer gives every CAdES and PAdES signature it builds a binding to the approved document, and
   the phone refuses blobs that don't match what the user reviewed. XAdES, triphase and batches
   aren't verifiable, and the phone says so before approval.
-- **The CAN and the PIN** (D20) are typed only on the desktop. Before anything goes to the phone,
-  the `dnie_signature` prompt starts in the `unlock` stage when the desktop lacks one
+- **The CAN and the PIN** (D20, D22) are typed only on the desktop. Before anything goes to the
+  phone, the `dnie_signature` prompt starts in the `unlock` stage when the desktop lacks one
   (`unlock: {can, pin}`): the CAN unless the user typed it earlier in this run or Mis datos has a
-  valid `dniAccessNumber` from the scanned DNI, the PIN unless typed in the last hour
-  (`DNIE_PIN_CACHE_MS`; certificate reads need none). The card explains both (where the PIN came
-  from, how to reset or change it). The renderer sends them once with `companion.unlock`
-  (zod-validated); they never go into the prompt, the transcript, logs or the QR. Main keeps them
-  in memory only: the PIN for an hour, the CAN while the app runs. Every `sign.request` carries
-  `can`, and `pin` except for certificate reads, inside the encrypted channel only. `PhoneSigner`
-  drops the PIN from the copy it re-sends after a reconnect. The phone uses them for that request
-  and never stores them. When the card refuses one, the phone sends `sign.need` (`what`,
-  `refused`, `triesLeft`) and waits: the desktop forgets that value, shows the `unlock` stage
-  again with the reason and the tries left, and answers `sign.unlock`; the request's timers wait
-  meanwhile. The phone never tries a refused CAN or PIN again while it runs. `pin_blocked` makes
-  the desktop forget the PIN. Agents have no path to either: the bridge leaves the CAN out of
-  `vault.read`, refuses it and PIN-like keys (`pin`, `custom.pin_dnie`) in `vault.save`, form
-  fields and `browser.fillFromVault`; the logger masks the PIN; learnings scrub the CAN like other
-  vault values.
+  valid `dniAccessNumber` from the scanned DNI, the PIN unless the vault holds it (certificate
+  reads need none). The card explains both (where the PIN came from, how to reset or change it).
+  The renderer sends them once with `companion.unlock` (zod-validated); they never go into the
+  prompt, the transcript, logs or the QR. Main keeps the CAN in memory while the app runs. The
+  PIN lives on the vault's `dnie` credential: Mis datos saves, changes and deletes it
+  (`vault.setDniePin`, write-only; the summary has only `hasPin`), and a PIN typed in the card is
+  saved once the card accepts it (the first signature that request makes). Every `sign.request`
+  carries `can`, and `pin` except for certificate reads, inside the encrypted channel only.
+  `PhoneSigner` drops the PIN from the copy it re-sends after a reconnect. The phone uses them
+  for that request and never stores them. When the card refuses one, the phone sends `sign.need`
+  (`what`, `refused`, `triesLeft`) and waits: the desktop forgets that value (a refused saved PIN
+  is deleted from the vault), shows the `unlock` stage again with the reason and the tries left,
+  and answers `sign.unlock`; the request's timers wait meanwhile. The phone never tries a refused
+  CAN or PIN again while it runs. `pin_blocked` deletes the saved PIN. Agents have no path to
+  either: the bridge leaves the CAN out of `vault.read`, refuses it and PIN-like keys (`pin`,
+  `custom.pin_dnie`) in `vault.save`, form fields and `browser.fillFromVault`; the logger masks
+  the PIN; learnings scrub the CAN and the saved PIN like other vault values.
 - **Failures** (blocked PIN, no FIRMA certificate, another card, no NFC, timeouts, the phone
   gone) end the signature with a notice in the procedure in plain words. Declines and cancels
   reach the site as AutoFirma's cancellation. Connections that drop mid-signature recover by
@@ -560,7 +562,7 @@ Development builds can skip Unleash with `SA_FEATURE_FLAGS` (comma-separated Unl
 `dev:local` turns on both). E2e runs set it too, and main-process tests pass `features` to the
 test harness (every flag on by default). In the web preview, `?feedback=1` and `?dnie=1` turn
 the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
-`?dnieSaved=1` adds a saved DNIe to Mis datos. The playground shows the CAN and PIN step
+`?dnieSaved=1` adds a saved DNIe to Mis datos (`?dnieSaved=pin`: with its PIN saved). The playground shows the CAN and PIN step
 (`?playground=1&example=dnie-unlock`, and `dnie-unlock-wrong-pin`).
 
 ## 4. Security model (MVP)
@@ -574,8 +576,8 @@ the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
   `safeStorage`: Keychain / DPAPI / libsecret). Linux without a keyring is flagged as insecure.
 - The model never receives secrets; credentials are usable only on allow-listed official
   domains; certificate use and signatures require explicit approval by default. The DNIe PIN
-  is typed on the desktop, kept in memory for an hour, and leaves it only to the paired phone,
-  per request (D18, D20).
+  is typed on the desktop, kept in the vault, and leaves it only to the paired phone, per request
+  (D18, D20, D22).
 - Agent processes only get: bridge URL + per-agent token, provider key (if any), language. The
   assistant's token cannot reach the browser, signer or credentials; procedure tokens cannot
   start or message other procedures.

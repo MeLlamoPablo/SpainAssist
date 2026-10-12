@@ -94,6 +94,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   ]),
   'vault.addClaveMovil': none,
   'vault.addDnie': none,
+  'vault.setDniePin': z.tuple([id, DniePin.nullable()]),
   'vault.addCertificate': z.tuple([
     z.object({
       fileName: z.string().trim().min(1).max(255),

@@ -425,11 +425,22 @@ describe('credentials', () => {
     expect(reopened.getCredential(dnie.id)?.certificate?.holderName).toBe('JUAN ESPAÑOL ESPAÑOL');
   });
 
-  it('keeps no secret for the DNIe', async () => {
-    const { vault } = await openVault();
+  it('saves, changes and forgets the DNIe PIN, never in a summary', async () => {
+    const { dir, vault } = await openVault();
     const dnie = await vault.addDnie();
-    expect(dnie).not.toHaveProperty('pin');
-    expect(await vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
+    expect(dnie.hasPin).toBe(false);
+    const saved = await vault.setDniePin(dnie.id, 'abcd1234');
+    expect(saved.hasPin).toBe(true);
+    expect(JSON.stringify(vault.listCredentials())).not.toContain('abcd1234');
+    expect(vault.knownSensitiveValues()).toContain('abcd1234');
+    await vault.setDniePin(dnie.id, 'efgh5678');
+    const reopened = await Vault.open(dir, keys());
+    expect(await reopened.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: 'efgh5678' });
+    expect((await reopened.setDniePin(dnie.id, null)).hasPin).toBe(false);
+    expect(await reopened.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
+    await expectVaultError(reopened.setDniePin(dnie.id, 'short'), 'invalid_input');
+    const movil = await reopened.addClaveMovil();
+    await expectVaultError(reopened.setDniePin(movil.id, 'abcd1234'), 'invalid_input');
   });
 
   it('rejects Cl@ve usernames that are not a DNI/NIE', async () => {

@@ -113,6 +113,7 @@ export interface SensitiveSources {
   personal: Map<string, PersonalEntry>;
   claveUsernames: string[];
   certificateHolders: Array<{ holderName?: string; holderId?: string }>;
+  dniePins: string[];
 }
 
 export function sensitiveValues(sources: SensitiveSources): string[] {
@@ -164,6 +165,7 @@ export function sensitiveValues(sources: SensitiveSources): string[] {
     if (holder.holderName) values.push(holder.holderName);
     if (holder.holderId) values.push(...idVariants(holder.holderId));
   }
+  values.push(...sources.dniePins);
 
   const seen = new Set<string>();
   const out: string[] = [];

@@ -185,10 +185,13 @@ describe('DNIe signatures with the phone', () => {
     await a.waitFor(() => received.some((m) => m.type === 'sign.cancel'));
   });
 
-  it('explains a blocked PIN, and a procedure stop cancels the request', async () => {
-    const { relay, app: a, procedureId } = await setup();
+  it('explains a blocked PIN, forgets the saved one, and a procedure stop cancels', async () => {
+    const { relay, app: a, procedureId, dnie } = await setup();
+    await a.invoke('vault.setDniePin', dnie.id, PIN);
     const approval = a.services.browser.approveSignature(procedureId, summary);
-    await typeUnlock(a, procedureId);
+    expect(await typeUnlock(a, procedureId, { can: CAN })).toMatchObject({
+      unlock: { can: true, pin: false },
+    });
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     const { link } = await a.invoke('companion.status');
     phone(relay, link as string, (m, send) => {
@@ -203,6 +206,7 @@ describe('DNIe signatures with the phone', () => {
     });
 
     // A blocked card forgets the PIN: asked again (not the CAN, which the card accepted).
+    expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
     const stopped = a.services.browser.approveSignature(procedureId, summary);
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     expect(a.pendingPrompt(procedureId)?.prompt).toMatchObject({
@@ -241,18 +245,19 @@ describe('DNIe signatures with the phone', () => {
     const invalid = await sign({ can: '654321', pin: PIN });
     expect(invalid.shown).toMatchObject({ unlock: { can: true, pin: true } });
     expect(invalid.request).toMatchObject({ can: '654321', pin: PIN });
-    // The CAN typed is kept while the app runs, the PIN for an hour: nothing asked.
-    const cached = await sign();
-    expect(cached.shown).toMatchObject({ stage: 'phone' });
-    expect(cached.request).toMatchObject({ can: '654321', pin: PIN });
+    // The CAN typed is kept while the app runs. The PIN is saved only once the card accepts it.
+    expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
+    const again = await sign({ pin: 'Nuevo5678' });
+    expect(again.shown).toMatchObject({ unlock: { can: false, pin: true } });
+    expect(again.request).toMatchObject({ can: '654321', pin: 'Nuevo5678' });
 
-    // An hour later the PIN is asked again; Mis datos' CAN isn't preferred over the typed one.
+    // The PIN saved in Mis datos goes without asking; Mis datos' CAN isn't preferred over the
+    // typed one.
     await a.vault.setPersonal([{ key: 'dniAccessNumber', value: CAN }], 'manual');
-    const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61 * 60_000);
-    const expired = await sign({ pin: 'Nuevo5678' });
-    later.mockRestore();
-    expect(expired.shown).toMatchObject({ unlock: { can: false, pin: true } });
-    expect(expired.request).toMatchObject({ can: '654321', pin: 'Nuevo5678' });
+    await a.invoke('vault.setDniePin', dnie.id, 'Nuevo5678');
+    const saved = await sign();
+    expect(saved.shown).toMatchObject({ stage: 'phone' });
+    expect(saved.request).toMatchObject({ can: '654321', pin: 'Nuevo5678' });
     expect(a.services.companion!.status().link).not.toContain('654321');
 
     // Reading the certificate needs no PIN.
@@ -302,7 +307,7 @@ describe('DNIe signatures with the phone', () => {
   });
 
   it('asks again when the card refuses the CAN or the PIN, and never offers them again', async () => {
-    const { relay, app: a, procedureId } = await setup();
+    const { relay, app: a, procedureId, dnie } = await setup();
     await a.vault.setPersonal([{ key: 'dniAccessNumber', value: '111111' }], 'manual');
     const approval = a.services.browser.approveSignature(procedureId, summary);
     await typeUnlock(a, procedureId, { pin: 'Malo1234' });
@@ -353,6 +358,9 @@ describe('DNIe signatures with the phone', () => {
       pin: 'Malo1234',
     });
 
+    // The PIN the card accepted is saved in the vault (not the refused one).
+    expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(true);
+    expect(await a.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: PIN });
     // The next request carries what the card accepted, without asking.
     const next = a.services.browser.approveSignature(procedureId, summary);
     await a.waitFor(() => received.filter((m) => m.type === 'sign.request').length === 2);
@@ -365,6 +373,29 @@ describe('DNIe signatures with the phone', () => {
       outcome: 'cancelled',
     });
     expect(await next).toBeNull();
+  });
+
+  it('forgets a saved PIN the card refuses, and asks for a new one', async () => {
+    const { relay, app: a, procedureId, dnie } = await setup();
+    await a.vault.setPersonal([{ key: 'dniAccessNumber', value: CAN }], 'manual');
+    await a.invoke('vault.setDniePin', dnie.id, 'Viejo1234');
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await a.waitFor(() => !!a.services.companion!.status().link);
+    phone(relay, a.services.companion!.status().link as string, (m, send) => {
+      if (m.type === 'sign.request')
+        send({ type: 'sign.need', requestId: m.requestId, what: 'pin', refused: true });
+    });
+    expect(await typeUnlock(a, procedureId, { pin: PIN })).toMatchObject({
+      unlock: { can: false, pin: true, refused: 'pin' },
+    });
+    expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
+    await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
+      kind: 'dnie_signature',
+      outcome: 'cancelled',
+    });
+    expect(await approval).toBeNull();
+    // Not accepted by the card yet: not saved.
+    expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
   });
 
   it('tells agents how the DNIe logs in and signs instead of typing it', async () => {
@@ -424,6 +455,9 @@ it('ends login after inactivity and asks again for the next handshake', async ()
   const identity = await approval;
   const key = identity!.key as RemoteKey;
   const signal = new AbortController().signal;
+  await key.sign(Buffer.alloc(32), 'SHA-256', 'sede.example.gob.es', signal);
+  // The card accepted the PIN: the next approval doesn't ask for it.
+  expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(true);
   vi.useFakeTimers();
   await key.prepare('sede.example.gob.es', signal);
   await vi.advanceTimersByTimeAsync(DNIE_LOGIN_IDLE_MS + 1);

@@ -238,6 +238,17 @@ export class VaultService {
     });
   }
 
+  /** Mis datos: saves, changes or (null) forgets the DNIe PIN. It never comes back. */
+  setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
+    return this.guard(async () => {
+      this.requireVisible(id);
+      if (pin) this.deps.logger.addSecret(pin);
+      const summary = await this.deps.vault.setDniePin(id, pin);
+      this.changed();
+      return summary;
+    });
+  }
+
   addCertificate(input: AddCertificateInput): Promise<CredentialSummary> {
     return this.guard(async () => {
       this.deps.logger.addSecret(input.passphrase);

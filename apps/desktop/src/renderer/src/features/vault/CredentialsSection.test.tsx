@@ -68,9 +68,15 @@ describe('Mis datos: DNIe with the phone', () => {
     expect(saved).toContain('Vincular el móvil');
   });
 
-  it('has no place for the DNIe CAN or PIN: they are typed when a signature needs them', () => {
-    const saved = render(true, [DNIE]);
-    expect(saved).not.toContain('dnie-pin');
-    expect(saved).not.toContain('PIN');
+  it('offers to save the DNIe PIN, and to change or delete a saved one (never shown)', () => {
+    const none = render(true, [{ ...DNIE, hasPin: false }]);
+    expect(none).toContain('dnie-pin-row');
+    expect(none).toContain('Sin guardar');
+    expect(none).toContain('Guardar PIN');
+    const saved = render(true, [{ ...DNIE, hasPin: true }]);
+    expect(saved).toContain('Guardado. El asistente nunca lo ve.');
+    expect(saved).toContain('Cambiar');
+    expect(saved).toContain('Borrar');
+    expect(saved).not.toContain('Guardar PIN');
   });
 });

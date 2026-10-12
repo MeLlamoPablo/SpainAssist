@@ -1,4 +1,9 @@
-import type { CredentialPolicy, CredentialSummary, VaultOverview } from '@sa/shared';
+import {
+  type CredentialPolicy,
+  type CredentialSummary,
+  DniePin,
+  type VaultOverview,
+} from '@sa/shared';
 import {
   FileKey,
   IdCard,
@@ -400,9 +405,12 @@ function DnieCard({
 }) {
   const t = useT(vaultDict);
   const tc = useT(companionDict);
+  const tcommon = useT(common);
   const lang = useLang();
   const companion = useAppStore((s) => s.companion);
   const [pairing, setPairing] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinDelete, setPinDelete] = useState(false);
   const info = c.certificate;
   const connected = companion.state === 'connected';
   const paired = connected || companion.state === 'away';
@@ -424,6 +432,15 @@ function DnieCard({
       toast.error(errorMessage(err));
     }
   };
+  const deletePin = async () => {
+    try {
+      await api.invoke('vault.setDniePin', c.id, null);
+      await reloadVault();
+      toast.success(t.credentials.dnie.pinDeleted);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
 
   return (
     <CredentialCard
@@ -432,29 +449,64 @@ function DnieCard({
       title={t.credentials.dnie.title}
       biometric={biometric}
       below={
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2/60 px-3 py-2">
-          <p className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
-            <Smartphone
-              size={15}
-              className={connected ? 'text-st-done-fg' : 'text-fg-subtle'}
-              aria-hidden
-            />
-            {connected
-              ? tc.connected(companion.device ?? tc.app)
-              : companion.state === 'away' && companion.device
-                ? tc.away(companion.device)
-                : tc.noPhone}
-          </p>
-          {companion.state === 'unavailable' ? null : paired ? (
-            <Button variant="ghost" size="sm" onClick={() => void unpair()}>
-              {tc.unpair}
-            </Button>
-          ) : (
-            <Button variant="secondary" size="sm" icon={Smartphone} onClick={() => void pair()}>
-              {tc.pair}
-            </Button>
-          )}
-        </div>
+        <>
+          <div
+            className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2/60 px-3 py-2"
+            data-testid="dnie-pin-row"
+          >
+            <p className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
+              <KeyRound
+                size={15}
+                className={c.hasPin ? 'text-st-done-fg' : 'text-fg-subtle'}
+                aria-hidden
+              />
+              <span className="font-medium text-fg">{t.credentials.dnie.pin}</span>
+              {c.hasPin ? t.credentials.dnie.pinSaved : t.credentials.dnie.pinNone}
+            </p>
+            {c.hasPin ? (
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" onClick={() => setPinOpen(true)}>
+                  {t.credentials.dnie.pinChange}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setPinDelete(true)}>
+                  {t.credentials.dnie.pinRemove}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={KeyRound}
+                onClick={() => setPinOpen(true)}
+              >
+                {t.credentials.dnie.pinAdd}
+              </Button>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2/60 px-3 py-2">
+            <p className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
+              <Smartphone
+                size={15}
+                className={connected ? 'text-st-done-fg' : 'text-fg-subtle'}
+                aria-hidden
+              />
+              {connected
+                ? tc.connected(companion.device ?? tc.app)
+                : companion.state === 'away' && companion.device
+                  ? tc.away(companion.device)
+                  : tc.noPhone}
+            </p>
+            {companion.state === 'unavailable' ? null : paired ? (
+              <Button variant="ghost" size="sm" onClick={() => void unpair()}>
+                {tc.unpair}
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" icon={Smartphone} onClick={() => void pair()}>
+                {tc.pair}
+              </Button>
+            )}
+          </div>
+        </>
       }
     >
       {info ? (
@@ -478,7 +530,112 @@ function DnieCard({
       >
         <PairingPanel status={companion} />
       </Dialog>
+      <DniePinDialog credentialId={c.id} open={pinOpen} onOpenChange={setPinOpen} />
+      <ConfirmDialog
+        open={pinDelete}
+        onOpenChange={setPinDelete}
+        title={t.credentials.dnie.pinDeleteTitle}
+        description={t.credentials.dnie.pinDeleteBody}
+        confirmLabel={tcommon.delete}
+        cancelLabel={tcommon.cancel}
+        onConfirm={deletePin}
+      />
     </CredentialCard>
+  );
+}
+
+/** Saves or changes the DNIe PIN. Write-only: main never sends it back. */
+function DniePinDialog({
+  credentialId,
+  open,
+  onOpenChange,
+}: {
+  credentialId: string;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const t = useT(vaultDict);
+  const tc = useT(common);
+  const tu = useT(companionDict).unlock;
+  const tchat = useT(chatDict);
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const close = (o: boolean) => {
+    if (!o) {
+      setPin('');
+      setError(null);
+    }
+    onOpenChange(o);
+  };
+
+  const submit = async () => {
+    if (!DniePin.safeParse(pin).success) {
+      setError(tu.pinInvalid);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.invoke('vault.setDniePin', credentialId, pin);
+      await reloadVault();
+      toast.success(t.credentials.dnie.pinStored);
+      close(false);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={close}
+      title={t.credentials.dnie.pinDialogTitle}
+      description={t.credentials.dnie.pinDialogLead}
+      closeLabel={tc.close}
+      width="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => close(false)}>
+            {tc.cancel}
+          </Button>
+          <Button variant="primary" loading={busy} disabled={!pin} onClick={() => void submit()}>
+            {t.credentials.dnie.pinSave}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-4 pt-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <Field label={tu.pin} help={t.credentials.dnie.pinHelp} error={error} required>
+          {({ id, describedBy, invalid }) => (
+            <PasswordInput
+              id={id}
+              value={pin}
+              onChange={(e) => {
+                setPin(e.target.value);
+                setError(null);
+              }}
+              maxLength={16}
+              aria-describedby={describedBy}
+              aria-invalid={invalid || undefined}
+              revealLabel={tchat.prompt.reveal}
+              hideLabel={tchat.prompt.hide}
+              data-testid="dnie-pin-input"
+              autoFocus
+            />
+          )}
+        </Field>
+        <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
+      </form>
+    </Dialog>
   );
 }
 

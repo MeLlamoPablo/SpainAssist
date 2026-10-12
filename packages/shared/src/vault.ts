@@ -375,14 +375,14 @@ export const CredentialKind = z.enum([
   'clave_permanente', // username (DNI/NIE) + password (+ SMS code at login time)
   'clave_movil', // no stored secret: the user approves on their phone (Cl@ve app)
   'certificate', // X.509 certificate in a .p12/.pfx file + passphrase (e.g. FNMT Persona Física)
-  'dnie', // the DNIe, read by the paired phone app over NFC (no stored secret: D20)
+  'dnie', // the DNIe, read by the paired phone app over NFC (stored secret: its PIN, D20)
 ]);
 export type CredentialKind = z.infer<typeof CredentialKind>;
 
 /**
- * The DNIe PIN: 8 to 16 characters. Typed on the desktop when a DNIe signature or login needs
- * it, kept in memory for an hour and sent only to the paired phone, inside the encrypted channel
- * (DECISIONS D18, D20). Never stored.
+ * The DNIe PIN: 8 to 16 characters. Typed on the desktop (Mis datos, or when a DNIe signature or
+ * login needs it), kept in the vault on the DNIe credential and sent only to the paired phone,
+ * inside the encrypted channel (DECISIONS D18, D20). Never shown to the renderer or the agent.
  */
 export const DniePin = z.string().min(8).max(16);
 
@@ -421,6 +421,8 @@ export const CredentialSummary = z.object({
   usernameHint: z.string().optional(),
   /** `.p12` certificates; for the DNIe, its signing certificate once the phone has read it. */
   certificate: CertificateInfo.optional(),
+  /** DNIe: whether the vault holds its PIN (the PIN itself never leaves main). */
+  hasPin: z.boolean().optional(),
 });
 export type CredentialSummary = z.infer<typeof CredentialSummary>;
 

@@ -6,6 +6,7 @@ import {
   CredentialPolicy,
   type CredentialSummary,
   DEFAULT_CREDENTIAL_POLICY,
+  DniePin,
   type DocumentMeta,
   DocumentSource,
   maskValue,
@@ -70,7 +71,7 @@ export type CredentialSecret =
   | ClaveSecret
   | CertificateSecret
   | { kind: 'clave_movil' }
-  | { kind: 'dnie' };
+  | { kind: 'dnie'; pin?: string };
 
 export interface AddDocumentOptions {
   name: string;
@@ -140,8 +141,10 @@ function summarize(credential: StoredCredential): CredentialSummary {
   if (credential.lastUsedAt) summary.lastUsedAt = credential.lastUsedAt;
   if (credential.kind === 'clave_permanente') summary.usernameHint = maskValue(credential.username);
   if (credential.kind === 'certificate') summary.certificate = { ...credential.certificate };
-  if (credential.kind === 'dnie' && credential.certificate)
-    summary.certificate = { ...credential.certificate };
+  if (credential.kind === 'dnie') {
+    if (credential.certificate) summary.certificate = { ...credential.certificate };
+    summary.hasPin = !!credential.pin;
+  }
   return summary;
 }
 
@@ -521,6 +524,19 @@ export class Vault {
     });
   }
 
+  /** Saves the DNIe PIN (8 to 16 characters), or forgets it with null. */
+  async setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
+    return this.lock.run(async () => {
+      if (pin !== null && !DniePin.safeParse(pin).success) throw invalid('Invalid DNIe PIN');
+      const updated = await this.updateCredential(id, (c) => {
+        if (c.kind !== 'dnie') throw invalid('Not a DNIe credential');
+        const { pin: _old, ...rest } = c;
+        return pin === null ? rest : { ...rest, pin };
+      });
+      return summarize(updated);
+    });
+  }
+
   /**
    * Validates the passphrase, parses the certificate (RSA or ECDSA; modern, 3DES or RC2-40
    * files), rejects expired ones and stores a normalized PBES2/AES-256 copy. Importing the same
@@ -600,7 +616,7 @@ export class Vault {
       case 'clave_movil':
         return { kind: credential.kind };
       case 'dnie':
-        return { kind: credential.kind };
+        return { kind: credential.kind, ...(credential.pin ? { pin: credential.pin } : {}) };
     }
   }
 
@@ -678,6 +694,7 @@ export class Vault {
       certificateHolders: this.state.credentials.flatMap((c) =>
         c.kind === 'certificate' ? [c.certificate] : [],
       ),
+      dniePins: this.state.credentials.flatMap((c) => (c.kind === 'dnie' && c.pin ? [c.pin] : [])),
     });
   }
 

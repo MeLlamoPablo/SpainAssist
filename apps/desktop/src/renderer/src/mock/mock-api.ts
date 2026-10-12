@@ -61,8 +61,8 @@ import {
  * ?latency=ms (per-call delay) · ?chatgpt=ineligible (ChatGPT login fails: free account) ·
  * ?phone=1 (the DNI card asks for a phone call) · ?dnie=1 (feature flag: DNIe with the phone on;
  * ?companion, ?dnieSaved and the playground imply it) · ?companion=waiting|away|connected (phone
- * pairing for DNIe signatures; the playground starts connected) · ?dnieSaved=1 (a saved DNIe in
- * Mis datos).
+ * pairing for DNIe signatures; the playground starts connected) · ?dnieSaved=1|pin (a saved
+ * DNIe in Mis datos; =pin with its PIN saved).
  */
 
 type Handlers = { [M in SaMethod]: (...args: SaArgs<M>) => SaResult<M> | Promise<SaResult<M>> };
@@ -165,6 +165,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       label: 'DNIe con el móvil',
       policy: 'ask',
       createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      hasPin: params.get('dnieSaved') === 'pin',
     });
   if (params.has('phone')) {
     // The DNI card asks for a phone call instead of its form (the call card's states).
@@ -1211,8 +1212,17 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         label: 'DNIe con el móvil',
         policy: 'ask',
         createdAt: now(),
+        hasPin: false,
       };
       state.credentials.push(cred);
+      emit({ type: 'vault.changed' });
+      return cred;
+    },
+    'vault.setDniePin': (id, pin) => {
+      const i = state.credentials.findIndex((c) => c.id === id && c.kind === 'dnie');
+      if (i < 0) throw new Error(lang() === 'es' ? 'No lo encuentro.' : 'Not found.');
+      const cred = { ...state.credentials[i]!, hasPin: pin !== null };
+      state.credentials[i] = cred;
       emit({ type: 'vault.changed' });
       return cred;
     },

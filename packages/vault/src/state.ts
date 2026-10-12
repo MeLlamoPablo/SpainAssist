@@ -41,10 +41,14 @@ export interface StoredCertificate extends CredentialBase {
   certificate: CertificateInfo;
 }
 
-/** The DNIe signs in the paired phone; we keep its certificate's details once read. */
+/**
+ * The DNIe signs in the paired phone; we keep its certificate's details once read, and its PIN
+ * once the user saves it or the card accepts a typed one (D22).
+ */
 export interface StoredDnie extends CredentialBase {
   kind: 'dnie';
   certificate?: CertificateInfo;
+  pin?: string;
 }
 
 export type StoredCredential = StoredClave | StoredClaveMovil | StoredCertificate | StoredDnie;
@@ -108,6 +112,7 @@ const StateFile = z.object({
         ...credentialBase,
         kind: z.literal('dnie'),
         certificate: CertificateInfo.optional(),
+        pin: z.string().optional(),
       }),
     ]),
   ),

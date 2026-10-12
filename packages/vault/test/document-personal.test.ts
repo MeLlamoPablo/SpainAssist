@@ -57,6 +57,7 @@ describe('document-specific personal data', () => {
         ]),
         claveUsernames: [],
         certificateHolders: [],
+        dniePins: [],
       });
       expect(values).toContain('12345678');
       expect(values).toContain('02/01/2026');
@@ -68,6 +69,7 @@ describe('document-specific personal data', () => {
       personal: new Map([['dniAccessNumber', entry('654321')]]),
       claveUsernames: [],
       certificateHolders: [],
+      dniePins: [],
     });
     expect(values).toEqual(['654321']);
   });
