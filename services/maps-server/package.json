@@ -1,0 +1,23 @@
+{
+  "name": "@sa/maps-server",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.3",
+    "@sa/gateway-keys": "workspace:*",
+    "hono": "^4.13.12",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.5"
+  }
+}

@@ -1,0 +1,555 @@
+[
+  {
+    "key": "--sa-sidebar",
+    "light": "rgba(247, 243, 239, 1)",
+    "dark": "rgba(24, 21, 19, 1)",
+    "name": "App/sidebar",
+    "framerId": "d4cb24ce-7996-4773-a203-1ed4b57e6bf2"
+  },
+  {
+    "key": "--sa-surface",
+    "light": "rgba(255, 255, 255, 1)",
+    "dark": "rgba(30, 27, 25, 1)",
+    "name": "App/surface",
+    "framerId": "3691cb1e-e19f-4b48-ade1-4cd910d0baa1"
+  },
+  {
+    "key": "--sa-surface-2",
+    "light": "rgba(252, 251, 249, 1)",
+    "dark": "rgba(36, 33, 30, 1)",
+    "name": "App/surface-2",
+    "framerId": "a906757c-96bf-4de8-8282-b1225fc522c6"
+  },
+  {
+    "key": "--sa-surface-3",
+    "light": "rgba(249, 247, 243, 1)",
+    "dark": "rgba(46, 42, 39, 1)",
+    "name": "App/surface-3",
+    "framerId": "cc83e3c4-de62-4ca1-8c29-5a13ff17f79e"
+  },
+  {
+    "key": "--sa-overlay",
+    "light": "rgba(30, 26, 22, 0.4)",
+    "dark": "rgba(2, 2, 1, 0.6)",
+    "name": "App/overlay",
+    "framerId": "b60b57c1-26bd-498f-98f8-4da6cfef322c"
+  },
+  {
+    "key": "--sa-line",
+    "light": "rgba(229, 225, 220, 1)",
+    "dark": "rgba(49, 45, 42, 1)",
+    "name": "App/line",
+    "framerId": "ee4ef28a-8a02-4988-a40d-8a99660b0dd4"
+  },
+  {
+    "key": "--sa-line-strong",
+    "light": "rgba(212, 206, 200, 1)",
+    "dark": "rgba(67, 63, 59, 1)",
+    "name": "App/line-strong",
+    "framerId": "347aa4a0-6f24-4d2f-820d-edacb75e58fc"
+  },
+  {
+    "key": "--sa-flag-outline",
+    "light": "rgba(212, 208, 203, 1)",
+    "dark": "rgba(255, 255, 255, 1)",
+    "name": "Brand/Flag outline",
+    "framerId": "6c8c7e82-72e7-49c2-a338-43946076291c"
+  },
+  {
+    "key": "--sa-fg",
+    "light": "rgba(40, 33, 29, 1)",
+    "dark": "rgba(237, 235, 231, 1)",
+    "name": "App/fg",
+    "framerId": "192e6eb1-af21-4b69-91f1-f7c273b5410c"
+  },
+  {
+    "key": "--sa-fg-muted",
+    "light": "rgba(96, 89, 84, 1)",
+    "dark": "rgba(181, 176, 171, 1)",
+    "name": "App/fg-muted",
+    "framerId": "5ba732a7-1d4e-4d5b-aa3b-cc6722279d08"
+  },
+  {
+    "key": "--sa-fg-subtle",
+    "light": "rgba(121, 115, 110, 1)",
+    "dark": "rgba(150, 145, 140, 1)",
+    "name": "App/fg-subtle",
+    "framerId": "e2bd6f98-491b-46a6-be09-df2328c42d6d"
+  },
+  {
+    "key": "--sa-fg-faint",
+    "light": "rgba(163, 157, 152, 1)",
+    "dark": "rgba(103, 98, 93, 1)",
+    "name": "App/fg-faint",
+    "framerId": "ad9fb0db-b72c-4b04-886a-a7a99e818a98"
+  },
+  {
+    "key": "--sa-accent",
+    "light": "rgba(40, 33, 29, 1)",
+    "dark": "rgba(237, 235, 231, 1)",
+    "name": "App/accent",
+    "framerId": "0ec21668-5ae1-4bef-b956-6e3e7f27fd34"
+  },
+  {
+    "key": "--sa-accent-hover",
+    "light": "rgba(70, 61, 55, 1)",
+    "dark": "rgba(255, 255, 255, 1)",
+    "name": "App/accent-hover",
+    "framerId": "7ce85c36-9d2e-4efb-9700-b2bc26c14683"
+  },
+  {
+    "key": "--sa-accent-fg",
+    "light": "rgba(255, 255, 255, 1)",
+    "dark": "rgba(30, 27, 25, 1)",
+    "name": "App/accent-fg",
+    "framerId": "3c211d60-3c16-4315-9320-68c21241c1b5"
+  },
+  {
+    "key": "--sa-accent-text",
+    "light": "rgba(40, 33, 29, 1)",
+    "dark": "rgba(237, 235, 231, 1)",
+    "name": "App/accent-text",
+    "framerId": "3e3d6cbe-369f-4bdc-acd0-f19cf80e7033"
+  },
+  {
+    "key": "--sa-accent-soft",
+    "light": "rgba(244, 240, 236, 1)",
+    "dark": "rgba(46, 42, 39, 1)",
+    "name": "App/accent-soft",
+    "framerId": "20238c9a-e7bf-441d-a49e-a6a48d70ebaa"
+  },
+  {
+    "key": "--sa-accent-soft-strong",
+    "light": "rgba(234, 229, 224, 1)",
+    "dark": "rgba(58, 53, 49, 1)",
+    "name": "App/accent-soft-strong",
+    "framerId": "a3564fe3-1b33-49ff-9575-3883cc483a3b"
+  },
+  {
+    "key": "--sa-accent-line",
+    "light": "rgba(212, 206, 200, 1)",
+    "dark": "rgba(87, 82, 77, 1)",
+    "name": "App/accent-line",
+    "framerId": "78acf2bc-e89c-4ecd-bac5-c60b8ca81293"
+  },
+  {
+    "key": "--sa-ring",
+    "light": "rgba(40, 33, 29, 0.35)",
+    "dark": "rgba(237, 235, 231, 0.4)",
+    "name": "App/ring",
+    "framerId": "9184a690-7b2a-493d-9daa-333d651096f9"
+  },
+  {
+    "key": "--sa-danger",
+    "light": "rgba(197, 44, 42, 1)",
+    "dark": "rgba(200, 58, 53, 1)",
+    "name": "App/danger",
+    "framerId": "b0f1f0b4-d7f1-4d8b-ab19-7540227743a3"
+  },
+  {
+    "key": "--sa-danger-hover",
+    "light": "rgba(172, 26, 28, 1)",
+    "dark": "rgba(222, 70, 63, 1)",
+    "name": "App/danger-hover",
+    "framerId": "c39d0753-b7f2-4a63-80ea-9717eedff73d"
+  },
+  {
+    "key": "--st-research-fg",
+    "light": "rgba(33, 88, 167, 1)",
+    "dark": "rgba(146, 193, 253, 1)",
+    "name": "Status/research/fg",
+    "framerId": "458a51e7-408d-4de0-960a-274c92c0a973"
+  },
+  {
+    "key": "--st-research-bg",
+    "light": "rgba(236, 245, 255, 1)",
+    "dark": "rgba(24, 39, 60, 1)",
+    "name": "Status/research/bg",
+    "framerId": "1db9bc43-c259-4442-8dd5-b86328825800"
+  },
+  {
+    "key": "--st-research-line",
+    "light": "rgba(199, 221, 249, 1)",
+    "dark": "rgba(42, 67, 103, 1)",
+    "name": "Status/research/line",
+    "framerId": "1de424b2-79e2-4a0d-b999-658c4bdd3cec"
+  },
+  {
+    "key": "--st-research-dot",
+    "light": "rgba(55, 126, 227, 1)",
+    "dark": "rgba(101, 159, 244, 1)",
+    "name": "Status/research/dot",
+    "framerId": "25c51f6b-bde5-4766-8a16-465f4c03313b"
+  },
+  {
+    "key": "--st-attention-fg",
+    "light": "rgba(136, 77, 1, 1)",
+    "dark": "rgba(245, 198, 109, 1)",
+    "name": "Status/attention/fg",
+    "framerId": "fc02e2fd-21a4-4a46-b9cb-e3f2c71e1d50"
+  },
+  {
+    "key": "--st-attention-bg",
+    "light": "rgba(255, 245, 219, 1)",
+    "dark": "rgba(58, 39, 11, 1)",
+    "name": "Status/attention/bg",
+    "framerId": "6e00a146-8a2d-4635-b36a-95934da61319"
+  },
+  {
+    "key": "--st-attention-line",
+    "light": "rgba(244, 211, 151, 1)",
+    "dark": "rgba(102, 70, 16, 1)",
+    "name": "Status/attention/line",
+    "framerId": "631f9301-27bf-432f-8841-b8776060c546"
+  },
+  {
+    "key": "--st-attention-dot",
+    "light": "rgba(240, 156, 23, 1)",
+    "dark": "rgba(245, 174, 57, 1)",
+    "name": "Status/attention/dot",
+    "framerId": "37efd08e-e176-4b1f-809e-a4d0e4d609d2"
+  },
+  {
+    "key": "--st-progress-fg",
+    "light": "rgba(101, 66, 179, 1)",
+    "dark": "rgba(195, 176, 253, 1)",
+    "name": "Status/progress/fg",
+    "framerId": "8501db34-a3e1-4ed6-a96c-cc694014dd80"
+  },
+  {
+    "key": "--st-progress-bg",
+    "light": "rgba(245, 242, 255, 1)",
+    "dark": "rgba(39, 33, 61, 1)",
+    "name": "Status/progress/bg",
+    "framerId": "1b92fbb6-0237-4496-b4ef-2fd864e31cc3"
+  },
+  {
+    "key": "--st-progress-line",
+    "light": "rgba(220, 213, 249, 1)",
+    "dark": "rgba(68, 57, 105, 1)",
+    "name": "Status/progress/line",
+    "framerId": "bafa9962-144b-4cd4-a92d-197a284c0c75"
+  },
+  {
+    "key": "--st-progress-dot",
+    "light": "rgba(131, 89, 227, 1)",
+    "dark": "rgba(163, 136, 248, 1)",
+    "name": "Status/progress/dot",
+    "framerId": "b4dfc124-b05b-4869-b29f-d5841877819b"
+  },
+  {
+    "key": "--st-planned-fg",
+    "light": "rgba(0, 104, 108, 1)",
+    "dark": "rgba(141, 210, 214, 1)",
+    "name": "Status/planned/fg",
+    "framerId": "a2dfd278-55b4-4ef0-bd15-b9a87104579d"
+  },
+  {
+    "key": "--st-planned-bg",
+    "light": "rgba(231, 248, 249, 1)",
+    "dark": "rgba(14, 43, 47, 1)",
+    "name": "Status/planned/bg",
+    "framerId": "b75c5312-7d93-4570-9f42-e6afeb6f9093"
+  },
+  {
+    "key": "--st-planned-line",
+    "light": "rgba(187, 226, 227, 1)",
+    "dark": "rgba(28, 74, 79, 1)",
+    "name": "Status/planned/line",
+    "framerId": "b6f90fbc-8324-4c53-91d6-aa5dbd6d7817"
+  },
+  {
+    "key": "--st-planned-dot",
+    "light": "rgba(28, 152, 158, 1)",
+    "dark": "rgba(86, 182, 187, 1)",
+    "name": "Status/planned/dot",
+    "framerId": "1848a6ef-b37a-4c96-9323-2eac6f330ea1"
+  },
+  {
+    "key": "--st-waiting-fg",
+    "light": "rgba(77, 89, 105, 1)",
+    "dark": "rgba(181, 191, 203, 1)",
+    "name": "Status/waiting/fg",
+    "framerId": "7db0a8f1-969d-4082-90bb-d561efb99346"
+  },
+  {
+    "key": "--st-waiting-bg",
+    "light": "rgba(239, 243, 247, 1)",
+    "dark": "rgba(35, 39, 44, 1)",
+    "name": "Status/waiting/bg",
+    "framerId": "04940388-5630-454a-8d02-da23071e0def"
+  },
+  {
+    "key": "--st-waiting-line",
+    "light": "rgba(212, 219, 229, 1)",
+    "dark": "rgba(57, 64, 74, 1)",
+    "name": "Status/waiting/line",
+    "framerId": "1f3c699a-76e6-4393-89be-72ac3217acb9"
+  },
+  {
+    "key": "--st-waiting-dot",
+    "light": "rgba(120, 136, 155, 1)",
+    "dark": "rgba(140, 154, 171, 1)",
+    "name": "Status/waiting/dot",
+    "framerId": "5c155428-af00-43c0-9a7a-3326002e6c05"
+  },
+  {
+    "key": "--st-done-fg",
+    "light": "rgba(10, 105, 60, 1)",
+    "dark": "rgba(142, 216, 168, 1)",
+    "name": "Status/done/fg",
+    "framerId": "d59c7ac4-0b3a-4606-895d-87ce1781f359"
+  },
+  {
+    "key": "--st-done-bg",
+    "light": "rgba(230, 250, 236, 1)",
+    "dark": "rgba(19, 44, 32, 1)",
+    "name": "Status/done/bg",
+    "framerId": "f2a4a408-dc49-48da-826d-41692ed7f97a"
+  },
+  {
+    "key": "--st-done-line",
+    "light": "rgba(185, 228, 198, 1)",
+    "dark": "rgba(34, 76, 55, 1)",
+    "name": "Status/done/line",
+    "framerId": "f365df9a-11ce-4ddc-898b-aca270dc26f0"
+  },
+  {
+    "key": "--st-done-dot",
+    "light": "rgba(23, 163, 95, 1)",
+    "dark": "rgba(78, 190, 125, 1)",
+    "name": "Status/done/dot",
+    "framerId": "6930338b-fe48-4f28-8752-1242deb6751a"
+  },
+  {
+    "key": "--st-blocked-fg",
+    "light": "rgba(176, 43, 39, 1)",
+    "dark": "rgba(248, 165, 155, 1)",
+    "name": "Status/blocked/fg",
+    "framerId": "8f4bc266-888e-42ae-a0dc-1d244aa80293"
+  },
+  {
+    "key": "--st-blocked-bg",
+    "light": "rgba(255, 239, 238, 1)",
+    "dark": "rgba(62, 31, 27, 1)",
+    "name": "Status/blocked/bg",
+    "framerId": "869e17fe-3692-4f62-a789-89a44446a622"
+  },
+  {
+    "key": "--st-blocked-line",
+    "light": "rgba(250, 207, 202, 1)",
+    "dark": "rgba(108, 53, 48, 1)",
+    "name": "Status/blocked/line",
+    "framerId": "2ca176e6-4316-4710-a2f5-2585ca92207d"
+  },
+  {
+    "key": "--st-blocked-dot",
+    "light": "rgba(222, 60, 55, 1)",
+    "dark": "rgba(243, 99, 88, 1)",
+    "name": "Status/blocked/dot",
+    "framerId": "94abf5ba-d37c-4118-99b9-18b91cde5e69"
+  },
+  {
+    "key": "--sa-flag-red",
+    "light": "rgba(198, 11, 30, 1)",
+    "dark": "rgba(198, 11, 30, 1)",
+    "name": "Brand/Flag red",
+    "framerId": "6ca70468-b443-46a9-a23a-d4f0d4aff51b"
+  },
+  {
+    "key": "--sa-flag-yellow",
+    "light": "rgba(255, 196, 0, 1)",
+    "dark": "rgba(255, 196, 0, 1)",
+    "name": "Brand/Flag yellow",
+    "framerId": "10b99ed8-f089-4cf2-b33d-2ee579504bee"
+  },
+  {
+    "key": "--sa-window-close",
+    "light": "rgba(255, 95, 87, 1)",
+    "dark": "rgba(255, 95, 87, 1)",
+    "name": "Window/close",
+    "framerId": "d54f1a05-bb38-46bd-b019-4de046446a54"
+  },
+  {
+    "key": "--sa-window-minimize",
+    "light": "rgba(254, 188, 46, 1)",
+    "dark": "rgba(254, 188, 46, 1)",
+    "name": "Window/minimize",
+    "framerId": "f1df2146-af0b-419c-b1e4-25da625c44a3"
+  },
+  {
+    "key": "--sa-window-maximize",
+    "light": "rgba(40, 200, 64, 1)",
+    "dark": "rgba(40, 200, 64, 1)",
+    "name": "Window/maximize",
+    "framerId": "a1d9bd8b-d874-4e07-85a9-6dc9255822e5"
+  },
+  {
+    "key": "--sa-white",
+    "light": "rgba(255, 255, 255, 1)",
+    "dark": "rgba(255, 255, 255, 1)",
+    "name": "App/White",
+    "framerId": "c0664aff-3758-4b58-9547-2b04cc6c6f02"
+  },
+  {
+    "key": "--sa-black",
+    "light": "rgba(0, 0, 0, 1)",
+    "dark": "rgba(0, 0, 0, 1)",
+    "name": "App/Black",
+    "framerId": "6f70f456-a64f-4c75-a896-5ab0d0ce15b6"
+  },
+  {
+    "key": "--sa-transparent",
+    "light": "rgba(0, 0, 0, 0)",
+    "dark": "rgba(0, 0, 0, 0)",
+    "name": "App/Transparent",
+    "framerId": "86b57535-4ff2-4fcd-8a54-02d03dc0755e"
+  },
+  {
+    "key": "--sa-black-10",
+    "light": "rgba(0, 0, 0, 0.1)",
+    "dark": "rgba(0, 0, 0, 0.1)",
+    "name": "App/Black/10%",
+    "framerId": "d154d1f0-4494-48b8-a135-d3d9a5224b18"
+  },
+  {
+    "key": "--sa-accent-50",
+    "light": "rgba(40, 33, 29, 0.5)",
+    "dark": "rgba(237, 235, 231, 0.5)",
+    "name": "App/accent/50%",
+    "framerId": "393f584a-faa3-49b0-9ad5-35faec6eb072"
+  },
+  {
+    "key": "--sa-accent-60",
+    "light": "rgba(40, 33, 29, 0.6)",
+    "dark": "rgba(237, 235, 231, 0.6)",
+    "name": "App/accent/60%",
+    "framerId": "61922e3d-e991-43c3-aaca-0c7807bc2d88"
+  },
+  {
+    "key": "--sa-accent-20",
+    "light": "rgba(40, 33, 29, 0.2)",
+    "dark": "rgba(237, 235, 231, 0.2)",
+    "name": "App/accent/20%",
+    "framerId": "d1af1250-5af9-405d-98e8-5d283c4f27b7"
+  },
+  {
+    "key": "--sa-line-strong-70",
+    "light": "rgba(212, 206, 200, 0.7)",
+    "dark": "rgba(67, 63, 59, 0.7)",
+    "name": "App/line-strong/70%",
+    "framerId": "f71df7a4-3546-4c10-b26b-93be3bb7e34f"
+  },
+  {
+    "key": "--st-done-dot-40",
+    "light": "rgba(23, 163, 95, 0.4)",
+    "dark": "rgba(78, 190, 125, 0.4)",
+    "name": "Status/done/dot/40%",
+    "framerId": "26d0d147-5275-495c-92b7-f09ea2cb89a3"
+  },
+  {
+    "key": "--sa-surface-3-70",
+    "light": "rgba(249, 247, 243, 0.7)",
+    "dark": "rgba(46, 42, 39, 0.7)",
+    "name": "App/surface-3/70%",
+    "framerId": "4e1b00eb-f830-432c-9aca-4d16a3aba4ed"
+  },
+  {
+    "key": "--st-attention-line-70",
+    "light": "rgba(244, 211, 151, 0.7)",
+    "dark": "rgba(102, 70, 16, 0.7)",
+    "name": "Status/attention/line/70%",
+    "framerId": "a5e1ffdf-2e34-4503-9cd0-cf2bc2a8ac21"
+  },
+  {
+    "key": "--sa-surface-2-50",
+    "light": "rgba(252, 251, 249, 0.5)",
+    "dark": "rgba(36, 33, 30, 0.5)",
+    "name": "App/surface-2/50%",
+    "framerId": "1934d6fd-6ad1-4dae-b7b4-dacd6e8d900f"
+  },
+  {
+    "key": "--sa-surface-2-60",
+    "light": "rgba(252, 251, 249, 0.6)",
+    "dark": "rgba(36, 33, 30, 0.6)",
+    "name": "App/surface-2/60%",
+    "framerId": "ce7dfed9-6344-4a95-8b5c-9a5767df0553"
+  },
+  {
+    "key": "--sa-surface-95",
+    "light": "rgba(255, 255, 255, 0.95)",
+    "dark": "rgba(30, 27, 25, 0.95)",
+    "name": "App/surface/95%",
+    "framerId": "0eae388a-91e6-4364-a7d8-e557a328b52d"
+  },
+  {
+    "key": "--st-blocked-bg-40",
+    "light": "rgba(255, 239, 238, 0.4)",
+    "dark": "rgba(62, 31, 27, 0.4)",
+    "name": "Status/blocked/bg/40%",
+    "framerId": "2a95530a-d601-450e-b333-c0617abb7f91"
+  },
+  {
+    "key": "--sa-shadow-color-pop-2",
+    "light": "rgba(34, 24, 17, 0.12)",
+    "dark": "rgba(0, 0, 0, 0.3)",
+    "name": "Shadow/pop-2",
+    "framerId": "4e76a88c-a12c-45fc-bd41-b22013254b53"
+  },
+  {
+    "key": "--sa-shadow-color-pop-1",
+    "light": "rgba(34, 24, 17, 0.28)",
+    "dark": "rgba(0, 0, 0, 0.65)",
+    "name": "Shadow/pop-1",
+    "framerId": "b72e754f-6b3a-4ff8-bac3-a6e4218d02a1"
+  },
+  {
+    "key": "--sa-shadow-color-xs",
+    "light": "rgba(54, 44, 36, 0.06)",
+    "dark": "rgba(0, 0, 0, 0.3)",
+    "name": "Shadow/xs",
+    "framerId": "b25594e9-d3d6-4a38-bb67-dc9712e5af87"
+  },
+  {
+    "key": "--sa-shadow-color-raised",
+    "light": "rgba(54, 44, 36, 0.12)",
+    "dark": "rgba(0, 0, 0, 0.3)",
+    "name": "Shadow/raised",
+    "framerId": "29b9839c-5258-4832-a945-9aec1708b494"
+  },
+  {
+    "key": "--sa-map-home",
+    "light": "rgba(37, 99, 235, 1)",
+    "dark": "rgba(37, 99, 235, 1)",
+    "name": "Map/Home",
+    "framerId": "41f031e2-b539-4873-b4e0-47fbfc63e07d"
+  },
+  {
+    "key": "--sa-map-shadow",
+    "light": "rgba(0, 0, 0, 0.2)",
+    "dark": "rgba(0, 0, 0, 0.2)",
+    "name": "Map/Shadow",
+    "framerId": "2f45f528-3744-4899-9984-67a326cd8481"
+  },
+  {
+    "key": "--sa-shadow-color-pop-dark-line",
+    "light": "rgba(255, 255, 255, 0.06)",
+    "dark": "rgba(255, 255, 255, 0.06)",
+    "name": "Shadow/Dark outline",
+    "framerId": "9acec787-78fc-4211-9311-7d7e39e8f407"
+  },
+  {
+    "key": "--sa-shadow-color-raised-dark",
+    "light": "rgba(0, 0, 0, 0.5)",
+    "dark": "rgba(0, 0, 0, 0.5)",
+    "name": "Shadow/Dark raised",
+    "framerId": "78b2a5f5-fee5-40bc-8106-71bc80d1d029"
+  },
+  {
+    "key": "--sa-map-attribution",
+    "name": "Map/Attribution",
+    "light": "rgba(51, 65, 85, 1)",
+    "dark": "rgba(51, 65, 85, 1)",
+    "framerId": "c5638706-2639-41f4-b182-af51eda00896"
+  }
+]

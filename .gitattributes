@@ -1,0 +1,8 @@
+# Secrets are committed encrypted with git-crypt. `git-crypt init` once,
+# `git-crypt export-key` to a safe place, then these paths encrypt on commit.
+# Terraform variables: every production secret (see infra/README.md).
+infra/terraform/terraform.tfvars filter=git-crypt diff=git-crypt
+# Terraform state: holds the same secrets, plus the GitHub deploy key, in clear text.
+infra/terraform/terraform.tfstate filter=git-crypt diff=git-crypt
+# Scanner eval fixtures: real ID document photos, recorded scans and their ground truth.
+tools/scan-eval/fixtures/** filter=git-crypt diff=git-crypt

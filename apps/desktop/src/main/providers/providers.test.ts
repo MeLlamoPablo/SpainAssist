@@ -1,0 +1,672 @@
+import type { ChatGPTLoginCallbacks } from '@sa/agent';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { t } from '../core/i18n';
+import { SECRET_IDS } from '../core/secrets';
+import { createFakeProviderLib, FAKE_ID_TOKEN } from '../testing/fakes';
+import { createTestApp, type TestApp } from '../testing/harness';
+
+let app: TestApp;
+afterEach(async () => {
+  await app?.close();
+});
+
+describe('ProviderManager', () => {
+  it('redeems a voucher: key in the vault, gateway in app state, config in settings, status event', async () => {
+    app = await createTestApp();
+    const res = await app.invoke('providers.redeemVoucher', 'VALID-CODE');
+    expect(res).toMatchObject({
+      ok: true,
+      status: {
+        configured: true,
+        kind: 'voucher',
+        label: 'Bono Spain Assist',
+        // The app version's voucher model.
+        model: 'test/voucher-model',
+        // The voucher's credit, before the gateway reports any spend.
+        credit: { usageUsd: 0, limitUsd: 5, remainingUsd: 5 },
+      },
+    });
+    expect(await app.vault.getSecret(SECRET_IDS.voucher)).toBe('sk-litellm-voucher-key-123456');
+    const settings = await app.invoke('settings.get');
+    expect(settings.provider).toEqual({
+      kind: 'voucher',
+      secretId: SECRET_IDS.voucher,
+      limitUsd: 5,
+    });
+    expect(JSON.stringify(settings)).not.toContain('sk-litellm-voucher-key');
+    expect(app.events.some((e) => e.type === 'providers.status')).toBe(true);
+    const status = await app.invoke('providers.status');
+    expect(status.credit).toEqual({ usageUsd: 1, limitUsd: 5, remainingUsd: 4 });
+    // An OpenAI-compatible provider at our LiteLLM gateway.
+    expect(await app.services.providers.agentModel()).toEqual({
+      provider: 'litellm',
+      id: 'test/voucher-model',
+      baseUrl: 'https://llm.example.test/v1',
+      maxTokens: 8192,
+    });
+    // The assistant (orchestrator) has its own model and effort.
+    expect(await app.services.providers.agentModel('assistant')).toEqual({
+      provider: 'litellm',
+      id: 'test/voucher-assistant',
+      thinkingLevel: 'high',
+      baseUrl: 'https://llm.example.test/v1',
+      maxTokens: 8192,
+    });
+    expect(await app.services.providers.credentialFor('litellm')).toEqual({
+      type: 'api_key',
+      key: 'sk-litellm-voucher-key-123456',
+    });
+    expect(await app.services.providers.credentialFor('openrouter')).toBeNull();
+  });
+
+  it('sends the current voucher key with the next voucher, so it tops that key up', async () => {
+    const sent: (string | undefined)[] = [];
+    const fake = createFakeProviderLib();
+    app = await createTestApp({
+      providerLib: {
+        ...fake,
+        redeemVoucher(url, code, currentKey) {
+          sent.push(currentKey);
+          return fake.redeemVoucher(url, code, currentKey);
+        },
+      },
+    });
+    expect(await app.invoke('providers.redeemVoucher', 'VALID-CODE')).toMatchObject({
+      ok: true,
+      addedUsd: 5,
+    });
+    expect(await app.invoke('providers.redeemVoucher', 'VALID-CODE')).toMatchObject({
+      ok: true,
+      addedUsd: 5,
+      // The whole key: what was spent before stays spent.
+      status: { credit: { usageUsd: 1, limitUsd: 10, remainingUsd: 9 } },
+    });
+    expect(sent).toEqual([undefined, 'sk-litellm-voucher-key-123456']);
+    expect(await app.vault.getSecret(SECRET_IDS.voucher)).toBe('sk-litellm-voucher-key-123456');
+  });
+
+  it('reads the voucher credit from the key server, with the gateway the voucher came with', async () => {
+    const calls: string[] = [];
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        async redeemVoucher() {
+          return {
+            provider: 'litellm',
+            baseUrl: 'http://127.0.0.1:8789/v1/',
+            apiKey: 'sk-mock-1',
+            limitUsd: 5,
+            usageUsd: 0,
+            addedUsd: 5,
+            searchTools: [],
+          };
+        },
+        async getVoucherCredit(keyServerUrl, apiKey) {
+          calls.push(`credit ${keyServerUrl} ${apiKey}`);
+          return {
+            limitUsd: 5,
+            spendUsd: 0.5,
+            maxBudgetUsd: 5,
+            expiresAt: '2027-04-07T09:00:00.000Z',
+          };
+        },
+      }),
+    });
+    expect((await app.invoke('providers.redeemVoucher', 'SA-DEMO42')).ok).toBe(true);
+    expect(await app.services.providers.agentModel()).toEqual({
+      provider: 'litellm',
+      id: 'test/voucher-model',
+      baseUrl: 'http://127.0.0.1:8789/v1',
+      maxTokens: 8192,
+    });
+    const status = await app.invoke('providers.status');
+    expect(status.credit).toEqual({ usageUsd: 0.5, limitUsd: 5, remainingUsd: 4.5 });
+    expect(status.expiresAt).toBe('2027-04-07T09:00:00.000Z');
+    expect(calls).toContain('credit http://127.0.0.1:8787 sk-mock-1');
+    expect(app.logLines.join('\n')).not.toContain('sk-mock-1');
+  });
+
+  it('counts web research as used: it lowers the cap, not the vouchers total', async () => {
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        async getVoucherCredit() {
+          // A 5 USD voucher, 0.30 of LLM calls and a 0.11 research run.
+          return { limitUsd: 5, spendUsd: 0.3, maxBudgetUsd: 4.89, expiresAt: null };
+        },
+      }),
+    });
+    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
+    await app.services.providers.refreshCredit();
+    const status = await app.invoke('providers.status');
+    expect(status.credit?.limitUsd).toBe(5);
+    expect(status.credit?.remainingUsd).toBeCloseTo(4.59);
+    expect(status.credit?.usageUsd).toBeCloseTo(0.41);
+
+    // The headers carry the same cap: the total stays what the vouchers add up to.
+    const { token } = await app.procedureWithToken();
+    await app.rpc('agent.voucherSpend', { spendUsd: 0.4, maxBudgetUsd: 4.89 }, token);
+    const credit = (await app.invoke('providers.status')).credit;
+    expect(credit?.limitUsd).toBe(5);
+    expect(credit?.remainingUsd).toBeCloseTo(4.49);
+  });
+
+  it('refreshes the voucher credit after spending, and again once the gateway wrote the spend', async () => {
+    let usageUsd = 1;
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        async getVoucherCredit() {
+          return { limitUsd: 5, spendUsd: usageUsd, maxBudgetUsd: 5, expiresAt: null };
+        },
+      }),
+    });
+    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
+    const lastEmittedUsage = () =>
+      app.events.findLast((e) => e.type === 'providers.status')?.status.credit?.usageUsd;
+    await vi.waitFor(() => expect(lastEmittedUsage()).toBe(1));
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      usageUsd = 2;
+      app.services.providers.creditSpent();
+      await vi.waitFor(() => expect(lastEmittedUsage()).toBe(2));
+
+      usageUsd = 3;
+      await vi.advanceTimersByTimeAsync(12_000);
+      await vi.waitFor(() => expect(lastEmittedUsage()).toBe(3));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the voucher spend an agent read in the LiteLLM headers, and never moves it back', async () => {
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        async getVoucherCredit() {
+          return { limitUsd: 5, spendUsd: 1, maxBudgetUsd: 5, expiresAt: null };
+        },
+      }),
+    });
+    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
+    const lastEmittedCredit = () =>
+      app.events.findLast((e) => e.type === 'providers.status')?.status.credit;
+    await vi.waitFor(() => expect(lastEmittedCredit()?.usageUsd).toBe(1));
+    const { token } = await app.procedureWithToken();
+    const reportSpend = (spendUsd: number) =>
+      app.rpc('agent.voucherSpend', { spendUsd, maxBudgetUsd: 5 }, token);
+
+    expect((await reportSpend(2.5)).status).toBe(200);
+    expect(lastEmittedCredit()).toEqual({ usageUsd: 2.5, limitUsd: 5, remainingUsd: 2.5 });
+
+    // An older header, or the key server before the gateway wrote the spend.
+    await reportSpend(2);
+    await app.services.providers.refreshCredit();
+    expect((await app.invoke('providers.status')).credit?.usageUsd).toBe(2.5);
+
+    expect(
+      (await app.rpc('agent.voucherSpend', { spendUsd: -1, maxBudgetUsd: 5 }, token)).status,
+    ).toBe(400);
+  });
+
+  it('keeps the voucher model fixed: no model list, and setModel is refused', async () => {
+    app = await createTestApp();
+    await app.invoke('providers.redeemVoucher', 'VALID-CODE');
+    expect(await app.invoke('providers.listModels')).toEqual([]);
+    await expect(app.invoke('providers.setModel', 'other-model')).rejects.toThrow(
+      t('es', 'invalidRequest'),
+    );
+    expect((await app.services.providers.agentModel()).id).toBe('test/voucher-model');
+  });
+
+  it('maps key-server error codes to plain messages', async () => {
+    const codes: [string, string][] = [
+      ['invalid_code', t('es', 'voucherInvalid')],
+      ['bad_request', t('es', 'voucherInvalid')],
+      ['already_redeemed', t('es', 'voucherUsed')],
+      ['expired', t('es', 'voucherExpired')],
+      ['revoked', t('es', 'voucherRevoked')],
+      ['rate_limited', t('es', 'voucherRateLimited')],
+      ['provider_error', t('es', 'voucherFailed')],
+      ['internal', t('es', 'voucherFailed')],
+    ];
+    let next = '';
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        async redeemVoucher() {
+          if (next === 'network') throw new TypeError('fetch failed');
+          throw Object.assign(new Error('nope'), { code: next });
+        },
+      }),
+    });
+    for (const [code, message] of codes) {
+      next = code;
+      expect(await app.invoke('providers.redeemVoucher', 'SA-XXXXXX')).toEqual({
+        ok: false,
+        error: message,
+      });
+    }
+    next = 'network';
+    expect(await app.invoke('providers.redeemVoucher', 'SA-XXXXXX')).toEqual({
+      ok: false,
+      error: t('es', 'voucherNetwork'),
+    });
+    expect((await app.invoke('providers.status')).configured).toBe(false);
+  });
+
+  it('sets BYOK and custom providers, changes the model and logs out (deleting the secret)', async () => {
+    app = await createTestApp();
+    expect(await app.invoke('providers.listByok')).toHaveLength(2);
+    const unknown = await app.invoke('providers.setByok', {
+      provider: 'nope',
+      apiKey: 'k',
+      model: 'm',
+    });
+    expect(unknown.ok).toBe(false);
+    const byok = await app.invoke('providers.setByok', {
+      provider: 'anthropic',
+      apiKey: ' sk-ant-1 ',
+      model: 'claude-x',
+    });
+    expect(byok).toMatchObject({
+      ok: true,
+      status: { kind: 'byok', label: 'Anthropic (clave propia)' },
+    });
+    expect(await app.vault.getSecret(SECRET_IDS.byok)).toBe('sk-ant-1');
+    expect(await app.invoke('providers.setModel', 'claude-y')).toMatchObject({ model: 'claude-y' });
+    expect(await app.services.providers.agentModel()).toEqual({
+      provider: 'anthropic',
+      id: 'claude-y',
+    });
+    // BYOK runs the assistant on the user's model too.
+    expect(await app.services.providers.agentModel('assistant')).toEqual({
+      provider: 'anthropic',
+      id: 'claude-y',
+    });
+
+    const custom = await app.invoke('providers.setCustom', {
+      baseUrl: 'http://localhost:11434/v1/',
+      api: 'openai-completions',
+      model: 'llama',
+      apiKey: 'local-key',
+    });
+    expect(custom).toMatchObject({
+      ok: true,
+      status: { kind: 'custom', label: 'Servidor propio (localhost:11434)' },
+    });
+    expect((await app.invoke('settings.get')).provider).toEqual({
+      kind: 'custom',
+      baseUrl: 'http://localhost:11434/v1',
+      api: 'openai-completions',
+      model: 'llama',
+      secretId: SECRET_IDS.custom,
+    });
+    expect(await app.invoke('providers.logout')).toEqual({ configured: false });
+    expect(await app.vault.getSecret(SECRET_IDS.custom)).toBeUndefined();
+    await expect(app.invoke('providers.setModel', 'x')).rejects.toThrow(
+      t('es', 'agentErrorNoProvider'),
+    );
+  });
+
+  it('signs in with ChatGPT: stable device id, browser opened, progress events, account shown', async () => {
+    const deviceIds: string[] = [];
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        async loginChatGPT(cb: ChatGPTLoginCallbacks) {
+          deviceIds.push(cb.deviceId);
+          cb.onAuthUrl('https://auth.openai.com/api/accounts/authorize?client_id=x');
+          cb.onProgress?.('exchanging');
+          return {
+            credential: {
+              type: 'oauth',
+              access: 'access-1',
+              refresh: 'refresh-1',
+              expires: Date.now() + 3_600_000,
+            },
+            account: 'lucia@example.com',
+          };
+        },
+      }),
+    });
+    const res = await app.invoke('providers.loginChatGPT');
+    expect(res).toMatchObject({
+      ok: true,
+      status: { kind: 'chatgpt', label: 'ChatGPT', account: 'lucia@example.com' },
+    });
+    expect(app.opened).toEqual(['https://auth.openai.com/api/accounts/authorize?client_id=x']);
+    const progress = app.events.filter((e) => e.type === 'providers.loginProgress');
+    expect(progress[0]).toMatchObject({
+      url: 'https://auth.openai.com/api/accounts/authorize?client_id=x',
+    });
+    expect(progress[1]).toMatchObject({ message: t('es', 'loginExchanging') });
+    await app.invoke('providers.loginChatGPT');
+    expect(deviceIds[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(deviceIds[1]).toBe(deviceIds[0]);
+    expect(app.logLines.join('\n')).not.toContain('access-1');
+    const { procedureId, token } = await app.procedureWithToken();
+    expect(procedureId).toBeDefined();
+    const cred = await app.rpc('agent.credential', { providerId: 'openai' }, token);
+    expect(cred.body.result.credential).toMatchObject({ type: 'oauth', access: 'access-1' });
+  });
+
+  it('explains that ChatGPT needs a paid plan when the account is not eligible', async () => {
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        loginChatGPT: async () => {
+          throw Object.assign(new Error('Token request failed (400): invalid_grant'), {
+            code: 'not_eligible',
+          });
+        },
+      }),
+    });
+    expect(await app.invoke('providers.loginChatGPT')).toEqual({
+      ok: false,
+      error: t('es', 'loginChatgptNotEligible'),
+    });
+  });
+
+  it('cancels a sign-in in progress', async () => {
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        loginChatGPT: (cb: ChatGPTLoginCallbacks) =>
+          new Promise((_resolve, reject) => {
+            cb.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+          }),
+      }),
+    });
+    const pending = app.invoke('providers.loginChatGPT');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(await app.invoke('providers.loginChatGPT')).toEqual({
+      ok: false,
+      error: t('es', 'loginInProgress'),
+    });
+    await app.invoke('providers.cancelLogin');
+    expect(await pending).toEqual({ ok: false, error: t('es', 'loginCancelled') });
+  });
+
+  it('serializes OAuth refreshes across agents and persists the result', async () => {
+    const lib = createFakeProviderLib();
+    app = await createTestApp({ providerLib: lib });
+    await app.invoke('providers.loginChatGPT');
+    const providers = app.services.providers;
+    // Fresh token: returned as is, no refresh.
+    expect(await providers.refreshCredential('openai')).toMatchObject({ access: 'acc-token-1' });
+    expect(lib.refreshCalls).toBe(0);
+    // About to expire: three agents ask at once -> one refresh.
+    const stored = JSON.parse((await app.vault.getSecret(SECRET_IDS.chatgpt))!);
+    stored.credential.expires = Date.now() + 60_000;
+    await app.vault.setSecret(SECRET_IDS.chatgpt, 'x', JSON.stringify(stored));
+    const results = await Promise.all([
+      providers.refreshCredential('openai'),
+      providers.refreshCredential('openai'),
+      providers.refreshCredential('openai'),
+    ]);
+    expect(lib.refreshCalls).toBe(1);
+    expect(new Set(results.map((r) => r?.access))).toEqual(new Set(['acc-token-2']));
+    const persisted = JSON.parse((await app.vault.getSecret(SECRET_IDS.chatgpt))!);
+    expect(persisted.credential.access).toBe('acc-token-2');
+    expect(persisted.account).toBe('user@example.com');
+    expect(await providers.refreshCredential('anthropic')).toBeNull();
+  });
+
+  it('refuses the Codex device-code login when the build does not include it', async () => {
+    app = await createTestApp();
+    expect(await app.invoke('providers.loginCodexDevice')).toEqual({
+      ok: false,
+      error: t('es', 'loginCodexUnavailable'),
+    });
+  });
+
+  it('signs in with a Codex device code (dev builds) and serves the openai-codex credential', async () => {
+    let refreshed = 0;
+    const credential = {
+      type: 'oauth' as const,
+      access: 'codex-access-1',
+      refresh: 'codex-refresh-1',
+      expires: Date.now() + 60_000,
+      accountId: 'acct-1',
+    };
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        codex: {
+          async login(cb) {
+            cb.onUserCode({
+              userCode: 'ABCD-1234',
+              verificationUrl: 'https://auth.openai.com/codex/device',
+              expiresAt: Date.now() + 900_000,
+            });
+            return { credential, account: 'dev@example.com' };
+          },
+          async refresh(previous) {
+            refreshed++;
+            return { ...previous, access: 'codex-access-2', expires: Date.now() + 3_600_000 };
+          },
+        },
+      }),
+    });
+    const res = await app.invoke('providers.loginCodexDevice');
+    expect(res).toMatchObject({
+      ok: true,
+      status: {
+        kind: 'codex',
+        label: t('es', 'providerCodex'),
+        account: 'dev@example.com',
+      },
+    });
+    expect(app.events.find((e) => e.type === 'providers.loginProgress')).toMatchObject({
+      url: 'https://auth.openai.com/codex/device',
+      userCode: 'ABCD-1234',
+    });
+    expect(app.opened).toEqual([]);
+    const providers = app.services.providers;
+    expect(await providers.agentModel()).toMatchObject({ provider: 'openai-codex' });
+    expect(await providers.credentialFor('openai')).toBeNull();
+    expect(await providers.credentialFor('openai-codex')).toMatchObject({ accountId: 'acct-1' });
+    expect(await providers.refreshCredential('openai-codex')).toMatchObject({
+      access: 'codex-access-2',
+    });
+    expect(refreshed).toBe(1);
+    const stored = JSON.parse((await app.vault.getSecret(SECRET_IDS.codex))!);
+    expect(stored.credential.access).toBe('codex-access-2');
+    expect(app.logLines.join('\n')).not.toContain('codex-refresh-1');
+    // Without SA_DEV_USER_KEY, a Codex session has no user.
+    expect(providers.hasUserKey()).toBe(false);
+    expect(await providers.userKey()).toBeUndefined();
+
+    await app.invoke('providers.logout');
+    expect(await app.vault.getSecret(SECRET_IDS.codex)).toBeUndefined();
+  });
+
+  it("uses SA_DEV_USER_KEY as a Codex session's user key", async () => {
+    const devUserKey = { baseUrl: 'https://llm.example.test/v1', apiKey: 'sk-dev-user-key-123456' };
+    app = await createTestApp({
+      env: { devUserKey },
+      providerLib: createFakeProviderLib({
+        codex: {
+          async login() {
+            return {
+              credential: {
+                type: 'oauth' as const,
+                access: 'codex-access-1',
+                refresh: 'codex-refresh-1',
+                expires: Date.now() + 60_000,
+                accountId: 'acct-1',
+              },
+            };
+          },
+          async refresh(previous) {
+            return previous;
+          },
+        },
+      }),
+    });
+    const providers = app.services.providers;
+    await app.invoke('providers.redeemVoucher', 'VALID-CODE');
+    expect(await providers.userKey()).toEqual({
+      baseUrl: 'https://llm.example.test/v1',
+      apiKey: 'sk-litellm-voucher-key-123456',
+    });
+    expect((await app.invoke('providers.loginCodexDevice')).ok).toBe(true);
+    expect(providers.hasUserKey()).toBe(true);
+    expect(await providers.userKey()).toEqual(devUserKey);
+    expect(await providers.scanGateAccess()).toMatchObject({ apiKey: 'sk-dev-user-key-123456' });
+    expect(app.logLines.join('\n')).not.toContain('sk-dev-user-key');
+  });
+
+  it('lists models only for BYOK and custom providers', async () => {
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        codex: {
+          login: async () => ({
+            credential: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 3e6 },
+          }),
+          refresh: async (c) => c,
+        },
+      }),
+    });
+    expect(await app.invoke('providers.listModels')).toEqual([]);
+
+    await app.invoke('providers.loginChatGPT');
+    expect(await app.invoke('providers.listModels')).toEqual([]);
+    expect(await app.services.providers.agentModel()).toEqual({
+      provider: 'openai',
+      id: 'gpt-test',
+    });
+    expect(await app.services.providers.agentModel('assistant')).toEqual({
+      provider: 'openai',
+      id: 'gpt-test-assistant',
+      thinkingLevel: 'high',
+    });
+    // Learnings shared by procedure agents name their model and reasoning level.
+    expect(await app.services.providers.agentAuthor()).toBe('gpt-test · medium');
+    expect(await app.services.providers.agentAuthor('assistant')).toBe('gpt-test-assistant · high');
+
+    await app.invoke('providers.loginCodexDevice');
+    expect(await app.invoke('providers.listModels')).toEqual([]);
+    expect(await app.services.providers.agentModel()).toEqual({
+      provider: 'openai-codex',
+      id: 'gpt-test',
+    });
+    expect(await app.services.providers.agentModel('assistant')).toEqual({
+      provider: 'openai-codex',
+      id: 'gpt-test-assistant',
+      thinkingLevel: 'high',
+    });
+
+    await app.invoke('providers.setByok', { provider: 'anthropic', apiKey: 'k', model: 'x' });
+    expect((await app.invoke('providers.listModels')).map((m) => m.provider)).toEqual([
+      'anthropic',
+      'anthropic',
+      'anthropic',
+    ]);
+
+    await app.invoke('providers.setCustom', {
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      model: 'llama3.1:8b',
+    });
+    expect(await app.invoke('providers.listModels')).toEqual([
+      { provider: 'custom', id: 'llama3.1:8b', name: 'llama3.1:8b' },
+    ]);
+    // A custom endpoint without reasoning runs at "off".
+    expect(await app.services.providers.agentAuthor()).toBe('llama3.1:8b · off');
+  });
+
+  it('screens scans with the voucher key on the voucher gateway', async () => {
+    app = await createTestApp();
+    await app.invoke('providers.redeemVoucher', 'VALID-CODE');
+    expect(await app.services.providers.scanGateAccess()).toEqual({
+      endpoint: 'https://llm.example.test/openrouter/alpha/decisions',
+      apiKey: 'sk-litellm-voucher-key-123456',
+    });
+  });
+
+  it('gets the ChatGPT account scan key with the ID token and keeps it with the credential', async () => {
+    const tokens: string[] = [];
+    const lib = createFakeProviderLib();
+    const getKey = lib.getChatGPTKey;
+    app = await createTestApp({
+      providerLib: {
+        ...lib,
+        getChatGPTKey: (url, idToken) => {
+          tokens.push(idToken);
+          return getKey(url, idToken);
+        },
+      },
+    });
+    expect((await app.invoke('providers.loginChatGPT')).ok).toBe(true);
+    const access = await app.services.providers.scanGateAccess();
+    expect(access).toEqual({
+      endpoint: 'https://llm.example.test/openrouter/alpha/decisions',
+      apiKey: 'sk-litellm-chatgpt-scan-key-123456',
+    });
+    expect(tokens).toEqual([FAKE_ID_TOKEN]);
+    // Stored with the ChatGPT credential: reused, never asked for again.
+    const stored = JSON.parse((await app.vault.getSecret(SECRET_IDS.chatgpt))!);
+    expect(stored.scanKey).toEqual({
+      baseUrl: 'https://llm.example.test/v1',
+      apiKey: 'sk-litellm-chatgpt-scan-key-123456',
+    });
+    expect(await app.services.providers.scanGateAccess()).toEqual(access);
+    expect(tokens).toHaveLength(1);
+    // Neither the key nor the ID token reach logs, settings or the agent's credential.
+    const settings = JSON.stringify(await app.invoke('settings.get'));
+    for (const secret of ['sk-litellm-chatgpt-scan-key', FAKE_ID_TOKEN]) {
+      expect(app.logLines.join('\n')).not.toContain(secret);
+      expect(settings).not.toContain(secret);
+    }
+    const credential = await app.services.providers.credentialFor('openai');
+    expect(JSON.stringify(credential)).not.toContain('scan-key');
+    // Signing out forgets it.
+    await app.invoke('providers.logout');
+    expect(await app.services.providers.scanGateAccess()).toBeUndefined();
+  });
+
+  it('signs in with ChatGPT even when the key server refuses the ID token', async () => {
+    let calls = 0;
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        async getChatGPTKey() {
+          calls++;
+          throw Object.assign(new Error('Sign in with ChatGPT again.'), {
+            code: 'invalid_identity',
+          });
+        },
+      }),
+    });
+    expect((await app.invoke('providers.loginChatGPT')).ok).toBe(true);
+    expect(await app.services.providers.scanGateAccess()).toBeUndefined();
+    expect(await app.services.providers.scanGateAccess()).toBeUndefined();
+    expect(calls).toBe(1); // a refused token is not sent again
+    expect(app.logLines.join('\n')).toContain('ChatGPT scan key unavailable');
+  });
+
+  it('has no user key for BYOK and custom endpoints', async () => {
+    app = await createTestApp({
+      env: { devUserKey: { baseUrl: 'https://llm.example.test/v1', apiKey: 'sk-dev-user-key-1' } },
+    });
+    await app.invoke('providers.setByok', {
+      provider: 'anthropic',
+      model: 'anthropic-model-a',
+      apiKey: 'sk-ant-123456789',
+    });
+    expect(app.services.providers.hasUserKey()).toBe(false);
+    expect(await app.services.providers.userKey()).toBeUndefined();
+    expect(await app.services.providers.scanGateAccess()).toBeUndefined();
+  });
+
+  it('preconfigures SA_PROVIDER at startup', async () => {
+    app = await createTestApp({
+      env: {
+        provider: {
+          kind: 'custom',
+          baseUrl: 'http://127.0.0.1:8789/v1',
+          model: 'mock-model',
+          api: 'openai-completions',
+        },
+      },
+    });
+    expect(await app.invoke('providers.status')).toMatchObject({
+      configured: true,
+      kind: 'custom',
+      model: 'mock-model',
+    });
+  });
+});

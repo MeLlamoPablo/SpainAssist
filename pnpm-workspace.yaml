@@ -1,0 +1,15 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "services/*"
+  - "tools/*"
+  - "e2e"
+
+# pnpm blocks dependency install scripts by default; allow the ones we need.
+# The denied ones are a no-op (@google/genai), only check optional CLI deps (protobufjs), or
+# belong to Squirrel.Windows, which we don't build (electron-winstaller, via electron-builder).
+allowBuilds:
+  esbuild: true
+  '@google/genai': false
+  protobufjs: false
+  electron-winstaller: false

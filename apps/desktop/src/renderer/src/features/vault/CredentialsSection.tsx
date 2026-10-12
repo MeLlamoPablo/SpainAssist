@@ -1,0 +1,885 @@
+import {
+  type CredentialPolicy,
+  type CredentialSummary,
+  DniePin,
+  type VaultOverview,
+} from '@sa/shared';
+import {
+  FileKey,
+  IdCard,
+  KeyRound,
+  type LucideIcon,
+  Plus,
+  ShieldCheck,
+  Smartphone,
+  Trash,
+  TriangleAlert,
+  Upload,
+} from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
+import { Button, IconButton } from '../../components/ui/button';
+import { SegmentedControl } from '../../components/ui/controls';
+import { ConfirmDialog, Dialog } from '../../components/ui/dialog';
+import { Field, Input, PasswordInput } from '../../components/ui/field';
+import { Card, Pill } from '../../components/ui/misc';
+import { useLang, useT } from '../../i18n';
+import { common } from '../../i18n/common';
+import { api, errorMessage } from '../../lib/api';
+import { cn } from '../../lib/cn';
+import { pickFiles, readFileBytes } from '../../lib/files';
+import { daysUntil, formatLongDate, formatRelative } from '../../lib/format';
+import { useAppStore } from '../../store/app';
+import { reloadVault } from '../../store/sync';
+import { toast } from '../../store/toast';
+import { useVaultStore } from '../../store/vault';
+import { chatDict } from '../chat/i18n';
+import { companionDict } from '../companion/i18n';
+import { PairingPanel } from '../companion/PairingPanel';
+import { vaultDict } from './i18n';
+import { SectionIntro } from './VaultView';
+
+export function CredentialsSection({ overview }: { overview: VaultOverview }) {
+  const t = useT(vaultDict);
+  const [claveOpen, setClaveOpen] = useState(false);
+  const [certOpen, setCertOpen] = useState(false);
+  const [movilBusy, setMovilBusy] = useState(false);
+  const [dnieBusy, setDnieBusy] = useState(false);
+  const clave = overview.credentials.find((c) => c.kind === 'clave_permanente');
+  const movil = overview.credentials.find((c) => c.kind === 'clave_movil');
+  const certs = overview.credentials.filter((c) => c.kind === 'certificate');
+  // DNIe with the phone is behind a feature flag (main hides a saved one without it, too).
+  const dniePhone = useAppStore((s) => s.info?.features.dniePhone ?? false);
+  const dnie = overview.credentials.find((c) => c.kind === 'dnie');
+  const biometric = overview.storage.biometricAvailable;
+
+  const addMovil = async () => {
+    setMovilBusy(true);
+    try {
+      await api.invoke('vault.addClaveMovil');
+      await reloadVault();
+      toast.success(t.credentials.movil.saved);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setMovilBusy(false);
+    }
+  };
+
+  const addDnie = async () => {
+    setDnieBusy(true);
+    try {
+      await api.invoke('vault.addDnie');
+      await reloadVault();
+      toast.success(t.credentials.dnie.saved);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setDnieBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <SectionIntro lead={t.credentials.lead} />
+      <div className="flex flex-col gap-4">
+        {/* Cl@ve Permanente */}
+        {clave ? (
+          <CredentialCard
+            credential={clave}
+            icon={KeyRound}
+            title={t.credentials.clave.title}
+            biometric={biometric}
+          >
+            <Meta label={t.credentials.clave.user} value={clave.usernameHint ?? '•••••'} mono />
+          </CredentialCard>
+        ) : (
+          <AddCard
+            icon={KeyRound}
+            title={t.credentials.clave.title}
+            body={t.credentials.clave.what}
+            action={
+              <Button variant="secondary" icon={Plus} onClick={() => setClaveOpen(true)}>
+                {t.credentials.clave.add}
+              </Button>
+            }
+          />
+        )}
+
+        {/* Cl@ve Móvil */}
+        {movil ? (
+          <CredentialCard
+            credential={movil}
+            icon={Smartphone}
+            title={t.credentials.movil.title}
+            biometric={biometric}
+          >
+            <p className="text-[13px] text-fg-muted">{t.credentials.movil.active}</p>
+          </CredentialCard>
+        ) : (
+          <AddCard
+            icon={Smartphone}
+            title={t.credentials.movil.title}
+            body={`${t.credentials.movil.what} ${t.credentials.movil.hasHint}`}
+            action={
+              <Button
+                variant="secondary"
+                icon={ShieldCheck}
+                loading={movilBusy}
+                onClick={() => void addMovil()}
+              >
+                {t.credentials.movil.has}
+              </Button>
+            }
+          />
+        )}
+
+        {/* DNIe, read by the phone */}
+        {!dniePhone ? null : dnie ? (
+          <DnieCard credential={dnie} biometric={biometric} />
+        ) : (
+          <AddCard
+            icon={IdCard}
+            title={t.credentials.dnie.title}
+            body={t.credentials.dnie.what}
+            action={
+              <Button
+                variant="secondary"
+                icon={ShieldCheck}
+                loading={dnieBusy}
+                onClick={() => void addDnie()}
+              >
+                {t.credentials.dnie.has}
+              </Button>
+            }
+          />
+        )}
+
+        {/* Certificates */}
+        {certs.map((cert) => (
+          <CertificateCard key={cert.id} credential={cert} biometric={biometric} />
+        ))}
+        {certs.length === 0 ? (
+          <AddCard
+            icon={FileKey}
+            title={t.credentials.cert.title}
+            body={t.credentials.cert.what}
+            action={
+              <Button variant="secondary" icon={Plus} onClick={() => setCertOpen(true)}>
+                {t.credentials.cert.add}
+              </Button>
+            }
+          />
+        ) : (
+          <div>
+            <Button variant="ghost" icon={Plus} onClick={() => setCertOpen(true)}>
+              {t.credentials.cert.another}
+            </Button>
+          </div>
+        )}
+      </div>
+      <ClaveDialog open={claveOpen} onOpenChange={setClaveOpen} />
+      <CertificateDialog open={certOpen} onOpenChange={setCertOpen} />
+    </div>
+  );
+}
+
+function AddCard({
+  icon: Icon,
+  title,
+  body,
+  action,
+}: {
+  icon: LucideIcon;
+  title: string;
+  body: string;
+  action: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-4 rounded-xl border border-dashed border-line-strong bg-surface-2/50 px-5 py-4">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-3 text-fg-subtle">
+        <Icon size={19} aria-hidden />
+      </span>
+      <div className="min-w-[220px] flex-1">
+        <p className="text-[14.5px] font-semibold text-fg">{title}</p>
+        <p className="mt-0.5 text-[13px] text-fg-muted">{body}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function Meta({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11.5px] font-medium text-fg-subtle">{label}</dt>
+      <dd
+        className={cn(
+          'mt-0.5 truncate text-[13.5px] font-medium text-fg',
+          mono && 'tracking-wider tabular-nums',
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function CredentialCard({
+  credential: c,
+  icon: Icon,
+  title,
+  biometric,
+  children,
+  warning,
+  below,
+}: {
+  credential: CredentialSummary;
+  icon: LucideIcon;
+  title: string;
+  biometric: boolean;
+  children?: ReactNode;
+  warning?: ReactNode;
+  /** Shown under the details (e.g. the DNIe's phone pairing). */
+  below?: ReactNode;
+}) {
+  const t = useT(vaultDict);
+  const tc = useT(common);
+  const lang = useLang();
+  const [confirm, setConfirm] = useState(false);
+  const [policy, setPolicy] = useState<CredentialPolicy>(c.policy);
+  useEffect(() => setPolicy(c.policy), [c.policy]);
+
+  const changePolicy = async (next: CredentialPolicy) => {
+    const prev = policy;
+    setPolicy(next);
+    try {
+      await api.invoke('vault.setCredentialPolicy', c.id, next);
+      await reloadVault();
+      toast.success(t.credentials.policySaved);
+    } catch (err) {
+      setPolicy(prev);
+      toast.error(errorMessage(err));
+    }
+  };
+
+  const remove = async () => {
+    try {
+      useVaultStore.getState().set(await api.invoke('vault.deleteCredential', c.id));
+      toast.success(t.credentials.deleted);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <Card className="overflow-hidden" data-testid={`credential-${c.kind}`}>
+      <div className="flex items-start gap-4 px-5 pt-4 pb-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-st-done-bg text-st-done-fg">
+          <Icon size={19} aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[14.5px] font-semibold text-fg">{title}</p>
+            {c.label !== title ? (
+              <span className="text-[13px] text-fg-subtle">· {c.label}</span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-[12.5px] text-fg-subtle">
+            {c.lastUsedAt
+              ? t.credentials.lastUsed(formatRelative(c.lastUsedAt, lang))
+              : t.credentials.neverUsed}
+          </p>
+          {children ? (
+            <dl className="mt-3 grid grid-cols-1 gap-3 @min-[720px]:grid-cols-3">{children}</dl>
+          ) : null}
+          {warning}
+          {below}
+        </div>
+        <IconButton
+          icon={Trash}
+          label={`${t.credentials.remove} ${title}`}
+          onClick={() => setConfirm(true)}
+        />
+      </div>
+      {/* Cl@ve Móvil and the DNIe are always approved on the phone. */}
+      {c.kind !== 'clave_movil' && c.kind !== 'dnie' ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-2/60 px-5 py-3">
+          <div className="min-w-0">
+            <p className="text-[12.5px] font-semibold text-fg">{t.credentials.policy}</p>
+            <p className="text-[12.5px] text-fg-muted">
+              {policy === 'auto'
+                ? t.credentials.autoHint
+                : biometric
+                  ? t.credentials.askHintBio
+                  : t.credentials.askHint}
+            </p>
+          </div>
+          <SegmentedControl
+            label={`${t.credentials.policy}: ${title}`}
+            value={policy}
+            onValueChange={(v) => void changePolicy(v)}
+            options={[
+              { value: 'auto', label: t.credentials.auto },
+              { value: 'ask', label: t.credentials.ask },
+            ]}
+          />
+        </div>
+      ) : null}
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title={t.credentials.deleteTitle(title)}
+        description={t.credentials.deleteBody}
+        confirmLabel={tc.delete}
+        cancelLabel={tc.cancel}
+        onConfirm={remove}
+      />
+    </Card>
+  );
+}
+
+function CertificateCard({
+  credential: c,
+  biometric,
+}: {
+  credential: CredentialSummary;
+  biometric: boolean;
+}) {
+  const t = useT(vaultDict);
+  const lang = useLang();
+  const info = c.certificate;
+  const days = info ? daysUntil(info.validTo) : null;
+  const soon = days !== null && days < 30;
+
+  return (
+    <CredentialCard
+      credential={c}
+      icon={FileKey}
+      title={t.credentials.cert.title}
+      biometric={biometric}
+      warning={
+        soon && days !== null ? (
+          <div
+            className={cn(
+              'mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-[12.5px] font-medium ring-1 ring-inset',
+              days < 0
+                ? 'bg-st-blocked-bg text-st-blocked-fg ring-st-blocked-line'
+                : 'bg-st-attention-bg text-st-attention-fg ring-st-attention-line',
+            )}
+          >
+            <TriangleAlert size={15} className="mt-px shrink-0" aria-hidden />
+            {t.credentials.cert.expiresSoon(days)}
+          </div>
+        ) : null
+      }
+    >
+      {info ? (
+        <>
+          <Meta label={t.credentials.cert.holder} value={info.holderName ?? info.subject} />
+          <Meta label={t.credentials.cert.issuer} value={info.issuer} />
+          <Meta
+            label={t.credentials.cert.validTo}
+            value={
+              <span className="flex items-center gap-2">
+                {formatLongDate(info.validTo, lang)}
+                {days !== null && days < 0 ? (
+                  <Pill tone="blocked" size="sm">
+                    {t.credentials.cert.expired}
+                  </Pill>
+                ) : null}
+              </span>
+            }
+          />
+        </>
+      ) : null}
+    </CredentialCard>
+  );
+}
+
+function DnieCard({
+  credential: c,
+  biometric,
+}: {
+  credential: CredentialSummary;
+  biometric: boolean;
+}) {
+  const t = useT(vaultDict);
+  const tc = useT(companionDict);
+  const lang = useLang();
+  const companion = useAppStore((s) => s.companion);
+  const [pairing, setPairing] = useState(false);
+  const info = c.certificate;
+  const connected = companion.state === 'connected';
+  const paired = connected || companion.state === 'away';
+
+  const pair = async () => {
+    setPairing(true);
+    try {
+      useAppStore.setState({ companion: await api.invoke('companion.pair') });
+    } catch (err) {
+      setPairing(false);
+      toast.error(errorMessage(err));
+    }
+  };
+  const unpair = async () => {
+    try {
+      useAppStore.setState({ companion: await api.invoke('companion.unpair') });
+      toast.success(tc.unpaired);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <CredentialCard
+      credential={c}
+      icon={IdCard}
+      title={t.credentials.dnie.title}
+      biometric={biometric}
+      below={
+        <>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2/60 px-3 py-2">
+            <p className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
+              <Smartphone
+                size={15}
+                className={connected ? 'text-st-done-fg' : 'text-fg-subtle'}
+                aria-hidden
+              />
+              {connected
+                ? tc.connected(companion.device ?? tc.app)
+                : companion.state === 'away' && companion.device
+                  ? tc.away(companion.device)
+                  : tc.noPhone}
+            </p>
+            {companion.state === 'unavailable' ? null : paired ? (
+              <Button variant="ghost" size="sm" onClick={() => void unpair()}>
+                {tc.unpair}
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" icon={Smartphone} onClick={() => void pair()}>
+                {tc.pair}
+              </Button>
+            )}
+          </div>
+          <DniePinRow credential={c} />
+        </>
+      }
+    >
+      {info ? (
+        <>
+          <Meta label={t.credentials.cert.holder} value={info.holderName ?? info.subject} />
+          <Meta label={t.credentials.cert.validTo} value={formatLongDate(info.validTo, lang)} />
+        </>
+      ) : null}
+      <Dialog
+        open={pairing}
+        onOpenChange={setPairing}
+        title={tc.pairTitle}
+        description={tc.pairLead}
+        closeLabel={tc.done}
+        width="lg"
+        footer={
+          <Button variant={connected ? 'primary' : 'secondary'} onClick={() => setPairing(false)}>
+            {tc.done}
+          </Button>
+        }
+      >
+        <PairingPanel status={companion} />
+      </Dialog>
+    </CredentialCard>
+  );
+}
+
+/** The DNIe PIN in Mis datos: saved, refused by the card, or none. Main never sends it back. */
+function DniePinRow({ credential: c }: { credential: CredentialSummary }) {
+  const t = useT(vaultDict).credentials.dnie.pin;
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const wrong = c.pin === 'wrong';
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await api.invoke('vault.setDniePin', c.id, null);
+      await reloadVault();
+      toast.success(t.removed);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      data-testid="dnie-pin"
+      className={cn(
+        'mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2',
+        wrong ? 'bg-st-attention-bg ring-1 ring-st-attention-line ring-inset' : 'bg-surface-2/60',
+      )}
+    >
+      <p
+        className={cn(
+          'flex min-w-0 items-center gap-2 text-[13px]',
+          wrong ? 'font-medium text-st-attention-fg' : 'text-fg-muted',
+        )}
+      >
+        {wrong ? (
+          <TriangleAlert size={15} className="shrink-0" aria-hidden />
+        ) : (
+          <KeyRound
+            size={15}
+            className={cn('shrink-0', c.pin ? 'text-st-done-fg' : 'text-fg-subtle')}
+            aria-hidden
+          />
+        )}
+        {c.pin ? (wrong ? t.wrong : t.saved) : t.none}
+      </p>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {c.pin ? (
+          <>
+            <Button variant={wrong ? 'secondary' : 'ghost'} size="sm" onClick={() => setOpen(true)}>
+              {wrong ? t.fix : t.change}
+            </Button>
+            <Button variant="ghost" size="sm" loading={busy} onClick={() => void remove()}>
+              {t.remove}
+            </Button>
+          </>
+        ) : (
+          <Button variant="secondary" size="sm" icon={KeyRound} onClick={() => setOpen(true)}>
+            {t.add}
+          </Button>
+        )}
+      </div>
+      <DniePinDialog credential={c} open={open} onOpenChange={setOpen} />
+    </div>
+  );
+}
+
+/** Typed once and sent to main, which keeps it encrypted (it never comes back). */
+function DniePinDialog({
+  credential,
+  open,
+  onOpenChange,
+}: {
+  credential: CredentialSummary;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const t = useT(vaultDict).credentials.dnie.pin;
+  const tc = useT(common);
+  const tchat = useT(chatDict);
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    setPin('');
+    setError(null);
+    onOpenChange(false);
+  };
+
+  const submit = async () => {
+    if (!DniePin.safeParse(pin).success) {
+      setError(t.invalid);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.invoke('vault.setDniePin', credential.id, pin);
+      await reloadVault();
+      toast.success(t.savedToast);
+      close();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => (o ? onOpenChange(true) : close())}
+      title={t.dialogTitle}
+      description={t.dialogLead}
+      closeLabel={tc.close}
+      width="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={close}>
+            {tc.cancel}
+          </Button>
+          <Button variant="primary" loading={busy} disabled={!pin} onClick={() => void submit()}>
+            {t.save}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-4 pt-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <Field label={t.label} help={t.help} error={error} required>
+          {({ id, describedBy, invalid }) => (
+            <PasswordInput
+              id={id}
+              value={pin}
+              maxLength={16}
+              onChange={(e) => {
+                setPin(e.target.value);
+                setError(null);
+              }}
+              aria-describedby={describedBy}
+              aria-invalid={invalid || undefined}
+              revealLabel={tchat.prompt.reveal}
+              hideLabel={tchat.prompt.hide}
+              autoFocus
+            />
+          )}
+        </Field>
+        <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
+      </form>
+    </Dialog>
+  );
+}
+
+const DNI_NIE = /^([0-9]{8}[A-Z]|[XYZ][0-9]{7}[A-Z])$/;
+
+export function ClaveDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSaved?: (credential: CredentialSummary) => void | Promise<void>;
+}) {
+  const t = useT(vaultDict);
+  const tc = useT(common);
+  const tchat = useT(chatDict);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setUsername('');
+    setPassword('');
+    setError(null);
+  };
+
+  const submit = async () => {
+    const user = username.trim().toUpperCase().replace(/[\s-]/g, '');
+    if (!DNI_NIE.test(user)) {
+      setError(t.credentials.clave.invalidUser);
+      return;
+    }
+    if (!password) return;
+    setBusy(true);
+    try {
+      const credential = await api.invoke('vault.addClave', { username: user, password });
+      await reloadVault();
+      await onSaved?.(credential);
+      toast.success(t.credentials.clave.saved);
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+      title={t.credentials.clave.dialogTitle}
+      description={t.credentials.clave.dialogLead}
+      closeLabel={tc.close}
+      width="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {tc.cancel}
+          </Button>
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={!username || !password}
+            onClick={() => void submit()}
+          >
+            {t.credentials.clave.save}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-4 pt-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <Field label={t.credentials.clave.username} error={error} required>
+          {({ id, describedBy, invalid }) => (
+            <Input
+              id={id}
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                setError(null);
+              }}
+              placeholder="12345678Z"
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby={describedBy}
+              aria-invalid={invalid || undefined}
+              className="uppercase tracking-wider"
+              autoFocus
+            />
+          )}
+        </Field>
+        <Field label={t.credentials.clave.password} required>
+          {({ id }) => (
+            <PasswordInput
+              id={id}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              revealLabel={tchat.prompt.reveal}
+              hideLabel={tchat.prompt.hide}
+            />
+          )}
+        </Field>
+        <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
+      </form>
+    </Dialog>
+  );
+}
+
+function CertificateDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const t = useT(vaultDict);
+  const tc = useT(common);
+  const tchat = useT(chatDict);
+  const [file, setFile] = useState<File | null>(null);
+  const [passphrase, setPassphrase] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setFile(null);
+    setPassphrase('');
+    setError(null);
+  };
+
+  const choose = async () => {
+    const [picked] = await pickFiles('.p12,.pfx,application/x-pkcs12');
+    if (picked) {
+      setFile(picked);
+      setError(null);
+    }
+  };
+
+  const submit = async () => {
+    if (!file || !passphrase) return;
+    setBusy(true);
+    try {
+      await api.invoke('vault.addCertificate', {
+        fileName: file.name,
+        bytes: await readFileBytes(file),
+        passphrase,
+      });
+      await reloadVault();
+      toast.success(t.credentials.cert.saved);
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+      title={t.credentials.cert.dialogTitle}
+      description={t.credentials.cert.dialogLead}
+      closeLabel={tc.close}
+      width="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {tc.cancel}
+          </Button>
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={!file || !passphrase}
+            onClick={() => void submit()}
+          >
+            {t.credentials.cert.save}
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="flex flex-col gap-4 pt-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium text-fg">{t.credentials.cert.file}</span>
+          <button
+            type="button"
+            onClick={() => void choose()}
+            className="flex items-center gap-3 rounded-lg border border-dashed border-line-strong bg-surface-2/60 px-3.5 py-3 text-left hover:border-accent-line hover:bg-accent-soft"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface text-fg-subtle ring-1 ring-line">
+              {file ? <FileKey size={17} aria-hidden /> : <Upload size={17} aria-hidden />}
+            </span>
+            <span className="min-w-0 truncate text-[13.5px] font-medium text-fg">
+              {file ? file.name : t.credentials.cert.chooseFile}
+            </span>
+          </button>
+        </div>
+        <Field label={t.credentials.cert.password} error={error} required>
+          {({ id, describedBy, invalid }) => (
+            <PasswordInput
+              id={id}
+              value={passphrase}
+              onChange={(e) => {
+                setPassphrase(e.target.value);
+                setError(null);
+              }}
+              aria-describedby={describedBy}
+              aria-invalid={invalid || undefined}
+              revealLabel={tchat.prompt.reveal}
+              hideLabel={tchat.prompt.hide}
+            />
+          )}
+        </Field>
+        <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
+      </form>
+    </Dialog>
+  );
+}

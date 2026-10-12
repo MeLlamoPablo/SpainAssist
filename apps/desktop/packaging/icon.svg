@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Spain Assist</title>
+  <!-- App icon: the onboarding flag with its outline and shadow (BrandLogo in
+       src/renderer/src/components/brand.tsx) on its own, as wide as the macOS icon grid (824 px
+       body, 100 px margin). Rendered to icon.png with
+       `node packaging/render-icon.mjs`; electron-builder converts the PNG per platform. -->
+  <defs>
+    <clipPath id="flag">
+      <rect x="1" y="10" width="56" height="38" rx="7"/>
+    </clipPath>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="1.2" stdDeviation="1.6" flood-color="#1e0804" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <!-- The mark's 58 px box, centred on the flag (29, 29) and scaled so the flag and its outline
+       (58 wide) span 824 px. -->
+  <g transform="translate(512 512) scale(14.2069) translate(-29 -29)">
+    <rect x="0" y="9" width="58" height="40" rx="8" fill="#d4d0cb" filter="url(#shadow)"/>
+    <g clip-path="url(#flag)">
+      <path fill="#c60b1e" d="M0 9h58v40H0z"/>
+      <path fill="#ffc400" d="M0 19h58v20H0z"/>
+    </g>
+    <rect x="1" y="10" width="56" height="38" rx="7" fill="none" stroke="#d4d0cb" stroke-width="2"/>
+  </g>
+</svg>

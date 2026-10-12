@@ -1,0 +1,151 @@
+# Desktop release (DECISIONS D17): pushing a tag `vX.Y.Z` (or `vX.Y.Z-suffix`, a prerelease) on a
+# commit of `master` builds the installers on one native runner per target and publishes
+# them as a GitHub Release, with SHA256SUMS.txt.
+#
+# Unsigned for now: macOS builds are ad-hoc signed and not notarized, Windows builds are unsigned
+# (PRODUCTION_CHECKLIST.md). Signing turns on when its secrets are passed as the environment
+# variables `apps/desktop/electron-builder.ts` reads.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  check:
+    name: Check the tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: version
+        name: Read the version from the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag $TAG is not vX.Y.Z or vX.Y.Z-suffix"
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          [[ "$TAG" == *-* ]] && prerelease=true || prerelease=false
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+      - name: Check the commit is on master
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master 2>/dev/null; then
+            echo "::error::$GITHUB_REF_NAME points to a commit that is not on master"
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-15
+            script: package:mac
+          - name: macOS x64
+            runner: macos-15-intel
+            script: package:mac
+          - name: Windows x64
+            runner: windows-2025
+            script: package:win
+    runs-on: ${{ matrix.runner }}
+    env:
+      # No signing yet: never pick up an identity from the runner's keychain.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          # It would look for pnpm before Corepack is set up; the pnpm store is cached below.
+          package-manager-cache: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+      # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
+      # --force: Windows runners have a global Yarn whose shims Corepack's replace. There npm's
+      # global prefix comes after Node's bundled (older) Corepack on PATH, so put it first.
+      - name: Install Corepack
+        shell: bash
+        run: |
+          npm install --global --force corepack@latest
+          prefix=$(npm prefix --global)
+          if [[ "$RUNNER_OS" == Windows ]]; then echo "$prefix"; else echo "$prefix/bin"; fi >> "$GITHUB_PATH"
+      - name: Check Corepack
+        shell: bash
+        run: |
+          command -v corepack
+          corepack --version
+      - id: pnpm-store
+        name: Find the pnpm store
+        shell: bash
+        run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+      - name: Set the app version from the tag
+        working-directory: apps/desktop
+        run: npm pkg set version=${{ needs.check.outputs.version }}
+      - name: Package
+        run: corepack pnpm --filter @sa/desktop run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish the release
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: installers-*
+          path: installers
+          merge-multiple: true
+      - name: Write checksums
+        working-directory: installers
+        run: sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.check.outputs.version }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          flags=()
+          [[ "$PRERELEASE" == true ]] && flags+=(--prerelease)
+          gh release create "$TAG" installers/* \
+            --verify-tag --generate-notes --title "Spain Assist $VERSION" "${flags[@]}"

@@ -1,0 +1,54 @@
+Spain Assist (the phone app)
+Copyright (c) 2026 Pablo Rodríguez Caballero
+
+Our own source code in this directory is licensed under the MIT License (LICENSE).
+
+
+The Android app as distributed: EUPL-1.2
+----------------------------------------
+
+The Android build (the APK) includes jmulticard 2.1 (es.gob.afirma.jmulticard:jmulticard and
+jmulticard-crypto), the Spanish government's smart-card library. Its files offer these licences:
+
+- The 170 source files with a licence header: LGPL-2.1-or-later or EUPL-1.1-or-later.
+- 12 files (the PACE secure-messaging classes connection/pace/DO87, DO8E, DO97, DO99 and
+  SecureMessaging, plus a few callback and provider classes): GPL-2.0-or-later or
+  EUPL-1.1-or-later.
+- The files without a header: GPL-2.0 and EUPL-1.1, per the project's Maven metadata (the
+  jmulticard-base POM).
+- jmulticard-crypto also bundles Bouncy Castle classes, under the Bouncy Castle licence (MIT).
+
+The EUPL is the only licence that every jmulticard file offers, so we use jmulticard under the
+EUPL. The headers allow later EUPL versions, and EUPL-1.1 itself lets a work be redistributed
+under a later version (article 5). The Android app as a whole is therefore distributed under the
+European Union Public Licence, version 1.2 (EUPL-1.2):
+
+- English text: shared/src/commonMain/composeResources/files/licenses/EUPL-1.2.txt
+- Every official language: https://eur-lex.europa.eu/eli/dec_impl/2017/863/oj
+
+Our MIT code stays MIT inside it: you may also use it on its own under the MIT License.
+
+Source code. Whoever gets the APK can get its complete corresponding source:
+- this app, with its build scripts: apps/mobile in
+  https://github.com/MeLlamoPablo/SpainAssistant, for every release we distribute;
+- jmulticard: https://github.com/ctt-gob-es/jmulticard (version 2.1), unmodified.
+
+The iOS app (planned) doesn't include jmulticard: it is MIT, plus the licences of its
+dependencies. Once our own card layer (PACE and CWA-14890) replaces jmulticard, the Android app
+becomes plain MIT too.
+
+
+Other third-party components in the Android app
+-----------------------------------------------
+
+- Apache License 2.0: Kotlin, kotlinx.coroutines, kotlinx.serialization, Ktor, OkHttp, Okio,
+  cryptography-kotlin, Compose Multiplatform, Jetpack Compose, AndroidX (including CameraX),
+  Guava, Dagger, Firebase components, Google Data Transport and annotation libraries.
+- MIT: SLF4J API, Checker Framework qualifiers.
+- Proprietary: Google ML Kit barcode scanning (ML Kit Terms of Service,
+  https://developers.google.com/ml-kit/terms) and Google Play services base, basement and tasks
+  (Android Software Development Kit License, https://developer.android.com/studio/terms). The
+  APK also carries the notices of the open-source code inside them.
+
+The app shows all of this, with the full licence texts, under "Licencias de código abierto"
+("Open-source licences") on its start and home screens.

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon layer: the launcher tints it, so the flag's bands become two opacities. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="29"
+        android:pivotY="29"
+        android:scaleX="0.95"
+        android:scaleY="0.95"
+        android:translateX="25"
+        android:translateY="25">
+        <clip-path android:pathData="M8,10h42a7,7 0,0 1,7 7v24a7,7 0,0 1,-7 7h-42a7,7 0,0 1,-7 -7v-24a7,7 0,0 1,7 -7z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M0,9h58v10h-58zM0,39h58v10h-58z" />
+        <path
+            android:fillAlpha="0.45"
+            android:fillColor="#FFFFFF"
+            android:pathData="M0,19h58v20h-58z" />
+    </group>
+</vector>

@@ -1,0 +1,16 @@
+# Used by BuildKit for services/key-server/Dockerfile (context: repository root).
+# Keep host installs, local databases and secrets out of the image.
+**/node_modules
+**/.data
+**/dist
+**/out
+**/coverage
+**/*.log
+**/.env
+**/.env.*
+!**/.env.example
+**/.DS_Store
+services/key-server/test
+.git
+.claude
+.idea

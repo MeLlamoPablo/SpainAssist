@@ -1,0 +1,17 @@
+# BuildKit uses this file (next to the Dockerfile) instead of a root .dockerignore.
+# The context is the repo root; keep it to the workspace manifests and the packages we need.
+**/node_modules
+**/.data
+**/dist
+**/out
+**/coverage
+**/*.log
+**/.DS_Store
+.git
+.idea
+.claude
+docs
+e2e/test-results
+**/playwright-report
+.env
+.env.*

@@ -1,0 +1,37 @@
+{
+  "name": "@sa/signer",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@peculiar/asn1-cms": "^2.10.0",
+    "@peculiar/asn1-ess": "^2.10.0",
+    "@peculiar/asn1-pfx": "^2.10.0",
+    "@peculiar/asn1-pkcs8": "^2.10.0",
+    "@peculiar/asn1-schema": "^2.10.0",
+    "@peculiar/asn1-x509": "^2.10.0",
+    "@sa/shared": "workspace:*",
+    "@xmldom/xmldom": "^0.8.11",
+    "asn1js": "^3.0.10",
+    "node-forge": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "xml-crypto": "^6.3.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node-forge": "^1.3.11",
+    "pkijs": "^3.4.1",
+    "playwright-core": "^1.63.0",
+    "xml-core": "1.2.6",
+    "xmldsigjs": "^2.8.8",
+    "xpath": "0.0.34"
+  }
+}

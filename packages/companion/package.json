@@ -1,0 +1,23 @@
+{
+  "name": "@sa/companion",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "vectors": "tsx scripts/vectors.ts"
+  },
+  "dependencies": {
+    "@sa/shared": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@sa/signer": "workspace:*"
+  }
+}

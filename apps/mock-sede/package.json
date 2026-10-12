@@ -1,0 +1,34 @@
+{
+  "name": "@sa/mock-sede",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "fixtures": "tsx scripts/generate-fixtures.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.3",
+    "@sa/shared": "workspace:*",
+    "asn1js": "^3.0.10",
+    "hono": "^4.13.12",
+    "node-forge": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "pkijs": "^3.4.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node-forge": "^1.3.14",
+    "playwright-core": "1.63.0",
+    "@sa/browser": "workspace:*",
+    "@sa/signer": "workspace:*",
+    "@sa/vault": "workspace:*"
+  }
+}

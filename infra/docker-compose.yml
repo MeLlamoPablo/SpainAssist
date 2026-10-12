@@ -1,0 +1,101 @@
+# SpainAssistant backends for a local, production-like stack: Postgres + key server + feedback
+# server. Production runs on Coolify instead (infra/terraform, see infra/README.md).
+#
+#   cp infra/.env.example infra/.env        # fill in the secrets (see infra/README.md)
+#   docker compose -f infra/docker-compose.yml up -d --build
+#
+# Every variable has a default, so `docker compose -f infra/docker-compose.yml config` works
+# without an .env file; the key server still refuses to start without VOUCHER_PEPPER.
+name: spainassistant
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+      # Used by postgres/init/10-create-databases.sh on first start (empty volume) only.
+      KEY_SERVER_DB_PASSWORD: ${KEY_SERVER_DB_PASSWORD:-key_server}
+      FEEDBACK_DB_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Not published: only the services on the internal network can reach it. For local
+    # inspection add:  ports: ["127.0.0.1:5432:5432"]
+
+  key-server:
+    build:
+      context: ..
+      dockerfile: services/key-server/Dockerfile
+    image: spainassistant/key-server:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      DATABASE_URL: postgres://key_server:${KEY_SERVER_DB_PASSWORD:-key_server}@postgres:5432/keyserver
+      VOUCHER_PEPPER: ${VOUCHER_PEPPER:-}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      TRUST_PROXY: "0"
+      RATE_LIMIT: ${RATE_LIMIT:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # LiteLLM gateway (not part of this stack; production runs it on Coolify). Unset = mock keys.
+      LITELLM_ADMIN_URL: ${LITELLM_ADMIN_URL:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
+      LITELLM_PUBLIC_URL: ${LITELLM_PUBLIC_URL:-}
+      LITELLM_KEY_MODELS: ${LITELLM_KEY_MODELS:-}
+      LITELLM_SEARCH_TOOLS: ${LITELLM_SEARCH_TOOLS:-}
+      KEY_TTL_DAYS: ${KEY_TTL_DAYS:-180}
+      ANON_SEARCH_TOKENS: ${ANON_SEARCH_TOKENS:-1}
+      ANON_SEARCH_BUDGET_USD: ${ANON_SEARCH_BUDGET_USD:-0.25}
+      ANON_SEARCH_IP_WINDOW_HOURS: ${ANON_SEARCH_IP_WINDOW_HOURS:-24}
+      ANON_SEARCH_TOKEN_TTL_DAYS: ${ANON_SEARCH_TOKEN_TTL_DAYS:-30}
+      # Development only (ignored when LITELLM_ADMIN_URL is set).
+      DEV_SEED: ${DEV_SEED:-0}
+      MOCK_LLM_BASE_URL: ${MOCK_LLM_BASE_URL:-http://127.0.0.1:8789/v1}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:8787:8787"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+  feedback-server:
+    build:
+      context: ..
+      dockerfile: services/feedback-server/Dockerfile
+    image: spainassistant/feedback-server:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8788"
+      DATABASE_URL: postgres://feedback:${FEEDBACK_DB_PASSWORD:-feedback}@postgres:5432/feedback
+      TRUST_PROXY: "0"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # A LiteLLM to check users' gateway keys; unset, only search works (no sharing or votes).
+      LITELLM_URL: ${LITELLM_URL:-}
+      # Required with LITELLM_URL: HMAC key for users' ids (at least 32 characters).
+      USER_ID_SECRET: ${FEEDBACK_USER_ID_SECRET:-}
+      # Add the feedback server's own settings here (see services/feedback-server/README.md).
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:8788:8788"
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pgdata:

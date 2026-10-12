@@ -1,0 +1,23 @@
+{
+  "name": "@sa/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "e2e": "node scripts/run.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@sa/shared": "workspace:*",
+    "@sa/key-server": "workspace:*",
+    "@sa/feedback-server": "workspace:*",
+    "@sa/mock-sede": "workspace:*",
+    "@sa/mock-llm": "workspace:*",
+    "@hono/node-server": "^2.1.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "electron": "44.5.1"
+  }
+}

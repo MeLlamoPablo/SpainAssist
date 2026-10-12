@@ -1,0 +1,55 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars and terraform.tfstate hold secrets:
+# commit them only encrypted with git-crypt (see ../README.md). Every other variable has a
+# default in variables.tf.
+#
+# Generate values with:  openssl rand -hex 24  (letters/digits; prefix the master key with sk-)
+
+hcloud_token = "..." # Hetzner Cloud console > project > Security > API tokens (read & write)
+
+# ssh-keygen -t ed25519 -N '' -f admin_key   (then paste admin_key here and delete the files)
+ssh_private_key       = <<-EOT
+-----BEGIN OPENSSH PRIVATE KEY-----
+...
+-----END OPENSSH PRIVATE KEY-----
+EOT
+ssh_extra_public_keys = ["ssh-ed25519 AAAA... you@laptop"]
+# ssh_allowed_cidrs   = ["203.0.113.4/32"]
+
+# domain = "spainassist.es" # empty = sslip.io; set to dns_domain to serve the apps on it (see dns.tf)
+
+# The Terraform IAM user's key (aws_iam.tf). Leave them out for the first apply, run with an
+# admin key in AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, then copy the new key here:
+#   terraform show -json | jq -r '.values.root_module.resources[] | select(.address == "aws_iam_access_key.terraform") | .values | .id, .secret'
+aws_access_key_id     = "AKIA..."
+aws_secret_access_key = "..."
+
+coolify_root_password = "..." # >= 16 chars of [A-Za-z0-9_.-], upper, lower and digits
+coolify_api_token     = "..." # >= 40 letters and digits
+
+postgres_password = "..."
+service_db_passwords = {
+  key_server = "..."
+  feedback   = "..."
+  litellm    = "..."
+  unleash    = "..."
+}
+
+github_webhook_secret = "..." # >= 32 letters and digits
+
+voucher_pepper          = "..." # never change once vouchers exist
+key_server_admin_token  = "..."
+key_encryption_key      = "..." # openssl rand -hex 32; never change once ChatGPT keys exist
+feedback_admin_token    = "..."
+feedback_user_id_secret = "..." # openssl rand -hex 32; never change once votes exist
+
+mapbox_secret_token = "sk...." # Mapbox secret token for the maps server (no extra scopes)
+
+litellm_master_key  = "sk-..."
+litellm_salt_key    = "..." # never change once set
+litellm_ui_password = "..."
+
+unleash_admin_password = "..."     # only applied on Unleash's first start
+unleash_admin_token    = "*:*...." # *:*. + >= 32 letters and digits; only seeded on Unleash's first start
+
+openrouter_api_key = "" # https://openrouter.ai/settings/keys
+parallel_api_key   = "" # https://platform.parallel.ai

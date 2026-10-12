@@ -1,0 +1,25 @@
+#cloud-config
+# First boot only: system updates, swap and the Coolify install. No secrets here: the metadata
+# service that serves this file is readable from every container on the server. Coolify's
+# root user, API token and domain are set afterwards over SSH (bootstrap.tf), which also
+# upgrades Coolify when coolify_version changes.
+package_update: true
+package_upgrade: true
+packages:
+  - curl
+  - jq
+  - unattended-upgrades
+
+# Headroom for image builds next to Coolify, LiteLLM and Postgres on a 4 GB server.
+swap:
+  filename: /swapfile
+  size: 2147483648
+  maxsize: 2147483648
+
+ssh_pwauth: false
+
+# No ROOT_USER_* variables on purpose: they would leave the password in Coolify's .env. Until
+# the bootstrap creates the root user, nobody can reach the dashboard (port 8000 is closed).
+runcmd:
+  - curl -fsSL https://cdn.coollabs.io/coolify/install.sh -o /root/coolify-install.sh
+  - AUTOUPDATE=false bash /root/coolify-install.sh '${coolify_version}' >/var/log/coolify-install.log 2>&1

@@ -1,0 +1,8 @@
+.terraform/
+*.tfplan
+*.auto.tfvars
+crash.log
+
+# terraform.tfvars and terraform.tfstate are committed, encrypted with git-crypt (see
+# ../../.gitattributes and ../README.md); a locked clone sees ciphertext. Backups stay local.
+*.tfstate.*

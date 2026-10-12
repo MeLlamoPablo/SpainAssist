@@ -1,0 +1,14 @@
+-- One login role and one database per service, so services cannot read each other's data.
+-- Idempotent: rendered by coolify.tf and run with psql as the postgres superuser.
+%{ for key, db in databases ~}
+SELECT 'CREATE ROLE ${db.role} LOGIN' WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${db.role}')\gexec
+ALTER ROLE ${db.role} WITH LOGIN PASSWORD '${passwords[key]}';
+SELECT 'CREATE DATABASE ${db.database} OWNER ${db.role}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${db.database}')\gexec
+REVOKE ALL ON DATABASE ${db.database} FROM PUBLIC;
+GRANT ALL ON DATABASE ${db.database} TO ${db.role};
+%{ endfor ~}
+
+-- Extensions the feedback server's Spanish full-text search uses.
+\connect feedback
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;

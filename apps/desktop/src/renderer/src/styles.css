@@ -1,0 +1,568 @@
+@import "tailwindcss";
+@import "./design/colors.css";
+
+/*
+ * SpainAssist design tokens.
+ * Warm sand neutrals, an ink accent (the text colour: no brand hue) and semantic status colours.
+ * The canonical palette is design/color-tokens.json; regenerate with tools/design-colors.mjs.
+ * Components use the semantic utilities (bg-surface, text-fg, border-line, bg-st-research-bg...)
+ * so dark mode only needs the palette variables to change.
+ */
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+@custom-variant mac (&:where([data-platform="darwin"], [data-platform="darwin"] *));
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --animate-fade-in: fade-in 180ms ease-out;
+  --animate-pop-in: pop-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1.1);
+  --animate-slide-up: slide-up 200ms ease-out;
+  --animate-caret: caret 1s steps(2) infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+  /* Onboarding → app: the card leaves, the gradient dissolves, the app settles in underneath. */
+  --animate-onboarding-card-exit: onboarding-card-exit 280ms cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-onboarding-exit: onboarding-exit 650ms cubic-bezier(0.4, 0, 0.2, 1) 220ms both;
+  --animate-app-enter: app-enter 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  /* Splash ↔ card: the splash actions sink away, the card rises in under the gliding wordmark. */
+  --animate-onboarding-splash-enter: onboarding-splash-enter 520ms cubic-bezier(0.16, 1, 0.3, 1)
+    180ms both;
+  --animate-onboarding-splash-leave: onboarding-splash-leave 200ms cubic-bezier(0.2, 0, 0.4, 1) both;
+  --animate-onboarding-card-enter: onboarding-card-enter 720ms cubic-bezier(0.16, 1, 0.3, 1) 130ms
+    both;
+  --animate-onboarding-card-leave: onboarding-card-leave 180ms cubic-bezier(0.2, 0, 0.4, 1) both;
+  --animate-onboarding-step: onboarding-step 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes caret {
+    0% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @keyframes onboarding-card-exit {
+    to {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.98);
+    }
+  }
+  @keyframes onboarding-exit {
+    to {
+      opacity: 0;
+      transform: scale(1.06);
+    }
+  }
+  @keyframes onboarding-splash-enter {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.97);
+      filter: blur(4px);
+    }
+  }
+  @keyframes onboarding-splash-leave {
+    to {
+      opacity: 0;
+      transform: translateY(18px) scale(0.96);
+      filter: blur(4px);
+    }
+  }
+  @keyframes onboarding-card-enter {
+    from {
+      opacity: 0;
+      transform: translateY(36px) scale(0.94);
+    }
+  }
+  @keyframes onboarding-card-leave {
+    to {
+      opacity: 0;
+      transform: translateY(24px) scale(0.96);
+    }
+  }
+  @keyframes onboarding-step {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes app-enter {
+    from {
+      transform: scale(0.97);
+    }
+    to {
+      transform: none;
+    }
+  }
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+
+  /* Elevation */
+  --sa-shadow-xs: 0 1px 2px var(--sa-shadow-color-xs);
+  --sa-shadow-card: 0 1px 2px var(--sa-shadow-color-xs), 0 1px 3px var(--sa-shadow-color-xs);
+  --sa-shadow-raised:
+    0 1px 2px var(--sa-shadow-color-xs), 0 6px 16px -6px var(--sa-shadow-color-raised);
+  --sa-shadow-pop:
+    0 18px 48px -12px var(--sa-shadow-color-pop-1), 0 4px 12px -4px var(--sa-shadow-color-pop-2);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --sa-shadow-xs: 0 1px 2px var(--sa-shadow-color-xs);
+    --sa-shadow-card: 0 1px 2px var(--sa-shadow-color-xs);
+    --sa-shadow-raised:
+      0 1px 2px var(--sa-shadow-color-xs), 0 8px 20px -8px var(--sa-shadow-color-raised-dark);
+    --sa-shadow-pop:
+      0 20px 50px -12px var(--sa-shadow-color-pop-1), 0 0 0 1px var(--sa-shadow-color-pop-dark-line);
+  }
+}
+
+@theme inline {
+  --color-sidebar: var(--sa-sidebar);
+  --color-surface: var(--sa-surface);
+  --color-surface-2: var(--sa-surface-2);
+  --color-surface-3: var(--sa-surface-3);
+  --color-overlay: var(--sa-overlay);
+  --color-line: var(--sa-line);
+  --color-line-strong: var(--sa-line-strong);
+  --color-fg: var(--sa-fg);
+  --color-fg-muted: var(--sa-fg-muted);
+  --color-fg-subtle: var(--sa-fg-subtle);
+  --color-fg-faint: var(--sa-fg-faint);
+  --color-accent: var(--sa-accent);
+  --color-accent-hover: var(--sa-accent-hover);
+  --color-accent-fg: var(--sa-accent-fg);
+  --color-accent-text: var(--sa-accent-text);
+  --color-accent-soft: var(--sa-accent-soft);
+  --color-accent-soft-strong: var(--sa-accent-soft-strong);
+  --color-accent-line: var(--sa-accent-line);
+  --color-ring: var(--sa-ring);
+  --color-danger: var(--sa-danger);
+  --color-danger-hover: var(--sa-danger-hover);
+  --color-danger-fg: var(--sa-white);
+
+  --color-st-research-fg: var(--st-research-fg);
+  --color-st-research-bg: var(--st-research-bg);
+  --color-st-research-line: var(--st-research-line);
+  --color-st-research-dot: var(--st-research-dot);
+  --color-st-attention-fg: var(--st-attention-fg);
+  --color-st-attention-bg: var(--st-attention-bg);
+  --color-st-attention-line: var(--st-attention-line);
+  --color-st-attention-dot: var(--st-attention-dot);
+  --color-st-progress-fg: var(--st-progress-fg);
+  --color-st-progress-bg: var(--st-progress-bg);
+  --color-st-progress-line: var(--st-progress-line);
+  --color-st-progress-dot: var(--st-progress-dot);
+  --color-st-planned-fg: var(--st-planned-fg);
+  --color-st-planned-bg: var(--st-planned-bg);
+  --color-st-planned-line: var(--st-planned-line);
+  --color-st-planned-dot: var(--st-planned-dot);
+  --color-st-waiting-fg: var(--st-waiting-fg);
+  --color-st-waiting-bg: var(--st-waiting-bg);
+  --color-st-waiting-line: var(--st-waiting-line);
+  --color-st-waiting-dot: var(--st-waiting-dot);
+  --color-st-done-fg: var(--st-done-fg);
+  --color-st-done-bg: var(--st-done-bg);
+  --color-st-done-line: var(--st-done-line);
+  --color-st-done-dot: var(--st-done-dot);
+  --color-st-blocked-fg: var(--st-blocked-fg);
+  --color-st-blocked-bg: var(--st-blocked-bg);
+  --color-st-blocked-line: var(--st-blocked-line);
+  --color-st-blocked-dot: var(--st-blocked-dot);
+  --color-st-neutral-fg: var(--sa-fg-muted);
+  --color-st-neutral-bg: var(--sa-surface-3);
+  --color-st-neutral-line: var(--sa-line);
+  --color-st-neutral-dot: var(--sa-fg-faint);
+
+  --shadow-xs: var(--sa-shadow-xs);
+  --shadow-card: var(--sa-shadow-card);
+  --shadow-raised: var(--sa-shadow-raised);
+  --shadow-pop: var(--sa-shadow-pop);
+}
+
+/* Window chrome (Electron): draggable title-bar areas and the controls inside them. */
+@utility drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+@utility no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Consistent, visible keyboard focus. */
+@utility focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  &:focus-visible {
+    outline-color: var(--sa-ring);
+  }
+}
+
+@utility skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--sa-surface-3) 0%,
+    var(--sa-surface-2) 50%,
+    var(--sa-surface-3) 100%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+  border-radius: 6px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* Only the panes scroll. Hidden overflow still allows scrollIntoView to move the window. */
+  html,
+  body {
+    overflow: clip;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01";
+    font-size: 16px;
+  }
+
+  body {
+    background: var(--sa-surface);
+    color: var(--sa-fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    user-select: none;
+    cursor: default;
+  }
+
+  /* Text people may want to copy stays selectable. */
+  input,
+  textarea,
+  .selectable,
+  .prose-sa {
+    user-select: text;
+    cursor: auto;
+  }
+
+  button,
+  [role="button"],
+  a {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  ::selection {
+    background: var(--sa-accent-soft-strong);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--sa-ring);
+    outline-offset: 2px;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--sa-fg-subtle);
+    opacity: 1;
+  }
+
+  /* Calm, thin scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sa-line-strong) transparent;
+  }
+
+  /* Main scroll areas keep room for the scrollbar on both sides, so content never shifts
+     (and stays centred) when a scrollbar appears. */
+  [data-scroll-stable] {
+    scrollbar-gutter: stable both-edges;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
+    cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) {
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must override every animation */
+    animation-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: see above */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: see above */
+    transition-duration: 1ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: see above */
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Assistant markdown. Kept small and calm; no raw HTML is ever rendered. */
+.prose-sa {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--sa-fg);
+  overflow-wrap: anywhere;
+}
+.prose-sa > * + * {
+  margin-top: 0.7em;
+}
+.prose-sa h1,
+.prose-sa h2,
+.prose-sa h3,
+.prose-sa h4 {
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  margin-top: 1.1em;
+}
+.prose-sa h1 {
+  font-size: 1.2em;
+}
+.prose-sa h2 {
+  font-size: 1.1em;
+}
+.prose-sa h3,
+.prose-sa h4 {
+  font-size: 1em;
+}
+.prose-sa strong {
+  font-weight: 600;
+}
+.prose-sa ul,
+.prose-sa ol {
+  padding-left: 1.35em;
+}
+.prose-sa ul {
+  list-style: disc;
+}
+.prose-sa ol {
+  list-style: decimal;
+}
+.prose-sa li + li {
+  margin-top: 0.3em;
+}
+.prose-sa li::marker {
+  color: var(--sa-fg-subtle);
+}
+.prose-sa code {
+  font-size: 0.88em;
+  background: var(--sa-surface-3);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+.prose-sa pre {
+  background: var(--sa-surface-2);
+  border: 1px solid var(--sa-line);
+  border-radius: 10px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+}
+.prose-sa pre code {
+  background: none;
+  padding: 0;
+}
+.prose-sa blockquote {
+  border-left: 3px solid var(--sa-accent-line);
+  padding-left: 0.9em;
+  color: var(--sa-fg-muted);
+}
+.prose-sa hr {
+  border: 0;
+  border-top: 1px solid var(--sa-line);
+}
+.prose-sa table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.93em;
+  border: 1px solid var(--sa-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.prose-sa th,
+.prose-sa td {
+  text-align: left;
+  padding: 0.45em 0.75em;
+  border-bottom: 1px solid var(--sa-line);
+  vertical-align: top;
+}
+.prose-sa tr:last-child td {
+  border-bottom: 0;
+}
+.prose-sa th {
+  background: var(--sa-surface-2);
+  font-weight: 600;
+}
+
+/* Blinking caret at the end of a streaming answer. */
+.prose-sa.is-streaming > :last-child:not(ul, ol, table, pre)::after,
+.prose-sa.is-streaming > :is(ul, ol):last-child > li:last-child::after,
+.prose-sa.is-streaming:empty::after {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.17em;
+  border-radius: 2px;
+  background: var(--sa-accent);
+  animation: var(--animate-caret);
+}
+
+/* Leaflet owns map positioning; marker colours use the renderer's theme tokens. */
+.sa-map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--color-accent);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  font:
+    600 13px Inter,
+    sans-serif;
+  box-shadow: 0 2px 5px var(--sa-map-shadow);
+}
+.sa-map-pin-selected {
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+.sa-map-home {
+  border-color: var(--sa-map-home);
+  background: var(--sa-map-home);
+  color: var(--sa-white);
+  font-size: 20px;
+}
+
+/* Scan success: a soft spring followed by the check drawing into place. */
+.scan-success-mark {
+  animation: scan-check-pop 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center;
+}
+
+.scan-success-stroke {
+  stroke-dasharray: 1;
+  animation: scan-check-draw 320ms ease-out 100ms both;
+}
+
+@keyframes scan-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.65);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scan-check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-success-mark,
+  .scan-success-stroke {
+    animation: none;
+  }
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/brand/instrument-serif-regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/brand/instrument-serif-italic.ttf") format("truetype");
+}
+
+.brand-name {
+  font-family: "Instrument Serif", serif;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}

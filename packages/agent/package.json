@@ -1,0 +1,40 @@
+{
+  "name": "@sa/agent",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./host": "./dist/host.js",
+    "./codex": "./src/providers/codex.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node scripts/build-host.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "dev:chat": "tsx scripts/dev-chat.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^1.1.0",
+    "@earendil-works/pi-coding-agent": "^1.1.0",
+    "@jitl/quickjs-singlefile-mjs-release-sync": "^0.32.0",
+    "@mozilla/readability": "^0.6.0",
+    "@napi-rs/canvas": "^1.0.10",
+    "@sa/shared": "workspace:*",
+    "jose": "^6.2.12",
+    "linkedom": "^0.18.13",
+    "quickjs-emscripten-core": "^0.32.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "typebox": "1.3.27",
+    "unpdf": "^1.8.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@sa/mock-llm": "workspace:*",
+    "@types/turndown": "^5.0.6",
+    "esbuild": "^0.28.2"
+  }
+}

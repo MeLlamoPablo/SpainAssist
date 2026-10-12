@@ -1,0 +1,41 @@
+import { resolve } from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig, type Plugin } from 'vite';
+
+/**
+ * Standalone browser preview of the renderer (no Electron). `window.sa` does not exist there, so
+ * the renderer falls back to the in-memory mock API (src/renderer/src/mock).
+ *
+ *   corepack pnpm --filter @sa/desktop preview:web          # dev server on http://localhost:5180
+ *   corepack pnpm --filter @sa/desktop build:web            # static build in out/renderer-web
+ *
+ * Useful query params (mock only): ?onboarding=1 (splash) or =voucher|data (open that step;
+ * add &provider=voucher for data), ?lang=en, ?provider=none|chatgpt|voucher|byok, ?chatgpt=ineligible,
+ * ?playground=1 (interactive agent UI catalogue), ?example=<id>, ?map=1 (map picker; ?nomap=1: its list only, lookups used up), ?phone=1 (phone-call card), ?dnie=1 (feature flag: DNIe with the phone on; ?companion, ?dniePin and ?playground imply it), ?companion=waiting|away|connected (DNIe phone pairing), ?dniePin=none|saved|wrong (a saved DNIe without a PIN, with one, or with one the card refused), ?address=1 (saved mock address, located on open), ?empty=1, ?freeze=1 (no simulated activity), ?speed=4, ?view=vault|settings, ?p=<procedureId>, ?feedback=1 (feature flag: community learnings on).
+ */
+
+/** The app CSP forbids inline scripts; Vite's React refresh preamble needs one in dev. */
+function relaxCspInDev(): Plugin {
+  return {
+    name: 'sa-relax-csp-in-dev',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace(/<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>/, '');
+    },
+  };
+}
+
+export default defineConfig({
+  root: resolve(__dirname, 'src/renderer'),
+  resolve: {
+    alias: { '@renderer': resolve(__dirname, 'src/renderer/src') },
+  },
+  plugins: [react(), tailwindcss(), relaxCspInDev()],
+  server: { port: 5180, strictPort: false, watch: null, hmr: false },
+  preview: { port: 5181, strictPort: false },
+  build: {
+    outDir: resolve(__dirname, 'out/renderer-web'),
+    emptyOutDir: true,
+  },
+});

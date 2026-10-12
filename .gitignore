@@ -1,0 +1,31 @@
+node_modules/
+dist/
+out/
+build/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+
+# local data (dev databases, app profiles, test artifacts)
+.data/
+test-results/
+playwright-report/
+blob-report/
+
+# JetBrains (keep shared project files only)
+.idea/workspace.xml
+.idea/shelf/
+
+# Native helpers built for development (corepack pnpm --filter @sa/sidecar build)
+apps/desktop/vendor/
+# Generated at build time (apps/desktop/scripts/notices.ts)
+apps/desktop/THIRD_PARTY_NOTICES.txt
+
+# Claude Code agent worktrees
+.claude/worktrees/
+# Scanner eval results hold personal data from the fixtures.
+tools/scan-eval/results/

@@ -1,0 +1,180 @@
+package es.spainassist.firma.relay
+
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
+import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.Frame
+import io.ktor.websocket.close
+import io.ktor.websocket.readBytes
+import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.random.Random
+
+/** Close codes of services/relay-server (RELAY_CLOSE in packages/shared). */
+object RelayClose {
+    const val UNAUTHORIZED: Short = 4401
+    const val NOT_FOUND: Short = 4404
+    const val EXPIRED: Short = 4408
+    const val REPLACED: Short = 4409
+    const val LIMITED: Short = 4429
+}
+
+sealed interface RelayState {
+    data object Connecting : RelayState
+
+    data class Open(val peer: Boolean) : RelayState
+
+    /** Gave up: the room is gone, expired, or another phone took this one's place. */
+    data class Closed(val reason: Reason) : RelayState {
+        enum class Reason { NotFound, Expired, Replaced }
+    }
+}
+
+/** One connection to the relay; `RelaySocket` is the real one, tests use in-memory ones. */
+interface RelayTransport {
+    fun start()
+
+    fun stop()
+
+    /** False when there is no open connection (the frame is dropped). */
+    fun send(frame: ByteArray): Boolean
+}
+
+class RelayEvents(val onState: (RelayState) -> Unit, val onFrame: (ByteArray) -> Unit)
+
+/**
+ * The phone's connection to the relay (packages/companion/src/relay-socket.ts): reconnects with
+ * backoff, reports whether the desktop is there, and keeps the connection alive with
+ * `{"type":"ping"}` every 20 s (no pong in 10 s = reconnect). Callbacks run in [scope], which
+ * the caller keeps serial.
+ */
+class RelaySocket(
+    private val client: HttpClient,
+    private val relayUrl: String,
+    private val room: String,
+    private val scope: CoroutineScope,
+    private val events: RelayEvents,
+    private val pingIntervalMs: Long = 20_000,
+    private val pongTimeoutMs: Long = 10_000,
+    private val backoffMs: (Int) -> Long = ::defaultBackoff,
+) : RelayTransport {
+    private var job: Job? = null
+    private var session: DefaultClientWebSocketSession? = null
+    private var stopped = false
+
+    override fun start() {
+        if (job?.isActive == true) return
+        stopped = false
+        job = scope.launch { run() }
+    }
+
+    /** Closes cleanly: frames already sent (a `bye`) leave before the close frame. */
+    override fun stop() {
+        stopped = true
+        val s = session
+        val j = job
+        session = null
+        job = null
+        if (s == null) {
+            j?.cancel()
+            return
+        }
+        scope.launch {
+            withTimeoutOrNull(2_000) { runCatching { s.close(CloseReason(CloseReason.Codes.NORMAL, "")) } }
+            j?.cancel()
+        }
+    }
+
+    override fun send(frame: ByteArray): Boolean {
+        val s = session ?: return false
+        return s.outgoing.trySend(Frame.Binary(true, frame)).isSuccess
+    }
+
+    private suspend fun run() {
+        var attempt = 0
+        while (scope.isActive && !stopped) {
+            events.onState(RelayState.Connecting)
+            var code: Short? = null
+            try {
+                client.webSocket("$relayUrl/v1/rooms/$room/phone") {
+                    session = this
+                    attempt = 0
+                    val pongs = Channel<Unit>(Channel.CONFLATED)
+                    val pinger = launch {
+                        while (isActive) {
+                            delay(pingIntervalMs)
+                            outgoing.send(Frame.Text("""{"type":"ping"}"""))
+                            if (withTimeoutOrNull(pongTimeoutMs) { pongs.receive() } == null) {
+                                close(CloseReason(4000, "pong timeout"))
+                                return@launch
+                            }
+                        }
+                    }
+                    try {
+                        for (frame in incoming) {
+                            when (frame) {
+                                is Frame.Text -> control(frame.readText(), pongs)
+                                is Frame.Binary -> events.onFrame(frame.readBytes())
+                                else -> Unit
+                            }
+                        }
+                    } finally {
+                        pinger.cancel()
+                        session = null
+                    }
+                    code = closeReason.await()?.code
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Network errors: try again.
+            }
+            session = null
+            if (stopped) return
+            when (code) {
+                RelayClose.NOT_FOUND, RelayClose.UNAUTHORIZED -> {
+                    events.onState(RelayState.Closed(RelayState.Closed.Reason.NotFound))
+                    return
+                }
+                RelayClose.EXPIRED -> {
+                    events.onState(RelayState.Closed(RelayState.Closed.Reason.Expired))
+                    return
+                }
+                RelayClose.REPLACED -> {
+                    events.onState(RelayState.Closed(RelayState.Closed.Reason.Replaced))
+                    return
+                }
+            }
+            events.onState(RelayState.Connecting)
+            delay(if (code == RelayClose.LIMITED) 30_000 else backoffMs(attempt++))
+        }
+    }
+
+    private fun control(text: String, pongs: Channel<Unit>) {
+        val message = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return
+        when (message["type"]?.jsonPrimitive?.content) {
+            "pong" -> pongs.trySend(Unit)
+            "peer" -> {
+                val present = runCatching { message["present"]?.jsonPrimitive?.boolean }.getOrNull() ?: return
+                events.onState(RelayState.Open(present))
+            }
+        }
+    }
+}
+
+private fun defaultBackoff(attempt: Int): Long {
+    val base = minOf(15_000L, 500L shl minOf(attempt, 5))
+    return base / 2 + Random.nextLong(base / 2 + 1)
+}

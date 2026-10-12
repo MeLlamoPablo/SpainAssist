@@ -1,0 +1,101 @@
+import { defineDict } from '../../../i18n';
+
+export const phoneCallDict = defineDict({
+  es: {
+    kicker: 'Una llamada',
+    call: 'Llamar',
+    copy: 'Copiar',
+    copied: 'Número copiado',
+    hours: 'Horario',
+    haveAtHand: 'Ten a mano',
+    whatToAsk: 'Qué preguntar',
+    openingTitle: 'Para empezar puedes decir',
+    record: {
+      title: 'Graba la llamada',
+      hint: 'Pon el móvil en altavoz cerca del ordenador. Te paso la conversación a texto para que no tengas que tomar notas.',
+      consent:
+        'Al empezar, avisa de que grabas la llamada: «Le aviso de que voy a grabar la llamada para tomar notas».',
+      start: 'Empezar a grabar',
+      stop: 'Terminar',
+      recording: 'Grabando',
+      limit: (minutes: number) => `Máximo ${minutes} minutos`,
+      limitReached: 'Has llegado al máximo de la grabación.',
+      micDenied:
+        'No puedo usar el micrófono. Dale permiso en Ajustes del sistema › Privacidad › Micrófono.',
+      micFailed: 'No puedo usar el micrófono. Comprueba que hay uno conectado.',
+      transcribing: 'Pasando la llamada a texto…',
+      transcribingHint: 'Tarda unos segundos por cada minuto de llamada.',
+      retry: 'Reintentar',
+      discard: 'Borrar la grabación',
+      again: 'Grabar de nuevo',
+      unavailable:
+        'Con tu forma de conexión a la IA no puedo pasar llamadas a texto. Apunta abajo lo que te digan.',
+    },
+    transcript: {
+      label: 'Lo que se dijo',
+      hint: 'Revísalo y borra lo que no quieras compartir antes de enviarlo.',
+      empty: 'No se oye a nadie en la grabación.',
+    },
+    notes: {
+      label: 'Tus notas',
+      placeholder: 'Lo más importante que te dijeron (opcional)',
+    },
+    done: 'Ya he llamado',
+    unreachable: 'No he podido hablar con ellos',
+    skip: 'No voy a llamar',
+    answered: {
+      done: 'Llamada hecha',
+      unreachable: 'No pudiste hablar con ellos',
+      skipped: 'No llamaste',
+      transcript: 'con transcripción',
+    },
+  },
+  en: {
+    kicker: 'A phone call',
+    call: 'Call',
+    copy: 'Copy',
+    copied: 'Number copied',
+    hours: 'Hours',
+    haveAtHand: 'Have at hand',
+    whatToAsk: 'What to ask',
+    openingTitle: 'You can start with',
+    record: {
+      title: 'Record the call',
+      hint: 'Put your phone on speaker next to the computer. I’ll turn the conversation into text so you don’t need to take notes.',
+      consent:
+        'When the call starts, tell them you’re recording: «Le aviso de que voy a grabar la llamada para tomar notas».',
+      start: 'Start recording',
+      stop: 'Finish',
+      recording: 'Recording',
+      limit: (minutes: number) => `${minutes} minutes max`,
+      limitReached: 'You reached the longest recording.',
+      micDenied: 'I can’t use the microphone. Allow it in System Settings › Privacy › Microphone.',
+      micFailed: 'I can’t use the microphone. Check that one is connected.',
+      transcribing: 'Turning the call into text…',
+      transcribingHint: 'It takes a few seconds per minute of call.',
+      retry: 'Try again',
+      discard: 'Delete the recording',
+      again: 'Record again',
+      unavailable:
+        'With the way you connect to the AI I can’t turn calls into text. Write down below what they tell you.',
+    },
+    transcript: {
+      label: 'What was said',
+      hint: 'Check it and delete anything you don’t want to share before sending.',
+      empty: 'Nobody can be heard in the recording.',
+    },
+    notes: {
+      label: 'Your notes',
+      placeholder: 'The most important things they told you (optional)',
+    },
+    done: 'I’ve called',
+    unreachable: 'I couldn’t talk to them',
+    skip: 'I won’t call',
+    answered: {
+      done: 'Call made',
+      unreachable: 'You couldn’t talk to them',
+      skipped: 'You didn’t call',
+      transcript: 'with transcript',
+    },
+  },
+});
