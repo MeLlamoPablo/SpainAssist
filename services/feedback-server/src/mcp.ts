@@ -10,7 +10,7 @@ import { searchFeedback, type VoteContext } from './feedback/repo';
  * query the community learnings.
  */
 export function createMcpServer(db: Db, votes: VoteContext, random?: () => number): McpServer {
-  const server = new McpServer({ name: 'spainassist-feedback', version: '0.1.0' });
+  const server = new McpServer({ name: 'spainassist-feedback', version: '0.1.1' });
 
   server.registerTool(
     'search_feedback',
