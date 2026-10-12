@@ -9,7 +9,7 @@ export interface SystemPromptOptions {
   now?: Date;
   /** IANA time zone for "today". Default Europe/Madrid. */
   timeZone?: string;
-  /** The web_research tool is available (voucher research through our key server). */
+  /** The web_research tool is available (voucher key server, or OpenAI web search on a ChatGPT plan). */
   webResearch?: boolean;
   /** feedback_search is available, plus feedback_submit / feedback_vote when on. */
   feedback?: { submit: boolean; vote: boolean };

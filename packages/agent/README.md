@@ -35,7 +35,7 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
   Then `runRpcMode`.
 - Roles (`config.role`, D9): `assistant` gets `createAssistantTools()` (delegation, `ask_user`,
   vault) and `buildAssistantPrompt()`; `procedure` gets `createTools()` (everything else, plus
-  `web_research` for voucher users) and `buildSystemPrompt()`, whose final message per run is a short
+  `web_research` for voucher users and ChatGPT plans) and `buildSystemPrompt()`, whose final message per run is a short
   report for the assistant.
 - `src/tools/` — tool definitions (TypeBox schemas, English model-facing text). Bridge-backed
   tools pass the tool's `AbortSignal` to the HTTP request, so aborting a run cancels a pending
@@ -61,7 +61,7 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 | `browser_fill_from_vault` | `browser.fillFromVault` | `source` personal (`key`) or credential (`credentialId`, `field`) |
 | `browser_fill_from_user` | `browser.fillFromUser` | One-time codes typed by the app; the model never sees them |
 | `browser_tabs`, `browser_screenshot`, `browser_use_certificate`, `browser_close` | `browser.*` | Screenshot returns an image block (refused when the model has no vision) |
-| `web_research` | Voucher users only: key server `POST /v1/research`, paid from the voucher (D13). `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10) | One POST stays open until completion; progress goes to the app, no model polling turns. Abort closes the stream; failures never start a replacement run. |
+| `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher (D13); `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan (D21); `mode` picks model and effort: `fast` → `gpt-6-luna` low, `balanced` → `gpt-6.1-sol` medium, `deep` → `gpt-6.1-sol` high | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
 | `feedback_search`, `feedback_submit`, `feedback_vote` | `feedback.*` | Submit text must be PII-free (the app scrubs again); votes rate a search result by id |
 | `fetch_url` | local | 20 s timeout, 6 MB (HTML) / 25 MB (PDF) cap, ≤ 5 redirects (each re-checked), private hosts blocked, `offset`/`maxChars` paging, `mode: full`, 10-minute cache |
 | `boe_search` | local (BOE open data) | `legislacion-consolidada` search, in-force by default |

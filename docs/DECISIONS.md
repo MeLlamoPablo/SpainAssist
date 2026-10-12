@@ -100,8 +100,8 @@ There is no reliable keyless web search in 2026 (DuckDuckGo/Mojeek/SearXNG all c
 
 > **Superseded 2026-10-12: Exa is removed.** Its key was a temporary development key. The agent
 > no longer has `mcp__exa__*` web search or Exa's Agent API, and LiteLLM no longer registers an
-> `exa` search tool. Deep research is D13's voucher path only; other providers get the
-> "research blocked" path. Refinement uses `fetch_url`, `boe_search` and the browser.
+> `exa` search tool. Deep research is D13's voucher path and, for ChatGPT plans, D21; other
+> providers get the "research blocked" path. Refinement uses `fetch_url`, `boe_search` and the browser.
 
 Simplify research to one provider.
 - **Exa only.** The agent host registers Exa's hosted MCP server (`https://mcp.exa.ai/mcp`,
@@ -389,8 +389,9 @@ Parallel keys have no processor lock or spending cap, so the **key server** runs
   unfinished runs.
 - **App.** The agent host's `deep_research` tool calls the key server with the voucher key
   (read from the app's credential store at call time, never in the config or the model's
-  context) when the model provider is the voucher gateway. ChatGPT and BYOK users get the
-  "research blocked" path (Exa was removed on 2026-10-12, see D8). Research is refined with
+  context) when the model provider is the voucher gateway. ChatGPT plans research with
+  OpenAI's web search (D21); BYOK users get the "research blocked" path (Exa was removed on
+  2026-10-12, see D8). Research is refined with
   `fetch_url`, `boe_search` and the browser.
 - **Trade-offs.** The research input and output pass through our server (not stored or
   logged). The price is charged up front and refunded on failure, so a voucher with less than
@@ -695,3 +696,26 @@ doing two jobs. Now the desktop asks, and the phone only reviews and reads the c
 - **Pairing lasts 72 hours** (was 12), or until the desktop app quits; the relay keeps rooms 10
   minutes longer.
 - **Trade-off.** The user types the PIN about once an hour of use, like the phone used to ask.
+
+## D21 — Web research on ChatGPT plans: OpenAI's hosted `web_search` (2026-10-12)
+
+ChatGPT users had no web research since Exa was removed (D8), so every procedure stopped at
+"research blocked" (seen in a "Renovar el permiso de conducir" run on `gpt-6.1-sol`). SIWC allows
+OpenAI's hosted `web_search` "subject to model and account/workspace policy" (D8 problem 2), and
+it spends the plan the user already pays for.
+
+- **Same tool, other backend.** A procedure agent whose provider is `openai` or `openai-codex`
+  with an OAuth credential (a ChatGPT plan, not an API key, which would pay per search) gets
+  `web_research` with the same parameters and result shape as the voucher one (D13). It sends one
+  Responses request through pi's own provider (endpoint, tokens and refresh as for the agent's
+  turns) with `tools: [{type: "web_search"}]`, and returns the answer with its `url_citation`s
+  as `basis`. An `outputSchema` goes into the instructions; the answer is parsed as JSON when it
+  can be.
+- **Mode → model and effort.** `fast` → `gpt-6-luna` low, `balanced` → `gpt-6.1-sol` medium,
+  `deep` → `gpt-6.1-sol` high (`CHATGPT_RESEARCH_MODELS`). The prompt still gives no guidance on
+  the mode.
+- **Progress.** Each finished `web_search_call` in the stream is a progress update; the model
+  waits for the one final result, as with vouchers.
+- **Trade-offs.** No domain allowlist: the instructions ask for official sources and say which
+  facts come from unofficial ones. Research uses the user's plan limits. Unverified against the
+  live SIWC route; e2e runs cannot cover it (the mock LLM has no Responses API).

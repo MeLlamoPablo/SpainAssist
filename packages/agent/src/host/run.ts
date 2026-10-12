@@ -6,6 +6,7 @@ import { parseHostConfig } from '../config';
 import { buildAssistantPrompt } from '../prompt/assistant';
 import { buildSystemPrompt } from '../prompt/system';
 import { parseLiteLLMSpendHeaders } from '../providers/services';
+import { CHATGPT_PLAN_PROVIDERS, createChatGPTResearchTool } from '../research/chatgpt-research';
 import { createKeyServerResearchTool } from '../research/key-server-research';
 import { createAssistantTools, createTools } from '../tools/index';
 import { BridgeCredentialStore } from './credentials';
@@ -70,10 +71,18 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         dniePhone: config.dniePhone,
         redactPages,
       });
-  // Web research: voucher users through our key server (Parallel, paid from the voucher).
+  // Web research: voucher users through our key server (Parallel, paid from the voucher);
+  // ChatGPT plans (Sign in with ChatGPT, Codex) with OpenAI's hosted web search, on the plan.
   const keyServerUrl = config.research.keyServerUrl;
-  const webResearch = !assistant && config.model.provider === 'litellm' && !!keyServerUrl;
-  if (webResearch) {
+  const research = assistant
+    ? undefined
+    : config.model.provider === LITELLM_PROVIDER_ID && keyServerUrl
+      ? 'key server'
+      : CHATGPT_PLAN_PROVIDERS.includes(config.model.provider) &&
+          (await credentials.read(config.model.provider))?.type === 'oauth'
+        ? 'chatgpt'
+        : undefined;
+  if (research === 'key server' && keyServerUrl) {
     tools.push(
       createKeyServerResearchTool({
         keyServerUrl,
@@ -84,7 +93,21 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         language: config.language,
       }),
     );
+  } else if (research === 'chatgpt') {
+    tools.push(
+      createChatGPTResearchTool({
+        runtime: modelRuntime,
+        // The catalog's model of that id, at the agent model's endpoint (a mock in e2e runs).
+        model: (id) => ({
+          ...(modelRuntime.getModel(model.provider, id) ?? model),
+          id,
+          baseUrl: model.baseUrl,
+        }),
+        language: config.language,
+      }),
+    );
   }
+  const webResearch = !!research;
   const systemPrompt = () =>
     assistant
       ? buildAssistantPrompt({ language: config.language, timeZone: config.timeZone })
@@ -183,7 +206,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
   if (runtime.modelFallbackMessage) hostLog('warn', runtime.modelFallbackMessage);
   hostLog(
     'info',
-    `ready: ${config.role}, ${model.provider}/${model.id}, ${tools.length} tools, web research ${webResearch ? 'key server' : 'off'}`,
+    `ready: ${config.role}, ${model.provider}/${model.id}, ${tools.length} tools, web research ${research ?? 'off'}`,
   );
   await pi.runRpcMode(runtime);
 }

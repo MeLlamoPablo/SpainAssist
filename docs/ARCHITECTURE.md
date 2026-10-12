@@ -143,8 +143,10 @@ cancelled. Procedure cards do not expose a stop control.
 ### 3.2 Research and the card
 The procedure agent first uses `web_research`, with anonymized context from the user's saved
 data (age, municipality, document dates…) and a `mode` it chooses (`fast`, `balanced`,
-`deep`: Parallel `base`, `core`, `pro`). Voucher users run it on Parallel's Task API through
-our key server, paid from the voucher (D13). Other providers have no web research. One request
+`deep`). Voucher users run it on Parallel's Task API through our key server, paid from the
+voucher (D13; `lite`, `core`, `pro`). ChatGPT plans run one Responses request with OpenAI's
+hosted `web_search` tool on the plan's usage (D21; `gpt-6-luna` low, `gpt-6.1-sol` medium,
+`gpt-6.1-sol` high). Other providers (API keys, custom endpoints) have no web research. One request
 stays
 open until a terminal event arrives: progress updates reach the activity log, and the model
 receives only the final result, without polling turns. Abort closes the stream; a disconnect or
@@ -524,8 +526,8 @@ they check with LiteLLM's `/key/info` and turn into a stable, pseudonymous id wi
 Without a user key these are off: scan frame screening (frames go to the extractor unscreened),
 phone-call transcription (`phoneCall.transcriptionAvailable` is false), map lookups (no pins),
 and sharing and rating learnings (the agent gets neither `feedback_submit` nor
-`feedback_vote`; it can still search). Web research is separate: it is paid from a voucher, so
-only voucher users have it.
+`feedback_vote`; it can still search). Web research is separate: voucher users pay for it from
+the voucher, ChatGPT plans from their plan usage (D21).
 
 ### Feature flags
 Main reads the flags once per launch from Unleash's frontend API (`remote/flags.ts`, with
