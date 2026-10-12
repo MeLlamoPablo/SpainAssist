@@ -22,6 +22,7 @@ import {
   type SaMethod,
   type SaResult,
   type Settings,
+  type UpdateStatus,
   type VaultOverview,
 } from '@sa/shared';
 import { examplePromptItems, phoneCallExample } from '../features/playground/examples';
@@ -215,6 +216,40 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     companion = next;
     emit({ type: 'companion.changed', status: next });
   };
+
+  // The must-update screen: `?mustUpdate=1` plays a Windows update (checking, downloading, ready);
+  // a state name shows that one (`downloading` at 42 %).
+  const mustUpdateParam = params.get('mustUpdate');
+  const mustUpdate = mustUpdateParam !== null && mustUpdateParam !== '0';
+  let updates: UpdateStatus =
+    mustUpdateParam === 'downloading'
+      ? { state: 'downloading', version: '0.2.0', percent: 42 }
+      : mustUpdateParam === 'ready'
+        ? { state: 'ready', version: '0.2.0' }
+        : mustUpdateParam === 'checking' ||
+            mustUpdateParam === 'error' ||
+            mustUpdateParam === 'upToDate'
+          ? { state: mustUpdateParam }
+          : mustUpdateParam === '1'
+            ? { state: 'checking' }
+            : { state: 'unsupported' };
+  if (mustUpdateParam === '1' && !freeze) {
+    const setUpdates = (next: UpdateStatus) => {
+      updates = next;
+      emit({ type: 'updates.status', status: next });
+    };
+    let percent = 0;
+    window.setTimeout(() => {
+      const timer = window.setInterval(() => {
+        percent = Math.min(100, percent + 7);
+        if (percent < 100) setUpdates({ state: 'downloading', version: '0.2.0', percent });
+        else {
+          window.clearInterval(timer);
+          setUpdates({ state: 'ready', version: '0.2.0' });
+        }
+      }, 400 / speed);
+    }, 1500 / speed);
+  }
 
   let seq = 1;
   const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${seq++}`;
@@ -779,8 +814,9 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       platform: 'darwin',
       isDev: true,
       isE2E: false,
-      features: { feedbackServer: params.get('feedback') === '1', dniePhone },
+      features: { feedbackServer: params.get('feedback') === '1', dniePhone, mustUpdate },
     }),
+    'updates.status': () => updates,
     'app.reveal': () => {},
     'app.exportTranscripts': () => 'SpainAssist-transcripts-2026-10-12.zip',
     'app.openExternal': (url) => {

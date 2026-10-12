@@ -116,6 +116,8 @@ export interface SaMethods {
    * session) in a new .zip in Downloads, for analysis; returns its file name.
    */
   'app.exportTranscripts': [[], string];
+  /** The app's own updates (see UpdateStatus); changes arrive as `updates.status` events. */
+  'updates.status': [[], UpdateStatus];
 
   'settings.get': [[], Settings];
   'settings.update': [[patch: SettingsPatch], Settings];
@@ -232,7 +234,23 @@ export type SaEvent =
   | { type: 'providers.loginProgress'; message: string; url?: string; userCode?: string }
   | { type: 'vault.changed' }
   | { type: 'settings.changed'; settings: Settings }
-  | { type: 'companion.changed'; status: CompanionStatus };
+  | { type: 'companion.changed'; status: CompanionStatus }
+  | { type: 'updates.status'; status: UpdateStatus };
+
+/**
+ * The app's own updates (electron-updater, GitHub Releases). They download in the background and
+ * install when the app quits; with the `must-update` flag, main installs one as soon as it's
+ * downloaded and restarts.
+ * - `unsupported`: this build can't update itself (development, e2e, macOS until builds are
+ *   signed, Linux); `idle`: no check yet;
+ * - `checking`, `upToDate`;
+ * - `downloading` the new `version`, `percent` 0–100; `ready`: downloaded, installs on quit;
+ * - `error`: the last check or download failed (it retries on the next check).
+ */
+export type UpdateStatus =
+  | { state: 'unsupported' | 'idle' | 'checking' | 'upToDate' | 'error' }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string };
 
 /**
  * The desktop's pairing with the phone app (`@sa/companion`):

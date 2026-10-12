@@ -40,6 +40,9 @@ export function applyEvent(event: SaEvent): void {
     case 'companion.changed':
       useAppStore.setState({ companion: event.status });
       return;
+    case 'updates.status':
+      useAppStore.setState({ updates: event.status });
+      return;
   }
 }
 
@@ -65,7 +68,7 @@ export async function reloadProcedures(): Promise<void> {
 export async function startSync(): Promise<() => void> {
   const unsubscribe = api.on(applyEvent);
   const appInfo = api.invoke('app.info');
-  const [info, settings, provider, procedures, state, companion] = await Promise.all([
+  const [info, settings, provider, procedures, state, companion, updates] = await Promise.all([
     appInfo,
     api.invoke('settings.get'),
     api.invoke('providers.status'),
@@ -75,11 +78,12 @@ export async function startSync(): Promise<() => void> {
     appInfo.then((i): Promise<CompanionStatus> | CompanionStatus =>
       i.features.dniePhone ? api.invoke('companion.status') : { state: 'unavailable' },
     ),
+    api.invoke('updates.status'),
   ]);
   document.documentElement.dataset.platform = info.platform;
   useProcedureStore.getState().setAll(procedures);
   useChatStore.getState().setState(state);
-  useAppStore.setState({ info, settings, provider, companion, ready: true });
+  useAppStore.setState({ info, settings, provider, companion, updates, ready: true });
   void reloadVault();
   void loadConversation();
   return unsubscribe;

@@ -23,6 +23,7 @@ import {
   shell,
   systemPreferences,
 } from 'electron';
+import type { AppUpdater } from 'electron-updater';
 import { z } from 'zod';
 import { type CameraAccess, SCANNER_CHANNEL } from '../scanner';
 import { resolveAgentHostScript } from './agents/host';
@@ -57,6 +58,7 @@ import { createCameraRequester, logCameraEvent } from './scanner/camera';
 import { OpenRouterFrameGate } from './scanner/decider';
 import { DocumentScanner } from './scanner/service';
 import { prepareScanStorage } from './scanner/transcript';
+import { createUpdates, updatesSupported } from './updates/updater';
 import { createSafeStorageKeyProvider, createTouchIdBiometric } from './vault/keyProvider';
 
 // ---------------------------------------------------------------------------------------------
@@ -284,6 +286,7 @@ async function main(): Promise<void> {
           url: PRODUCTION_SERVICES.flagsUrl,
           token: env.flagsToken,
           appName: 'desktop',
+          appVersion: app.getVersion(),
           logger: log,
         });
 
@@ -334,6 +337,19 @@ async function main(): Promise<void> {
   };
   log.info('feature flags', appInfo.features);
 
+  const updatesLog = log.child('updates');
+  const updates = createUpdates({
+    backend: updatesSupported({
+      packaged: app.isPackaged,
+      platform: process.platform,
+      e2e: env.e2e,
+    })
+      ? await loadAutoUpdater(updatesLog)
+      : undefined,
+    logger: updatesLog,
+    urgent: appInfo.features.mustUpdate,
+  });
+
   services = await createMainServices({
     env,
     paths,
@@ -342,6 +358,7 @@ async function main(): Promise<void> {
       : app.getPath('downloads'),
     logger: log,
     appInfo,
+    updates,
     keyProvider,
     biometric,
     openVault: (dir, keys) => openVault(dir, keys, log),
@@ -479,7 +496,30 @@ async function main(): Promise<void> {
   app.on('activate', () => {
     if (!mainWindow) mainWindow = createWindow();
   });
+  updates.start();
+  app.on('before-quit', () => updates.stop());
   log.info('ready', { bridge: 'listening', methods: s.router.methods().length });
+}
+
+/**
+ * electron-updater, loaded only where the app updates itself; its own log goes to ours. When it
+ * can't load, the app runs without updates instead of failing to start.
+ */
+async function loadAutoUpdater(log: Logger) {
+  let autoUpdater: AppUpdater;
+  try {
+    autoUpdater = (await import('electron-updater')).default.autoUpdater;
+  } catch (err) {
+    log.error('updates unavailable: electron-updater did not load', { error: errorMessage(err) });
+    return undefined;
+  }
+  autoUpdater.logger = {
+    debug: (message: unknown) => log.debug(String(message)),
+    info: (message: unknown) => log.debug(String(message)),
+    warn: (message: unknown) => log.warn(String(message)),
+    error: (message: unknown) => log.warn(String(message)),
+  };
+  return autoUpdater;
 }
 
 app.on('window-all-closed', () => {

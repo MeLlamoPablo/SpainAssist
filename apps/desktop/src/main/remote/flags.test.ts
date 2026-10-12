@@ -13,6 +13,7 @@ function load(handler: Parameters<typeof createFakeFetch>[0]) {
     url: 'https://flags.test',
     token: 'default:production.token',
     appName: 'desktop',
+    appVersion: '0.2.0-beta.1',
     logger,
   });
   return { fetch, flags };
@@ -23,9 +24,14 @@ describe('loadFeatureFlags', () => {
     const { fetch, flags } = load(() =>
       jsonResponse(200, { toggles: [{ name: 'feedback-server', enabled: true }] }),
     );
-    expect(await flags).toEqual({ feedbackServer: true, dniePhone: false });
+    expect(await flags).toEqual({ feedbackServer: true, dniePhone: false, mustUpdate: false });
     const request = fetch.requests[0];
-    expect(request?.url.href).toBe('https://flags.test/api/frontend?appName=desktop');
+    expect(request?.url.pathname).toBe('/api/frontend');
+    // The version is a context property, so Unleash constraints can compare it (SEMVER_LT).
+    expect(Object.fromEntries(request?.url.searchParams ?? [])).toEqual({
+      appName: 'desktop',
+      'properties[appVersion]': '0.2.0-beta.1',
+    });
     expect(request?.headers.get('authorization')).toBe('default:production.token');
   });
 
@@ -50,6 +56,7 @@ describe('loadFeatureFlags', () => {
         toggles: {
           'feedback-server': { yes: 0, no: 1, variants: {} },
           'dnie-phone': { yes: 1, no: 0, variants: {} },
+          'must-update': { yes: 0, no: 1, variants: {} },
         },
       },
     });
@@ -61,7 +68,7 @@ describe('loadFeatureFlags', () => {
         ? jsonResponse(200, { toggles: [{ name: 'feedback-server', enabled: true }] })
         : jsonResponse(500, {}),
     );
-    expect(await flags).toEqual({ feedbackServer: true, dniePhone: false });
+    expect(await flags).toEqual({ feedbackServer: true, dniePhone: false, mustUpdate: false });
     await vi.waitFor(() => expect(fetch.requests).toHaveLength(2));
   });
 
@@ -69,11 +76,18 @@ describe('loadFeatureFlags', () => {
     const on = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
     ).flags;
-    expect(await on).toEqual({ feedbackServer: false, dniePhone: true });
+    expect(await on).toEqual({ feedbackServer: false, dniePhone: true, mustUpdate: false });
     const off = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: false }] }),
     ).flags;
     expect((await off).dniePhone).toBe(false);
+  });
+
+  it('blocks this version only when must-update is on', async () => {
+    const on = load(() =>
+      jsonResponse(200, { toggles: [{ name: 'must-update', enabled: true }] }),
+    ).flags;
+    expect(await on).toEqual({ feedbackServer: false, dniePhone: false, mustUpdate: true });
   });
 
   it('turns off every feature Unleash does not list', async () => {

@@ -13,6 +13,7 @@
  *   next to the node_modules that hold its external imports (`dependencies`).
  * - Signing only happens when its environment variables are set. Without them, macOS builds are
  *   ad-hoc signed (no notarization: Gatekeeper warns once) and Windows builds are unsigned.
+ * - Updates (D19): `publish` points the app at this repo's GitHub Releases (electron-updater).
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -129,8 +130,10 @@ const config: Configuration = {
     // The renderer is served from app://, not file://.
     grantFileProtocolExtraPrivileges: false,
   },
-  // No auto-update yet: Squirrel.Mac only updates signed apps (PRODUCTION_CHECKLIST.md).
-  publish: null,
+  // Where updates come from (D19): written into the app as `app-update.yml` and used for the
+  // `latest*.yml` update files next to the installers. CI uploads them to the release itself
+  // (`--publish never`, .github/workflows/release.yml). Only Windows updates itself for now.
+  publish: { provider: 'github', owner: 'MeLlamoPablo', repo: 'SpainAssist' },
   mac: {
     target: ['dmg', 'zip'],
     category: 'public.app-category.productivity',

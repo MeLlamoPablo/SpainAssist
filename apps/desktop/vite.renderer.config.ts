@@ -12,7 +12,7 @@ import { defineConfig, type Plugin } from 'vite';
  *
  * Useful query params (mock only): ?onboarding=1 (splash) or =voucher|data (open that step;
  * add &provider=voucher for data), ?lang=en, ?provider=none|chatgpt|voucher|byok, ?chatgpt=ineligible,
- * ?playground=1 (interactive agent UI catalogue), ?example=<id>, ?map=1 (map picker; ?nomap=1: its list only, lookups used up), ?phone=1 (phone-call card), ?dnie=1 (feature flag: DNIe with the phone on; ?companion, ?dniePin and ?playground imply it), ?companion=waiting|away|connected (DNIe phone pairing), ?dniePin=none|saved|wrong (a saved DNIe without a PIN, with one, or with one the card refused), ?address=1 (saved mock address, located on open), ?empty=1, ?freeze=1 (no simulated activity), ?speed=4, ?view=vault|settings, ?p=<procedureId>, ?feedback=1 (feature flag: community learnings on).
+ * ?playground=1 (interactive agent UI catalogue), ?example=<id>, ?map=1 (map picker; ?nomap=1: its list only, lookups used up), ?phone=1 (phone-call card), ?dnie=1 (feature flag: DNIe with the phone on; ?companion, ?dniePin and ?playground imply it), ?companion=waiting|away|connected (DNIe phone pairing), ?dniePin=none|saved|wrong (a saved DNIe without a PIN, with one, or with one the card refused), ?address=1 (saved mock address, located on open), ?empty=1, ?freeze=1 (no simulated activity), ?speed=4, ?view=vault|settings, ?p=<procedureId>, ?feedback=1 (feature flag: community learnings on), ?mustUpdate=1 (feature flag: the must-update screen, playing a Windows update; =checking|downloading|ready|error|unsupported shows one state).
  */
 
 /** The app CSP forbids inline scripts; Vite's React refresh preamble needs one in dev. */

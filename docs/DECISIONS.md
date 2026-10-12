@@ -492,7 +492,8 @@ packages, the services, the tools and the phone app's own source. A permissive l
 anyone reuse it, and keeps the desktop and services free to use any permissive dependency.
 
 - **Desktop and services: nothing copyleft.** The desktop ships 366 third-party components
-  (2026-10-11): MIT, Apache-2.0, BSD, ISC, 0BSD, BlueOak, Unlicense and Zlib, plus two OFL-1.1
+  (2026-10-11): MIT, Apache-2.0, BSD, ISC, 0BSD, BlueOak, Unlicense, Zlib and Python-2.0 (the
+  PSF licence of `argparse`, through electron-updater's js-yaml; 2026-10-12), plus two OFL-1.1
   fonts (Inter, Instrument Serif), which may be bundled with any software. `node-forge` is
   "BSD-3-Clause OR GPL-2.0"; we use it under BSD-3-Clause. Electron is MIT, Chromium's notices
   ship as Electron's `LICENSES.chromium.html`, and `sa-sidecar` uses only Go's standard library
@@ -579,8 +580,8 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
   `packaging/entitlements.mac*.plist` files. The notarytool variables then add notarization.
   Windows uses Azure Artifact Signing (`SA_AZURE_SIGNING_*`) or a `.pfx` (`WIN_CSC_LINK`), and
   is unsigned otherwise. `PRODUCTION_CHECKLIST.md` has the steps.
-- **No auto-update yet** (`publish: null`). Squirrel.Mac only updates signed apps. Add
-  electron-updater and a publish target with signing; the macOS zip is already built for it.
+- **Auto-update: D19.** Windows first; Squirrel.Mac only updates signed apps, and the macOS zip
+  is already built for it.
 
 ## D18 — The DNIe PIN as a desktop credential, sent only to the paired phone (2026-10-12)
 
@@ -630,3 +631,32 @@ may hold the PIN, and the desktop gives it to the phone with the request.
   next request the user approves on the desktop. Signing with a saved PIN asks on both the desktop
   and the phone. A "use automatically" policy for the DNIe would remove the desktop step; Mis
   datos doesn't offer one yet.
+
+## D19 — Silent auto-update from GitHub Releases, and a `must-update` flag (2026-10-12)
+
+- **electron-updater, GitHub provider.** `publish` in `electron-builder.ts` points at the public
+  repo `MeLlamoPablo/SpainAssist`: electron-builder writes it into the app as `app-update.yml`
+  and writes `latest.yml` next to the Windows installer. The release workflow uploads
+  `latest.yml` and the installer's blockmap (differential downloads) with the installers. The app
+  needs no token.
+- **Windows only, for now** (`updatesSupported` in `apps/desktop/src/main/updates/updater.ts`:
+  packaged, `win32`, not e2e). Unsigned NSIS updates work: electron-updater checks the
+  installer's SHA-512 from `latest.yml`, and a publisher signature only once one is configured.
+  macOS waits for Developer ID signing, because Squirrel.Mac refuses an update that isn't signed by
+  the same identity. It then needs the arm64 and x64 `latest-mac.yml` merged into one in CI.
+  Linux waits for an AppImage release.
+- **Silent.** It checks 30 s after startup and every 4 hours, downloads in the background and
+  installs when the app quits (`autoInstallOnAppQuit`). There's no banner. The status still
+  reaches the renderer (`updates.status`, `UpdateStatus`) for the must-update screen. Stable
+  versions never get prereleases (`vX.Y.Z-suffix` tags); a prerelease install keeps getting
+  them (electron-updater's default).
+- **Unleash knows the version.** The flags request sends `properties[appVersion]`, so a flag can
+  be constrained by version (`SEMVER_LT`). This needs an `appVersion` context field in Unleash.
+- **`must-update`.** When it's on for this version, the app shows only the must-update screen
+  (`MustUpdate.tsx`), not the onboarding and not the shell. Where the app updates itself, main
+  checks at once and installs the update as soon as it's downloaded, restarting the app.
+  Elsewhere (macOS, Linux), and when the update fails, the screen links to the latest
+  release. The flag fails open like every flag: if Unleash can't be reached, the app works. Always
+  give it a version constraint: on its own it would block every version, the newest included.
+- **Trust.** Unsigned, whoever can publish a release on the repo can ship code to every Windows
+  install. Keep release rights limited until Windows builds are signed.

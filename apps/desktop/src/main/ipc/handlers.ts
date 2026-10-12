@@ -12,6 +12,7 @@ import type { Maps } from '../places/maps';
 import type { ProcedureService } from '../procedures/service';
 import type { ProviderManager } from '../providers/manager';
 import type { SettingsStore } from '../settings/store';
+import type { Updates } from '../updates/updater';
 import type { VaultService } from '../vault/service';
 import type { IpcRouter } from './router';
 import { SA_ARG_SCHEMAS as S } from './schemas';
@@ -39,6 +40,8 @@ export interface IpcServices {
     available(): Promise<boolean>;
     transcribe(promptItemId: string, wav: Uint8Array): Promise<string>;
   };
+  /** The app's own updates. */
+  updates: Pick<Updates, 'status'>;
   openExternal(url: string): Promise<void>;
   revealWindow(): void;
   /** Saves every stored transcript in a zip in Downloads; returns its file name. */
@@ -69,6 +72,7 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   });
   router.register('app.reveal', S['app.reveal'], () => s.revealWindow());
   router.register('app.exportTranscripts', S['app.exportTranscripts'], () => s.exportTranscripts());
+  router.register('updates.status', S['updates.status'], () => s.updates.status());
 
   router.register('settings.get', S['settings.get'], () => s.settings.get());
   router.register('settings.update', S['settings.update'], (patch) => s.settings.update(patch));

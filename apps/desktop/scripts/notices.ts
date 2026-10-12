@@ -52,6 +52,8 @@ const PERMISSIVE = new Set([
   'CC0-1.0',
   'ISC',
   'MIT',
+  // The PSF licence (argparse, via js-yaml in electron-updater): keep the notice, nothing more.
+  'Python-2.0',
   'Unlicense',
   'Zlib',
   // Fonts: bundling them with software is allowed; only a modified font must stay OFL.

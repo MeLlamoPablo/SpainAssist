@@ -17,7 +17,8 @@ export function featuresFromNames(enabled: Iterable<string>): FeatureFlags {
 
 /**
  * Reads the feature flags from Unleash's frontend API, which lists only the flags that are on.
- * Fails closed: when Unleash can't be reached or answers nonsense, every feature is off.
+ * The app version goes along as the `appVersion` context property, so a flag can target versions
+ * (`must-update` with SEMVER_LT, for example). Fails closed: when Unleash can't be reached or answers nonsense, every feature is off.
  * Once read, it reports their use in the background (see reportFlagMetrics).
  */
 export async function loadFeatureFlags(deps: {
@@ -25,16 +26,20 @@ export async function loadFeatureFlags(deps: {
   url: string;
   token: string;
   appName: string;
+  appVersion: string;
   logger: Logger;
   timeoutMs?: number;
 }): Promise<FeatureFlags> {
   const start = new Date();
+  const query = new URLSearchParams({
+    appName: deps.appName,
+    'properties[appVersion]': deps.appVersion,
+  });
   try {
-    const json = await requestJson(
-      deps.fetch,
-      joinUrl(deps.url, `/api/frontend?${new URLSearchParams({ appName: deps.appName })}`),
-      { headers: { authorization: deps.token }, timeoutMs: deps.timeoutMs ?? 3_000 },
-    );
+    const json = await requestJson(deps.fetch, joinUrl(deps.url, `/api/frontend?${query}`), {
+      headers: { authorization: deps.token },
+      timeoutMs: deps.timeoutMs ?? 3_000,
+    });
     const parsed = FrontendResponse.parse(json);
     const features = featuresFromNames(parsed.toggles.filter((t) => t.enabled).map((t) => t.name));
     void reportFlagMetrics(deps, start, features);

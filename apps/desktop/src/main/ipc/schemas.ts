@@ -36,6 +36,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'app.openExternal': z.tuple([z.string().url().max(2000)]),
   'app.reveal': none,
   'app.exportTranscripts': none,
+  'updates.status': none,
 
   'settings.get': none,
   'settings.update': z.tuple([SettingsPatch]),

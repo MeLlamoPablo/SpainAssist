@@ -42,6 +42,7 @@ import { ProviderManager } from '../providers/manager';
 import { FeedbackService } from '../remote/feedback';
 import type { FetchFn } from '../remote/http';
 import { AppStateStore, SettingsStore } from '../settings/store';
+import { createUpdates, type Updates } from '../updates/updater';
 import { VaultService } from '../vault/service';
 import type { SaEnv } from './env';
 import { type AppPaths, assistantPaths } from './paths';
@@ -72,6 +73,8 @@ export interface MainDeps {
   relaySocket?: typeof WebSocket;
   /** Map lookups (public places, the home); injectable for offline tests. */
   places?: Pick<Maps, 'place' | 'home'>;
+  /** The app's own updates (`updates/updater.ts`); unsupported when absent (tests, dev). */
+  updates?: Updates;
   openExternal(url: string): Promise<void>;
   /** Show the app window (`app.reveal`). */
   revealWindow(): void;
@@ -138,6 +141,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     await ensurePrivateDir(dir);
 
   const events = new EventBus();
+  const updates = deps.updates ?? createUpdates({ logger });
+  updates.onStatus((status) => events.emit({ type: 'updates.status', status }));
   const settings = await SettingsStore.open(paths.settingsFile, {
     overlay: {},
     events,
@@ -522,6 +527,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         return transcriber.transcribe(wav);
       },
     },
+    updates,
     openExternal: deps.openExternal,
     revealWindow: deps.revealWindow,
     exportTranscripts: () =>

@@ -78,7 +78,9 @@ public repository will be a copy without the encrypted files or this history.
          downloaded dmg (only the app is notarized, not the dmg). Then, on that Mac, test the
          camera, the microphone, the Keychain (vault) and a certificate login under the
          hardened runtime.
-      6. Then add auto-update: electron-updater plus a `publish` target (D17).
+      6. Then turn on macOS auto-update (D19): allow `darwin` in `updatesSupported`, and merge
+         the arm64 and x64 `latest-mac.yml` into one in the release job (each runner writes its
+         own), uploading it with the zips and their blockmaps.
 - [ ] **Verify DNIe login on real hardware.** Test AUTENTICACIÓN on DNIe 3.0/4.0 and supported
       Android phones, card-moved recovery, repeated handshakes, PIN cache expiry, and approval
       after 30 idle seconds. Verify real-host TLS 1.2 resumption/renegotiation and timings.

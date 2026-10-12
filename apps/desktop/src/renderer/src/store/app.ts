@@ -1,4 +1,4 @@
-import type { AppInfo, CompanionStatus, ProviderStatus, Settings } from '@sa/shared';
+import type { AppInfo, CompanionStatus, ProviderStatus, Settings, UpdateStatus } from '@sa/shared';
 import { create } from 'zustand';
 
 export type VaultTab = 'personal' | 'documents' | 'credentials';
@@ -27,6 +27,8 @@ interface AppState {
   loginProgress: LoginProgress | null;
   /** The phone pairing for DNIe signatures (QR link while no phone is connected). */
   companion: CompanionStatus;
+  /** The app's own updates; the must-update screen shows them. */
+  updates: UpdateStatus;
   view: View;
   showArchived: boolean;
   /** The procedure card to bring into view and highlight (e.g. from a procedure event in the chat). */
@@ -51,6 +53,7 @@ export const useAppStore = create<AppState>()((set) => ({
   provider: null,
   loginProgress: null,
   companion: { state: 'off' },
+  updates: { state: 'unsupported' },
   view: { kind: 'procedures' },
   showArchived: false,
   focusedProcedure: null,

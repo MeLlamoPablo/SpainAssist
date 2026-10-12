@@ -178,15 +178,26 @@ export interface FeatureFlags {
    * exist; a saved `dnie` credential stays in the vault, hidden.
    */
   dniePhone: boolean;
+  /**
+   * This version may no longer be used: the app shows only the must-update screen. Unleash
+   * targets it with a constraint on the `appVersion` context field (e.g. SEMVER_LT 0.3.0), which
+   * the app sends; without a constraint the flag would block every version, the newest included.
+   */
+  mustUpdate: boolean;
 }
 
 /** Unleash flag name of each feature flag. */
 export const FEATURE_FLAG_NAMES: Record<keyof FeatureFlags, string> = {
   feedbackServer: 'feedback-server',
   dniePhone: 'dnie-phone',
+  mustUpdate: 'must-update',
 };
 
-export const FEATURES_OFF: FeatureFlags = { feedbackServer: false, dniePhone: false };
+export const FEATURES_OFF: FeatureFlags = {
+  feedbackServer: false,
+  dniePhone: false,
+  mustUpdate: false,
+};
 
 export const DEFAULT_SETTINGS: Settings = {
   language: 'es',

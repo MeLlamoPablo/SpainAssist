@@ -134,7 +134,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
       platform: 'darwin',
       isDev: true,
       isE2E: true,
-      features: { feedbackServer: true, dniePhone: true, ...opts.features },
+      features: { feedbackServer: true, dniePhone: true, mustUpdate: false, ...opts.features },
     },
     keyProvider: fakeKeyProvider(),
     biometric: opts.biometric ?? noBiometric,
