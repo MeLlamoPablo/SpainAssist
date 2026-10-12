@@ -33,8 +33,11 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
   const t = useT(settingsDict);
   const settings = useAppStore((s) => s.settings);
   const info = useAppStore((s) => s.info);
+  const kind = useAppStore((s) => s.provider?.kind);
   // With a voucher connected, more codes top up its balance; ChatGPT is not offered.
-  const voucherConnected = useAppStore((s) => s.provider?.kind === 'voucher');
+  const voucherConnected = kind === 'voucher';
+  // A ChatGPT subscription needs nothing else: the card shows only its status.
+  const chatGptConnected = kind === 'chatgpt' || kind === 'codex';
   const scrollRef = useRef<HTMLDivElement>(null);
   const providerRef = useRef<HTMLDivElement>(null);
   const generalRef = useRef<HTMLDivElement>(null);
@@ -73,54 +76,63 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
           <div ref={providerRef} className="scroll-mt-4">
             <SectionCard icon={Sparkles} title={t.provider.title}>
               <ProviderStatusCard />
-              <div
-                className={cn(
-                  'mt-5 flex flex-col',
-                  // A lone "Añadir otro código" row sits on the card without a frame.
-                  !voucherConnected && 'divide-y divide-line rounded-xl border border-line',
-                )}
-              >
-                {voucherConnected ? null : (
-                  <OptionRow
-                    title={t.provider.chatgpt.title}
-                    body={t.provider.chatgpt.body}
-                    icon={Sparkles}
+              {chatGptConnected ? null : (
+                <>
+                  <div
+                    className={cn(
+                      'mt-5 flex flex-col',
+                      // A lone "Añadir otro código" row sits on the card without a frame.
+                      !voucherConnected && 'divide-y divide-line rounded-xl border border-line',
+                    )}
                   >
-                    <ChatGptConnect />
-                  </OptionRow>
-                )}
-                <OptionRow
-                  title={voucherConnected ? t.provider.voucher.addTitle : t.provider.voucher.title}
-                  body={voucherConnected ? undefined : t.provider.voucher.body}
-                  icon={Ticket}
-                  naked={voucherConnected}
-                >
-                  <VoucherRedeem naked={voucherConnected} />
-                </OptionRow>
-              </div>
-              <Advanced title={t.provider.advanced.title}>
-                <div className="flex flex-col gap-6">
-                  <SubSection title={t.provider.advanced.byok} body={t.provider.advanced.byokBody}>
-                    <ByokForm />
-                  </SubSection>
-                  <SubSection
-                    title={t.provider.advanced.custom}
-                    body={t.provider.advanced.customBody}
-                  >
-                    <CustomProviderForm />
-                  </SubSection>
-                  {/* Impersonates Codex CLI (against OpenAI's terms): never in production builds. */}
-                  {import.meta.env.DEV ? (
-                    <SubSection
-                      title={t.provider.advanced.codex}
-                      body={t.provider.advanced.codexBody}
+                    {voucherConnected ? null : (
+                      <OptionRow
+                        title={t.provider.chatgpt.title}
+                        body={t.provider.chatgpt.body}
+                        icon={Sparkles}
+                      >
+                        <ChatGptConnect />
+                      </OptionRow>
+                    )}
+                    <OptionRow
+                      title={
+                        voucherConnected ? t.provider.voucher.addTitle : t.provider.voucher.title
+                      }
+                      body={voucherConnected ? undefined : t.provider.voucher.body}
+                      icon={Ticket}
+                      naked={voucherConnected}
                     >
-                      <CodexDeviceConnect />
-                    </SubSection>
-                  ) : null}
-                  <ModelPicker />
-                </div>
-              </Advanced>
+                      <VoucherRedeem naked={voucherConnected} />
+                    </OptionRow>
+                  </div>
+                  <Advanced title={t.provider.advanced.title}>
+                    <div className="flex flex-col gap-6">
+                      <SubSection
+                        title={t.provider.advanced.byok}
+                        body={t.provider.advanced.byokBody}
+                      >
+                        <ByokForm />
+                      </SubSection>
+                      <SubSection
+                        title={t.provider.advanced.custom}
+                        body={t.provider.advanced.customBody}
+                      >
+                        <CustomProviderForm />
+                      </SubSection>
+                      {/* Impersonates Codex CLI (against OpenAI's terms): never in production builds. */}
+                      {import.meta.env.DEV ? (
+                        <SubSection
+                          title={t.provider.advanced.codex}
+                          body={t.provider.advanced.codexBody}
+                        >
+                          <CodexDeviceConnect />
+                        </SubSection>
+                      ) : null}
+                      <ModelPicker />
+                    </div>
+                  </Advanced>
+                </>
+              )}
             </SectionCard>
           </div>
 

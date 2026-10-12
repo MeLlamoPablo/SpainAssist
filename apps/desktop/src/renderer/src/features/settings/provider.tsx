@@ -88,7 +88,8 @@ export function ProviderStatusCard() {
         ) : null}
       </div>
       <dl className="mt-3 grid grid-cols-1 gap-3 border-t border-line pt-3 text-[13px] @min-[640px]:grid-cols-3">
-        {provider.model && provider.kind !== 'voucher' ? (
+        {/* Only BYOK and custom providers let the user pick the model. */}
+        {provider.model && (provider.kind === 'byok' || provider.kind === 'custom') ? (
           <div className="min-w-0">
             <dt className="text-fg-subtle">{t.provider.model}</dt>
             <dd className="truncate font-medium text-fg">{provider.model}</dd>
