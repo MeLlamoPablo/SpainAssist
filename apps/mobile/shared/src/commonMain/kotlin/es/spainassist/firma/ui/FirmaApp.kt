@@ -439,8 +439,7 @@ private fun SigningScreen(s: Screen.Signing, actions: FirmaActions, platform: Pl
             Words {
                 Title(stringResource(if (login) Res.string.working_login else if (step.reading) Res.string.working_reading else Res.string.working_signing))
                 Body(stringResource(Res.string.working_hint))
-                if (login) Body(stringResource(Res.string.login_cancel_desktop))
-                else if (step.signed > 0) Body(stringResource(Res.string.working_signed, step.signed))
+                if (!login && step.signed > 0) Body(stringResource(Res.string.working_signed, step.signed))
             }
             if (!s.connected) Actions { away() }
         }

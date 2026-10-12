@@ -62,7 +62,7 @@
 
     <!-- Card -->
     <string name="card_title">Hold your DNIe to the phone</string>
-    <string name="card_body">Put your DNIe on a table and rest the back of the phone on it. Don’t move them until it’s done.</string>
+    <string name="card_body">Put your DNIe on a table and rest the back of your phone on it, without a case.\n\nDon’t move them.</string>
     <string name="card_moved">The DNIe moved. Rest the phone on it again and don’t move it.</string>
     <string name="working_reading">Reading your DNIe…</string>
     <string name="working_signing">Signing…</string>
@@ -88,7 +88,6 @@
     <string name="review_title_login">Log in to %1$s</string>
     <string name="review_login_body">Your DNIe will log in to this website. Keep the card near your phone.</string>
     <string name="review_login">Log in</string>
-    <string name="login_cancel_desktop">You can cancel from your computer.</string>
     <string name="working_login">Keep your DNIe nearby</string>
     <string name="result_login">DNIe use ended</string>
     <string name="result_login_declined">You did not approve login.</string>

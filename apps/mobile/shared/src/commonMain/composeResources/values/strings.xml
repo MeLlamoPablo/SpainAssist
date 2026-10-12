@@ -62,7 +62,7 @@
 
     <!-- Card -->
     <string name="card_title">Acerca el DNIe</string>
-    <string name="card_body">Pon el DNIe sobre una mesa y apoya encima la parte de atrás del móvil. No los muevas hasta que termine.</string>
+    <string name="card_body">Pon el DNIe sobre una mesa y apoya la parte de atrás del móvil encima, sin funda.\n\nNo los muevas.</string>
     <string name="card_moved">Se ha movido el DNIe. Vuelve a apoyar el móvil encima y no lo muevas.</string>
     <string name="working_reading">Leyendo el DNIe…</string>
     <string name="working_signing">Firmando…</string>
@@ -88,7 +88,6 @@
     <string name="review_title_login">Entrar en %1$s</string>
     <string name="review_login_body">Tu DNIe se usará para entrar en esta web. Mantén la tarjeta cerca del móvil.</string>
     <string name="review_login">Entrar</string>
-    <string name="login_cancel_desktop">Puedes cancelar desde el ordenador.</string>
     <string name="working_login">Mantén el DNIe cerca</string>
     <string name="result_login">Uso del DNIe terminado</string>
     <string name="result_login_declined">No has aprobado el acceso.</string>
