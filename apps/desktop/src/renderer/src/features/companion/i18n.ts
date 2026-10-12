@@ -34,13 +34,12 @@ export const companionDict = defineDict({
     /** The `reviewing` hint of a certificate read. */
     reviewingCertificate: 'Comprueba quién lo pide y comparte tu certificado.',
     unlock: {
-      lead: 'Solo los recibe tu móvil vinculado, cifrados. El asistente nunca los ve. Recuerdo el PIN durante una hora.',
       can: 'Número CAN',
       canHelp: 'Son los 6 números de la parte de delante de tu DNIe, abajo a la derecha.',
       canInvalid: 'El número CAN tiene 6 números.',
       canRefused: 'El número CAN no coincide con tu DNIe. Míralo otra vez en la tarjeta.',
       pin: 'PIN del DNIe',
-      pinHelp: 'De 8 a 16 letras y números. No es el número CAN.',
+      pinHelp: 'De 8 a 16 letras y números.',
       pinInvalid: 'El PIN tiene entre 8 y 16 caracteres.',
       pinRefused: (tries: number) =>
         tries === 1
@@ -49,14 +48,14 @@ export const companionDict = defineDict({
       pinRefusedUnknown: 'El PIN no es correcto. Escríbelo otra vez.',
       helpTitle: '¿Qué es el PIN y dónde lo encuentro?',
       canHelpTitle: '¿Dónde está el número CAN?',
+      /** One list item each; a blank line splits an item into paragraphs. */
       help: [
-        'El PIN es la contraseña de tu DNI electrónico. Tiene de 8 a 16 letras y números. No es el número CAN.',
+        'El PIN es la contraseña de tu DNI electrónico.',
         'Te lo dieron en un sobre cerrado cuando te hicieron el DNI.',
-        '¿Lo has perdido o no lo recuerdas? Ve a un Punto de Actualización del DNIe. Son unas máquinas que hay en las comisarías donde se hace el DNI. Con tu huella pones un PIN nuevo. No hace falta cita.',
-        'Para cambiar el PIN, usa esas mismas máquinas. Por seguridad, no se puede cambiar por internet.',
-        'Si fallas el PIN 3 veces, el DNIe se bloquea. Se desbloquea en esas máquinas, con tu huella.',
-        'El número CAN son los 6 números impresos en la parte de delante del DNIe, abajo a la derecha.',
+        '¿Lo has perdido o no lo recuerdas? Ve a un Punto de Actualización del DNIe.\n\nSon unas máquinas que hay en las comisarías de Policía Nacional. Con tu huella pones un PIN nuevo. No hace falta cita.',
       ],
+      canWhere:
+        'El número CAN son los 6 números impresos en la parte de delante del DNIe, abajo a la derecha.',
       submit: 'Continuar',
     },
     login: {
@@ -111,13 +110,12 @@ export const companionDict = defineDict({
     },
     reviewingCertificate: 'Check who asks and share your certificate.',
     unlock: {
-      lead: 'Only your paired phone gets them, encrypted. The assistant never sees them. I remember the PIN for an hour.',
       can: 'CAN number',
       canHelp: 'The 6 digits on the front of your DNIe, at the bottom right.',
       canInvalid: 'The CAN has 6 digits.',
       canRefused: "The CAN doesn't match your DNIe. Check it again on the card.",
       pin: 'DNIe PIN',
-      pinHelp: '8 to 16 letters and numbers. It’s not the CAN.',
+      pinHelp: '8 to 16 letters and numbers.',
       pinInvalid: 'The PIN has 8 to 16 characters.',
       pinRefused: (tries: number) =>
         tries === 1
@@ -127,13 +125,11 @@ export const companionDict = defineDict({
       helpTitle: 'What is the PIN and where do I find it?',
       canHelpTitle: 'Where is the CAN?',
       help: [
-        'The PIN is the password of your electronic DNI. It has 8 to 16 letters and numbers. It’s not the CAN.',
+        'The PIN is the password of your electronic DNI.',
         'You got it in a sealed envelope when your DNI was issued.',
-        'Lost it or can’t remember it? Go to a DNIe Update Point (Punto de Actualización del DNIe). These are machines at the police stations that issue the DNI. With your fingerprint you set a new PIN. No appointment needed.',
-        'To change the PIN, use those same machines. For security, it can’t be changed online.',
-        'After 3 wrong PINs your DNIe gets blocked. You unblock it at those machines, with your fingerprint.',
-        'The CAN is the 6 digits printed on the front of the DNIe, at the bottom right.',
+        'Lost it or can’t remember it? Go to a DNIe Update Point (Punto de Actualización del DNIe).\n\nThese are machines at Policía Nacional stations. With your fingerprint you set a new PIN. No appointment needed.',
       ],
+      canWhere: 'The CAN is the 6 digits printed on the front of the DNIe, at the bottom right.',
       submit: 'Continue',
     },
     login: {

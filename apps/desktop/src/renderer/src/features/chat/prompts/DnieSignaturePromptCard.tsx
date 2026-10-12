@@ -242,14 +242,11 @@ function UnlockForm({
         void submit();
       }}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-st-attention-bg text-st-attention-fg">
           <KeyRound size={19} aria-hidden />
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[14.5px] font-semibold text-fg">{tc.stage.unlock}</p>
-          <p className="mt-0.5 text-[13px] text-fg-muted">{tu.lead}</p>
-        </div>
+        <p className="min-w-0 flex-1 text-[14.5px] font-semibold text-fg">{tc.stage.unlock}</p>
       </div>
 
       {refused ? (
@@ -326,8 +323,10 @@ function UnlockForm({
         </button>
         {helpOpen ? (
           <ul className="flex list-disc flex-col gap-1.5 border-t border-line py-3 pr-3 pl-7 text-[13px] text-fg-muted">
-            {(unlock.pin ? tu.help : tu.help.slice(-1)).map((line) => (
-              <li key={line}>{line}</li>
+            {(unlock.pin ? tu.help : [tu.canWhere]).map((line) => (
+              <li key={line} className="whitespace-pre-line">
+                {line}
+              </li>
             ))}
           </ul>
         ) : null}
