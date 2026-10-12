@@ -12,6 +12,8 @@ import es.gob.jmulticard.card.dnie.DnieFactory
 import es.gob.jmulticard.card.dnie.DnieNfc
 import es.gob.jmulticard.card.dnie.InvalidAccessCodeException
 import es.gob.jmulticard.card.icao.InvalidCanOrMrzException
+import es.spainassist.firma.android.firmaLog
+import es.spainassist.firma.app.LogArea
 import es.spainassist.firma.card.Card
 import es.spainassist.firma.card.CardException
 import es.spainassist.firma.card.DnieSession
@@ -34,6 +36,7 @@ class JmulticardCard(tag: Tag) : Card {
     private val connection = try {
         IsoDepConnection(isoDep)
     } catch (e: Exception) {
+        log("connect failed: ${e::class.simpleName} ${e.message}")
         throw CardException.Lost()
     }
 
@@ -42,26 +45,33 @@ class JmulticardCard(tag: Tag) : Card {
             for (callback in callbacks) answer(callback, can, pin)
         }
         val crypto = LoginCryptoHelper()
+        log("PACE with the CAN (purpose=${purpose.name})")
         val dnie: DnieNfc = guard { DnieFactory.getDnieNfc(connection, crypto, handler) }
-        val alias = guard { certificateAlias(dnie, purpose == es.spainassist.firma.protocol.Purpose.Login) } ?: throw CardException.NoCertificate()
-        val certificate = dnie.getCertificate(alias) ?: throw CardException.NoCertificate()
+        log("PACE done: reading the certificate")
+        val alias = guard { certificateAlias(dnie, purpose == es.spainassist.firma.protocol.Purpose.Login) }
+            ?: throw CardException.NoCertificate().also { log("no certificate for ${purpose.name}") }
+        val certificate = dnie.getCertificate(alias)
+            ?: throw CardException.NoCertificate().also { log("no certificate under the alias") }
         try {
             certificate.checkValidity()
         } catch (e: CertificateExpiredException) {
+            log("certificate expired")
             throw CardException.CertificateExpired()
         } catch (e: CertificateNotYetValidException) {
+            log("certificate not yet valid")
             throw CardException.CertificateExpired()
         }
-        val key = dnie.getPrivateKey(alias) ?: throw CardException.NoCertificate()
+        val key = dnie.getPrivateKey(alias) ?: throw CardException.NoCertificate().also { log("no private key under the alias") }
         return object : DnieSession {
             override val certificates = listOf(certificate.encoded)
 
             override fun sign(data: ByteArray, algorithm: Algorithm, prehashed: Boolean): ByteArray =
                 guard {
+                    log("signing ${algorithm.name} prehashed=$prehashed (PIN check)")
                     crypto.setPrehashed(if (prehashed) data else null)
                     try { dnie.sign(data, algorithm.jcaName, key) }
                     finally { crypto.setPrehashed(null) }
-                }
+                }.also { log("card signed") }
         }
     }
 
@@ -85,6 +95,8 @@ class JmulticardCard(tag: Tag) : Card {
         }
     }
 
+    private fun log(message: String) = firmaLog(LogArea.Nfc, message)
+
     /** Runs a jmulticard call, turning its exceptions into [CardException]s. */
     private fun <T> guard(block: () -> T): T {
         try {
@@ -97,8 +109,10 @@ class JmulticardCard(tag: Tag) : Card {
     }
 
     private fun classify(e: Throwable): CardException {
-        if (connection.lost) return CardException.Lost()
         val chain = generateSequence(e) { it.cause }.take(12).toList()
+        // Class names only: jmulticard's messages may quote card data.
+        log("jmulticard error: ${chain.joinToString(" <- ") { it.javaClass.simpleName }} lost=${connection.lost}")
+        if (connection.lost) return CardException.Lost()
         chain.firstNotNullOfOrNull { it as? CardException }?.let { return it }
         for (cause in chain) {
             when (cause) {

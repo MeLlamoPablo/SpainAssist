@@ -26,6 +26,7 @@ import es.spainassist.firma.protocol.SignNeed
 import es.spainassist.firma.protocol.SignUnlock
 import es.spainassist.firma.protocol.Stage
 import es.spainassist.firma.protocol.ToBeSigned
+import es.spainassist.firma.protocol.describe
 import es.spainassist.firma.relay.LinkListener
 import es.spainassist.firma.relay.LinkStatus
 import es.spainassist.firma.relay.PhoneLink
@@ -86,7 +87,7 @@ class FirmaController(
     private val linkFactory: LinkFactory = { pairing, hello, listener ->
         val link = PhoneLink(pairing, hello, { events ->
             platform.relay(pairing.relayUrl, pairing.roomId, events)
-        }, listener, platform::log)
+        }, listener, { platform.log(LogArea.Link, it) })
         object : CompanionLink {
             override val connected get() = link.connected
 
@@ -141,15 +142,18 @@ class FirmaController(
             val parsed = try {
                 PairingLink.parse(text, platform.allowInsecureRelay)
             } catch (e: ChannelException) {
+                log("pairing link rejected: ${e.message}")
                 if (link == null) notice = StartNotice.BadLink
                 render()
                 return@launch
             }
             if (stored()?.let { it == parsed } == true && link != null) {
                 // The same QR again: just make sure we're connected.
+                log("pairing link: same pairing, reconnecting")
                 link?.start()
                 return@launch
             }
+            log("pairing link: asking to confirm")
             proposed = parsed
             render()
         }
@@ -159,6 +163,7 @@ class FirmaController(
         scope.launch {
             val next = proposed ?: return@launch
             proposed = null
+            log("pairing confirmed" + if (link != null) " (replacing the previous one)" else "")
             if (link != null) endPairing(sendBye = true)
             store.put(KEY_PAIRING, next.encode())
             store.put(KEY_PAIRED_AT, platform.now().toString())
@@ -170,6 +175,7 @@ class FirmaController(
 
     override fun cancelPairing() {
         scope.launch {
+            log("pairing declined")
             proposed = null
             render()
         }
@@ -177,6 +183,7 @@ class FirmaController(
 
     override fun unpair() {
         scope.launch {
+            log("unpair (user)")
             endPairing(sendBye = true)
             render()
         }
@@ -188,17 +195,21 @@ class FirmaController(
             ?: store.get(KEY_PAIRED_AT)?.toLongOrNull()?.let { platform.now() > it + PAIRING_MAX_MS }
             ?: true
         if (expired) {
+            log("stored pairing expired")
             clearPairing()
             return null
         }
         return runCatching { PairingLink.decode(payload, platform.allowInsecureRelay) }.getOrElse {
+            log("stored pairing unreadable: ${it::class.simpleName}")
             clearPairing()
             null
         }
     }
 
     private fun restorePairing() {
-        stored()?.let { connect(it) }
+        val pairing = stored()
+        log(if (pairing != null) "restoring pairing" else "not paired")
+        pairing?.let { connect(it) }
         render()
     }
 
@@ -215,7 +226,12 @@ class FirmaController(
             }
 
             override fun onSession() {
-                if (link === created) active?.let(::resend)
+                if (link === created) {
+                    active?.let {
+                        log("new session: resending ${it.request.requestId}")
+                        resend(it)
+                    }
+                }
             }
         })
         link = created
@@ -226,6 +242,9 @@ class FirmaController(
 
     private fun onLinkStatus(status: LinkStatus) {
         linkStatus = status
+        active?.takeIf { !it.finished && status !is LinkStatus.Connected }?.let {
+            log("link ${status::class.simpleName} during ${it.request.requestId}")
+        }
         if (status is LinkStatus.Connected) {
             parseInstant(status.welcome.expiresAt)?.let { store.put(KEY_EXPIRES, it.toString()) }
         }
@@ -237,6 +256,7 @@ class FirmaController(
                 LinkStatus.Ended.Reason.NotFound -> StartNotice.PairingEnded
                 LinkStatus.Ended.Reason.Unpaired -> null
             }
+            log("pairing ended: ${status.reason}")
             endPairing(sendBye = false)
         }
         render()
@@ -314,16 +334,20 @@ class FirmaController(
 
     override fun dismissResult() {
         scope.launch {
-            if (active?.finished == true) active = null
+            if (active?.finished == true) {
+                log("result dismissed")
+                active = null
+            }
             render()
         }
     }
 
     private fun act(action: Action) = scope.launch {
-        val current = active ?: return@launch
-        if (current.finished) return@launch
+        val current = active ?: return@launch log("$action ignored: no request")
+        if (current.finished) return@launch log("$action ignored: ${current.request.requestId} finished")
+        log("user $action ${current.request.requestId}")
         if (action == Action.Cancel) {
-            if (current.request.purpose == Purpose.Login) return@launch
+            if (current.request.purpose == Purpose.Login) return@launch log("cancel ignored: login")
             stopActive(current, Outcome.Cancelled, ErrorCode.Cancelled)
             return@launch
         }
@@ -334,34 +358,47 @@ class FirmaController(
         when (message) {
             is SignRequest -> onRequest(message)
             is ToBeSigned, is SignDone -> {
-                val current = active ?: return
+                val current = active ?: return log("ignored ${describe(message)}: no request")
                 val id = if (message is ToBeSigned) message.requestId else (message as SignDone).requestId
-                if (current.request.requestId != id || current.finished) return
+                if (current.request.requestId != id || current.finished) return ignored(message, current)
                 if (message is SignDone) current.done = true
                 current.inbox.trySend(message)
             }
             is SignUnlock -> {
-                val current = active ?: return
-                if (current.request.requestId != message.requestId || current.finished || current.waiting == null) return
+                val current = active ?: return log("ignored ${describe(message)}: no request")
+                if (current.request.requestId != message.requestId || current.finished || current.waiting == null) {
+                    return ignored(message, current)
+                }
                 current.unlocks.trySend(message)
             }
             is SignCancel -> {
-                val current = active ?: return
-                if (current.request.requestId != message.requestId || current.finished) return
+                val current = active ?: return log("ignored ${describe(message)}: no request")
+                if (current.request.requestId != message.requestId || current.finished) return ignored(message, current)
+                log("desktop cancelled ${message.requestId}: ${message.reason}")
                 stopActive(current, Outcome.CancelledByDesktop, sendError = null)
             }
             DesktopBye -> Unit // PhoneLink ends the pairing itself.
         }
     }
 
+    private fun ignored(message: DesktopToPhone, current: Active) =
+        log("ignored ${describe(message)}: active ${current.request.requestId} step=${current.step}")
+
     private fun onRequest(request: SignRequest) {
+        log(
+            "request ${request.requestId}: ${request.purpose} host=${hostOf(request.origin)} " +
+                "format=${request.format.ifEmpty { "-" }} documents=${request.documents.size} " +
+                "signatures=${request.signatures} verifiable=${request.verifiable} expires=${request.expiresAt}",
+        )
         val current = active
         if (current != null && current.request.requestId == request.requestId) {
+            log("request ${request.requestId} again: resending")
             resend(current)
             return
         }
         if (current != null && !current.finished) {
             if (!current.done) {
+                log("busy with ${current.request.requestId} (step=${current.step}): rejecting ${request.requestId}")
                 send(SignError(request.requestId, ErrorCode.Busy))
                 return
             }
@@ -371,10 +408,12 @@ class FirmaController(
         }
         val expiresAt = parseInstant(request.expiresAt)
         if (expiresAt == null || expiresAt <= platform.now()) {
+            log("request ${request.requestId} already expired or bad expiresAt (phone clock ${platform.now()})")
             send(SignError(request.requestId, ErrorCode.Timeout))
             return
         }
         if (request.purpose == Purpose.Login && (request.documents.isNotEmpty() || request.verifiable || request.format.isNotEmpty())) {
+            log("protocol: login request with documents or format")
             send(SignError(request.requestId, ErrorCode.Protocol))
             return
         }
@@ -383,18 +422,22 @@ class FirmaController(
             ReviewDocument(document.name, document.mimeType, document.size, document.sha256, bytes)
         }
         if (request.documents.any { it.data != null } && documents.any { it.data == null && it.size > 0 }) {
+            log("protocol: bad document")
             send(SignError(request.requestId, ErrorCode.Protocol, "bad document"))
             return
         }
         if (request.signatures != null && request.signatures < 1) {
+            log("protocol: bad signature count")
             send(SignError(request.requestId, ErrorCode.Protocol, "bad signature count"))
             return
         }
         if (!CAN_PATTERN.matches(request.can)) {
+            log("protocol: bad CAN format")
             send(SignError(request.requestId, ErrorCode.Protocol, "bad CAN"))
             return
         }
         if (request.pin != null && request.pin.length !in PIN_LENGTH) {
+            log("protocol: bad PIN length")
             send(SignError(request.requestId, ErrorCode.Protocol, "bad PIN"))
             return
         }
@@ -419,7 +462,7 @@ class FirmaController(
                 throw e
             } catch (e: Exception) {
                 // The message may quote request data: log only the class name.
-                platform.log("request failed: ${e::class.simpleName}")
+                log("request ${next.request.requestId} failed: ${e::class.simpleName}")
                 finish(next, Outcome.Failed(ErrorCode.Internal), ErrorCode.Internal)
             }
         }
@@ -435,9 +478,15 @@ class FirmaController(
             Prepared.Ready
         }
         when (prepared) {
-            null -> return finish(r, Outcome.Expired, ErrorCode.Timeout)
+            null -> {
+                log("review timed out (request deadline)")
+                return finish(r, Outcome.Expired, ErrorCode.Timeout)
+            }
             Prepared.Declined -> return finish(r, Outcome.Declined, ErrorCode.Rejected)
-            Prepared.NoNfc -> return finish(r, Outcome.Failed(ErrorCode.NfcUnavailable), ErrorCode.NfcUnavailable)
+            Prepared.NoNfc -> {
+                log("approved, but the phone has no NFC")
+                return finish(r, Outcome.Failed(ErrorCode.NfcUnavailable), ErrorCode.NfcUnavailable)
+            }
             Prepared.Ready -> Unit
         }
         readAndSign(r)
@@ -455,11 +504,13 @@ class FirmaController(
     private suspend fun ensureSecrets(r: Active): Boolean {
         val can = r.can
         if (can == null || wasRefused(Need.Can, can)) {
+            log(if (can == null) "no CAN" else "the card refused this CAN before")
             r.can = obtain(r, Need.Can, refused = true, triesLeft = null) ?: return false
         }
         if (r.request.purpose == Purpose.Certificate) return true
         val pin = r.pin
         if (pin == null || wasRefused(Need.Pin, pin)) {
+            log(if (pin == null) "no PIN" else "the card refused this PIN before")
             val wrong = r.pinRefused || pin != null
             r.pin = obtain(r, Need.Pin, refused = wrong, triesLeft = if (wrong) pinTriesLeft else null) ?: return false
         }
@@ -470,23 +521,33 @@ class FirmaController(
     private suspend fun obtain(r: Active, what: Need, refused: Boolean, triesLeft: Int?): String? {
         val need = SignNeed(r.request.requestId, what, refused, triesLeft?.takeIf { it in 1..2 })
         r.waiting = need
+        log("asking the computer for the $what (refused=${need.refused} triesLeft=${need.triesLeft})")
         send(need)
         _readingCard.value = false
         setStep(r, Step.WaitForComputer(what, need.refused, need.triesLeft))
         try {
             while (true) {
-                val unlock = withTimeoutOrNull(UNLOCK_WAIT_MS) { r.unlocks.receive() } ?: return null
+                val unlock = withTimeoutOrNull(UNLOCK_WAIT_MS) { r.unlocks.receive() }
+                if (unlock == null) {
+                    log("no $what from the computer in ${UNLOCK_WAIT_MS / 1000} s")
+                    return null
+                }
                 parseInstant(unlock.expiresAt)?.let { r.deadline = it }
                 val value = if (what == Need.Can) unlock.can else unlock.pin
                 val valid = if (what == Need.Can) value != null && CAN_PATTERN.matches(value) else value != null && value.length in PIN_LENGTH
-                if (!valid) continue
+                if (!valid) {
+                    log("unlock without a valid $what: still waiting")
+                    continue
+                }
                 if (wasRefused(what, value)) {
                     // Never tried twice: ask again.
+                    log("the computer sent a $what the card refused before: asking again")
                     val again = need.copy(refused = true)
                     r.waiting = again
                     send(again)
                     continue
                 }
+                log("got the $what from the computer")
                 return value
             }
         } finally {
@@ -505,6 +566,7 @@ class FirmaController(
                     if (!ensureSecrets(r)) return finish(r, Outcome.Failed(ErrorCode.Timeout), ErrorCode.Timeout)
                     // Until the card is read the request's own deadline applies.
                     if (r.certificates == null && platform.now() > r.deadline) {
+                        log("request deadline passed before the card was read")
                         return finish(r, Outcome.Expired, ErrorCode.Timeout)
                     }
                     setStep(r, Step.HoldCard(moved))
@@ -512,13 +574,19 @@ class FirmaController(
                     // On until the card is no longer needed: turning reader mode off drops the
                     // tag, so it can't go off as soon as the card shows up.
                     _readingCard.value = true
+                    log("waiting for the card (moved=$moved)")
                     val held = if (r.certificates == null) {
-                        withTimeoutOrNull(r.deadline - platform.now()) { cardReader.awaitCard() }
-                            ?: return finish(r, Outcome.Expired, ErrorCode.Timeout)
+                        withTimeoutOrNull(r.deadline - platform.now()) { cardReader.awaitCard() } ?: kotlin.run {
+                            log("no card before the request deadline")
+                            return finish(r, Outcome.Expired, ErrorCode.Timeout)
+                        }
                     } else {
-                        withTimeoutOrNull(CARD_AGAIN_MS) { cardReader.awaitCard() }
-                            ?: return finish(r, Outcome.Failed(ErrorCode.Timeout), ErrorCode.Timeout)
+                        withTimeoutOrNull(CARD_AGAIN_MS) { cardReader.awaitCard() } ?: kotlin.run {
+                            log("card not back in ${CARD_AGAIN_MS / 1000} s")
+                            return finish(r, Outcome.Failed(ErrorCode.Timeout), ErrorCode.Timeout)
+                        }
                     }
+                    log("card found: opening")
                     card = held
                     setStep(r, Step.Working(reading = true, signed = r.signatures.size))
                     progress(r, Stage.Reading)
@@ -531,10 +599,12 @@ class FirmaController(
                         card = null
                         when (e) {
                             is CardException.Lost -> {
+                                log("card lost while opening: hold it again")
                                 moved = true
                                 continue
                             }
                             is CardException.WrongCan -> {
+                                log("wrong CAN: asking the computer for another")
                                 refused += fingerprint(Need.Can, can)
                                 r.can = null
                                 moved = false
@@ -545,10 +615,12 @@ class FirmaController(
                     }
                     val certificates = opened.certificates.map { Base64Std.encode(it) }
                     val first = r.certificates
+                    log("card opened (${certificates.size} certificates)")
                     if (first == null) {
                         r.certificates = certificates
                         send(SignCertificate(r.request.requestId, certificates))
                     } else if (first.first() != certificates.first()) {
+                        log("not the card read first")
                         held.closeQuietly()
                         return finish(r, Outcome.Failed(ErrorCode.WrongCard), ErrorCode.WrongCard)
                     }
@@ -556,10 +628,10 @@ class FirmaController(
                     moved = false
                 }
 
-                val item = retry ?: (
-                    withTimeoutOrNull(NEXT_ITEM_MS) { r.inbox.receive() }
-                        ?: return finish(r, Outcome.Failed(ErrorCode.Timeout), ErrorCode.Timeout)
-                    )
+                val item = retry ?: withTimeoutOrNull(NEXT_ITEM_MS) { r.inbox.receive() } ?: kotlin.run {
+                    log("nothing to sign from the computer in ${NEXT_ITEM_MS / 1000} s")
+                    return finish(r, Outcome.Failed(ErrorCode.Timeout), ErrorCode.Timeout)
+                }
                 retry = null
                 when (item) {
                     is SignDone -> return finish(
@@ -569,19 +641,24 @@ class FirmaController(
                     )
                     is ToBeSigned -> {
                         r.signatures[item.seq]?.let {
+                            log("seq ${item.seq} signed already: sending it again")
                             send(SignSignature(r.request.requestId, item.seq, it))
                             continue
                         }
                         if (r.request.purpose == Purpose.Certificate) {
+                            log("protocol: data to sign in a certificate request")
                             return finish(r, Outcome.Failed(ErrorCode.Protocol), ErrorCode.Protocol)
                         }
                         // No more signatures than the review showed the user.
                         val limit = r.request.signatures
                         if (limit != null && r.signatures.size >= limit) {
+                            log("protocol: more than the $limit signatures reviewed")
                             return finish(r, Outcome.Failed(ErrorCode.Protocol), ErrorCode.Protocol)
                         }
-                        val data = runCatching { Base64Std.decode(item.data) }.getOrNull()
-                            ?: return finish(r, Outcome.Failed(ErrorCode.Protocol), ErrorCode.Protocol)
+                        val data = runCatching { Base64Std.decode(item.data) }.getOrNull() ?: kotlin.run {
+                            log("protocol: data to sign is not Base64")
+                            return finish(r, Outcome.Failed(ErrorCode.Protocol), ErrorCode.Protocol)
+                        }
                         val login = r.request.purpose == Purpose.Login
                         val digestSize = when (item.algorithm) {
                             es.spainassist.firma.protocol.Algorithm.Sha1 -> 20
@@ -590,18 +667,21 @@ class FirmaController(
                             es.spainassist.firma.protocol.Algorithm.Sha512 -> 64
                         }
                         if (login != (item.prehashed == true) || (login && (data.size != digestSize || item.check != null))) {
+                            log("protocol: bad data to sign (login=$login prehashed=${item.prehashed} size=${data.size})")
                             return finish(r, Outcome.Failed(ErrorCode.Protocol), ErrorCode.Protocol)
                         }
                         if (r.request.verifiable) {
                             val check = item.check
                             val documents = r.review.documents.map { it.data }
                             if (check == null || !Binding.verify(check, item.algorithm, data, documents)) {
+                                log("binding mismatch on seq ${item.seq} (check=${check != null})")
                                 return finish(r, Outcome.Failed(ErrorCode.BindingMismatch), ErrorCode.BindingMismatch)
                             }
                         }
                         setStep(r, Step.Working(reading = false, signed = r.signatures.size))
                         progress(r, Stage.Signing)
                         val signer = session ?: continue
+                        log("signing seq ${item.seq}")
                         val signature = try {
                             withContext(io) { signer.sign(data, item.algorithm, item.prehashed == true) }
                         } catch (e: CardException) {
@@ -611,10 +691,12 @@ class FirmaController(
                             retry = item
                             when (e) {
                                 is CardException.Lost -> {
+                                    log("card lost while signing seq ${item.seq}: hold it again")
                                     moved = true
                                     continue
                                 }
                                 is CardException.WrongPin -> {
+                                    log("wrong PIN: ${e.retriesLeft} tries left")
                                     // Never tried again; the desktop asks the user for another.
                                     r.pin?.let { refused += fingerprint(Need.Pin, it) }
                                     r.pin = null
@@ -629,11 +711,12 @@ class FirmaController(
                         // The card accepted the PIN: its tries are back to the full count.
                         pinTriesLeft = null
                         val encoded = Base64Std.encode(signature)
+                        log("signed seq ${item.seq}")
                         r.signatures[item.seq] = encoded
                         send(SignSignature(r.request.requestId, item.seq, encoded))
                         setStep(r, Step.Working(reading = false, signed = r.signatures.size))
                     }
-                    else -> Unit
+                    else -> log("unexpected ${describe(item)}")
                 }
             }
         } finally {
@@ -651,12 +734,13 @@ class FirmaController(
             else -> ErrorCode.Internal
         }
         if (code == ErrorCode.PinBlocked) pinTriesLeft = 0
-        platform.log("card error: ${e::class.simpleName} ${e.message}")
+        log("card error: ${e::class.simpleName} ${e.message}")
         finish(r, Outcome.Failed(code), code)
     }
 
     /** Ends [r] from outside its runner (user or desktop cancel, pairing ended). */
     private fun stopActive(r: Active, outcome: Outcome, sendError: ErrorCode?) {
+        if (!r.finished) log("stopping ${r.request.requestId}")
         r.job?.cancel()
         _readingCard.value = false
         finish(r, outcome, sendError)
@@ -667,6 +751,7 @@ class FirmaController(
         r.pin = null
         r.waiting = null
         if (r.finished) return
+        log("finish ${r.request.requestId}: $outcome, sending ${sendError ?: "no error"}")
         if (sendError != null) {
             val error = SignError(r.request.requestId, sendError)
             r.error = error
@@ -677,6 +762,7 @@ class FirmaController(
             scope.launch {
                 delay(RESULT_MS)
                 if (active === r) {
+                    log("result of ${r.request.requestId} cleared")
                     active = null
                     render()
                 }
@@ -704,13 +790,19 @@ class FirmaController(
     }
 
     private fun setStep(r: Active, step: Step) {
+        log("step ${r.request.requestId}: $step")
         r.step = step
         render()
     }
 
     private fun send(message: PhoneToDesktop) {
-        link?.send(message)
+        val current = link
+        if (current?.send(message) == true) return
+        // What the active request still needs is sent again on the next session ([resend]).
+        log("not sent (${if (current == null) "not paired" else "link down"}): ${describe(message)}")
     }
+
+    private fun log(message: String) = platform.log(LogArea.Flow, message)
 
     // ------------------------------------------------------------------------------------------
     // Rendering

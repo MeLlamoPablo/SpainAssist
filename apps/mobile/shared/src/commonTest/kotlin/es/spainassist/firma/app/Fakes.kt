@@ -141,7 +141,7 @@ class FakePlatform(var clock: Long = 1_791_000_000_000L) : Platform {
 
     override fun openNfcSettings() = Unit
 
-    override fun log(message: String) = Unit
+    override fun log(area: LogArea, message: String) = Unit
 
     @Composable
     override fun QrScanner(onCode: (String) -> Unit) = Unit

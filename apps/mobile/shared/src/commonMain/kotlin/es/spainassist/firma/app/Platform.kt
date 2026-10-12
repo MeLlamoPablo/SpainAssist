@@ -14,6 +14,21 @@ interface SecureStore {
     fun remove(key: String)
 }
 
+/** Where a debug log line comes from. */
+enum class LogArea {
+    /** Requests and pairing in [FirmaController]. */
+    Flow,
+
+    /** The encrypted channel to the desktop (`PhoneLink`). */
+    Link,
+
+    /** The WebSocket to the relay (`RelaySocket`). */
+    Relay,
+
+    /** The NFC reader and the card. */
+    Nfc,
+}
+
 /** What the shared app needs from the platform. */
 interface Platform {
     val appVersion: String
@@ -36,7 +51,12 @@ interface Platform {
 
     fun openNfcSettings()
 
-    fun log(message: String)
+    /**
+     * Debug log (Android: logcat tag `Firma/<area>`). Callers log outcomes, ids, codes and
+     * exception classes only: never the CAN, the PIN, keys, certificates, data to sign,
+     * documents, pairing secrets or personal data.
+     */
+    fun log(area: LogArea, message: String)
 
     /** Camera QR scanner; calls [onCode] with every code it reads. */
     @Composable

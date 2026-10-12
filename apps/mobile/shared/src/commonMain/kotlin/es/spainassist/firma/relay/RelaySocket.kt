@@ -69,6 +69,8 @@ class RelaySocket(
     private val pingIntervalMs: Long = 20_000,
     private val pongTimeoutMs: Long = 10_000,
     private val backoffMs: (Int) -> Long = ::defaultBackoff,
+    /** Debug log; never given the room id (it lets anyone knock on the room). */
+    private val log: (String) -> Unit = {},
 ) : RelayTransport {
     private var job: Job? = null
     private var session: DefaultClientWebSocketSession? = null
@@ -76,12 +78,14 @@ class RelaySocket(
 
     override fun start() {
         if (job?.isActive == true) return
+        log("start ($relayUrl)")
         stopped = false
         job = scope.launch { run() }
     }
 
     /** Closes cleanly: frames already sent (a `bye`) leave before the close frame. */
     override fun stop() {
+        log("stop")
         stopped = true
         val s = session
         val j = job
@@ -98,8 +102,14 @@ class RelaySocket(
     }
 
     override fun send(frame: ByteArray): Boolean {
-        val s = session ?: return false
-        return s.outgoing.trySend(Frame.Binary(true, frame)).isSuccess
+        val s = session
+        if (s == null) {
+            log("send dropped: not connected")
+            return false
+        }
+        val sent = s.outgoing.trySend(Frame.Binary(true, frame)).isSuccess
+        if (!sent) log("send dropped: socket closing")
+        return sent
     }
 
     private suspend fun run() {
@@ -108,15 +118,18 @@ class RelaySocket(
             events.onState(RelayState.Connecting)
             var code: Short? = null
             try {
+                log("connecting (attempt ${attempt + 1})")
                 client.webSocket("$relayUrl/v1/rooms/$room/phone") {
                     session = this
                     attempt = 0
+                    log("open")
                     val pongs = Channel<Unit>(Channel.CONFLATED)
                     val pinger = launch {
                         while (isActive) {
                             delay(pingIntervalMs)
                             outgoing.send(Frame.Text("""{"type":"ping"}"""))
                             if (withTimeoutOrNull(pongTimeoutMs) { pongs.receive() } == null) {
+                                log("pong timeout: reconnecting")
                                 close(CloseReason(4000, "pong timeout"))
                                 return@launch
                             }
@@ -134,12 +147,15 @@ class RelaySocket(
                         pinger.cancel()
                         session = null
                     }
-                    code = closeReason.await()?.code
+                    val reason = closeReason.await()
+                    code = reason?.code
+                    log("closed: code=${reason?.code} ${reason?.message.orEmpty()}")
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Network errors: try again.
+                // Network errors: try again. The message may quote the URL, room id included.
+                log("network error: ${e::class.simpleName} ${e.message?.replace(room, "<room>")}")
             }
             session = null
             if (stopped) return
@@ -158,7 +174,9 @@ class RelaySocket(
                 }
             }
             events.onState(RelayState.Connecting)
-            delay(if (code == RelayClose.LIMITED) 30_000 else backoffMs(attempt++))
+            val wait = if (code == RelayClose.LIMITED) 30_000 else backoffMs(attempt++)
+            log("reconnecting in $wait ms")
+            delay(wait)
         }
     }
 
@@ -168,6 +186,7 @@ class RelaySocket(
             "pong" -> pongs.trySend(Unit)
             "peer" -> {
                 val present = runCatching { message["present"]?.jsonPrimitive?.boolean }.getOrNull() ?: return
+                log("peer present=$present")
                 events.onState(RelayState.Open(present))
             }
         }

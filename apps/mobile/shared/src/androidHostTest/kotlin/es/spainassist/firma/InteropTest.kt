@@ -3,6 +3,7 @@ package es.spainassist.firma
 import androidx.compose.runtime.Composable
 import es.spainassist.firma.app.FirmaController
 import es.spainassist.firma.app.Licenses
+import es.spainassist.firma.app.LogArea
 import es.spainassist.firma.app.Outcome
 import es.spainassist.firma.app.Platform
 import es.spainassist.firma.app.Screen
@@ -131,13 +132,13 @@ class InteropTest {
             }
 
             override fun relay(relayUrl: String, room: String, events: RelayEvents) =
-                RelaySocket(client, relayUrl, room, scope, events)
+                RelaySocket(client, relayUrl, room, scope, events, log = { log(LogArea.Relay, it) })
 
             override fun now() = System.currentTimeMillis()
 
             override fun openNfcSettings() = Unit
 
-            override fun log(message: String) = println("phone: $message")
+            override fun log(area: LogArea, message: String) = println("phone/$area: $message")
 
             @Composable
             override fun QrScanner(onCode: (String) -> Unit) = Unit

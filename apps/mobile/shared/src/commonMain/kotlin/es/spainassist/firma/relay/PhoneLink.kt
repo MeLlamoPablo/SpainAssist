@@ -21,6 +21,7 @@ import es.spainassist.firma.protocol.Hello
 import es.spainassist.firma.protocol.PhoneBye
 import es.spainassist.firma.protocol.PhoneToDesktop
 import es.spainassist.firma.protocol.Welcome
+import es.spainassist.firma.protocol.describe
 
 sealed interface LinkStatus {
     data object Connecting : LinkStatus
@@ -72,10 +73,14 @@ class PhoneLink(
 
     val connected: Boolean get() = session != null
 
-    fun start() = socket.start()
+    fun start() {
+        log("start")
+        socket.start()
+    }
 
     /** Stops without ending the pairing (the app goes away; it reconnects next time). */
     fun close() {
+        log("close")
         session = null
         pending = null
         socket.stop()
@@ -83,21 +88,31 @@ class PhoneLink(
 
     /** Ends the pairing on both sides. */
     fun unpair() {
+        log("unpair")
         send(PhoneBye)
         finish(LinkStatus.Ended(LinkStatus.Ended.Reason.Unpaired))
     }
 
     fun send(message: PhoneToDesktop): Boolean {
-        val s = session ?: return false
+        val s = session
+        if (s == null) {
+            log("not sent (no session): ${describe(message)}")
+            return false
+        }
         val json = CompanionJson.encodeToString(PhoneToDesktop.serializer(), message).encodeToByteArray()
         for (frame in sealMessage(s.sealer, json)) {
-            if (!socket.send(frame)) return false
+            if (!socket.send(frame)) {
+                log("not sent (socket): ${describe(message)}")
+                return false
+            }
         }
+        log("sent ${describe(message)}")
         return true
     }
 
     private fun setStatus(next: LinkStatus) {
         if (status == next) return
+        log("status ${statusName(next)}")
         status = next
         listener.onStatus(next)
     }
@@ -111,6 +126,7 @@ class PhoneLink(
 
     private fun onRelayState(state: RelayState) {
         if (status is LinkStatus.Ended) return
+        log("relay $state")
         session = null
         pending = null
         when (state) {
@@ -138,7 +154,7 @@ class PhoneLink(
                 Frame.RECORD -> onRecord(frame)
             }
         } catch (e: ChannelException) {
-            log("companion frame rejected: ${e.message}")
+            log("companion frame rejected: ${e.message}; session dropped")
             // A broken session: the desktop's next CHALLENGE starts a new one.
             session = null
         } catch (e: IllegalArgumentException) {
@@ -150,6 +166,7 @@ class PhoneLink(
 
     private fun onChallenge(frame: ByteArray) {
         if (frame.size != 1 + NONCE_BYTES) throw ChannelException("Bad challenge")
+        log("challenge: new handshake")
         val desktopNonce = frame.copyOfRange(1, frame.size)
         val mine = Crypto.generateKeyPair()
         val phoneNonce = Crypto.randomBytes(NONCE_BYTES)
@@ -176,6 +193,7 @@ class PhoneLink(
         if (welcome.type != "welcome") throw ChannelException("Bad welcome")
         pending = null
         if (welcome.protocol != COMPANION_PROTOCOL) {
+            log("welcome: desktop protocol ${welcome.protocol}, ours $COMPANION_PROTOCOL")
             setStatus(LinkStatus.Outdated(welcome.protocol))
             return
         }
@@ -188,10 +206,17 @@ class PhoneLink(
         val s = session ?: throw ChannelException("No session")
         val bytes = s.assembler.push(s.opener.open(frame, 1)) ?: return
         val message = CompanionJson.decodeFromString(DesktopToPhone.serializer(), bytes.decodeToString())
+        log("received ${describe(message)}")
         if (message == DesktopBye) {
             finish(LinkStatus.Ended(LinkStatus.Ended.Reason.DesktopUnpaired))
             return
         }
         listener.onMessage(message)
     }
+}
+
+private fun statusName(status: LinkStatus): String = when (status) {
+    // Welcome: app version and expiry only.
+    is LinkStatus.Connected -> "Connected (desktop ${status.welcome.app}, pairing expires ${status.welcome.expiresAt})"
+    else -> status.toString()
 }

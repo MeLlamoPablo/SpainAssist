@@ -31,10 +31,10 @@ class MainActivity : ComponentActivity() {
                 app.platform.cardReader.refresh()
                 app.controller.readingCard.collect { reading ->
                     if (reading) {
-                        app.platform.cardReader.attach(this@MainActivity)
+                        app.platform.cardReader.attach(this@MainActivity, "waiting for or using the card")
                         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     } else {
-                        app.platform.cardReader.detach(this@MainActivity)
+                        app.platform.cardReader.detach(this@MainActivity, "card not needed")
                         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     }
                 }
@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        app.platform.cardReader.detach(this)
+        app.platform.cardReader.detach(this, "app paused")
         super.onPause()
     }
 

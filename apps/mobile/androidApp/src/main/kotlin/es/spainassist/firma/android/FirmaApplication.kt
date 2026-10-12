@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import es.spainassist.firma.BuildConfig
 import es.spainassist.firma.android.nfc.AndroidCardReader
 import es.spainassist.firma.app.FirmaController
+import es.spainassist.firma.app.LogArea
 import es.spainassist.firma.app.Platform
 import es.spainassist.firma.relay.RelayEvents
 import es.spainassist.firma.relay.RelaySocket
@@ -34,6 +35,14 @@ class FirmaApplication : Application() {
     }
 }
 
+/**
+ * Logcat, tag `Firma/<area>` (`adb logcat -s Firma/Flow Firma/Link Firma/Relay Firma/Nfc`).
+ * Never documents, keys, PINs or the CAN: callers log outcomes, ids and exception classes only.
+ */
+fun firmaLog(area: LogArea, message: String) {
+    Log.i("Firma/${area.name}", message)
+}
+
 class AndroidPlatform(private val app: Application) : Platform {
     override val appVersion: String = BuildConfig.VERSION_NAME
     override val deviceName: String = Build.MODEL.ifBlank { Build.DEVICE }.take(80)
@@ -55,7 +64,7 @@ class AndroidPlatform(private val app: Application) : Platform {
     }
 
     override fun relay(relayUrl: String, room: String, events: RelayEvents): RelayTransport =
-        RelaySocket(client, relayUrl, room, scope, events)
+        RelaySocket(client, relayUrl, room, scope, events, log = { log(LogArea.Relay, it) })
 
     override fun now(): Long = System.currentTimeMillis()
 
@@ -63,10 +72,7 @@ class AndroidPlatform(private val app: Application) : Platform {
         app.startActivity(Intent(Settings.ACTION_NFC_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    override fun log(message: String) {
-        // Never documents, PINs or the CAN: the shared code logs outcomes only.
-        Log.i("Firma", message)
-    }
+    override fun log(area: LogArea, message: String) = firmaLog(area, message)
 
     @Composable
     override fun QrScanner(onCode: (String) -> Unit) = es.spainassist.firma.android.QrScanner(onCode)
