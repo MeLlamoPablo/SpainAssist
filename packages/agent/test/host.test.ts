@@ -243,6 +243,8 @@ describe('saved data and physical-place prompts', () => {
     expect(procedure).toContain('If ask_user returns a location error, no form was shown');
     expect(procedure).toContain('find their street addresses and municipality');
     expect(procedure).toContain('Do not research coordinates');
+    expect(procedure).toContain('give the user plenty of options');
+    expect(procedure).toContain('The app sorts them by closest to the user.');
     expect(procedure).toContain('Ordinary choices such as methods or times still use select');
     expect(buildAssistantPrompt({ language: 'en' })).toContain(
       'map-options with place names and street addresses',
