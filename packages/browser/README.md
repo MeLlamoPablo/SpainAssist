@@ -16,7 +16,7 @@ await browser.closeAll();
 
 `onDownload` must copy the staged file before returning its document descriptor: the staging
 file is deleted afterwards. Inline PDF responses are captured too. Observations include tabs,
-downloads, dialogs, signatures, certificate/CAPTCHA hints and budgeted accessibility snapshots.
+downloads, dialogs, page script errors, signatures, AutoFirma and certificate/CAPTCHA hints and budgeted accessibility snapshots.
 `saveMedia` optionally persists throttled JPEGs. Actions settle with a bounded network heuristic;
 stale refs require a fresh snapshot. Popups become the active page automatically.
 

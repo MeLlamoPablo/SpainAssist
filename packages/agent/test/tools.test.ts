@@ -37,6 +37,7 @@ const observation: BrowserObservation = {
   downloads: [{ downloadId: 'dl_1', name: 'justificante.pdf', mimeType: 'application/pdf' }],
   signatures: [{ status: 'signed', format: 'CAdES', origin: 'https://sede.policia.gob.es' }],
   dialogs: ['alert "Sesión caducada" (accepted)'],
+  pageErrors: [],
   notes: ['Client certificate requested by sede.policia.gob.es'],
   imageId: 'img_1',
 };

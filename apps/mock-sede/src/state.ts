@@ -174,6 +174,24 @@ export interface Session {
   captchaPassed: boolean;
 }
 
+export interface GsedeChallenge {
+  /** Base64 of what the login signs ("hashToSign"). */
+  hashToSign: string;
+  transactionId: string;
+  createdAt: number;
+}
+
+export interface GsedePresign {
+  /** The singlesign's data (decoded datasource). */
+  data: Buffer;
+  certDer: Buffer;
+  chainDer: Buffer[];
+  /** DER of the CAdES signed attributes (the PRE the client signs). */
+  toBeSigned: Buffer;
+  signingTime: Date;
+  createdAt: number;
+}
+
 export interface SignatureReport {
   valid: boolean;
   error?: string;
@@ -247,6 +265,10 @@ export class MockSedeState {
   captchas = new Map<string, CaptchaChallenge>();
   /** AutoFirma intermediate-server storage (StorageService/RetrieveService). */
   afirmaStorage = new Map<string, string>();
+  /** gsede certificate login: the challenge each JSESSIONID must sign. */
+  gsedeChallenges = new Map<string, GsedeChallenge>();
+  /** gsede batch presignatures waiting for their postsignature, by singlesign Id. */
+  gsedePresigns = new Map<string, GsedePresign>();
   submissions: SubmissionRecord[] = [];
   appointments: AppointmentRecord[] = [];
   private registrationSeq = 0;
@@ -270,6 +292,8 @@ export class MockSedeState {
     this.assertions.clear();
     this.captchas.clear();
     this.afirmaStorage.clear();
+    this.gsedeChallenges.clear();
+    this.gsedePresigns.clear();
     this.submissions = [];
     this.appointments = [];
     this.registrationSeq = 0;

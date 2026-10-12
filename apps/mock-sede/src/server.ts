@@ -12,6 +12,7 @@ import { getRequestListener } from '@hono/node-server';
 import { createMainApp } from './app';
 import { loadAssets } from './assets';
 import type { AppContext, MockSedeConfig } from './context';
+import { trustingFetch } from './fetch';
 import { DEMO_IDENTITY_PASSPHRASE, FIXTURE_PATHS, loadClientCa } from './identities';
 import {
   type CertAndKey,
@@ -79,6 +80,8 @@ export interface MockSede {
   };
   config: MockSedeConfig;
   test: MockSedeTestApi;
+  /** fetch() that trusts the mock's TLS CA, for Node-side clients (the signer's batch calls). */
+  fetch: typeof fetch;
   close(): Promise<void>;
 }
 
@@ -234,6 +237,7 @@ export async function startMockSede(options: MockSedeOptions = {}): Promise<Mock
     },
     config,
     test: testApi,
+    fetch: trustingFetch(tls.ca.certPem),
     close: async () => {
       await Promise.all([closeServer(mainServer), closeServer(certServer)]);
     },

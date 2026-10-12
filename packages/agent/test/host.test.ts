@@ -196,8 +196,14 @@ describe('DNIe prompt', () => {
     ]) {
       expect(off).not.toContain('DNIe');
       expect(off).toContain('Cl@ve Permanente and Cl@ve Móvil are different capabilities');
-      expect(off).toContain('Digital certificate login: browser_use_certificate');
+      expect(off).toContain('browser_use_certificate is only for logins where the browser asks');
     }
+  });
+
+  it('tells TLS client-certificate logins apart from AutoFirma logins', () => {
+    const prompt = buildSystemPrompt({ language: 'en', webResearch: true, dniePhone: true });
+    expect(prompt).toContain('Signatures and AutoFirma logins are the app');
+    expect(prompt).toContain('browser asks for a client certificate (TLS)');
   });
 });
 

@@ -39,7 +39,9 @@ import {
   type BatchResultEntry,
   batchSign,
   type Cop,
+  parseXmlBatch,
   triphaseSign,
+  xmlBatchSign,
 } from './triphase';
 import { decodeBase64, toBase64 } from './util/base64';
 import { createXades } from './xades';
@@ -616,6 +618,68 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     return [result, toBase64(identity.certificateDer)];
   }
 
+  /** Legacy XML batch (`signBatch`): always against the site's batch servers. */
+  async function xmlBatchOperation(
+    call: AfirmaCall,
+    ctx: AfirmaHandlerContext,
+  ): Promise<{ args: unknown[]; failure?: string }> {
+    const batchB64 = argString(call.args, 0, 'batchB64');
+    const bytes = batchB64 ? decodeBase64(batchB64) : null;
+    if (!bytes || bytes.length === 0) throw AfirmaError.invalidParameter('Lote de firma no valido');
+    if (bytes.length > maxBytes) throw AfirmaError.invalidData('El lote es demasiado grande');
+    const batch = parseXmlBatch(bytes.toString('utf8'));
+    const preUrl = argString(call.args, 1, 'batchPreSignerUrl');
+    const postUrl = argString(call.args, 2, 'batchPostSignerUrl');
+    if (!preUrl || !postUrl) {
+      throw AfirmaError.invalidParameter('No se han indicado los servicios de firma por lotes');
+    }
+    if (batch.signs.length > 500)
+      throw AfirmaError.invalidParameter('Lote de firma demasiado grande');
+    // Reject an unsupported algorithm before the user is asked to approve.
+    checkAlgorithm(batch.algorithm);
+    const n = batch.signs.length;
+    const formats = [...new Set(batch.signs.map((s) => s.format).filter(Boolean))].join(', ');
+    const inFormat = formats ? ` en formato ${formats}` : '';
+    const { identity } = await approve(ctx, {
+      method: call.method,
+      format: formats,
+      algorithm: batch.algorithm,
+      origin: call.origin,
+      description: [
+        n > 1
+          ? `Firmar un lote de ${n} documentos${inFormat}.`
+          : (batch.signs[0]?.dataSize ?? Number.POSITIVE_INFINITY) <= 128
+            ? `Firmar un código corto del sitio${inFormat} (normalmente, para identificarte).`
+            : `Firmar un documento${inFormat}.`,
+        'El servidor del sitio prepara las firmas y tu certificado firma un resumen de cada documento. No se puede mostrar el contenido exacto.',
+        `Lo pide ${call.origin}.`,
+      ].join('\n'),
+      documents: [],
+      verifiable: false,
+      signatures: n,
+    });
+    const result = await using(identity, () =>
+      xmlBatchSign({
+        batch: bytes,
+        preUrl,
+        postUrl,
+        algorithm: resolveAlgorithm(batch.algorithm, identity.keyType),
+        signer: identity.signer,
+        chain: identity.chainDer,
+        fetch: ctx.fetch,
+      }),
+    );
+    const failed = result.results.filter((r) => !BATCH_DONE.has(r.result));
+    const failure =
+      failed.length || result.results.length === 0
+        ? `El servidor del sitio no completó ${failed.length || n} de ${n} firmas${failed[0] ? ` (${failed[0].result}${failed[0].description ? `: ${failed[0].description}` : ''})` : ''}`
+        : undefined;
+    return {
+      args: [toBase64(Buffer.from(result.log, 'utf8')), toBase64(identity.certificateDer)],
+      ...(failure ? { failure } : {}),
+    };
+  }
+
   async function localBatch(
     batch: BatchRequest,
     stopOnError: boolean,
@@ -726,6 +790,8 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
           url: '',
         };
     let format = '';
+    /** The operation ran, but the site's servers reported failed signatures. */
+    let failure: string | undefined;
     try {
       if (!checked.success) throw AfirmaError.invalidParameter('Llamada no valida');
       const a = call.args;
@@ -791,7 +857,9 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
           callbackArgs = await batchOperation(call, ctx);
           break;
         case 'signBatch':
-          throw AfirmaError.unsupportedOperation('firma de lotes XML (signBatch)');
+          format = 'lote';
+          ({ args: callbackArgs, failure } = await xmlBatchOperation(call, ctx));
+          break;
         case 'saveDataToFile':
           callbackArgs = await saveData(call);
           break;
@@ -805,7 +873,11 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
           throw AfirmaError.unsupportedOperation(call.method);
       }
       if (isSignatureMethod(call.method)) {
-        ctx.report({ status: 'signed', format, origin: call.origin });
+        ctx.report(
+          failure
+            ? { status: 'failed', format, origin: call.origin, message: failure }
+            : { status: 'signed', format, origin: call.origin },
+        );
       }
       return { ok: true, callbackArgs };
     } catch (e) {
@@ -828,6 +900,9 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     }
   };
 }
+
+/** Batch results of a signature the site's servers made. */
+const BATCH_DONE = new Set(['DONE_AND_SAVED', 'DONE_BUT_NOT_SAVED_YET', 'DONE_BUT_SAVED_SKIPPED']);
 
 const SIGNATURE_METHODS = new Set([
   'sign',

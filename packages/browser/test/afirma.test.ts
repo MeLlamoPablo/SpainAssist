@@ -1,5 +1,5 @@
 import type { AfirmaCall, AfirmaHandler, SigningKey } from '@sa/shared';
-import { AFIRMA_BINDING } from '@sa/shared';
+import { AFIRMA_BINDING, AFIRMA_NOTICE } from '@sa/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestService, page, refOf, startServer, type TestServer } from './helpers';
 
@@ -31,10 +31,24 @@ let t: ReturnType<typeof createTestService>;
 const calls: { call: AfirmaCall; procedureId: string }[] = [];
 let approve: () => Promise<SigningKey | null>;
 let failHandler = false;
+const logs: { level: string; msg: string; data?: unknown }[] = [];
+const logger = {
+  debug: () => {},
+  info: (msg: string, data?: unknown) => logs.push({ level: 'info', msg, data }),
+  warn: (msg: string, data?: unknown) => logs.push({ level: 'warn', msg, data }),
+  error: (msg: string, data?: unknown) => logs.push({ level: 'error', msg, data }),
+};
 
 const handler: AfirmaHandler = async (call, ctx) => {
   calls.push({ call, procedureId: ctx.procedureId });
   if (failHandler) throw new Error('boom: secret details');
+  if (call.method === 'saveDataToFile') {
+    return {
+      ok: false,
+      errorType: 'java.lang.UnsupportedOperationException',
+      errorMessage: 'El guardado de ficheros no está disponible',
+    };
+  }
   const format = String(call.args[2]);
   const cert = await ctx.approveSignature({
     method: call.method,
@@ -74,6 +88,14 @@ beforeAll(async () => {
        <iframe title="Marco de firma" src="${b.origin}/firma-frame" width=400 height=120></iframe>`,
       'Firma',
     ),
+    '/errores': page(
+      `<button onclick="setTimeout(() => { AutoScript.setWaitCertMaxLoops(15); }, 0)">Fallo de script</button>
+       <button onclick="Promise.reject(new Error('Sin respuesta del servidor'))">Promesa rechazada</button>
+       <button onclick="window.${AFIRMA_BINDING}({ method: '${AFIRMA_NOTICE}', args: ['loaded', '1.8.0'] }); window.${AFIRMA_BINDING}({ method: '${AFIRMA_NOTICE}', args: ['ignored', 'setSiteOption'] })">Avisos</button>
+       <button onclick="window.${AFIRMA_BINDING}({ method: 'saveDataToFile', args: [] }).then((r) => { document.getElementById('out').textContent = 'Guardado: ' + r.ok; })">Guardar</button>
+       <p id=out></p>`,
+      'Errores',
+    ),
   });
   t = createTestService({
     afirma: {
@@ -81,11 +103,13 @@ beforeAll(async () => {
       handler,
       context: () => ({ approveSignature: () => approve() }),
     },
+    logger,
   });
 });
 
 beforeEach(() => {
   calls.length = 0;
+  logs.length = 0;
   failHandler = false;
   approve = async () => CERT;
 });
@@ -157,5 +181,66 @@ describe('AutoFirma replacement plumbing', () => {
     obs = await t.service.click('af-pop', refOf(obs.snapshot, 'button "Firmar"'));
     expect(obs.snapshot).toContain('Firmado: U0lHTkFUVVJF');
     expect(calls.at(-1)?.call.origin).toBe(a.origin);
+  });
+
+  it('passes page script errors and unhandled rejections to the agent and the log', async () => {
+    let obs = await t.service.open('af-js', `${a.origin}/errores`);
+    obs = await t.service.click('af-js', refOf(obs.snapshot, 'button "Fallo de script"'));
+    expect(obs.pageErrors).toEqual([
+      expect.stringMatching(
+        /^TypeError: .*setWaitCertMaxLoops is not a function \(\/errores:\d+\)$/,
+      ),
+    ]);
+    obs = await t.service.click('af-js', refOf(obs.snapshot, 'button "Promesa rechazada"'));
+    expect(obs.pageErrors).toEqual([expect.stringContaining('Sin respuesta del servidor')]);
+    // Reported once per observation.
+    obs = await t.service.snapshot('af-js');
+    expect(obs.pageErrors).toEqual([]);
+    expect(logs.filter((l) => l.msg === 'page script error')).toEqual([
+      {
+        level: 'warn',
+        msg: 'page script error',
+        data: {
+          procedureId: 'af-js',
+          host: new URL(a.origin).host,
+          error: expect.stringContaining('TypeError'),
+        },
+      },
+      {
+        level: 'warn',
+        msg: 'page script error',
+        data: expect.objectContaining({ error: expect.stringContaining('Sin respuesta') }),
+      },
+    ]);
+  });
+
+  it('turns shim notices and failed AutoFirma calls into notes, without the handler', async () => {
+    let obs = await t.service.open('af-notice', `${a.origin}/errores`);
+    obs = await t.service.click('af-notice', refOf(obs.snapshot, 'button "Avisos"'));
+    expect(calls).toEqual([]);
+    expect(obs.notes).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(`${new URL(a.origin).host} uses AutoFirma. The app replaces it`),
+        expect.stringContaining('AutoScript.setSiteOption, which the app'),
+      ]),
+    );
+    // The AutoFirma note comes once per origin.
+    obs = await t.service.click('af-notice', refOf(obs.snapshot, 'button "Avisos"'));
+    expect(obs.notes.filter((n) => n.includes('uses AutoFirma'))).toEqual([]);
+
+    obs = await t.service.click('af-notice', refOf(obs.snapshot, 'button "Guardar"'));
+    expect(obs.snapshot).toContain('Guardado: false');
+    expect(obs.notes).toContain(
+      "The page's AutoFirma call saveDataToFile failed: El guardado de ficheros no está disponible.",
+    );
+    expect(logs).toContainEqual({
+      level: 'info',
+      msg: 'AutoFirma call failed',
+      data: expect.objectContaining({
+        method: 'saveDataToFile',
+        host: new URL(a.origin).host,
+        errorType: 'java.lang.UnsupportedOperationException',
+      }),
+    });
   });
 });

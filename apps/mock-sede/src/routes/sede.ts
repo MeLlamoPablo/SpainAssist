@@ -89,6 +89,7 @@ export function registerSedeRoutes(
           <h2 id="otros">Otros servicios</h2>
           <ul>
             <li><a href="/ayuda/autofirma">Requisitos técnicos y comprobación de AutoFirma</a></li>
+            <li><a href="/gsede/acceso">Mi carpeta (acceso con certificado y AutoFirma)</a></li>
             <li><a href="/verificacion?continuar=/">Verificación de seguridad («No soy un robot»)</a></li>
           </ul>
         </section>`,

@@ -7,6 +7,7 @@ import { registerAfirmaRoutes } from './routes/afirma';
 import { registerCaptchaRoutes } from './routes/captcha';
 import { registerCitaRoutes } from './routes/cita';
 import { registerGatewayRoutes } from './routes/gateway';
+import { registerGsedeRoutes } from './routes/gsede';
 import { registerResidenciaRoutes } from './routes/residencia';
 import { registerSedeRoutes } from './routes/sede';
 import { type MockSedeTestApi, registerTestApi } from './test-api';
@@ -26,6 +27,7 @@ export function createMainApp(
   registerCitaRoutes(app, ctx);
   registerCaptchaRoutes(app, ctx);
   registerAfirmaRoutes(app, ctx);
+  registerGsedeRoutes(app, ctx);
 
   app.notFound((c) =>
     renderSede(

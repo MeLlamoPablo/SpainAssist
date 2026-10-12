@@ -35,6 +35,11 @@ export function certificateFailedNote(host: string, code: string, detail: string
   }
 }
 
+/** A page that loaded AutoFirma's JavaScript client (the app's shim answers it). */
+export function afirmaPageNote(host: string): string {
+  return `${host || 'This page'} uses AutoFirma. The app replaces it: when a button on this page signs or logs in with a certificate through AutoFirma, the app asks the user to approve and pick their certificate or DNIe, and signs. Just click the button and wait; browser_use_certificate is not needed for it (that tool is only for logins where the browser itself asks for a client certificate).`;
+}
+
 const CLAVE_NO_CERT =
   /no se ha (?:presentado|seleccionado|enviado|aportado) (?:ning[uú]n )?certificado|no certificate (?:has been|was) (?:submitted|presented|sent)/i;
 

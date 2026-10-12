@@ -82,6 +82,11 @@ export const BrowserObservation = z.object({
     .default([]),
   /** JS dialogs (alert/confirm) that appeared and how they were handled. */
   dialogs: z.array(z.string()).default([]),
+  /**
+   * Uncaught exceptions and unhandled promise rejections of the page's own scripts since the
+   * last observation, e.g. `TypeError: x is not a function (/js/login.js:12)`.
+   */
+  pageErrors: z.array(z.string()).default([]),
   /** Short notes from the app, e.g. "Client certificate requested by www1.agenciatributaria.gob.es". */
   notes: z.array(z.string()).default([]),
   /** Media id of a low-res screenshot for the UI (not sent to the model). */

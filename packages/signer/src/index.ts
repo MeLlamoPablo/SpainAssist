@@ -5,8 +5,8 @@
  *    @sa/browser into every frame before site scripts run) that traps the site's `AutoScript` /
  *    `MiniApplet` globals and forwards signing calls to the AFIRMA_BINDING exposed by the browser.
  *  - afirmaHandler / createAfirmaHandler(): Node-side implementation of those calls (sign,
- *    coSign, counterSign, signAndSaveToFile, selectCertificate, signBatchProcess...), including
- *    triphase signing against the site's servers, using the user's .p12 after explicit approval.
+ *    coSign, counterSign, signAndSaveToFile, selectCertificate, signBatchProcess, signBatch...),
+ *    including triphase and batch signing against the site's servers, using the user's .p12 after explicit approval.
  *  - Low-level signers: CAdES, XAdES, PAdES, PKCS#1 producing AutoFirma-compatible output with
  *    RSA or EC keys, through a `KeySigner`: a .p12 key in memory, or an external key (the DNIe
  *    in the paired phone).

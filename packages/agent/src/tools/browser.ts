@@ -49,6 +49,11 @@ export function renderObservation(obs: BrowserObservation, redacted: boolean): s
     );
   }
   if (obs.dialogs?.length) lines.push(`Dialogs: ${obs.dialogs.join(' | ')}`);
+  if (obs.pageErrors?.length) {
+    lines.push(
+      `Page script errors (the site's own code failed; the page may be stuck or half-working): ${obs.pageErrors.join(' | ')}`,
+    );
+  }
   if (obs.notes?.length) lines.push(`Notes: ${obs.notes.join(' | ')}`);
   let snapshot = obs.snapshot ?? '';
   let truncated = obs.truncated ?? false;
@@ -131,7 +136,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       name: 'browser_snapshot',
       label: 'Look at page',
       description:
-        'Get the current page: URL, title, tabs, downloads, signatures, dialogs, notes and an accessibility snapshot with element refs (e.g. [ref=e12]). Refs change after every snapshot.',
+        'Get the current page: URL, title, tabs, downloads, signatures, dialogs, page script errors, notes and an accessibility snapshot with element refs (e.g. [ref=e12]). Refs change after every snapshot.',
       parameters: Type.Object({}),
       async execute(_id, _params, signal) {
         return callBridge(bridge, 'browser.snapshot', {}, signal, observationResult);
@@ -368,7 +373,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
     defineSaTool({
       name: 'browser_use_certificate',
       label: 'Use certificate',
-      description: `Enable login with the user's digital certificate${options.dniePhone ? ' or DNIe in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser. The app may ask the user to approve. Afterwards click the site's certificate login button.`,
+      description: `Enable TLS client-certificate login with the user's digital certificate${options.dniePhone ? ' or DNIe in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser: for sites where the browser itself asks for a certificate when you open the login page (e.g. "Certificado electrónico" in Cl@ve, AEAT). The app may ask the user to approve. Afterwards click the site's certificate login button. Not for AutoFirma logins and signatures (the page uses AutoFirma or its "Acceder"/"Firmar" button calls AutoScript): there, just click the button; the app signs.`,
       parameters: Type.Object({
         credentialId: Type.String({ minLength: 1, maxLength: 120 }),
         origins: Type.Optional(

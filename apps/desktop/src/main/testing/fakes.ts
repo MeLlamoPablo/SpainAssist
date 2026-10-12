@@ -388,6 +388,7 @@ export class FakeBrowser implements BrowserPort {
       downloads: [],
       signatures: [],
       dialogs: [],
+      pageErrors: [],
       notes: [],
     };
   }

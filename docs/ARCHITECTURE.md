@@ -274,7 +274,18 @@ Every page gets the AutoScript shim (`@sa/signer`) injected before site scripts.
 calls `AutoScript.sign(...)`, the shim forwards the call to the `__saAfirma` binding → main shows
 a signature confirmation (what, for whom, which certificate; Touch ID) → `@sa/signer` signs with
 the `.p12` (CAdES/XAdES/PAdES, triphase when the site requests it) → the site's success callback
-receives the signature exactly as if AutoFirma had produced it.
+receives the signature exactly as if AutoFirma had produced it. Batches work the same way: JSON
+`signBatchProcess` and the legacy XML `signBatch` (`<signbatch>` against the site's
+BatchPresigner/BatchPostsigner) sign every presignature after one approval.
+
+Some sedes log in this way rather than with a TLS client certificate: the "Acceder" button signs
+a challenge through AutoFirma (e.g. gsede's `clientSigner.js` → `signBatch`). For those the agent
+just clicks the button; `browser_use_certificate` is only for TLS client-certificate logins. When
+a page creates its AutoScript object the shim sends an `AFIRMA_NOTICE`, and the agent's next
+observation says the page uses AutoFirma. The shim also reports methods it had to stand in for.
+Failed AutoFirma calls, and the page's uncaught script errors and unhandled rejections
+(`BrowserObservation.pageErrors`), reach the agent's next browser result and main.log (method,
+host and error only, never payloads).
 
 ### Signing and logging in with the DNIe in the phone
 All of this is behind the `dnie-phone` feature flag (see [Feature flags](#feature-flags)).

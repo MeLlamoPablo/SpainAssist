@@ -1,4 +1,4 @@
-import { AFIRMA_BINDING } from '@sa/shared';
+import { AFIRMA_BINDING, AFIRMA_NOTICE } from '@sa/shared';
 import { type AutoscriptShimConfig, installAutoscriptShim } from './runtime';
 
 export type { AutoscriptShimConfig, AutoscriptShimHandle } from './runtime';
@@ -38,6 +38,7 @@ const FORBIDDEN_IN_SOURCE = [
 export function buildAutoscriptShimSource(options: AutoscriptShimOptions = {}): string {
   const config: AutoscriptShimConfig = {
     binding: options.binding ?? AFIRMA_BINDING,
+    notice: AFIRMA_NOTICE,
     version: options.version ?? DEFAULT_AUTOSCRIPT_VERSION,
   };
   const fn = installAutoscriptShim.toString();

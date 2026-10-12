@@ -12,6 +12,15 @@
 /** Name of the Playwright binding exposed to pages. */
 export const AFIRMA_BINDING = '__saAfirma';
 
+/**
+ * `AfirmaCall.method` of the shim's own diagnostics, sent through the same binding. Never an
+ * AutoScript operation and never signs: the browser records it and answers `{ ok: true }`.
+ * `args`: `[kind, detail]`, where kind is `'loaded'` (the page created its AutoScript object;
+ * detail: its VERSION) or `'ignored'` (the page called an AutoScript method the shim doesn't
+ * implement; detail: the method name).
+ */
+export const AFIRMA_NOTICE = 'shim.notice';
+
 export interface AfirmaCall {
   /** AutoScript method name, e.g. "sign", "coSign", "counterSign", "signBatch", "selectCertificate". */
   method: string;

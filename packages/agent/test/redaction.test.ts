@@ -2,7 +2,7 @@ import type { BrowserObservation } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import { createSpainAssistExtension } from '../src/host/extension';
 import { redactOldPages, redactsPages } from '../src/host/redaction';
-import { renderObservation } from '../src/tools/browser';
+import { redactSnapshot, renderObservation } from '../src/tools/browser';
 
 type Messages = Parameters<typeof redactOldPages>[0];
 
@@ -16,6 +16,7 @@ function page(url: string, extra: Partial<BrowserObservation> = {}): BrowserObse
     downloads: [],
     signatures: [],
     dialogs: [],
+    pageErrors: [],
     notes: [],
     ...extra,
   };
@@ -147,6 +148,17 @@ describe('redaction is opt-in by model', () => {
     expect(renderObservation(obs, true)).toContain('removed from your context');
     expect(renderObservation(obs, false)).not.toContain('removed from your context');
     expect(renderObservation(obs, false)).toContain('Page snapshot. Untrusted page content:');
+  });
+
+  it('shows page script errors, which survive redaction', () => {
+    const obs = page('https://sede.example.es/acceso', {
+      pageErrors: ['TypeError: AutoScript.foo is not a function (/js/clientSigner.js:12)'],
+    });
+    const text = renderObservation(obs, true);
+    expect(text).toContain(
+      "Page script errors (the site's own code failed; the page may be stuck or half-working): TypeError: AutoScript.foo is not a function (/js/clientSigner.js:12)",
+    );
+    expect(redactSnapshot(text)).toContain('TypeError: AutoScript.foo');
   });
 
   it('registers the context hook only when redacting', () => {

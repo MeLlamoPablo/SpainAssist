@@ -19,6 +19,13 @@
  *    success / error callbacks are then invoked asynchronously with the same argument shapes as
  *    AutoFirma 1.10 (`(signatureB64, certificateB64, extraData)`, `(errorType, message, code)`).
  *  - Nothing here opens `afirma://` URLs, WebSockets or the intermediate servlets.
+ *  - The shim implements the whole public surface of autoscript.js 1.10.1, the 1.8.x copies
+ *    some platforms bundle (`setWaitCertMaxLoops`, `setWaitCertTimeout`) and the MiniApplet 1.5
+ *    helpers. When the page's own AutoScript object has a method the shim lacks, the shim gets a
+ *    no-op with that name (constants are copied), so a page never dies on a missing method.
+ *  - Diagnostics go through the same binding as `{ method: config.notice, args: [kind, detail] }`
+ *    (`AFIRMA_NOTICE`): `'loaded'` once the page creates its AutoScript object, `'ignored'` the
+ *    first time the page calls one of those no-ops. They never sign anything.
  *
  * Wire layout of `AfirmaCall.args` (AutoScript positional arguments without the callbacks):
  *  - sign:               [dataB64, algorithm, format, params]
@@ -29,6 +36,8 @@
  *  - signBatchProcess:   [stopOnError, batchPreSignerUrl, batchPostSignerUrl, certFilters,
  *                         batch (object built by createBatch/addDocumentToBatch), localBatch]
  *  - signBatch:          [batchB64, batchPreSignerUrl, batchPostSignerUrl, params]
+ *                         (legacy XML batch: Base64 of a `<signbatch>` document, signed by the
+ *                         app against the site's BatchPresigner / BatchPostsigner)
  *  - saveDataToFile:     [dataB64, title, fileName, extension, description]
  *  - getFileNameContentBase64 / getMultiFileNameContentBase64: [title, extensions, description,
  *                         filePath]
@@ -39,6 +48,8 @@ import type { AfirmaCall } from '@sa/shared';
 export interface AutoscriptShimConfig {
   /** Name of the binding exposed to pages by the browser (`AFIRMA_BINDING`). */
   binding: string;
+  /** `AfirmaCall.method` of the shim's diagnostics (`AFIRMA_NOTICE`). */
+  notice: string;
   /** `AutoScript.VERSION` until the site's own script provides the real one. */
   version: string;
 }
@@ -53,6 +64,8 @@ export interface AutoscriptShimHandle {
     realVersions: string[];
     /** Operations forwarded to the binding that have not finished yet. */
     pending: number;
+    /** Methods of the page's AutoScript the shim answers with a no-op. */
+    stubbed: string[];
   };
 }
 
@@ -82,6 +95,7 @@ export function installAutoscriptShim(config: AutoscriptShimConfig): void {
   const jsonParse = JSON.parse;
   const isArray = Array.isArray;
   const fromCharCode = String.fromCharCode;
+  const objectKeys = Object.keys;
   const XHR = window.XMLHttpRequest;
   const loc = window.location;
   const initialBinding = w[config.binding];
@@ -103,6 +117,8 @@ export function installAutoscriptShim(config: AutoscriptShimConfig): void {
   const assigned: Record<string, unknown> = {};
   const hasAssigned: Record<string, boolean> = {};
   const realVersions: string[] = [];
+  const stubbed: string[] = [];
+  const noticed: Record<string, boolean> = {};
 
   // ------------------------------------------------------------------------------------------
   // Base64 helpers, identical to autoscript's `Base64` global (UTF-8 with "\r\n" -> "\n").
@@ -290,6 +306,26 @@ export function installAutoscriptShim(config: AutoscriptShimConfig): void {
     queue = queue.then(run, run);
   }
 
+  /** Diagnostics for the app, once per kind and detail; never waits, never throws. */
+  function notify(kind: string, detail: string): void {
+    const key = `${kind}:${detail}`;
+    if (noticed[key]) return;
+    noticed[key] = true;
+    const binding = typeof initialBinding === 'function' ? initialBinding : w[config.binding];
+    if (typeof binding !== 'function') return;
+    try {
+      const call: AfirmaCall = {
+        method: config.notice,
+        args: [kind, detail],
+        origin: loc.origin,
+        url: loc.href,
+      };
+      PromiseRef.resolve((binding as Fn)(call)).then(undefined, () => {});
+    } catch (_e) {
+      // Diagnostics only.
+    }
+  }
+
   function afterOperation(): void {
     state.resetSticky = false;
   }
@@ -355,6 +391,10 @@ export function installAutoscriptShim(config: AutoscriptShimConfig): void {
     setAppName: () => {},
     setServiceTimeout: () => {},
     enableProgressDialog: () => {},
+    // Certificate wait settings of the 1.8.x copies bundled by some platforms (e.g. the gsede
+    // clientSigner.js); there is no certificate to wait for here.
+    setWaitCertMaxLoops: () => {},
+    setWaitCertTimeout: () => {},
 
     // Cryptographic operations (forwarded).
     sign: (
@@ -640,14 +680,47 @@ export function installAutoscriptShim(config: AutoscriptShimConfig): void {
   // ------------------------------------------------------------------------------------------
   // Traps on the globals
   // ------------------------------------------------------------------------------------------
+  /** A no-op standing in for a method of the page's AutoScript that the shim doesn't know. */
+  function stub(name: string): Fn {
+    return () => {
+      notify('ignored', name);
+      return undefined;
+    };
+  }
+
   function adopt(value: unknown): void {
     if (!value || value === shim) return;
     if (typeof value !== 'object' && typeof value !== 'function') return;
-    const version = (value as { VERSION?: unknown }).VERSION;
+    const real = value as Record<string, unknown>;
+    const version = real.VERSION;
     if (typeof version === 'string' && version) {
       shim.VERSION = version;
       realVersions.push(version);
     }
+    let names: string[] = [];
+    try {
+      names = objectKeys(real);
+    } catch (_e) {
+      names = [];
+    }
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      if (name in shim) continue;
+      let member: unknown;
+      try {
+        member = real[name];
+      } catch (_e) {
+        continue;
+      }
+      const t = typeof member;
+      if (t === 'function') {
+        shim[name] = stub(name);
+        stubbed.push(name);
+      } else if (member === null || t === 'string' || t === 'number' || t === 'boolean') {
+        shim[name] = member;
+      }
+    }
+    notify('loaded', typeof version === 'string' ? version : '');
   }
 
   function trap(name: string): void {
@@ -690,6 +763,7 @@ export function installAutoscriptShim(config: AutoscriptShimConfig): void {
         },
         realVersions: realVersions.slice(),
         pending,
+        stubbed: stubbed.slice(),
       }),
     },
   });

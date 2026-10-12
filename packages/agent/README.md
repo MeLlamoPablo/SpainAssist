@@ -57,7 +57,7 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 | `request_user_action` | `prompt.userAction` | captcha, qr_scan, phone_approval, manual_step, offline |
 | `vault_read`, `vault_save` | `vault.read`, `vault.save` | Values of personal data; credential summaries only |
 | `download_save` | `downloads.save` | Moves a temporary browser download into the vault under a readable name (extension kept) |
-| `browser_open`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_check`, `browser_press`, `browser_wait`, `browser_back`, `browser_upload` | `browser.*` | Result = compact observation text (URL, tabs, downloads, signatures, dialogs, notes, then the snapshot). `details.imageId` carries the UI screenshot id |
+| `browser_open`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_check`, `browser_press`, `browser_wait`, `browser_back`, `browser_upload` | `browser.*` | Result = compact observation text (URL, tabs, downloads, signatures, dialogs, page script errors, notes, then the snapshot). `details.imageId` carries the UI screenshot id |
 | `browser_fill_from_vault` | `browser.fillFromVault` | `source` personal (`key`) or credential (`credentialId`, `field`) |
 | `browser_fill_from_user` | `browser.fillFromUser` | One-time codes typed by the app; the model never sees them |
 | `browser_tabs`, `browser_screenshot`, `browser_use_certificate`, `browser_close` | `browser.*` | Screenshot returns an image block (refused when the model has no vision) |

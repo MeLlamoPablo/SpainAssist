@@ -1,7 +1,7 @@
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, expect, test } from 'vitest';
+import { pemToDer, signCadesBes } from '../src/cades-build';
 import { loadDemoIdentity, type MockSede, startMockSede } from '../src/index';
-import { pemToDer, signCadesBes } from './helpers/cades-signer';
 
 let sede: MockSede;
 let browser: Browser;

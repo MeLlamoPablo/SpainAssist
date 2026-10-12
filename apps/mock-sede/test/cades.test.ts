@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { verifyCadesSignature } from '../src/cades';
+import { signCadesBes } from '../src/cades-build';
 import { createTestIdentity, loadDemoIdentity } from '../src/identities';
-import { signCadesBes } from './helpers/cades-signer';
 
 const data = Buffer.from('<?xml version="1.0"?><Solicitud>Año 2026, señora Núñez</Solicitud>');
 const demo = loadDemoIdentity();

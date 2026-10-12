@@ -61,7 +61,7 @@ var Cipher = {
 };
 
 var AutoScript = (function (window, undefined) {
-  var VERSION = '1.9.0';
+  var VERSION = '1.9.0'; // mock-sede:version
 
   var CHECKTIME_NO = 'CT_NO';
   var CHECKTIME_RECOMMENDED = 'CT_RECOMMENDED';
@@ -965,6 +965,7 @@ var AutoScript = (function (window, undefined) {
     setServlets: setServlets,
     setStickySignatory: setStickySignatory,
     setAppName: setAppName,
+    // mock-sede:extra-members
   };
 })(window, undefined);
 

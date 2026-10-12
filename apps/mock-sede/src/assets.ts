@@ -38,5 +38,40 @@ export function loadAssets(config: MockSedeConfig): Map<string, Asset> {
     }
     assets.set(path, { body, contentType });
   }
+  assets.set(GSEDE_CLIENT_SIGNER, {
+    body: gsedeClientSigner(assets.get('/js/autoscript.js')!.body),
+    contentType: 'text/javascript; charset=utf-8',
+  });
   return assets;
+}
+
+/** The gsede login's script: its own autoscript.js copy followed by the clientSigner wrapper. */
+export const GSEDE_CLIENT_SIGNER = '/gsede/js/clientSigner.js';
+
+/**
+ * Like the real platform, the bundle carries an older autoscript (1.8.0) with the two
+ * certificate-wait setters its wrapper calls, which the official 1.9/1.10 clients don't have.
+ */
+function gsedeClientSigner(autoscript: string): string {
+  const replace = (body: string, tag: string, re: RegExp, value: string) => {
+    if (!re.test(body)) throw new Error(`autoscript.js: missing mock-sede:${tag} marker`);
+    return body.replace(re, value);
+  };
+  let body = replace(
+    autoscript,
+    'version',
+    /var VERSION = '[^']*'; \/\/ mock-sede:version/,
+    "var VERSION = '1.8.0';",
+  );
+  body = replace(
+    body,
+    'extra-members',
+    / *\/\/ mock-sede:extra-members/,
+    [
+      '    setWaitCertMaxLoops: function (loops) { certificateWait.loops = loops; },',
+      '    setWaitCertTimeout: function (timeout) { certificateWait.timeoutMs = timeout; },',
+    ].join('\n'),
+  );
+  const wrapper = readFileSync(`${PUBLIC_DIR}js/clientsigner.js`, 'utf8');
+  return `var certificateWait = { loops: 15, timeoutMs: 4000 };\n${body}\n${wrapper}`;
 }

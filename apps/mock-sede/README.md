@@ -20,6 +20,10 @@ The home lists residence certificate and appointment procedures. Residence uses 
 form, PDF/JPG upload, review, AutoScript signing and server verification of real implicit CAdES
 signatures against the mock client CA. Receipts provide PDF attachment and inline links. Cita
 includes office/service selection, a slot calendar, CAPTCHA and booking confirmation.
+`/gsede/acceso` imitates a municipal gsede login: "Acceder" signs a challenge with AutoFirma's
+legacy XML batch (`clientSigner.js` → `AutoScript.signBatch`, multinode `/service/<JSESSIONID>`
+servlets). Its BatchPresigner/BatchPostsigner build a real CAdES; the login verifies it against
+the mock client CA and opens a certificate session (`/gsede/carpeta`).
 The gateway simulates Permanente + substantial-level SMS, Movil QR approval and certificate
 login, including a realistic missing-certificate error. No physical phone or AutoFirma is needed.
 

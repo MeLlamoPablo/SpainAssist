@@ -170,6 +170,10 @@ export function parseTriphaseData(xml: string): TriphaseData {
   } catch {
     throw AfirmaError.triphase('pre', 'datos trifasicos no validos');
   }
+  return triphaseDataOf(doc);
+}
+
+function triphaseDataOf(doc: Document): TriphaseData {
   // The root name is ignored; its first child element must be <firmas>.
   const firmas = elementChildren(doc.documentElement)[0];
   if (firmas?.nodeName.toLowerCase() !== 'firmas') {
@@ -437,4 +441,187 @@ export async function batchSign(opts: BatchOptions): Promise<BatchResult> {
     http,
   );
   return parseJson<BatchResult>(postText, 'post');
+}
+
+// ---------------------------------------------------------------------------------------------
+// XML batch (signBatch)
+// ---------------------------------------------------------------------------------------------
+
+/** One `<singlesign>` of a `<signbatch>` document, as the consent summary needs it. */
+export interface XmlBatchEntry {
+  id: string;
+  format?: string;
+  suboperation?: string;
+  /** Bytes of the data when the datasource is Base64 (not a URL or an id the server resolves). */
+  dataSize?: number;
+}
+
+export interface XmlBatch {
+  algorithm: string;
+  stopOnError: boolean;
+  signs: XmlBatchEntry[];
+}
+
+function childText(el: Element, name: string): string | undefined {
+  const child = elementChildren(el).find((c) => c.nodeName.toLowerCase() === name);
+  const text = child?.textContent?.trim();
+  return text || undefined;
+}
+
+/**
+ * Reads AutoFirma's legacy batch document (`es.gob.afirma.signers.batch.SignBatch`):
+ *
+ *   <signbatch stoponerror="true" algorithm="SHA256withRSA" [concurrenttimeout=".."]>
+ *     <singlesign Id="..">
+ *       <datasource>Base64 data | URL</datasource>
+ *       <format>CAdES</format> <suboperation>sign</suboperation>
+ *       <extraparams>Base64(Properties)</extraparams>
+ *       <signsaver><class>..</class><config>..</config></signsaver>
+ *     </singlesign>
+ *   </signbatch>
+ *
+ * The servers do the format work; the client only needs the algorithm and what to show.
+ */
+export function parseXmlBatch(xml: string): XmlBatch {
+  let doc: Document;
+  try {
+    doc = parseXml(xml);
+  } catch {
+    throw AfirmaError.invalidParameter('Lote de firma XML no valido');
+  }
+  const root = doc.documentElement;
+  if (root.nodeName.toLowerCase() !== 'signbatch') {
+    throw AfirmaError.invalidParameter('Lote de firma XML no valido: falta <signbatch>');
+  }
+  const algorithm = root.getAttribute('algorithm')?.trim();
+  if (!algorithm) throw AfirmaError.invalidParameter('Lote de firma XML sin algoritmo');
+  const signs: XmlBatchEntry[] = [];
+  for (const el of elementChildren(root)) {
+    if (el.nodeName.toLowerCase() !== 'singlesign') continue;
+    const id = el.getAttribute('Id') || el.getAttribute('id');
+    if (!id) throw AfirmaError.invalidParameter('Lote de firma XML con una firma sin Id');
+    const datasource = childText(el, 'datasource');
+    const data = datasource && !/^https?:/i.test(datasource) ? decodeBase64(datasource) : null;
+    signs.push({
+      id,
+      format: childText(el, 'format'),
+      suboperation: childText(el, 'suboperation'),
+      ...(data ? { dataSize: data.length } : {}),
+    });
+  }
+  if (signs.length === 0) throw AfirmaError.invalidParameter('Lote de firma XML vacio');
+  return {
+    algorithm,
+    stopOnError: root.getAttribute('stoponerror')?.trim().toLowerCase() !== 'false',
+    signs,
+  };
+}
+
+export interface XmlBatchOptions {
+  /** The `<signbatch>` document as the page gave it (decoded). */
+  batch: Buffer;
+  preUrl: string;
+  postUrl: string;
+  algorithm: ResolvedAlgorithm;
+  signer: KeySigner;
+  chain: Buffer[];
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+}
+
+/** The server's reply as XML text: AutoFirma's servers send it plain, some proxies Base64. */
+function batchReplyXml(text: string, phase: 'pre' | 'post'): Document {
+  const t = text.trim();
+  if (t.toUpperCase().startsWith('ERR-')) throw triphaseServerError(t, phase);
+  let xml = t;
+  if (!t.startsWith('<')) {
+    const decoded = decodeBase64(t)?.toString('utf8').trim();
+    if (!decoded?.startsWith('<')) {
+      throw AfirmaError.triphase(phase, 'respuesta del servidor de lotes no valida');
+    }
+    xml = decoded;
+  }
+  try {
+    return parseXml(xml);
+  } catch {
+    throw AfirmaError.triphase(phase, 'respuesta del servidor de lotes no valida');
+  }
+}
+
+export interface XmlBatchResult {
+  /** The result log, re-serialized: `<signs><signresult id=".." result=".." description=".."/>…</signs>`. */
+  log: string;
+  results: BatchResultEntry[];
+}
+
+function resultLog(doc: Document, phase: 'pre' | 'post'): XmlBatchResult {
+  const root = doc.documentElement;
+  if (root.nodeName.toLowerCase() !== 'signs') {
+    throw AfirmaError.triphase(phase, 'resultado del lote no valido');
+  }
+  const attr = (v: string) =>
+    v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const results: BatchResultEntry[] = [];
+  let log = '<signs>';
+  for (const el of elementChildren(root)) {
+    if (el.nodeName.toLowerCase() !== 'signresult') continue;
+    const entry: BatchResultEntry = {
+      id: el.getAttribute('id') ?? '',
+      result: el.getAttribute('result') ?? '',
+    };
+    const description = el.getAttribute('description');
+    if (description) entry.description = description;
+    results.push(entry);
+    log += `<signresult id="${attr(entry.id)}" result="${attr(entry.result)}" description="${attr(description ?? '')}"/>`;
+  }
+  return { log: `${log}</signs>`, results };
+}
+
+/**
+ * Legacy XML batch against the site's batch presigner/postsigner, like AutoFirma's
+ * `BatchSigner.sign(batchB64, presignerUrl, postsignerUrl, certificates, pk)`:
+ *
+ *   POST presignerUrl   xml=<b64u(batch)>&certs=<b64u cert>;<b64u cert>…
+ *     <- TriphaseData XML (<xml><firmas><firma Id=".."><param n="PRE">..</param>…)
+ *   (sign each PRE -> PK1)
+ *   POST postsignerUrl  xml=<b64u(batch)>&certs=…&tridata=<b64u(TriphaseData XML with PK1)>
+ *     <- <signs><signresult id=".." result="DONE_AND_SAVED" description=""/>…</signs>
+ *
+ * Returns the result log. A presigner that answers with a result log (every presignature
+ * failed) ends the batch there.
+ */
+export async function xmlBatchSign(opts: XmlBatchOptions): Promise<XmlBatchResult> {
+  const jar = new CookieJar();
+  const http = { fetch: opts.fetch, jar, timeoutMs: opts.timeoutMs, phase: 'batch' as const };
+  const xml = toBase64Url(opts.batch);
+  const certs = opts.chain.map(toBase64Url).join(';');
+
+  const preDoc = batchReplyXml(
+    await postForm(
+      opts.preUrl,
+      formBody([
+        ['xml', xml],
+        ['certs', certs],
+      ]),
+      http,
+    ),
+    'pre',
+  );
+  if (preDoc.documentElement.nodeName.toLowerCase() === 'signs') return resultLog(preDoc, 'pre');
+  const triphase = triphaseDataOf(preDoc);
+  if (triphase.signs.length) await signTriphaseData(triphase, opts.algorithm, opts.signer);
+
+  const postDoc = batchReplyXml(
+    await postForm(
+      opts.postUrl,
+      formBody([
+        ['xml', xml],
+        ['certs', certs],
+        ['tridata', toBase64Url(Buffer.from(serializeTriphaseData(triphase), 'utf8'))],
+      ]),
+      http,
+    ),
+    'post',
+  );
+  return resultLog(postDoc, 'post');
 }

@@ -443,7 +443,14 @@ POST <batchPostSignerUrl>  json=<b64u(batch, updated with presign errors)>&certs
 - Batch JSON: `{algorithm, format, suboperation, stoponerror, extraparams:b64, singlesigns:[{id, datareference, format?, suboperation?, extraparams?:b64}]}`.
 - Result states: `DONE_AND_SAVED`, `DONE_BUT_ERROR_SAVING`, `ERROR_PRE`, `ERROR_POST`, `NOT_STARTED`, `DONE_BUT_NOT_SAVED_YET`, `DONE_BUT_SAVED_SKIPPED`, `SKIPPED`, `SAVE_ROLLBACKED`.
 - `setLocalBatchProcess(true)`: no servers; the client signs each `datareference` locally and returns `signature` per entry.
-- Legacy XML batch (`signBatch`): same idea with `xml=`, `certs=`, `tridata=`. Low priority.
+- Legacy XML batch (`signBatch`): same idea with `xml=`, `certs=`, `tridata=`. Implemented 2026-10-12 (`xmlBatchSign`) after a real gsede login (municipal sedes) used it to sign a login challenge:
+  ```
+  POST <presignerUrl>   xml=<b64u(<signbatch>)>&certs=<b64u cert>;<b64u cert>…
+    ← TriphaseData XML, plain (<xml><firmas><firma Id="<singlesign Id>"><param n="PRE">…)
+  POST <postsignerUrl>  xml=<same>&certs=<same>&tridata=<b64u(TriphaseData with PK1)>
+    ← <signs><signresult id="…" result="DONE_AND_SAVED" description=""/>…</signs>
+  ```
+  The page's success callback gets `(Base64(result log), certificateB64)`. gsede's `clientSigner.js` then downloads each signature from its RetrieveService (`op=get&v=1_0&id=<Id>` → `<b64u cert>|<b64u signature>`, stored by the server's SignSaver) and posts `[{signature, transactionId}, {certificate}]`. Its bundled autoscript 1.8.0 also has `setWaitCertMaxLoops`/`setWaitCertTimeout`, which the official 1.9/1.10 don't.
 
 ---
 

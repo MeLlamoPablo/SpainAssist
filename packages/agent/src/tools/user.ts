@@ -146,7 +146,7 @@ function requestCredentialParams(dniePhone: boolean) {
 const CREDENTIAL_NAME = { clave_permanente: 'Cl@ve Permanente', dnie: 'DNIe' } as const;
 const CREDENTIAL_NEXT = {
   clave_permanente: 'Log in with browser_fill_from_vault.',
-  dnie: "Log in with browser_use_certificate; the app pairs the phone if needed, don't ask the user to do it.",
+  dnie: "Log in with browser_use_certificate when the site asks for a client certificate, or click the login button when it signs with AutoFirma; the app pairs the phone if needed, don't ask the user to do it.",
 } as const;
 
 export const RequestPhoneCallParams = Type.Object({

@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
   AFIRMA_BINDING,
+  AFIRMA_NOTICE,
   type AfirmaCall,
   type AfirmaHandlerContext,
   type AfirmaReply,
@@ -41,6 +42,7 @@ import {
 import { ensureChromium } from './install';
 import { NetworkTracker } from './network';
 import {
+  afirmaPageNote,
   CLIENT_CERT_NET_ERROR,
   certificateFailedNote,
   certificateRequestedNote,
@@ -108,6 +110,12 @@ interface Session {
   downloads: BrowserObservation['downloads'];
   signatures: BrowserObservation['signatures'];
   dialogs: string[];
+  /** Script errors of the pages since the last observation. */
+  pageErrors: string[];
+  /** Page errors already logged (main.log gets each one once per session). */
+  loggedPageErrors: Set<string>;
+  /** Origins whose AutoFirma note the agent already got. */
+  afirmaOrigins: Set<string>;
   notes: string[];
   /** Downloads / inline PDF captures / certificate checks in progress. */
   pending: Set<Promise<unknown>>;
@@ -802,6 +810,7 @@ export class PlaywrightBrowserService implements BrowserService {
       }
     });
     page.on('dialog', (dialog) => void this.onDialog(s, dialog));
+    page.on('pageerror', (error) => this.onPageError(s, page, error));
     page.on('download', (download) => this.onDownload(s, download));
     page.on('response', (response) => this.onResponse(s, page, response));
     page.on('requestfailed', (request) => this.onRequestFailed(s, request));
@@ -1141,6 +1150,7 @@ export class PlaywrightBrowserService implements BrowserService {
         .splice(0)
         .map((e) => (e.message === undefined ? e : { ...e, message: mask(e.message) })),
       dialogs: s.dialogs.splice(0).map(mask),
+      pageErrors: s.pageErrors.splice(0).map(mask),
       notes: [...new Set(notes.map(mask))],
       imageId,
     };
@@ -1250,6 +1260,28 @@ export class PlaywrightBrowserService implements BrowserService {
       }
     } catch (err) {
       this.log.debug('dialog handling failed', { error: errorMessage(err) });
+    }
+  }
+
+  /** Uncaught exceptions and unhandled rejections of the page's scripts (any frame). */
+  private onPageError(s: Session, page: Page, error: Error): void {
+    const text = describePageError(error);
+    if (s.pageErrors.length < MAX_PAGE_ERRORS && !s.pageErrors.includes(text)) {
+      s.pageErrors.push(text);
+    }
+    if (s.loggedPageErrors.size < 100 && !s.loggedPageErrors.has(text)) {
+      s.loggedPageErrors.add(text);
+      let host = '';
+      try {
+        host = hostOf(page.url());
+      } catch {
+        host = '';
+      }
+      this.log.warn('page script error', {
+        procedureId: s.id,
+        host,
+        error: maskSecrets(text, s.secretVariants),
+      });
     }
   }
 
@@ -1415,6 +1447,11 @@ export class PlaywrightBrowserService implements BrowserService {
 
   private onAfirmaCall(s: Session, frame: Frame, raw: unknown): Promise<AfirmaReply> {
     const afirma = this.opts.afirma;
+    const notice = parseAfirmaArgs(raw);
+    if (notice?.method === AFIRMA_NOTICE) {
+      this.onAfirmaNotice(s, effectiveFrameUrl(frame), notice.args);
+      return Promise.resolve({ ok: true, callbackArgs: [] });
+    }
     const work = (async (): Promise<AfirmaReply> => {
       // origin/url come from the calling frame as seen by the browser, never from the page.
       const url = effectiveFrameUrl(frame);
@@ -1428,7 +1465,9 @@ export class PlaywrightBrowserService implements BrowserService {
         };
       }
       const call: AfirmaCall = { method: parsed.method, args: parsed.args, origin, url };
+      let reported = false;
       const report: AfirmaHandlerContext['report'] = (event) => {
+        reported = true;
         s.signatures.push({
           status: event.status,
           format: String(event.format ?? ''),
@@ -1436,9 +1475,30 @@ export class PlaywrightBrowserService implements BrowserService {
           ...(event.message !== undefined ? { message: String(event.message).slice(0, 500) } : {}),
         });
       };
+      const host = hostOf(url);
       try {
         const ctx: AfirmaHandlerContext = { ...afirma.context(s.id), procedureId: s.id, report };
-        return await afirma.handler(call, ctx);
+        const reply = await afirma.handler(call, ctx);
+        if (reply.ok) {
+          this.log.info('AutoFirma call', { procedureId: s.id, method: call.method, host });
+        } else {
+          const code = (reply as { errorCode?: unknown }).errorCode;
+          this.log.info('AutoFirma call failed', {
+            procedureId: s.id,
+            method: call.method,
+            host,
+            errorType: reply.errorType,
+            ...(typeof code === 'string' ? { code } : {}),
+            error: maskSecrets(reply.errorMessage.slice(0, 300), s.secretVariants),
+          });
+          // Signatures report themselves; anything else the page asked AutoFirma for gets a note.
+          if (!reported) {
+            s.notes.push(
+              `The page's AutoFirma call ${call.method} failed: ${reply.errorMessage.slice(0, 200) || reply.errorType}.`,
+            );
+          }
+        }
+        return reply;
       } catch (err) {
         this.log.error('AutoFirma handler failed', {
           procedureId: s.id,
@@ -1452,6 +1512,29 @@ export class PlaywrightBrowserService implements BrowserService {
     s.afirmaInFlight.add(work);
     void work.finally(() => s.afirmaInFlight.delete(work)).catch(noop);
     return work;
+  }
+
+  /** The shim's diagnostics (`AFIRMA_NOTICE`): never signs, never waits. */
+  private onAfirmaNotice(s: Session, url: string, args: unknown[]): void {
+    const kind = args[0];
+    const detail = typeof args[1] === 'string' ? args[1].slice(0, 64) : '';
+    const origin = originOf(url);
+    const host = hostOf(url);
+    if (kind === 'loaded') {
+      this.log.info('AutoFirma page', { procedureId: s.id, host, version: detail });
+      if (s.afirmaOrigins.has(origin) || s.afirmaOrigins.size >= 50) return;
+      s.afirmaOrigins.add(origin);
+      s.notes.push(afirmaPageNote(host));
+    } else if (kind === 'ignored' && /^[A-Za-z_$][\w$]*$/.test(detail)) {
+      this.log.warn('AutoFirma method not implemented', {
+        procedureId: s.id,
+        host,
+        method: detail,
+      });
+      s.notes.push(
+        `The page called AutoScript.${detail}, which the app's AutoFirma replacement does not implement; the call was ignored. If the page then gets stuck, tell the user this site's AutoFirma flow is not supported yet.`,
+      );
+    }
   }
 
   // =============================================================================================
@@ -1508,6 +1591,9 @@ function newSession(id: string): Session {
     downloads: [],
     signatures: [],
     dialogs: [],
+    pageErrors: [],
+    loggedPageErrors: new Set(),
+    afirmaOrigins: new Set(),
     notes: [],
     pending: new Set(),
     afirmaInFlight: new Set(),
@@ -1674,6 +1760,27 @@ function matchOption(
   if (loose) return loose;
   const partial = options.filter((o) => looseText(o.label).includes(w));
   return partial.length === 1 ? partial[0] : undefined;
+}
+
+const MAX_PAGE_ERRORS = 5;
+
+/** `TypeError: x is not a function (/js/login.js:12)`: no query strings, short. */
+function describePageError(error: Error): string {
+  const name = error?.name && error.name !== 'Error' ? `${error.name}: ` : '';
+  const message = String(error?.message ?? error)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 240);
+  let where = '';
+  const frame = /\(?((?:https?|file):\/\/[^\s)]+?):(\d+):\d+\)?/.exec(String(error?.stack ?? ''));
+  if (frame?.[1]) {
+    try {
+      where = ` (${new URL(frame[1]).pathname}:${frame[2]})`;
+    } catch {
+      where = '';
+    }
+  }
+  return `${name}${message || 'Unknown error'}${where}`;
 }
 
 function parseAfirmaArgs(raw: unknown): { method: string; args: unknown[] } | null {
