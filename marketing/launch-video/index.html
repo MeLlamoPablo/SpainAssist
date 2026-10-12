@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Spain Assist · launch video</title>
+<link rel="stylesheet" href="scene.css" />
+</head>
+<body>
+<div id="stage">
+  <div id="bg"><div class="blob" id="blob-r"></div><div class="blob" id="blob-y"></div><div class="blob" id="blob-s"></div></div>
+
+  <!-- The app window, in "world" coordinates (1280×820) moved by the camera. -->
+  <div id="world">
+    <div id="win">
+      <!-- Left: chat -->
+      <aside id="side">
+        <header class="side-head">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="brand"><svg class="flag" viewBox="0 0 58 58"><use href="#flag" /></svg><span class="brand-name">Spain <i>Assist</i></span></div>
+        </header>
+        <div id="hero">
+          <svg class="flag hero-flag" viewBox="0 0 58 58"><use href="#flag" /></svg>
+          <h1>¿En qué te ayudo?</h1>
+          <ul>
+            <li><span class="tick" data-icon="check"></span>Investigo los requisitos</li>
+            <li><span class="tick" data-icon="check"></span>Expido los documentos que necesitas</li>
+            <li><span class="tick" data-icon="check"></span>Tus datos se guardan en este ordenador</li>
+          </ul>
+        </div>
+        <div id="chat">
+          <div class="item" id="c-user"><div class="bubble">Me quiero empadronar</div></div>
+          <div class="item" id="c-chip1"><span class="chip"><span data-icon="rocket"></span>Empiezo el trámite «Empadronarme en Madrid»<span class="chip-go" data-icon="arrow-up-right"></span></span></div>
+          <div class="item" id="c-ai1"><p class="ai stream">¡Vamos allá! Para empadronarte necesito tu <b>contrato de alquiler</b>. Te lo pido en su tarjeta.</p></div>
+          <div class="item" id="c-ai2"><p class="ai stream">Recibido. Ahora <b>firma la solicitud con tu DNIe</b>, desde el móvil.</p></div>
+          <div class="item" id="c-chip2"><span class="chip"><span data-icon="inbox"></span>Novedades de «Empadronarme en Madrid»<span class="chip-go" data-icon="arrow-up-right"></span></span></div>
+          <div class="item" id="c-ai3">
+            <p class="ai stream">¡Hecho! Ya estás empadronado. Aquí tienes tu <b>certificado de empadronamiento</b>:</p>
+            <div class="attach" id="attach">
+              <span class="attach-icon" data-icon="file-text"></span>
+              <span class="attach-text"><b>Certificado de empadronamiento.pdf</b><small>PDF · 1 página · Ayuntamiento de Madrid</small></span>
+              <span class="attach-dl" data-icon="download"></span>
+            </div>
+          </div>
+        </div>
+        <div id="composer">
+          <div class="field"><span id="placeholder">Por ejemplo: me he mudado a Madrid</span><span id="typed"></span><span id="caret"></span></div>
+          <div class="composer-row"><span class="clip" data-icon="paperclip"></span><span id="send" data-icon="arrow-up"></span></div>
+        </div>
+      </aside>
+
+      <!-- Right: procedures -->
+      <main id="main">
+        <nav class="tabs">
+          <span class="tab on"><span data-icon="clipboard-list"></span>Mis trámites<b id="badge">1</b></span>
+          <span class="tab"><span data-icon="shield-check"></span>Mis datos</span>
+          <span class="tab"><span data-icon="settings"></span>Ajustes</span>
+          <span class="credits">420 <span data-icon="sparkle"></span></span>
+        </nav>
+        <div id="empty">
+          <div class="ill">
+            <div class="ill-card back2"></div><div class="ill-card back1"></div>
+            <div class="ill-card front">
+              <div class="ill-row"><i class="bar w60"></i><i class="bar amber"></i></div>
+              <div class="ill-cols"><div><i class="dot"></i><i class="bar w50"></i><br /><i class="dot"></i><i class="bar w35"></i><br /><i class="dot"></i><i class="bar w45"></i></div><div class="ill-steps"><i class="c done"></i><i class="bar w60"></i><br /><i class="c cur"></i><i class="bar w60"></i><br /><i class="c"></i><i class="bar w60"></i></div></div>
+            </div>
+          </div>
+          <p>Prueba con</p>
+          <div class="try"><span><span data-icon="id-card"></span>Renovar el DNI<span data-icon="arrow-up-right"></span></span><span><span data-icon="landmark"></span>Empadronarme<span data-icon="arrow-up-right"></span></span><span><span data-icon="file-text"></span>Certificado digital<span data-icon="arrow-up-right"></span></span></div>
+        </div>
+
+        <section id="card">
+          <div class="card-head">
+            <div>
+              <h2>Empadronarme en Madrid</h2>
+              <p class="org"><span data-icon="landmark"></span>Ayuntamiento de Madrid<span class="sep">·</span><span id="updated">Actualizado ahora</span></p>
+            </div>
+            <span class="pill done" id="pill-done"><i></i>Completado</span>
+            <span class="more">···</span>
+          </div>
+          <div class="card-body">
+            <ul class="facts">
+              <li><span>Dónde:</span> Por internet, en la sede del Ayuntamiento.</li>
+              <li><span>Coste:</span> Gratis.</li>
+              <li><span>Necesitas:</span> Contrato de alquiler y tu DNIe.</li>
+            </ul>
+            <ol class="steps">
+              <li class="step" id="s1"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Leer los requisitos</span></li>
+              <li class="step" id="s2"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Subir el contrato de alquiler</span><span class="you">Tú</span></li>
+              <li class="step" id="s3"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Firmar la solicitud con tu DNIe</span><span class="you">Tú</span></li>
+              <li class="step" id="s4"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Descargar el certificado</span></li>
+            </ol>
+          </div>
+
+          <!-- Question 1: the rental contract -->
+          <div class="col" id="q1"><div class="q">
+            <div class="q-head"><span class="q-icon" data-icon="message-square-text"></span><h3>Sube tu contrato de alquiler</h3></div>
+            <p class="q-msg">Lo necesito para pedir tu alta en el padrón. Vale el PDF o una foto.</p>
+            <label>Contrato de alquiler</label>
+            <div class="drop" id="drop">
+              <span class="drop-empty" id="drop-empty">Ningún documento elegido</span>
+              <span class="drop-file" id="drop-file"><span class="df-icon" data-icon="file-text"></span><b>Contrato de alquiler.pdf</b><small>312 KB</small><span class="df-ok" data-icon="circle-check"></span></span>
+              <span class="btn ghost" id="btn-vault"><span data-icon="file-text"></span>Elegir de Mis datos</span>
+              <span class="btn link" id="btn-up"><span data-icon="upload"></span>Subir un archivo</span>
+            </div>
+            <div class="q-foot"><span class="btn dark" id="btn-go"><span data-icon="check"></span>Continuar</span></div>
+          </div></div>
+
+          <!-- Question 2: DNIe signature -->
+          <div class="col" id="q2"><div class="q">
+            <div class="q-head"><span class="q-icon" data-icon="id-card"></span><h3>Firma con tu DNIe</h3></div>
+            <p class="q-msg">El Ayuntamiento te pide firmar la solicitud. Revisa la firma en el móvil y acerca el DNIe.</p>
+            <div class="stage">
+              <span class="stage-icon" id="stage-icon" data-icon="scan-eye"></span>
+              <span class="stage-text"><b id="stage-title">Revisa la firma en el móvil</b><small id="stage-hint">Comprueba qué firmas y para quién.</small><small class="faint">Conectado con Pixel 8</small></span>
+            </div>
+            <div class="details"><span>Qué</span><b>Solicitud de alta en el padrón (PDF)</b></div>
+          </div></div>
+          <div class="col" id="q2done"><div class="answered"><span data-icon="circle-check"></span>Firmado con el DNIe<small>Hecho</small></div></div>
+
+          <div class="col" id="strip"><div class="strip"><span class="spin" id="spin"></span><span id="strip-text">Leyendo sede.madrid.es</span></div></div>
+        </section>
+      </main>
+
+      <!-- The dragged file and the pointer live in window coordinates. -->
+      <div id="dragfile"><span data-icon="file-text"></span><b>Contrato de alquiler.pdf</b></div>
+      <svg id="cursor" viewBox="0 0 28 28"><path d="M6 3.5v19.2l4.6-4.5 2.9 6.8 3.4-1.5-2.9-6.6h6.5z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" /></svg>
+      <div id="click"></div>
+    </div>
+  </div>
+
+  <!-- Screen-space layers -->
+  <div id="dnie">
+    <div class="dnie-top"><span class="chipgold"></span><span class="dnie-title">DNIe</span></div>
+    <div class="dnie-body"><span class="avatar"></span><span class="lines"><i class="w80"></i><i class="w60"></i><i class="w70"></i><i class="w40"></i></span></div>
+  </div>
+  <div id="phone">
+    <div class="screen">
+      <div class="p-status"><span>9:41</span><span class="p-notch"></span><span>5G ▮</span></div>
+      <div class="p-brand"><svg class="flag" viewBox="0 0 58 58"><use href="#flag" /></svg><span class="brand-name">Spain <i>Assist</i></span></div>
+      <div class="p-view" id="pv1">
+        <span class="p-kicker">Firma digital · te necesito</span>
+        <h3>Firma con tu DNIe</h3>
+        <p>El Ayuntamiento de Madrid te pide firmar:</p>
+        <div class="p-box"><span>Qué</span><b>Solicitud de alta en el padrón</b><span>Para</span><b>sede.madrid.es</b></div>
+        <span class="p-btn" id="p-btn">Firmar con el DNIe</span>
+        <span class="p-cancel">Cancelar</span>
+      </div>
+      <div class="p-view" id="pv2">
+        <svg class="p-ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track" /><circle cx="60" cy="60" r="52" class="bar" id="p-ring-bar" /></svg>
+        <span class="p-nfc" data-icon="nfc"></span>
+        <h3 id="pv2-title">Acerca el DNIe a la parte de atrás del móvil</h3>
+        <p id="pv2-hint">Pon el DNIe sobre una mesa y apoya el móvil encima.</p>
+      </div>
+      <div class="p-view" id="pv3">
+        <span class="p-ok" data-icon="check"></span>
+        <h3>Firmado</h3>
+        <p>Ya puedes volver al ordenador.</p>
+      </div>
+      <i id="tap"></i>
+    </div>
+  </div>
+
+  <div id="rings"><i></i><i></i><i></i></div>
+
+  <div id="veil"></div>
+  <canvas id="confetti" width="1920" height="1080"></canvas>
+  <div id="cert">
+    <div class="sheet">
+      <p class="cert-org">Ayuntamiento de Madrid · Padrón Municipal</p>
+      <h2>Certificado de empadronamiento</h2>
+      <i class="rule"></i>
+      <dl>
+        <dt>Nombre</dt><dd>Lucía García Martín</dd>
+        <dt>Domicilio</dt><dd>Calle del Ejemplo 12, 3.º B<br />28012 Madrid</dd>
+        <dt>Fecha de alta</dt><dd>12 de octubre de 2026</dd>
+      </dl>
+      <div class="cert-lines"><i class="w100"></i><i class="w90"></i><i class="w95"></i><i class="w70"></i></div>
+      <div class="cert-sign"><span data-icon="circle-check"></span>Firmado electrónicamente</div>
+    </div>
+  </div>
+
+  <div id="title">
+    <div class="logo"><svg class="flag" id="t-flag" viewBox="0 0 58 58"><use href="#flag" /></svg><span class="brand-name"><span class="mask"><span id="t-w1">Spain</span></span> <span class="mask"><i id="t-w2">Assist</i></span></span></div>
+    <p id="t-tag"></p>
+    <p id="t-url">spainassist.es</p>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <clipPath id="flag-clip"><rect x="1" y="10" width="56" height="38" rx="7" /></clipPath>
+    <g id="flag">
+      <g clip-path="url(#flag-clip)"><path fill="#C60B1E" d="M0 9h58v40H0z" /><path fill="#FFC400" d="M0 19h58v20H0z" /></g>
+      <rect x="1" y="10" width="56" height="38" rx="7" fill="none" stroke="#D4D0CB" stroke-width="2" />
+    </g>
+  </defs>
+</svg>
+<script type="module" src="scene.js"></script>
+</body>
+</html>

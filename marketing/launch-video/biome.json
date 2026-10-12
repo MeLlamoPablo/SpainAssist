@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/@biomejs/biome/configuration_schema.json",
+  "root": false,
+  "extends": "//",
+  "linter": {
+    "rules": {
+      "a11y": { "noSvgWithoutTitle": "off", "noLabelWithoutControl": "off" },
+      "style": { "noDescendingSpecificity": "off" }
+    }
+  }
+}
