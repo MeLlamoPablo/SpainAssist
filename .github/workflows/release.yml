@@ -4,6 +4,8 @@
 # installer's blockmap: installed Windows apps update from them (electron-updater, D19).
 # Installer names carry no version (`SpainAssist-mac-arm64.dmg`), so
 # `releases/latest/download/<name>` links always reach the newest stable release.
+# Publishing a tag that already has a release deletes that release first, so moving the tag
+# (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`) or re-running the workflow republishes it.
 #
 # Unsigned for now: macOS builds are ad-hoc signed and not notarized, Windows builds are unsigned
 # (PRODUCTION_CHECKLIST.md). Signing turns on when its secrets are passed as the environment
@@ -150,6 +152,10 @@ jobs:
           VERSION: ${{ needs.check.outputs.version }}
           PRERELEASE: ${{ needs.check.outputs.prerelease }}
         run: |
+          # Re-running a tag (re-pushed or re-run) replaces its release; the tag itself stays.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release delete "$TAG" --yes
+          fi
           flags=()
           [[ "$PRERELEASE" == true ]] && flags+=(--prerelease)
           gh release create "$TAG" installers/* \
