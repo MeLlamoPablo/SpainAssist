@@ -132,12 +132,13 @@ describe('browser wiring', () => {
     expect(app.vault.listDocuments()).toEqual([]);
     expect(app.services.procedures.transcript(procedureId).at(-1)?.type).not.toBe('notice');
 
-    const doc = await app.services.browser.saveDownload(procedureId, res.downloadId, {
-      name: 'Justificante de registro - Empadronamiento',
-    });
+    const doc = await app.services.browser.saveDownload(
+      procedureId,
+      res.downloadId,
+      'Justificante de registro - Empadronamiento',
+    );
     expect(doc).toMatchObject({
       name: 'Justificante de registro - Empadronamiento.pdf',
-      kind: 'receipt',
       source: 'download',
       procedureId,
     });

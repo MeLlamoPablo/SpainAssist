@@ -32,7 +32,6 @@ test('actual browser, vault and signer submit the residence procedure and encryp
           name: file.suggestedName,
           mimeType: file.mimeType,
           bytes: await readFile(file.path),
-          kind: 'receipt',
           source: 'download',
           procedureId,
         });

@@ -37,7 +37,7 @@ vault.overview({ biometricAvailable: systemPreferences.canPromptTouchID() }); //
 | --- | --- |
 | Open/inspect | `Vault.open(dir, keys, { now? })`, `Vault.destroy(dir)`, `overview({ biometricAvailable })`, `storageInfo()` |
 | Personal data | `listPersonal()`, `getPersonal(key)`, `setPersonal(items, source)`, `deletePersonal(keys)` |
-| Documents | `listDocuments({ procedureId?, kind? })`, `getDocument(id)`, `addDocument(opts)`, `readDocument(id)`, `deleteDocument(id)` |
+| Documents | `listDocuments({ procedureId? })`, `getDocument(id)`, `addDocument(opts)`, `readDocument(id)`, `deleteDocument(id)` |
 | Credentials | `listCredentials()`, `getCredential(id)`, `addClave()`, `addClaveMovil()`, `addCertificate()`, `setCredentialPolicy()`, `getCredentialSecret()`, `markCredentialUsed()`, `deleteCredential()` |
 | App secrets | `listSecrets()` (labels only), `setSecret(id, label, value)`, `getSecret(id)`, `deleteSecret(id)` |
 | PII | `knownSensitiveValues()` (for `@sa/pii` `knownValues`) |

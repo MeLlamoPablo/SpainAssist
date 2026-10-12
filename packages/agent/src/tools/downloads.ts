@@ -1,7 +1,6 @@
-import { DocumentKind } from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
-import { callBridge, defineSaTool, StringEnum, textResult } from './common';
+import { callBridge, defineSaTool, textResult } from './common';
 
 export const DownloadSaveParams = Type.Object({
   downloadId: Type.String({
@@ -15,11 +14,6 @@ export const DownloadSaveParams = Type.Object({
     description:
       'Short name in the user\'s language that says what the document is, without extension: type or purpose, plus a verified year or date when useful (e.g. "Modelo 100 - Renta 2025", "Informe de vida laboral - 2026-10-04"). Never the website\'s file name, internal codes or personal data.',
   }),
-  kind: Type.Optional(
-    StringEnum(DocumentKind.options, {
-      description: 'receipt = justificante / acuse; form = a filled form. Guessed when omitted.',
-    }),
-  ),
 });
 
 /** Downloads stay temporary until the agent saves them to the user's documents. */

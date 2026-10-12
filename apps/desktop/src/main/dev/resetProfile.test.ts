@@ -34,7 +34,6 @@ describe('resetDevProfile', () => {
     await vault.addDocument({
       name: 'test.txt',
       mimeType: 'text/plain',
-      kind: 'other',
       source: 'user',
       bytes: Buffer.from('fake document'),
     });

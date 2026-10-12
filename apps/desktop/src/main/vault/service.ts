@@ -137,7 +137,6 @@ export class VaultService {
       const meta = await this.deps.vault.addDocument({
         name: input.name,
         mimeType: input.mimeType,
-        kind: input.kind,
         source: input.source ?? 'user',
         bytes: Buffer.from(input.bytes),
         ...(input.procedureId ? { procedureId: input.procedureId } : {}),

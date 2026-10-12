@@ -3,9 +3,7 @@ import {
   Download,
   FileText,
   FolderOpen,
-  IdCard,
   Image as ImageIcon,
-  Receipt,
   SquareArrowOutUpRight,
   Trash,
   Upload,
@@ -26,14 +24,7 @@ import { useVaultStore } from '../../store/vault';
 import { vaultDict } from './i18n';
 
 function DocIcon({ doc }: { doc: DocumentMeta }) {
-  const Icon =
-    doc.kind === 'id_document'
-      ? IdCard
-      : doc.kind === 'receipt'
-        ? Receipt
-        : doc.mimeType.startsWith('image/')
-          ? ImageIcon
-          : FileText;
+  const Icon = doc.mimeType.startsWith('image/') ? ImageIcon : FileText;
   return (
     <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-text">
       <Icon size={18} aria-hidden />
@@ -127,8 +118,6 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
         <p className="truncate text-[14px] font-medium text-fg">{doc.name}</p>
         {/* One line: a long procedure title truncates instead of wrapping after a "·". */}
         <p className="mt-0.5 flex items-center gap-x-1.5 whitespace-nowrap text-[12.5px] text-fg-subtle">
-          <span>{tc.documentKind[doc.kind]}</span>
-          <span aria-hidden>·</span>
           <span>{formatBytes(doc.size, lang)}</span>
           <span aria-hidden>·</span>
           <span>{formatDate(doc.createdAt, lang)}</span>
@@ -139,7 +128,7 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
                 type="button"
                 title={procedure.title}
                 onClick={() => focusProcedure(procedure.id)}
-                className="min-w-0 truncate text-accent-text hover:underline"
+                className="min-w-0 truncate transition-colors duration-150 hover:text-fg hover:underline"
               >
                 {procedure.title}
               </button>

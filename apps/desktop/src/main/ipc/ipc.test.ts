@@ -49,9 +49,7 @@ describe('IPC router', () => {
       t('es', 'invalidRequest'),
     );
     await expect(
-      dispatch('vault.addDocument', [
-        { name: 'a', mimeType: 'b', kind: 'other', bytes: 'not bytes' },
-      ]),
+      dispatch('vault.addDocument', [{ name: 'a', mimeType: 'b', bytes: 'not bytes' }]),
     ).rejects.toThrow(t('es', 'invalidRequest'));
     await expect(dispatch('nope.nope' as SaMethod, [])).rejects.toThrow(/Unknown method/);
     await expect(dispatch('procedures.get', ['p_0000000000000000'])).resolves.toBeNull();
@@ -122,7 +120,6 @@ describe('vault IPC', () => {
     const png = await app.invoke('vault.addDocument', {
       name: 'foto.png',
       mimeType: 'image/png',
-      kind: 'photo',
       bytes: new Uint8Array([1, 2, 3]),
     });
     expect(png).toMatchObject({ source: 'user', size: 3 });
@@ -130,7 +127,6 @@ describe('vault IPC', () => {
     const pdf = await app.invoke('vault.addDocument', {
       name: '../../justificante?.pdf',
       mimeType: 'application/pdf',
-      kind: 'receipt',
       bytes: new Uint8Array([37, 80, 68, 70]),
     });
     expect(await app.invoke('vault.previewDocument', pdf.id)).toBeNull();
@@ -146,7 +142,6 @@ describe('vault IPC', () => {
     const doc = await app.invoke('vault.addDocument', {
       name: 'document.pdf',
       mimeType: 'application/pdf',
-      kind: 'other',
       bytes: new Uint8Array([37, 80, 68, 70]),
     });
     vi.useFakeTimers();
@@ -172,7 +167,6 @@ describe('vault IPC', () => {
     const doc = await app.invoke('vault.addDocument', {
       name: '../../justificante?.pdf',
       mimeType: 'application/pdf',
-      kind: 'receipt',
       bytes: new Uint8Array([37, 80, 68, 70]),
     });
     const downloads = join(app.dir, 'Downloads');
@@ -200,7 +194,6 @@ describe('vault IPC', () => {
     const doc = await app.invoke('vault.addDocument', {
       name: 'document.pdf',
       mimeType: 'application/pdf',
-      kind: 'other',
       bytes: new Uint8Array([37, 80, 68, 70]),
     });
     const downloads = join(app.dir, 'Downloads');

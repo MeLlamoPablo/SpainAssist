@@ -6,7 +6,6 @@ import {
   CredentialPolicy,
   type CredentialSummary,
   DEFAULT_CREDENTIAL_POLICY,
-  DocumentKind,
   type DocumentMeta,
   DocumentSource,
   maskValue,
@@ -76,7 +75,6 @@ export type CredentialSecret =
 export interface AddDocumentOptions {
   name: string;
   mimeType: string;
-  kind: DocumentKind;
   source: DocumentSource;
   bytes: Uint8Array;
   procedureId?: string;
@@ -355,11 +353,10 @@ export class Vault {
 
   // --- documents -------------------------------------------------------------------------------
 
-  /** Newest first, optionally filtered by procedure and/or kind. */
-  listDocuments(filter: { procedureId?: string; kind?: DocumentKind } = {}): DocumentMeta[] {
+  /** Newest first, optionally filtered by procedure. */
+  listDocuments(filter: { procedureId?: string } = {}): DocumentMeta[] {
     return [...this.state.documents.values()]
       .filter((d) => filter.procedureId === undefined || d.procedureId === filter.procedureId)
-      .filter((d) => filter.kind === undefined || d.kind === filter.kind)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((d) => ({ ...d }));
   }
@@ -381,7 +378,6 @@ export class Vault {
       }
       const mimeType = typeof options.mimeType === 'string' ? options.mimeType.toLowerCase() : '';
       if (!MIME_PATTERN.test(mimeType)) throw invalid('The document type is not valid');
-      if (!DocumentKind.safeParse(options.kind).success) throw invalid('Invalid document kind');
       if (!DocumentSource.safeParse(options.source).success)
         throw invalid('Invalid document source');
       if (
@@ -400,7 +396,6 @@ export class Vault {
         name,
         mimeType,
         size: bytes.length,
-        kind: options.kind,
         source: options.source,
         ...(options.procedureId ? { procedureId: options.procedureId } : {}),
         createdAt: this.now().toISOString(),

@@ -3,7 +3,6 @@ import type { CertificateProxy, ClientCertificateUse, DownloadedFile } from '@sa
 import type {
   AfirmaSignatureSummary,
   CredentialSummary,
-  DocumentKind,
   DocumentMeta,
   Language,
   SigningKey,
@@ -48,13 +47,6 @@ export interface BrowserHolderDeps {
   fetch?: typeof fetch;
   logger: Logger;
   lang: () => Language;
-}
-
-export function guessDocumentKind(name: string): DocumentKind {
-  if (/justificante|acuse|recibo|resguardo|receipt/i.test(name)) return 'receipt';
-  if (/certificad|certificate/i.test(name)) return 'certificate';
-  if (/formulario|modelo|solicitud|impreso|form/i.test(name)) return 'form';
-  return 'other';
 }
 
 function describeCertificate(c: CredentialSummary, lang: Language): string {
@@ -208,16 +200,15 @@ export class BrowserHolder {
   async saveDownload(
     procedureId: string,
     downloadId: string,
-    options: { name: string; kind?: DocumentKind },
+    readableName: string,
   ): Promise<DocumentMeta | undefined> {
     const { deps } = this;
     const download = this.downloads.get(procedureId, downloadId);
     if (!download) return undefined;
-    const name = documentFileName(options.name, download.name);
+    const name = documentFileName(readableName, download.name);
     const meta = await deps.vault().addDocument({
       name,
       mimeType: download.mimeType,
-      kind: options.kind ?? guessDocumentKind(`${name} ${download.name}`),
       source: 'download',
       bytes: await this.downloads.read(downloadId),
       procedureId,

@@ -482,7 +482,6 @@ describe('tools', () => {
             id: 'doc_1',
             name: 'dni.jpg',
             mimeType: 'image/jpeg',
-            kind: 'id_document',
             createdAt: '2026-09-01T10:00:00Z',
           },
         ],
@@ -532,7 +531,6 @@ describe('tools', () => {
       const result = await h.run('download_save', {
         downloadId: 'dl_1',
         name: 'Justificante de cita - DNI',
-        kind: 'receipt',
       });
       expect(textOf(result)).toBe(
         'Saved to the user\'s documents as "Justificante de cita - DNI.pdf" (id doc_1).',

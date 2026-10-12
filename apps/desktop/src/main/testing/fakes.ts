@@ -128,7 +128,6 @@ export class MemoryVault implements VaultPort {
       name: opts.name,
       mimeType: opts.mimeType,
       size: opts.bytes.byteLength,
-      kind: opts.kind,
       source: opts.source,
       ...(opts.procedureId ? { procedureId: opts.procedureId } : {}),
       createdAt: now(),

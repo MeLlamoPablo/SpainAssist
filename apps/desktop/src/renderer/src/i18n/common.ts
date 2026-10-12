@@ -1,6 +1,5 @@
 import type {
   AdministrationLevel,
-  DocumentKind,
   NextActionOwner,
   PersonalDataSource,
   ProcedureStatus,
@@ -62,14 +61,6 @@ export const common = defineDict({
       unknown: 'Por confirmar',
       not_needed: 'No hace falta',
     } satisfies Record<RequirementStatus, string>,
-    documentKind: {
-      id_document: 'Documento de identidad',
-      photo: 'Foto',
-      certificate: 'Certificado',
-      receipt: 'Justificante',
-      form: 'Formulario',
-      other: 'Documento',
-    } satisfies Record<DocumentKind, string>,
     dataSource: {
       manual: 'Escrito por ti',
       scan: 'Escaneado',
@@ -128,14 +119,6 @@ export const common = defineDict({
       missing: 'Missing',
       unknown: 'To confirm',
       not_needed: 'Not needed',
-    },
-    documentKind: {
-      id_document: 'ID document',
-      photo: 'Photo',
-      certificate: 'Certificate',
-      receipt: 'Receipt',
-      form: 'Form',
-      other: 'Document',
     },
     dataSource: {
       manual: 'Typed by you',

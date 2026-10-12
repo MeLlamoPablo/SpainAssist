@@ -473,7 +473,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
           id: d.id,
           name: d.name,
           mimeType: d.mimeType,
-          kind: d.kind,
           createdAt: d.createdAt,
         })),
         credentials: vault
@@ -533,10 +532,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     'downloads.save': async (params, ctx) => {
       let saved: { id: string; name: string } | undefined;
       try {
-        saved = await deps.browser.saveDownload(ctx.procedureId, params.downloadId, {
-          name: params.name,
-          ...(params.kind ? { kind: params.kind } : {}),
-        });
+        saved = await deps.browser.saveDownload(ctx.procedureId, params.downloadId, params.name);
       } catch (err) {
         throw new BridgeError('bad_request', truncate(errorMessage(err), 300));
       }

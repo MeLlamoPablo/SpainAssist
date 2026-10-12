@@ -5,7 +5,6 @@ import {
   CustomProviderInput,
   DniAccessNumber,
   DniePin,
-  DocumentKind,
   PersonalDataInput,
   PHONE_CALL_MAX_WAV_BYTES,
   PromptResponse,
@@ -77,7 +76,6 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
     z.object({
       name: z.string().trim().min(1).max(255),
       mimeType: z.string().min(1).max(200),
-      kind: DocumentKind,
       bytes: bytes(50 * 1024 * 1024),
       procedureId: id.optional(),
       source: z.enum(['user', 'scan']).optional(),

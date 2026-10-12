@@ -520,7 +520,6 @@ describe('bridge: vault', () => {
     const doc = await app.vault.addDocument({
       name: 'padron.pdf',
       mimeType: 'application/pdf',
-      kind: 'other',
       source: 'user',
       bytes: Buffer.from('%PDF-1.7'),
     });
@@ -562,7 +561,7 @@ describe('bridge: downloads', () => {
       name: 'Justificante de cita - DNI.pdf',
     });
     const doc = app.vault.getDocument(saved.body.result.documentId);
-    expect(doc).toMatchObject({ kind: 'receipt', source: 'download', procedureId });
+    expect(doc).toMatchObject({ source: 'download', procedureId });
     expect((await app.vault.readDocument(doc!.id)).toString()).toBe('%PDF-1.7');
     expect(app.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
       type: 'notice',
@@ -912,7 +911,6 @@ describe('bridge: browser and credentials', () => {
     const doc = await app.vault.addDocument({
       name: 'dni.pdf',
       mimeType: 'application/pdf',
-      kind: 'id_document',
       source: 'user',
       bytes: Buffer.from('%PDF'),
     });

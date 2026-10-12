@@ -10,7 +10,7 @@ import {
 } from './chat';
 import { ProcedureUpdate } from './procedure';
 import { FeedbackKind, FeedbackVote } from './services';
-import { CredentialField, DocumentKind, PersonalDataInput } from './vault';
+import { CredentialField, PersonalDataInput } from './vault';
 
 /**
  * Host bridge: the contract between the pi extension (running inside the agent child process)
@@ -177,12 +177,11 @@ export const BridgeParams = {
   // --- downloads (procedure agents) ----------------------------------------------------------
   /**
    * Move one of this procedure's temporary downloads into the vault under a readable name.
-   * The app keeps the original file extension and guesses the kind when it's omitted.
+   * The app keeps the original file extension.
    */
   'downloads.save': z.object({
     downloadId: z.string().min(1).max(120),
     name: z.string().trim().min(1).max(120),
-    kind: DocumentKind.optional(),
   }),
 
   // --- browser -------------------------------------------------------------------------------
@@ -282,7 +281,7 @@ export type BridgeParamsOf<M extends BridgeMethod> = z.input<(typeof BridgeParam
 
 export interface VaultReadResult {
   personal: { key: string; label: string; value: string }[];
-  documents: { id: string; name: string; mimeType: string; kind: string; createdAt: string }[];
+  documents: { id: string; name: string; mimeType: string; createdAt: string }[];
   credentials: {
     id: string;
     kind: string;

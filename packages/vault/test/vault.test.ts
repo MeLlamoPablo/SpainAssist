@@ -49,7 +49,6 @@ describe('opening', () => {
     await vault.addDocument({
       name: 'padron.pdf',
       mimeType: 'application/pdf',
-      kind: 'certificate',
       source: 'user',
       bytes: Buffer.from('%PDF-1.7 Carmencita'),
     });
@@ -76,7 +75,6 @@ describe('opening', () => {
     const doc = await vault.addDocument({
       name: 'dni.jpg',
       mimeType: 'image/jpeg',
-      kind: 'id_document',
       source: 'scan',
       bytes: Buffer.from([1, 2, 3, 4]),
       procedureId: 'proc-1',
@@ -143,7 +141,6 @@ describe('tamper detection', () => {
       vault.addDocument({
         name: `${text}.txt`,
         mimeType: 'text/plain',
-        kind: 'other',
         source: 'user',
         bytes: Buffer.from(text),
       });
@@ -309,7 +306,6 @@ describe('documents', () => {
     const a = await vault.addDocument({
       name: 'C:\\Users\\carmen\\justificante.pdf',
       mimeType: 'Application/PDF',
-      kind: 'receipt',
       source: 'download',
       bytes: big,
       procedureId: 'renovar-dni',
@@ -318,7 +314,6 @@ describe('documents', () => {
     const b = await vault.addDocument({
       name: 'foto.png',
       mimeType: 'image/png',
-      kind: 'photo',
       source: 'user',
       bytes: new Uint8Array([9, 8, 7]),
     });
@@ -327,14 +322,12 @@ describe('documents', () => {
       name: 'justificante.pdf',
       mimeType: 'application/pdf',
       size: big.length,
-      kind: 'receipt',
       source: 'download',
       procedureId: 'renovar-dni',
       createdAt: '2026-10-03T10:00:00.000Z',
     });
     expect(vault.listDocuments().map((d) => d.id)).toEqual([b.id, a.id]);
     expect(vault.listDocuments({ procedureId: 'renovar-dni' }).map((d) => d.id)).toEqual([a.id]);
-    expect(vault.listDocuments({ kind: 'photo' }).map((d) => d.id)).toEqual([b.id]);
     expect(vault.getDocument(a.id)?.name).toBe('justificante.pdf');
     expect((await vault.readDocument(a.id)).equals(big)).toBe(true);
     expect([...(await vault.readDocument(b.id))]).toEqual([9, 8, 7]);
@@ -354,16 +347,11 @@ describe('documents', () => {
     const base = {
       name: 'a.pdf',
       mimeType: 'application/pdf',
-      kind: 'other' as const,
       source: 'user' as const,
       bytes: Buffer.from('x'),
     };
     await expectVaultError(vault.addDocument({ ...base, name: '  ' }), 'invalid_input');
     await expectVaultError(vault.addDocument({ ...base, mimeType: 'pdf' }), 'invalid_input');
-    await expectVaultError(
-      vault.addDocument({ ...base, kind: 'selfie' as never }),
-      'invalid_input',
-    );
     await expectVaultError(vault.addDocument({ ...base, source: 'nsa' as never }), 'invalid_input');
     await expectVaultError(vault.addDocument({ ...base, bytes: 'x' as never }), 'invalid_input');
     await expectVaultError(vault.readDocument('../vault'), 'not_found');
@@ -503,7 +491,6 @@ describe('concurrency', () => {
         vault.addDocument({
           name: `${i}.txt`,
           mimeType: 'text/plain',
-          kind: 'other',
           source: 'agent',
           bytes: Buffer.from(String(i)),
         }),
@@ -537,7 +524,6 @@ describe('wipe and destroy', () => {
     const doc = await vault.addDocument({
       name: 'a.txt',
       mimeType: 'text/plain',
-      kind: 'other',
       source: 'user',
       bytes: Buffer.alloc(4096, 0x41),
     });
@@ -572,7 +558,6 @@ describe('wipe and destroy', () => {
     await vault.addDocument({
       name: 'a.txt',
       mimeType: 'text/plain',
-      kind: 'other',
       source: 'user',
       bytes: Buffer.from('a'),
     });

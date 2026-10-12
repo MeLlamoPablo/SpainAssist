@@ -352,16 +352,6 @@ export type PersonalSaveIssue = z.infer<typeof PersonalSaveIssue>;
 // Documents
 // ---------------------------------------------------------------------------------------------
 
-export const DocumentKind = z.enum([
-  'id_document', // DNI / TIE / passport scans
-  'photo',
-  'certificate', // e.g. certificado de empadronamiento
-  'receipt', // justificante / acuse de recibo
-  'form', // a filled form
-  'other',
-]);
-export type DocumentKind = z.infer<typeof DocumentKind>;
-
 export const DocumentSource = z.enum(['user', 'scan', 'download', 'agent']);
 export type DocumentSource = z.infer<typeof DocumentSource>;
 
@@ -370,7 +360,6 @@ export const DocumentMeta = z.object({
   name: z.string(),
   mimeType: z.string(),
   size: z.number().int().nonnegative(),
-  kind: DocumentKind,
   source: DocumentSource,
   /** Procedure that produced or uses this document, if any. */
   procedureId: z.string().optional(),

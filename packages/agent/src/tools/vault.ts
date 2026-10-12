@@ -41,9 +41,7 @@ export function renderVault(result: VaultReadResult): string {
   if (result.documents.length > 0) {
     lines.push(`Documents (${result.documents.length}):`);
     for (const doc of result.documents) {
-      lines.push(
-        `- ${doc.id}: ${doc.name} (${doc.kind}, ${doc.mimeType}, ${doc.createdAt.slice(0, 10)})`,
-      );
+      lines.push(`- ${doc.id}: ${doc.name} (${doc.mimeType}, ${doc.createdAt.slice(0, 10)})`);
     }
   } else {
     lines.push('Documents: none.');

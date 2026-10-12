@@ -71,7 +71,6 @@ describe('the assistant', () => {
     const doc = await app.invoke('vault.addDocument', {
       name: 'dni.png',
       mimeType: 'image/png',
-      kind: 'id_document',
       bytes: new Uint8Array([137, 80, 78, 71]),
     });
     await app.invoke('chat.send', {

@@ -13,7 +13,6 @@ import type {
 import type {
   CredentialPolicy,
   CredentialSummary,
-  DocumentKind,
   DocumentMeta,
   PersonalDataInput,
   PersonalSaveIssue,
@@ -54,7 +53,6 @@ export interface SendMessageInput {
 export interface AddDocumentInput {
   name: string;
   mimeType: string;
-  kind: DocumentKind;
   /** File contents. */
   bytes: Uint8Array;
   procedureId?: string;

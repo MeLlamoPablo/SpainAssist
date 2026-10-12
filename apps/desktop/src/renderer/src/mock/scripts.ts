@@ -1,6 +1,5 @@
 import type {
   Administration,
-  DocumentKind,
   NextActionOwner,
   NoticeItem,
   ProcedureListItem,
@@ -43,7 +42,7 @@ export type PStep =
   | { kind: 'notice'; level: NoticeItem['level']; text: string }
   /** Ask the user in the conversation (the run pauses until they answer). */
   | { kind: 'ask'; prompt: Prompt; onAnswer: (r: PromptResponse) => PStep[] }
-  | { kind: 'document'; name: string; docKind: DocumentKind; preview: [string, string] }
+  | { kind: 'document'; name: string; preview: [string, string] }
   /** End of the run: the agent's short report goes up; the assistant reacts with `reply`. */
   | { kind: 'report'; summary: string; reply: string; error?: boolean };
 
@@ -715,7 +714,6 @@ export function dniAfterForm(response: PromptResponse, lang: Lang): PStep[] {
     {
       kind: 'document',
       name: t('Justificante cita DNI.pdf', 'DNI appointment receipt.pdf'),
-      docKind: 'receipt',
       preview: [t('Cita previa DNI', 'DNI appointment'), `${whenTime} · ${officeShort}`],
     },
     { kind: 'tool', tool: 'procedure_update', args: {}, ms: 500 },

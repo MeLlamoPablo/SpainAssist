@@ -59,7 +59,6 @@ describe('atomic writes', () => {
       vault.addDocument({
         name: 'a.txt',
         mimeType: 'text/plain',
-        kind: 'other',
         source: 'user',
         bytes: Buffer.from('a'),
       }),
@@ -75,7 +74,6 @@ describe('atomic writes', () => {
     const doc = await vault.addDocument({
       name: 'keep.txt',
       mimeType: 'text/plain',
-      kind: 'other',
       source: 'user',
       bytes: Buffer.from('keep'),
     });
