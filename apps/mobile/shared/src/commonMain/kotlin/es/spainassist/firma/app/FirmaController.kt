@@ -99,7 +99,7 @@ class FirmaController(
             override fun send(message: PhoneToDesktop) = link.send(message)
         }
     },
-) {
+) : FirmaActions {
     private val store = platform.store
     private val cardReader = platform.cardReader
     private val _screen = MutableStateFlow<Screen>(Screen.Start(cardReader.nfc.value))
@@ -136,43 +136,50 @@ class FirmaController(
     // Pairing
     // ------------------------------------------------------------------------------------------
 
-    /** A link from a QR code or an App Link / `sa-firma://` intent. */
-    fun onLink(text: String) = scope.launch {
-        val parsed = try {
-            PairingLink.parse(text, platform.allowInsecureRelay)
-        } catch (e: ChannelException) {
-            if (link == null) notice = StartNotice.BadLink
+    override fun onLink(text: String) {
+        scope.launch {
+            val parsed = try {
+                PairingLink.parse(text, platform.allowInsecureRelay)
+            } catch (e: ChannelException) {
+                if (link == null) notice = StartNotice.BadLink
+                render()
+                return@launch
+            }
+            if (stored()?.let { it == parsed } == true && link != null) {
+                // The same QR again: just make sure we're connected.
+                link?.start()
+                return@launch
+            }
+            proposed = parsed
             render()
-            return@launch
         }
-        if (stored()?.let { it == parsed } == true && link != null) {
-            // The same QR again: just make sure we're connected.
-            link?.start()
-            return@launch
+    }
+
+    override fun confirmPairing() {
+        scope.launch {
+            val next = proposed ?: return@launch
+            proposed = null
+            if (link != null) endPairing(sendBye = true)
+            store.put(KEY_PAIRING, next.encode())
+            store.put(KEY_PAIRED_AT, platform.now().toString())
+            store.remove(KEY_EXPIRES)
+            notice = null
+            connect(next)
         }
-        proposed = parsed
-        render()
     }
 
-    fun confirmPairing() = scope.launch {
-        val next = proposed ?: return@launch
-        proposed = null
-        if (link != null) endPairing(sendBye = true)
-        store.put(KEY_PAIRING, next.encode())
-        store.put(KEY_PAIRED_AT, platform.now().toString())
-        store.remove(KEY_EXPIRES)
-        notice = null
-        connect(next)
+    override fun cancelPairing() {
+        scope.launch {
+            proposed = null
+            render()
+        }
     }
 
-    fun cancelPairing() = scope.launch {
-        proposed = null
-        render()
-    }
-
-    fun unpair() = scope.launch {
-        endPairing(sendBye = true)
-        render()
+    override fun unpair() {
+        scope.launch {
+            endPairing(sendBye = true)
+            render()
+        }
     }
 
     private fun stored(): PairingLink? {
@@ -251,7 +258,7 @@ class FirmaController(
         store.remove(KEY_EXPIRES)
     }
 
-    fun openNfcSettings() = platform.openNfcSettings()
+    override fun openNfcSettings() = platform.openNfcSettings()
 
     // ------------------------------------------------------------------------------------------
     // Requests
@@ -293,17 +300,23 @@ class FirmaController(
         data object Cancel : Action
     }
 
-    fun approve() = act(Action.Approve)
+    override fun approve() {
+        act(Action.Approve)
+    }
 
-    fun decline() = act(Action.Decline)
+    override fun decline() {
+        act(Action.Decline)
+    }
 
-    /** Stops a request half-way (after approving). */
-    fun cancel() = act(Action.Cancel)
+    override fun cancel() {
+        act(Action.Cancel)
+    }
 
-    /** Leaves a finished request's result. */
-    fun dismissResult() = scope.launch {
-        if (active?.finished == true) active = null
-        render()
+    override fun dismissResult() {
+        scope.launch {
+            if (active?.finished == true) active = null
+            render()
+        }
     }
 
     private fun act(action: Action) = scope.launch {

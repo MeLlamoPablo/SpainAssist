@@ -45,10 +45,12 @@ Other third-party components in the Android app
   cryptography-kotlin, Compose Multiplatform, Jetpack Compose, AndroidX (including CameraX),
   Guava, Dagger, Firebase components, Google Data Transport and annotation libraries.
 - MIT: SLF4J API, Checker Framework qualifiers.
+- SIL Open Font License 1.1: the Inter and Instrument Serif fonts
+  (shared/src/commonMain/composeResources/font; Inter is cut to static weights and to Latin).
 - Proprietary: Google ML Kit barcode scanning (ML Kit Terms of Service,
   https://developers.google.com/ml-kit/terms) and Google Play services base, basement and tasks
   (Android Software Development Kit License, https://developer.android.com/studio/terms). The
   APK also carries the notices of the open-source code inside them.
 
 The app shows all of this, with the full licence texts, under "Licencias de código abierto"
-("Open-source licences") on its start and home screens.
+("Open-source licences"), in the "⋯" menu of its start, pairing and home screens.

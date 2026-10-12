@@ -38,6 +38,30 @@ sealed interface Screen {
 
 enum class StartNotice { BadLink, PairingEnded, PairingExpired, Replaced, DesktopUnpaired }
 
+/** What the user can do on the screens ([FirmaController]; a no-op in the debug screen preview). */
+interface FirmaActions {
+    /** A link from a QR code or an App Link / `sa-firma://` intent. */
+    fun onLink(text: String)
+
+    fun confirmPairing()
+
+    fun cancelPairing()
+
+    fun unpair()
+
+    fun openNfcSettings()
+
+    fun approve()
+
+    fun decline()
+
+    /** Stops a request half-way (after approving). */
+    fun cancel()
+
+    /** Leaves a finished request's result. */
+    fun dismissResult()
+}
+
 /** A request as the user reviews it. */
 data class Review(
     val requestId: String,

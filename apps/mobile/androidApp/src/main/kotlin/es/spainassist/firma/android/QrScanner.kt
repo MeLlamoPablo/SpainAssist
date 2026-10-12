@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -65,12 +67,17 @@ fun QrScanner(onCode: (String) -> Unit) {
         ) {
             Text(stringResource(Res.string.camera_denied), color = Color.White)
             if (asked) {
-                Button(onClick = {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                }) { Text(stringResource(Res.string.camera_allow)) }
+                // White on the black viewfinder, whatever the theme.
+                Button(
+                    onClick = {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                ) { Text(stringResource(Res.string.camera_allow)) }
             }
         }
         return

@@ -36,6 +36,7 @@ internal val ANDROID_LICENSES = Licenses(
         ),
         LicenseGroup(LicenseText.BouncyCastle, listOf(Component("Bouncy Castle, inside jmulticard-crypto"))),
         LicenseGroup(LicenseText.Bsd3, listOf(Component("libyuv, inside CameraX"))),
+        Licenses.FONTS,
         LicenseGroup(
             LicenseText.Apache2,
             listOf(

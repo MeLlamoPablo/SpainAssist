@@ -3,13 +3,7 @@
     <string name="app_name">Spain Assist</string>
 
     <!-- Start -->
-    <string name="start_title">Firma con tu DNIe desde el móvil</string>
-    <string name="start_lead">Cuando Spain Assist necesite tu firma en el ordenador, la haces aquí: el móvil lee tu DNIe por NFC.</string>
-    <string name="start_step1">En el ordenador, Spain Assist te enseña un código QR.</string>
-    <string name="start_step2">Escanéalo con este móvil para vincularlos.</string>
-    <string name="start_step3">Escribe el CAN y el PIN en el ordenador, revisa cada firma aquí y acerca el DNIe.</string>
-    <string name="start_need">Necesitas tu DNIe con chip (3.0 o 4.0), su número CAN y su PIN.</string>
-    <string name="start_scan">Escanear el código</string>
+    <string name="start_scan">Escanear QR</string>
     <string name="scan_title">Apunta al código del ordenador</string>
     <string name="camera_denied">Para escanear el código, deja que la app use la cámara.</string>
     <string name="camera_allow">Dar permiso a la cámara</string>
@@ -27,7 +21,7 @@
 
     <!-- Pairing -->
     <string name="pair_title">¿Vincular con tu ordenador?</string>
-    <string name="pair_body">Hazlo solo si ahora mismo ves este código en Spain Assist, en tu ordenador. Después, el ordenador podrá pedirte firmas en este móvil.</string>
+    <string name="pair_body">Vincularás este dispositivo con Spain Assist en tu ordenador durante 72 horas.\n\nPodrás firmar aquí tus operaciones con DNIe.</string>
     <string name="pair_replacing">Ya estás vinculado con un ordenador. Si sigues, se desvincula.</string>
     <string name="pair_confirm">Vincular</string>
     <string name="pair_cancel">Cancelar</string>
@@ -37,7 +31,6 @@
     <string name="home_connecting">Conectando con tu ordenador…</string>
     <string name="home_away">Tu ordenador no está conectado. Abre Spain Assist en el ordenador.</string>
     <string name="home_outdated">Esta app y Spain Assist en el ordenador no se entienden. Actualiza las dos.</string>
-    <string name="home_waiting">Cuando el asistente necesite tu firma, la verás aquí. Deja esta app abierta mientras tanto.</string>
     <string name="home_unpair">Desvincular</string>
 
     <!-- Review -->
@@ -103,6 +96,7 @@
     <string name="result_login_failed">No se ha podido entrar. Vuelve a intentarlo desde el ordenador.</string>
 
     <!-- Licences -->
+    <string name="menu_more">Más opciones</string>
     <string name="licenses_open">Licencias de código abierto</string>
     <string name="licenses_title">Licencias de código abierto</string>
     <string name="licenses_lead">Nuestro código es software libre, con licencia MIT. Aquí tienes también las licencias de los componentes de otros que usa la app.</string>

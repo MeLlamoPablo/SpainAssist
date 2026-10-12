@@ -66,6 +66,11 @@ cd apps/mobile
   `0.0.0.0:8794`. `corepack pnpm dev:local` makes the desktop put this machine's LAN address in
   the QR. Install the debug APK and scan. Both must be on the same Wi-Fi, and the debug build
   allows `ws://`.
+- **Screen preview** (debug builds): `PreviewActivity` shows any screen with mock data and no
+  controller, at the design frames' layout (status bar, no navigation bar). Open it with
+  `adb shell am start -n es.spainassist.firma.debug/es.spainassist.firma.android.PreviewActivity --es screen conectado`;
+  the names (`inicio`, `vincular`, `revisar`, `pin`, `firmado`, `entrar-revisar`…) are in the
+  file. A 1080×2400, 420 dpi emulator matches the Framer frames (411×914).
 - **On an emulator** (no NFC, so up to "hold your DNIe"): `adb reverse tcp:8794 tcp:8794`, then
   open the link with `adb shell am start -a android.intent.action.VIEW -d "sa-firma://pair?d=<payload>"`.
 

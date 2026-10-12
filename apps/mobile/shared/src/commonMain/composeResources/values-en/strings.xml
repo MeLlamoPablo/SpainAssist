@@ -3,13 +3,7 @@
     <string name="app_name">Spain Assist</string>
 
     <!-- Start -->
-    <string name="start_title">Sign with your DNIe from your phone</string>
-    <string name="start_lead">When Spain Assist on your computer needs your signature, you sign here: the phone reads your DNIe over NFC.</string>
-    <string name="start_step1">On your computer, Spain Assist shows you a QR code.</string>
-    <string name="start_step2">Scan it with this phone to pair them.</string>
-    <string name="start_step3">Type the CAN and the PIN on your computer, check each signature here and hold your DNIe to the phone.</string>
-    <string name="start_need">You need your DNIe with a chip (3.0 or 4.0), its CAN number and its PIN.</string>
-    <string name="start_scan">Scan the code</string>
+    <string name="start_scan">Scan QR code</string>
     <string name="scan_title">Point at the code on your computer</string>
     <string name="camera_denied">To scan the code, let the app use the camera.</string>
     <string name="camera_allow">Allow the camera</string>
@@ -27,7 +21,7 @@
 
     <!-- Pairing -->
     <string name="pair_title">Pair with your computer?</string>
-    <string name="pair_body">Only do it if you can see this code in Spain Assist on your computer right now. Then the computer can ask you for signatures on this phone.</string>
+    <string name="pair_body">You’ll pair this device with Spain Assist on your computer for 72 hours.\n\nYou’ll sign your DNIe operations here.</string>
     <string name="pair_replacing">You’re already paired with a computer. If you go on, it will be unpaired.</string>
     <string name="pair_confirm">Pair</string>
     <string name="pair_cancel">Cancel</string>
@@ -37,7 +31,6 @@
     <string name="home_connecting">Connecting to your computer…</string>
     <string name="home_away">Your computer isn’t connected. Open Spain Assist on your computer.</string>
     <string name="home_outdated">This app and Spain Assist on your computer don’t understand each other. Update both.</string>
-    <string name="home_waiting">When the assistant needs your signature, you’ll see it here. Keep this app open meanwhile.</string>
     <string name="home_unpair">Unpair</string>
 
     <!-- Review -->
@@ -103,6 +96,7 @@
     <string name="result_login_failed">Could not log in. Try again from your computer.</string>
 
     <!-- Licences -->
+    <string name="menu_more">More options</string>
     <string name="licenses_open">Open-source licences</string>
     <string name="licenses_title">Open-source licences</string>
     <string name="licenses_lead">Our code is free software, under the MIT licence. Here are also the licences of the components by others that the app uses.</string>
