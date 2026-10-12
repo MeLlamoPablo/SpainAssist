@@ -541,6 +541,88 @@ it('keeps one phone approval across the hosts of one organisation, and tells the
   ).rejects.toThrow();
 });
 
+it('keeps the login approval when the browser drops a connection', async () => {
+  const { relay, app: a, procedureId, dnie } = await setup();
+  const companion = a.services.companion!;
+  const approval = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
+  await typeUnlock(a, procedureId);
+  await a.waitFor(() => companion.status().state === 'waiting');
+  const status = await a.invoke('companion.status');
+  // The phone approves the login, then holds what it is asked until the test answers it.
+  const held: DesktopToPhone[] = [];
+  let approved = false;
+  const { client, received } = phone(relay, status.link as string, (m, send) => {
+    if (m.type === 'sign.request' && !approved) {
+      approved = true;
+      send({
+        type: 'sign.certificate',
+        requestId: m.requestId,
+        certificates: [CERT.toString('base64')],
+      });
+    } else if (m.type === 'sign.request' || m.type === 'sign.toBeSigned') held.push(m);
+  });
+  const answer = (m: DesktopToPhone) => {
+    if (m.type === 'sign.request')
+      client.send({
+        type: 'sign.certificate',
+        requestId: m.requestId,
+        certificates: [CERT.toString('base64')],
+      });
+    if (m.type === 'sign.toBeSigned')
+      client.send({
+        type: 'sign.signature',
+        requestId: m.requestId,
+        seq: m.seq,
+        signature: Buffer.alloc(256).toString('base64'),
+      });
+  };
+  const key = (await approval)!.key as RemoteKey;
+  const host = 'idp.seg-social.es';
+
+  // A connection dropped while the card signs: only that handshake gives up.
+  const dropped = new AbortController();
+  const first = key.sign(Buffer.alloc(32), 'SHA-256', host, dropped.signal);
+  await a.waitFor(() => held.length === 1);
+  dropped.abort();
+  await expect(first).rejects.toThrow('dropped');
+  answer(held.shift()!);
+  const next = key.sign(Buffer.alloc(32), 'SHA-256', host, new AbortController().signal);
+  await a.waitFor(() => held.length === 1);
+  answer(held.shift()!);
+  await expect(next).resolves.toHaveLength(256);
+  expect(received.filter((m) => m.type === 'sign.request')).toHaveLength(1);
+  expect(received.some((m) => m.type === 'sign.cancel' || m.type === 'sign.done')).toBe(false);
+
+  // Parallel connections to another site share one phone request, which outlives one of them.
+  const other = 'www1.agenciatributaria.gob.es';
+  const one = new AbortController();
+  const two = new AbortController();
+  const waits = [key.prepare(other, one.signal), key.prepare(other, two.signal)];
+  await a.waitFor(() => held.length === 1);
+  one.abort();
+  await expect(waits[0]).rejects.toThrow('dropped');
+  expect(received.some((m) => m.type === 'sign.cancel')).toBe(false);
+  answer(held.shift()!);
+  await expect(waits[1]).resolves.toBeUndefined();
+  expect(received.filter((m) => m.type === 'sign.request')).toHaveLength(2);
+
+  // The request is cancelled once every connection waiting for it is gone.
+  const third = new AbortController();
+  const last = key.prepare(host, third.signal);
+  await a.waitFor(() => held.length === 1);
+  third.abort();
+  await expect(last).rejects.toThrow('dropped');
+  const request = held.shift()!;
+  await a.waitFor(() =>
+    received.some(
+      (m) =>
+        m.type === 'sign.cancel' &&
+        request.type === 'sign.request' &&
+        m.requestId === request.requestId,
+    ),
+  );
+});
+
 it('enables DNIe browser login after origin policy, desktop consent and phone approval', async () => {
   const { relay, app: a, procedureId, token, dnie } = await setup();
   await a.vault.setCredentialPolicy(dnie.id, 'ask');

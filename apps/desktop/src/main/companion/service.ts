@@ -103,6 +103,16 @@ const LOGIN_REFUSALS: Partial<Record<PhoneSignErrorCode, string>> = {
   expired: 'the phone pairing expired',
 };
 
+/** `promise`, or a `declined` error once `signal` aborts (the browser dropped the connection). */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new SidecarError('declined', 'The browser dropped the connection.'));
+    if (signal.aborted) abort();
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
 /** "Seguridad Social (idp.seg-social.es, ipce.seg-social.es…)", or just the host. */
 function siteLabel(host: string): string {
   const site = certificateSite(host);
@@ -430,7 +440,9 @@ export class CompanionService {
     let active: ExternalSigningKey | undefined;
     let currentOrigin = origin;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let preparing: Promise<void> | undefined;
+    // The phone approval that the browser's connections wait for; it is cancelled only when they
+    // have all been dropped.
+    let preparing: { done: Promise<void>; waiting: number; abort: AbortController } | undefined;
     let chain: Uint8Array[] | undefined;
     const siteOf = (host: string) => certificateSite(host).id;
     const sameSite = (host: string) => siteOf(new URL(currentOrigin).hostname) === siteOf(host);
@@ -515,10 +527,29 @@ export class CompanionService {
           if (!active) {
             const site =
               new URL(currentOrigin).hostname === host ? currentOrigin : `https://${host}`;
-            preparing ??= acquire(site, signal).finally(() => {
-              preparing = undefined;
-            });
-            await preparing;
+            if (!preparing) {
+              const abort = new AbortController();
+              const job = {
+                abort,
+                waiting: 0,
+                done: acquire(site, abort.signal).finally(() => {
+                  if (preparing === job) preparing = undefined;
+                }),
+              };
+              preparing = job;
+            }
+            const job = preparing;
+            job.waiting++;
+            const leave = () => {
+              if (--job.waiting === 0 && preparing === job) job.abort.abort();
+            };
+            signal.addEventListener('abort', leave, { once: true });
+            try {
+              await untilAborted(job.done, signal);
+            } finally {
+              signal.removeEventListener('abort', leave);
+              if (!signal.aborted) job.waiting--;
+            }
           }
           idle();
         },
@@ -526,22 +557,27 @@ export class CompanionService {
           if (signal.aborted || !active || !sameSite(host))
             throw new SidecarError('declined', 'DNIe login approval ended.');
           clearTimeout(timer);
-          const cancel = () => end(false);
-          signal.addEventListener('abort', cancel, { once: true });
-          try {
-            return Buffer.from(await active.sign(digest, TLS_ALGORITHMS[hash]));
-          } catch (err) {
-            const code = err instanceof PhoneSignError ? err.code : 'internal';
-            logger.warn('dnie login signature failed', { procedureId, host, code });
-            this.loginNews(procedureId).notes.push(
-              `The phone could not sign the DNIe login for ${host} (${code}). Ask the user to keep the DNIe on the phone, then start the login again from the site.`,
-            );
-            end(false);
-            throw new SidecarError('failed', 'The phone could not complete the login.');
-          } finally {
-            signal.removeEventListener('abort', cancel);
-            if (active) idle();
-          }
+          const key = active;
+          // A dropped connection stops waiting only for its own signature: the phone finishes it
+          // and the approval stays for the browser's next handshakes.
+          const signature = key.sign(digest, TLS_ALGORITHMS[hash]).then(
+            (bytes) => Buffer.from(bytes),
+            (err) => {
+              const code = err instanceof PhoneSignError ? err.code : 'internal';
+              logger.warn('dnie login signature failed', { procedureId, host, code });
+              this.loginNews(procedureId).notes.push(
+                `The phone could not sign the DNIe login for ${host} (${code}). Ask the user to keep the DNIe on the phone, then start the login again from the site.`,
+              );
+              if (active === key) end(false);
+              throw new SidecarError('failed', 'The phone could not complete the login.');
+            },
+          );
+          void signature
+            .finally(() => {
+              if (active) idle();
+            })
+            .catch(() => {});
+          return untilAborted(signature, signal);
         },
       },
     };
