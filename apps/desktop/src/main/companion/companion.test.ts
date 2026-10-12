@@ -478,6 +478,69 @@ it('ends login after inactivity and asks again for the next handshake', async ()
   ).rejects.toThrow();
 });
 
+it('keeps one phone approval across the hosts of one organisation, and tells the agent', async () => {
+  const { relay, app: a, procedureId, token, dnie } = await setup();
+  const companion = a.services.companion!;
+  const approval = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
+  const prompt = await typeUnlock(a, procedureId);
+  expect(prompt).toMatchObject({ purpose: 'login' });
+  expect(prompt.kind === 'dnie_signature' && prompt.message).toContain(
+    'Seguridad Social (idp.seg-social.es, ipce.seg-social.es, w2.seg-social.es)',
+  );
+  await a.waitFor(() => companion.status().state === 'waiting');
+  const status = await a.invoke('companion.status');
+  let held: string | undefined;
+  const { client, received } = phone(relay, status.link as string, (m, send) => {
+    if (m.type === 'sign.request' && m.origin.includes('agenciatributaria')) held = m.requestId;
+    else if (m.type === 'sign.request')
+      send({
+        type: 'sign.certificate',
+        requestId: m.requestId,
+        certificates: [CERT.toString('base64')],
+      });
+    if (m.type === 'sign.toBeSigned')
+      send({
+        type: 'sign.signature',
+        requestId: m.requestId,
+        seq: m.seq,
+        signature: Buffer.alloc(256).toString('base64'),
+      });
+  });
+  const key = (await approval)!.key as RemoteKey;
+  const signal = new AbortController().signal;
+  // Importass: idp → ipce → idp, all with the first approval.
+  for (const host of ['idp.seg-social.es', 'ipce.seg-social.es', 'idp.seg-social.es']) {
+    await key.prepare(host, signal);
+    await key.sign(Buffer.alloc(32), 'SHA-256', host, signal);
+  }
+  expect(received.filter((m) => m.type === 'sign.request')).toHaveLength(1);
+  expect(received.filter((m) => m.type === 'sign.toBeSigned')).toHaveLength(3);
+  const observation = await a.rpc('browser.snapshot', {}, token);
+  expect(observation.body.result.notes).toContain(
+    'The user approved the DNIe login for Seguridad Social (idp.seg-social.es, ipce.seg-social.es, w2.seg-social.es) on their phone.',
+  );
+  expect(companion.takeLoginNotes(procedureId)).toEqual([]);
+
+  // Another organisation asks again, and the agent knows the login waits for the user.
+  const other = key.prepare('www1.agenciatributaria.gob.es', signal);
+  await a.waitFor(() => held !== undefined);
+  expect(companion.takeLoginNotes(procedureId)).toEqual([
+    expect.stringMatching(
+      /^Waiting for the user to approve the DNIe login for Agencia Tributaria \(.*\) on their phone\./,
+    ),
+  ]);
+  client.send({ type: 'sign.error', requestId: held!, code: 'rejected' });
+  await expect(other).rejects.toThrow();
+  expect(companion.takeLoginNotes(procedureId)).toEqual([
+    expect.stringMatching(
+      /Agencia Tributaria .* was not approved: the user declined it on the phone\.$/,
+    ),
+  ]);
+  await expect(
+    key.sign(Buffer.alloc(32), 'SHA-256', 'idp.seg-social.es', signal),
+  ).rejects.toThrow();
+});
+
 it('enables DNIe browser login after origin policy, desktop consent and phone approval', async () => {
   const { relay, app: a, procedureId, token, dnie } = await setup();
   await a.vault.setCredentialPolicy(dnie.id, 'ask');

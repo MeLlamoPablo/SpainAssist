@@ -343,11 +343,16 @@ phone.
 
 - **Login.** The companion's `login` request shows the site, without a document. The phone reads
   AUTENTICACIÓN, while documents continue to use FIRMA. The sidecar's `RemoteKey.prepare`
-  reuses the approval for that host; `sign` sends an already-hashed handshake digest with
+  reuses the approval for every host of the same site: `certificateSite` in `@sa/browser` is a
+  fixed list of the hosts of one organisation (Seguridad Social's idp, ipce and w2; the AEAT's
+  www1, www8 and www10), so a login that hops between them asks the phone once. Any other host
+  is a site of its own and asks again. `sign` sends an already-hashed handshake digest with
   `prehashed: true`. The phone validates its length and wraps it in PKCS#1 DigestInfo without
   hashing it again. PACE/CWA hashing remains unchanged. `DNIE_LOGIN_IDLE_MS` (30 seconds)
   ends the approval after inactivity; another connection asks again. A different card is
   refused. Progress uses the existing `dnie_signature` prompt, with desktop cancellation.
+  The agent's next browser observation gets notes on DNIe logins: approved, not approved (and
+  why), a failed handshake signature, or one still waiting for the user on the phone.
   Phone approval can be declined; once approved, cancellation is on the desktop. Protocol 2
   added the login purpose, protocol 3 the `can` field, protocol 4 the `pin` field, and protocol 5
   made `can` required and added `sign.need` and `sign.unlock`: old phones can't decode them, so

@@ -20,7 +20,13 @@
 import { PlaywrightBrowserService } from './service';
 import type { BrowserService, BrowserServiceOptions } from './types';
 
-export { CERTIFICATE_ORIGINS, certificateHosts, normalizeOrigin } from './certificates';
+export {
+  CERTIFICATE_ORIGINS,
+  type CertificateSite,
+  certificateHosts,
+  certificateSite,
+  normalizeOrigin,
+} from './certificates';
 export { BrowserError, type BrowserErrorCode } from './errors';
 export { type ChromiumRegistry, ensureChromium } from './install';
 export { type RenderOptions, type RenderResult, renderSnapshot } from './snapshot';

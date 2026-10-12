@@ -1,4 +1,5 @@
 import { networkInterfaces } from 'node:os';
+import { certificateSite } from '@sa/browser';
 import {
   DesktopPairing,
   type PairingStatus,
@@ -91,6 +92,23 @@ const NOTICES: Partial<Record<PhoneSignErrorCode, StringKey>> = {
   expired: 'dnieError_expired',
 };
 
+/** Why a DNIe login wasn't approved, for the agent. */
+const LOGIN_REFUSALS: Partial<Record<PhoneSignErrorCode, string>> = {
+  rejected: 'the user declined it on the phone',
+  cancelled: 'the user cancelled it',
+  timeout: 'nobody approved it in time',
+  pin_blocked: 'the DNIe PIN is blocked',
+  wrong_card: 'a different DNIe was held to the phone',
+  unpaired: 'the phone was unpaired',
+  expired: 'the phone pairing expired',
+};
+
+/** "Seguridad Social (idp.seg-social.es, ipce.seg-social.es…)", or just the host. */
+function siteLabel(host: string): string {
+  const site = certificateSite(host);
+  return site.name === host ? host : `${site.name} (${site.hosts.join(', ')})`;
+}
+
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /** A loopback relay seen from the phone: the same port on this machine's LAN address. */
@@ -133,6 +151,8 @@ export class CompanionService {
   /** CANs the card refused: not offered again while the app runs (also Mis datos' one). */
   private readonly refusedCans = new Set<string>();
   private readonly unlocks = new Map<string, UnlockWaiter>();
+  /** DNIe login news for each procedure's agent (`takeLoginNotes`). */
+  private readonly logins = new Map<string, { waiting?: string; notes: string[] }>();
 
   constructor(private readonly deps: CompanionDeps) {
     this.relayUrl = deps.relayUrl && deps.lanRelay ? lanRelayUrl(deps.relayUrl) : deps.relayUrl;
@@ -201,7 +221,15 @@ export class CompanionService {
     procedureId: string,
     summary: AfirmaSignatureSummary,
     credential: CredentialSummary,
-    options: { login?: { signal?: AbortSignal; onCancelled?: () => void } } = {},
+    options: {
+      login?: {
+        /** What the user approves: the login's site, with all its hosts. */
+        site: string;
+        signal?: AbortSignal;
+        onCancelled?: () => void;
+        onRefused?: (code: PhoneSignErrorCode) => void;
+      };
+    } = {},
   ): Promise<ExternalSigningKey | null> {
     const { login } = options;
     if (!login) this.endLogin?.();
@@ -220,7 +248,7 @@ export class CompanionService {
         : 'document';
     const details: { label: string; value: string }[] = [
       { label: t(lang, 'detailWhat'), value: summary.description.slice(0, 500) },
-      { label: t(lang, 'detailFor'), value: host },
+      { label: t(lang, 'detailFor'), value: login?.site ?? host },
     ];
     if (summary.format)
       details.push({
@@ -247,7 +275,7 @@ export class CompanionService {
           : purpose === 'certificate'
             ? 'dnieCertificateMessage'
             : 'dnieSignatureMessage',
-        { host },
+        { host: login?.site ?? host },
       ),
       details,
       stage: 'phone',
@@ -283,6 +311,7 @@ export class CompanionService {
       const typed = await this.waitUnlock(itemId, first, abort.signal);
       if (!typed) {
         settle('cancelled');
+        login?.onRefused?.('cancelled');
         return null;
       }
       can = typed.can ?? can;
@@ -338,6 +367,7 @@ export class CompanionService {
       const code: PhoneSignErrorCode = err instanceof PhoneSignError ? err.code : 'internal';
       if (code === 'pin_blocked') await this.forgetPin(credential);
       deps.logger.info('dnie signature not approved', { procedureId, code });
+      login?.onRefused?.(code);
       const declined = code === 'cancelled' || code === 'rejected';
       settle(declined ? 'cancelled' : 'failed');
       if (!declined) {
@@ -386,6 +416,9 @@ export class CompanionService {
   /**
    * Authentication key for the browser sidecar; the private key stays on the phone. Called once
    * `browser.useCertificate` has applied the credential's policy (its consent, with Touch ID).
+   * One phone approval covers the hosts of one site (`certificateSite`): a login that hops
+   * between them signs every handshake with the card already on the phone. Another site asks
+   * again.
    */
   async login(
     procedureId: string,
@@ -393,11 +426,14 @@ export class CompanionService {
     origin: string,
   ): Promise<SidecarIdentity | null> {
     this.endLogin?.();
+    const { logger } = this.deps;
     let active: ExternalSigningKey | undefined;
     let currentOrigin = origin;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let preparing: Promise<void> | undefined;
     let chain: Uint8Array[] | undefined;
+    const siteOf = (host: string) => certificateSite(host).id;
+    const sameSite = (host: string) => siteOf(new URL(currentOrigin).hostname) === siteOf(host);
     const end = (ok = true) => {
       clearTimeout(timer);
       timer = undefined;
@@ -411,25 +447,53 @@ export class CompanionService {
     };
     const acquire = async (site: string, signal?: AbortSignal) => {
       this.endLogin?.();
+      const label = siteLabel(hostOf(site));
+      this.loginNews(procedureId).waiting = label;
+      let refused: PhoneSignErrorCode | undefined;
       const key = await this.approve(
         procedureId,
         {
           method: 'selectCertificate',
           origin: site,
-          description: t(this.deps.lang(), 'dnieLoginMessage', { host: hostOf(site) }),
+          description: t(this.deps.lang(), 'dnieLoginMessage', { host: label }),
           format: '',
           algorithm: 'SHA256withRSA',
           documents: [],
           verifiable: false,
         },
         credential,
-        { login: { signal, onCancelled: () => end(false) } },
-      );
-      if (!key) throw new SidecarError('declined', 'DNIe login was not approved.');
+        {
+          login: {
+            site: label,
+            signal,
+            onCancelled: () => end(false),
+            onRefused: (code) => {
+              refused = code;
+            },
+          },
+        },
+      ).finally(() => {
+        const news = this.logins.get(procedureId);
+        if (news?.waiting === label) news.waiting = undefined;
+      });
+      if (!key) {
+        const why =
+          (refused && LOGIN_REFUSALS[refused]) ?? `it failed (${refused ?? 'unavailable'})`;
+        this.loginNews(procedureId).notes.push(
+          `The DNIe login for ${label} was not approved: ${why}.`,
+        );
+        throw new SidecarError('declined', 'DNIe login was not approved.');
+      }
       if (chain && !Buffer.from(chain[0]!).equals(Buffer.from(key.certificates[0]!))) {
         key.release(false);
+        this.loginNews(procedureId).notes.push(
+          `The DNIe login for ${label} failed: the user held a different DNIe than for the previous login.`,
+        );
         throw new SidecarError('wrong_card', 'Use the same DNIe for this login.');
       }
+      this.loginNews(procedureId).notes.push(
+        `The user approved the DNIe login for ${label} on their phone.`,
+      );
       chain = key.certificates;
       active = key;
       currentOrigin = site;
@@ -447,9 +511,10 @@ export class CompanionService {
       key: {
         prepare: async (host, signal) => {
           if (signal.aborted) throw new SidecarError('declined');
-          const site = new URL(currentOrigin).hostname === host ? currentOrigin : `https://${host}`;
-          if (active && new URL(currentOrigin).hostname !== host) end();
+          if (active && !sameSite(host)) end();
           if (!active) {
+            const site =
+              new URL(currentOrigin).hostname === host ? currentOrigin : `https://${host}`;
             preparing ??= acquire(site, signal).finally(() => {
               preparing = undefined;
             });
@@ -458,14 +523,19 @@ export class CompanionService {
           idle();
         },
         sign: async (digest, hash, host, signal) => {
-          if (signal.aborted || !active || new URL(currentOrigin).hostname !== host)
+          if (signal.aborted || !active || !sameSite(host))
             throw new SidecarError('declined', 'DNIe login approval ended.');
           clearTimeout(timer);
           const cancel = () => end(false);
           signal.addEventListener('abort', cancel, { once: true });
           try {
             return Buffer.from(await active.sign(digest, TLS_ALGORITHMS[hash]));
-          } catch {
+          } catch (err) {
+            const code = err instanceof PhoneSignError ? err.code : 'internal';
+            logger.warn('dnie login signature failed', { procedureId, host, code });
+            this.loginNews(procedureId).notes.push(
+              `The phone could not sign the DNIe login for ${host} (${code}). Ask the user to keep the DNIe on the phone, then start the login again from the site.`,
+            );
             end(false);
             throw new SidecarError('failed', 'The phone could not complete the login.');
           } finally {
@@ -475,6 +545,31 @@ export class CompanionService {
         },
       },
     };
+  }
+
+  /**
+   * What happened to the procedure's DNIe logins since the last call, and whether one waits for
+   * the user on the phone: notes for the agent's next browser observation.
+   */
+  takeLoginNotes(procedureId: string): string[] {
+    const news = this.logins.get(procedureId);
+    if (!news) return [];
+    const notes = news.notes.splice(0);
+    if (news.waiting)
+      notes.push(
+        `Waiting for the user to approve the DNIe login for ${news.waiting} on their phone. The page may not change until then: use browser_wait instead of clicking again.`,
+      );
+    else this.logins.delete(procedureId);
+    return notes;
+  }
+
+  private loginNews(procedureId: string): { waiting?: string; notes: string[] } {
+    let news = this.logins.get(procedureId);
+    if (!news) {
+      news = { notes: [] };
+      this.logins.set(procedureId, news);
+    }
+    return news;
   }
 
   /**

@@ -183,6 +183,16 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     }
   }
 
+  /** A browser action's observation, with news of the procedure's DNIe logins for the agent. */
+  async function observe(
+    procedureId: string,
+    fn: (b: BrowserPort) => Promise<BrowserObservation>,
+  ): Promise<BrowserObservation> {
+    const observation = await browserCall(fn);
+    const notes = deps.browser.loginNotes(procedureId);
+    return notes.length ? { ...observation, notes: [...observation.notes, ...notes] } : observation;
+  }
+
   function vaultChanged(): void {
     deps.events.emit({ type: 'vault.changed' });
   }
@@ -313,7 +323,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       throw new BridgeError('internal', 'Unexpected credential type.');
     const value = params.field === 'password' ? secret.password : secret.username;
     deps.logger.addSecret(value);
-    const observation = await browserCall((b) =>
+    const observation = await observe(pid, (b) =>
       b.type(pid, params.ref, value, {
         submit: params.submit,
         secret: true,
@@ -549,13 +559,16 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       const protocol = new URL(params.url).protocol;
       if (protocol !== 'https:' && protocol !== 'http:')
         throw new BridgeError('policy_denied', 'Only http(s) pages can be opened.');
-      return browserCall((b) => b.open(ctx.procedureId, params.url, { newTab: params.newTab }));
+      return observe(ctx.procedureId, (b) =>
+        b.open(ctx.procedureId, params.url, { newTab: params.newTab }),
+      );
     },
-    'browser.snapshot': async (_params, ctx) => browserCall((b) => b.snapshot(ctx.procedureId)),
+    'browser.snapshot': async (_params, ctx) =>
+      observe(ctx.procedureId, (b) => b.snapshot(ctx.procedureId)),
     'browser.click': async (params, ctx) =>
-      browserCall((b) => b.click(ctx.procedureId, params.ref)),
+      observe(ctx.procedureId, (b) => b.click(ctx.procedureId, params.ref)),
     'browser.type': async (params, ctx) =>
-      browserCall((b) =>
+      observe(ctx.procedureId, (b) =>
         b.type(ctx.procedureId, params.ref, params.text, { submit: params.submit }),
       ),
     'browser.fillFromVault': async (params, ctx) => {
@@ -565,7 +578,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         const item = deps.vault().getPersonal(value.key);
         if (!item)
           throw new BridgeError('not_found', `No personal data saved under "${value.key}".`);
-        return browserCall((b) =>
+        return observe(ctx.procedureId, (b) =>
           b.type(ctx.procedureId, params.ref, item.value, { submit: params.submit }),
         );
       }
@@ -605,7 +618,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       if (typeof value !== 'string' || value.length === 0)
         throw new BridgeError('user_rejected', 'The user did not provide the value.');
       deps.logger.addSecret(value);
-      return browserCall((b) =>
+      return observe(pid, (b) =>
         b.type(pid, params.ref, value, {
           submit: params.submit,
           secret: true,
@@ -614,20 +627,21 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       );
     },
     'browser.select': async (params, ctx) =>
-      browserCall((b) => b.select(ctx.procedureId, params.ref, params.values)),
+      observe(ctx.procedureId, (b) => b.select(ctx.procedureId, params.ref, params.values)),
     'browser.check': async (params, ctx) =>
-      browserCall((b) => b.check(ctx.procedureId, params.ref, params.checked)),
+      observe(ctx.procedureId, (b) => b.check(ctx.procedureId, params.ref, params.checked)),
     'browser.press': async (params, ctx) =>
-      browserCall((b) => b.press(ctx.procedureId, params.key)),
+      observe(ctx.procedureId, (b) => b.press(ctx.procedureId, params.key)),
     'browser.wait': async (params, ctx) =>
-      browserCall((b) =>
+      observe(ctx.procedureId, (b) =>
         b.wait(ctx.procedureId, {
           ...(params.text !== undefined ? { text: params.text } : {}),
           ...(params.textGone !== undefined ? { textGone: params.textGone } : {}),
           ...(params.seconds !== undefined ? { seconds: params.seconds } : {}),
         }),
       ),
-    'browser.back': async (_params, ctx) => browserCall((b) => b.back(ctx.procedureId)),
+    'browser.back': async (_params, ctx) =>
+      observe(ctx.procedureId, (b) => b.back(ctx.procedureId)),
     'browser.tabs': async (params, ctx) => ({
       tabs: await browserCall((b) => b.tabs(ctx.procedureId, params.action, params.index)),
     }),
@@ -649,7 +663,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
           buffer: Buffer.from(await vault.readDocument(id)),
         });
       }
-      return browserCall((b) => b.upload(ctx.procedureId, params.ref, files));
+      return observe(ctx.procedureId, (b) => b.upload(ctx.procedureId, params.ref, files));
     },
     'browser.useCertificate': async (params, ctx) => {
       if (!deps.browser.certificateLoginsAvailable())

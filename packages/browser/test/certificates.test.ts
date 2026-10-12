@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CERTIFICATE_ORIGINS, certificateHosts, normalizeOrigin } from '../src/certificates';
+import {
+  CERTIFICATE_ORIGINS,
+  certificateHosts,
+  certificateSite,
+  normalizeOrigin,
+} from '../src/certificates';
 import { BrowserError } from '../src/errors';
 
 describe('certificate origins', () => {
@@ -29,5 +34,24 @@ describe('certificate origins', () => {
         'https://localhost:9443',
       ]),
     ).toEqual(['pasarela-ident.clave.gob.es:443', 'localhost:9443']);
+  });
+
+  it('groups the hosts of one organisation for DNIe login approvals', () => {
+    const idp = certificateSite('idp.seg-social.es');
+    expect(idp.name).toBe('Seguridad Social');
+    expect(certificateSite('IPCE.seg-social.es').id).toBe(idp.id);
+    expect(certificateSite('w2.seg-social.es').id).toBe(idp.id);
+    expect(certificateSite('www8.agenciatributaria.gob.es').id).toBe(
+      certificateSite('www1.agenciatributaria.gob.es').id,
+    );
+    expect(certificateSite('pasarela-ident.clave.gob.es').id).not.toBe(idp.id);
+    // Not on the list: its own site, even under a listed domain.
+    expect(certificateSite('other.seg-social.es')).toEqual({
+      id: 'other.seg-social.es',
+      name: 'other.seg-social.es',
+      hosts: ['other.seg-social.es'],
+    });
+    for (const o of CERTIFICATE_ORIGINS)
+      expect(certificateSite(new URL(o).hostname).hosts).toContain(new URL(o).hostname);
   });
 });

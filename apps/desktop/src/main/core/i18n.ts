@@ -131,8 +131,8 @@ const STRINGS = {
   },
   dnieLoginTitle: { es: 'Entrar con el DNIe', en: 'Log in with your DNIe' },
   dnieLoginMessage: {
-    es: 'Aprueba entrar en {host} en tu móvil y mantén el DNIe cerca. Puedes cancelar aquí.',
-    en: 'Approve login to {host} on your phone and keep your DNIe nearby. You can cancel here.',
+    es: 'Aprueba entrar en {host} en tu móvil. Deja el DNIe en el móvil hasta que termine: puede firmar varias veces seguidas. Puedes cancelar aquí.',
+    en: 'Approve login to {host} on your phone. Keep your DNIe on the phone until it finishes: it may sign several times in a row. You can cancel here.',
   },
   dnieSignatureTitle: { es: 'Firma con tu DNIe', en: 'Sign with your DNIe' },
   dnieSignatureMessage: {

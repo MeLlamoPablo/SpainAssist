@@ -24,7 +24,46 @@ export const CERTIFICATE_ORIGINS: readonly string[] = Object.freeze([
   'https://www10.agenciatributaria.gob.es', // AEAT
   'https://w2.seg-social.es', // Seguridad Social certificate services
   'https://ipce.seg-social.es', // Seguridad Social certificate login
+  'https://idp.seg-social.es', // Seguridad Social login (Importass, seen live on 2026-10-12)
 ]);
+
+/**
+ * Hosts of one organisation that a single DNIe login approval covers: a login can hop between
+ * them (Importass goes idp → ipce → idp), and each hop would otherwise ask again on the phone.
+ * A fixed list, never computed from the domain; any other host is a site of its own.
+ */
+const CERTIFICATE_SITES: readonly { name: string; hosts: readonly string[] }[] = Object.freeze([
+  { name: 'Cl@ve', hosts: ['pasarela-ident.clave.gob.es'] },
+  {
+    name: 'Agencia Tributaria',
+    hosts: [
+      'www1.agenciatributaria.gob.es',
+      'www8.agenciatributaria.gob.es',
+      'www10.agenciatributaria.gob.es',
+    ],
+  },
+  {
+    name: 'Seguridad Social',
+    hosts: ['idp.seg-social.es', 'ipce.seg-social.es', 'w2.seg-social.es'],
+  },
+]);
+
+export interface CertificateSite {
+  /** Same id = same approval. */
+  id: string;
+  /** The organisation, or the host itself. */
+  name: string;
+  hosts: readonly string[];
+}
+
+/** The site a host belongs to for DNIe login approvals. */
+export function certificateSite(host: string): CertificateSite {
+  const hostname = host.toLowerCase();
+  const site = CERTIFICATE_SITES.find((s) => s.hosts.includes(hostname));
+  return site
+    ? { id: site.name, name: site.name, hosts: site.hosts }
+    : { id: hostname, name: hostname, hosts: [hostname] };
+}
 
 /** Normalizes an origin: https only, path dropped, default port removed. */
 export function normalizeOrigin(origin: string): string {

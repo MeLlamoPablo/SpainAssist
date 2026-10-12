@@ -100,6 +100,11 @@ export class BrowserHolder {
     return { id: credential.id, chain: identity.chainDer, key: identity.privateKey };
   }
 
+  /** News of the procedure's DNIe logins for the agent's next observation. */
+  loginNotes(procedureId: string): string[] {
+    return this.deps.companion?.takeLoginNotes(procedureId) ?? [];
+  }
+
   get(): BrowserPort {
     this.service ??= this.create();
     return this.service;
