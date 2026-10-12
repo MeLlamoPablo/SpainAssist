@@ -415,7 +415,7 @@ export class CompanionService {
 
   /**
    * Authentication key for the browser sidecar; the private key stays on the phone. Called once
-   * `browser.useCertificate` has applied the credential's policy (its consent, with Touch ID).
+   * `browser.useCertificate` has applied the credential's policy (its consent, without Touch ID).
    * One phone approval covers the hosts of one site (`certificateSite`): a login that hops
    * between them signs every handshake with the card already on the phone. Another site asks
    * again.

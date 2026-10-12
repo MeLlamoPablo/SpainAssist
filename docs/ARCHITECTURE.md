@@ -262,7 +262,7 @@ available), the element's frame URL is on an allowed domain for that credential 
 secret from the vault → `browser.type(..., {secret:true})` → later snapshots mask the value.
 
 Client certificates: `browser_use_certificate` → origin policy and consent (Touch ID when
-available) → main opens the vault `.p12` with `@sa/signer.openP12`, or asks `CompanionService`
+available, except for the DNIe: the phone's approval and the card are its second factor) → main opens the vault `.p12` with `@sa/signer.openP12`, or asks `CompanionService`
 for the DNIe authentication key → `browser.useClientCertificate({origins, identity})`.
 `packages/sidecar` supplies each browser context its own authenticated loopback proxy port.
 Only enabled origins are intercepted; the sidecar verifies their HTTPS certificate with the

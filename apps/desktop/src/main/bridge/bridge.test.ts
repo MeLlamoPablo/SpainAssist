@@ -1028,4 +1028,32 @@ describe('bridge: Touch ID', () => {
     expect(prompts).toBe(1);
     expect(app.browser.certificates).toEqual([]);
   });
+
+  it('does not ask for it to log in with the DNIe: the phone and the card are the second factor', async () => {
+    await app.close();
+    let prompts = 0;
+    app = await createTestApp({
+      biometric: {
+        available: () => true,
+        prompt: async () => {
+          prompts++;
+          return false;
+        },
+      },
+    });
+    ({ procedureId, token } = await app.procedureWithToken());
+    const dnie = await app.vault.addDnie();
+    const call = app.rpc(
+      'browser.useCertificate',
+      { credentialId: dnie.id, origins: ['https://sede.seg-social.gob.es'] },
+      token,
+    );
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const prompt = app.pendingPrompt(procedureId)!;
+    expect(prompt.prompt).toMatchObject({ biometric: false });
+    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
+    // No paired phone here: the login stops after the consent, never at Touch ID.
+    expect((await call).body.error?.code).not.toBe('user_rejected');
+    expect(prompts).toBe(0);
+  });
 });

@@ -228,12 +228,16 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     return procedure;
   }
 
-  /** In-app confirmation (+ Touch ID when available) for credentials set to "ask". */
+  /**
+   * In-app confirmation for credentials set to "ask", plus Touch ID when available and a
+   * `touchIdReason` is given. The DNIe passes none: its phone approval and card are the second
+   * factor.
+   */
   async function approveCredentialUse(
     ctx: BridgeContext,
     cacheKey: string,
     prompt: Omit<ConfirmPrompt, 'kind' | 'confirmKind' | 'biometric'>,
-    touchIdReason: string,
+    touchIdReason?: string,
   ): Promise<void> {
     const until = approvals.get(cacheKey);
     if (until && until > Date.now()) return;
@@ -245,13 +249,13 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         ...prompt,
         confirmLabel: t(lang(), 'useLabel'),
         rejectLabel: t(lang(), 'dontUseLabel'),
-        biometric: deps.biometric.available(),
+        biometric: touchIdReason !== undefined && deps.biometric.available(),
       },
       { signal: ctx.signal },
     );
     if (response.kind !== 'confirm' || !response.approved)
       throw new BridgeError('user_rejected', 'The user did not allow using this credential.');
-    if (!(await deps.biometric.prompt(touchIdReason)))
+    if (touchIdReason !== undefined && !(await deps.biometric.prompt(touchIdReason)))
       throw new BridgeError('user_rejected', 'The user did not confirm with Touch ID.');
     approvals.set(cacheKey, Date.now() + (deps.approvalTtlMs ?? 120_000));
   }
@@ -715,7 +719,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
               { label: t(lang(), 'detailWebsites'), value: websites.slice(0, 500) },
             ],
           },
-          t(lang(), 'touchIdCertificate'),
+          credential.kind === 'dnie' ? undefined : t(lang(), 'touchIdCertificate'),
         );
       }
       await browserCall(async (b) => {
