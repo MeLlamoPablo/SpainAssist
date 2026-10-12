@@ -30,6 +30,12 @@ import type {
 export const SA_INVOKE_CHANNEL = 'sa:invoke';
 export const SA_EVENT_CHANNEL = 'sa:event';
 
+/** What the user typed in a `dnie_signature` prompt's `unlock` stage. */
+export interface DnieUnlockValues {
+  can?: string;
+  pin?: string;
+}
+
 export interface AppInfo {
   name: string;
   version: string;
@@ -181,11 +187,6 @@ export interface SaMethods {
   'vault.addClaveMovil': [[], CredentialSummary];
   /** "I sign with my DNIe and my phone" (one per vault; adding it again returns it). */
   'vault.addDnie': [[], CredentialSummary];
-  /**
-   * Saves the DNIe PIN (`DniePin`), or removes it with null. The only time the PIN crosses IPC:
-   * main never sends it back (the summary's `pin` says only whether one is saved).
-   */
-  'vault.setDniePin': [[id: string, pin: string | null], CredentialSummary];
   /** Validates the passphrase and extracts certificate metadata. */
   'vault.addCertificate': [[input: AddCertificateInput], CredentialSummary];
   'vault.setCredentialPolicy': [[id: string, policy: CredentialPolicy], CredentialSummary];
@@ -208,6 +209,11 @@ export interface SaMethods {
   'companion.status': [[], CompanionStatus];
   'companion.pair': [[], CompanionStatus];
   'companion.unpair': [[], CompanionStatus];
+  /**
+   * The CAN and/or PIN a pending `dnie_signature` prompt asks for in its `unlock` stage
+   * (`DniAccessNumber`, `DniePin`). The only time they cross IPC: main never sends them back.
+   */
+  'companion.unlock': [[promptItemId: string, values: DnieUnlockValues], void];
 
   /** Data URL of a stored media item (e.g. screenshot) or null. */
   'media.get': [[id: string], string | null];

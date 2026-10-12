@@ -28,7 +28,7 @@ export interface Peer {
 }
 
 export interface RoomLimits {
-  /** Lifetime of a room from its creation (default 12 h + 10 min of grace). */
+  /** Lifetime of a room from its creation (default 72 h + 10 min of grace). */
   roomTtlMs: number;
   /** A room nobody is connected to disappears after this (default 30 min). */
   idleMs: number;
@@ -43,7 +43,7 @@ export interface RoomLimits {
 }
 
 export const DEFAULT_LIMITS: RoomLimits = {
-  roomTtlMs: (12 * 60 + 10) * 60_000,
+  roomTtlMs: (72 * 60 + 10) * 60_000,
   idleMs: 30 * 60_000,
   roomBytes: 512 * 1024 * 1024,
   roomsPerAddress: 20,

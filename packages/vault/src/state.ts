@@ -1,11 +1,5 @@
 /** The decrypted contents of vault.bin and its (de)serialization. */
-import {
-  CertificateInfo,
-  CredentialPolicy,
-  DniePin,
-  DocumentMeta,
-  PersonalDataSource,
-} from '@sa/shared';
+import { CertificateInfo, CredentialPolicy, DocumentMeta, PersonalDataSource } from '@sa/shared';
 import { z } from 'zod';
 import { VaultError } from './errors';
 
@@ -51,10 +45,6 @@ export interface StoredCertificate extends CredentialBase {
 export interface StoredDnie extends CredentialBase {
   kind: 'dnie';
   certificate?: CertificateInfo;
-  /** Its PIN, sent only to the paired phone (DECISIONS D18). */
-  pin?: string;
-  /** The card refused `pin` (or is blocked): it isn't sent again until a new one is saved. */
-  pinWrong?: true;
 }
 
 export type StoredCredential = StoredClave | StoredClaveMovil | StoredCertificate | StoredDnie;
@@ -118,8 +108,6 @@ const StateFile = z.object({
         ...credentialBase,
         kind: z.literal('dnie'),
         certificate: CertificateInfo.optional(),
-        pin: DniePin.optional(),
-        pinWrong: z.literal(true).optional(),
       }),
     ]),
   ),

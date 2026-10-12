@@ -3,6 +3,7 @@ package es.spainassist.firma.app
 import es.spainassist.firma.card.NfcAvailability
 import es.spainassist.firma.channel.PairingLink
 import es.spainassist.firma.protocol.ErrorCode
+import es.spainassist.firma.protocol.Need
 import es.spainassist.firma.protocol.Purpose
 import es.spainassist.firma.relay.LinkStatus
 
@@ -24,8 +25,6 @@ sealed interface Screen {
     data class Home(
         override val nfc: NfcAvailability,
         val link: LinkStatus,
-        val pinRemembered: Boolean,
-        val canSaved: Boolean,
     ) : Screen
 
     /** A sign request from the desktop. */
@@ -68,14 +67,11 @@ data class ReviewDocument(
 sealed interface Step {
     data object Review : Step
 
-    /** [fromComputer]: the wrong CAN was the one saved on the computer (Mis datos). */
-    data class EnterCan(val wrong: Boolean, val fromComputer: Boolean = false) : Step
-
     /**
-     * [retriesLeft]: what the card said after a wrong PIN, while no PIN has been accepted since.
-     * [fromComputer]: the wrong PIN was the one saved on the computer (Mis datos).
+     * The user types the CAN or the PIN on the computer (`sign.need`). [refused]: the card refused
+     * the one it had; [triesLeft]: PIN tries left after a wrong PIN.
      */
-    data class EnterPin(val wrong: Boolean, val retriesLeft: Int?, val fromComputer: Boolean = false) : Step
+    data class WaitForComputer(val what: Need, val refused: Boolean, val triesLeft: Int?) : Step
 
     /** Waiting for the card; [moved]: it was there and left the field. */
     data class HoldCard(val moved: Boolean) : Step

@@ -7,8 +7,8 @@
     <string name="start_lead">Cuando Spain Assist necesite tu firma en el ordenador, la haces aquí: el móvil lee tu DNIe por NFC.</string>
     <string name="start_step1">En el ordenador, Spain Assist te enseña un código QR.</string>
     <string name="start_step2">Escanéalo con este móvil para vincularlos.</string>
-    <string name="start_step3">Revisa cada firma aquí, escribe el PIN y acerca el DNIe.</string>
-    <string name="start_need">Necesitas tu DNIe con chip (3.0 o 4.0) y su PIN.</string>
+    <string name="start_step3">Escribe el CAN y el PIN en el ordenador, revisa cada firma aquí y acerca el DNIe.</string>
+    <string name="start_need">Necesitas tu DNIe con chip (3.0 o 4.0), su número CAN y su PIN.</string>
     <string name="start_scan">Escanear el código</string>
     <string name="scan_title">Apunta al código del ordenador</string>
     <string name="camera_denied">Para escanear el código, deja que la app use la cámara.</string>
@@ -38,9 +38,6 @@
     <string name="home_away">Tu ordenador no está conectado. Abre Spain Assist en el ordenador.</string>
     <string name="home_outdated">Esta app y Spain Assist en el ordenador no se entienden. Actualiza las dos.</string>
     <string name="home_waiting">Cuando el asistente necesite tu firma, la verás aquí. Deja esta app abierta mientras tanto.</string>
-    <string name="home_pin_remembered">El PIN de tu DNIe está guardado en este móvil durante una hora.</string>
-    <string name="home_forget_pin">Olvidar el PIN</string>
-    <string name="home_forget_can">Cambiar el número CAN</string>
     <string name="home_unpair">Desvincular</string>
 
     <!-- Review -->
@@ -60,21 +57,14 @@
     <string name="review_decline">No firmar</string>
     <string name="review_disconnected">Esperando a tu ordenador…</string>
 
-    <!-- CAN -->
-    <string name="can_title">Escribe el número CAN</string>
-    <string name="can_body">Son los 6 números de la parte de delante de tu DNIe, abajo a la derecha. Solo lo pedimos una vez.</string>
-    <string name="can_wrong">El número CAN no coincide con este DNIe. Revísalo.</string>
-    <string name="can_wrong_computer">El número CAN guardado en tu ordenador no coincide con este DNIe. Escribe el que ves en la tarjeta y corrígelo también en Mis datos.</string>
-    <string name="can_label">Número CAN</string>
-
-    <!-- PIN -->
-    <string name="pin_title">Escribe el PIN de tu DNIe</string>
-    <string name="pin_body">Es el PIN que te dieron con el DNIe (de 8 a 16 caracteres). Este móvil lo recuerda durante una hora y no lo envía a ningún sitio.</string>
-    <string name="pin_wrong">El PIN no es correcto. Te quedan %1$d intentos.</string>
-    <string name="pin_wrong_computer">Era el PIN guardado en tu ordenador: corrígelo en Mis datos. Hasta entonces no lo usaremos. Ahora escribe aquí tu PIN.</string>
+    <!-- CAN and PIN: typed on the computer -->
+    <string name="wait_can_title">Escribe el número CAN en el ordenador</string>
+    <string name="wait_can_wrong">Tu DNIe no ha aceptado el número CAN. Revísalo en la tarjeta y escríbelo en Spain Assist, en el ordenador.</string>
+    <string name="wait_pin_title">Escribe el PIN en el ordenador</string>
+    <string name="wait_pin_wrong">El PIN no es correcto. Te quedan %1$d intentos. Escríbelo otra vez en Spain Assist, en el ordenador.</string>
+    <string name="wait_pin_missing">Escribe el PIN de tu DNIe en Spain Assist, en el ordenador.</string>
     <string name="pin_last_try">Cuidado: te queda un intento. Si fallas, el DNIe se bloquea y tendrás que ir a una comisaría.</string>
-    <string name="pin_label">PIN del DNIe</string>
-    <string name="continue_label">Continuar</string>
+    <string name="wait_body">Después, vuelve a acercar el DNIe al móvil.</string>
     <string name="cancel_label">Cancelar</string>
 
     <!-- Card -->

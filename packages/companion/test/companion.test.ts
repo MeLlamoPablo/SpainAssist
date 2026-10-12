@@ -277,6 +277,7 @@ describe('PhoneSigner', () => {
     format: 'CAdES',
     documents: [{ name: 'solicitud.pdf', mimeType: 'application/pdf', data: Buffer.from('%PDF') }],
     verifiable: true,
+    can: '123456',
   };
 
   it('requests, signs and finishes', async () => {
@@ -295,59 +296,101 @@ describe('PhoneSigner', () => {
     expect(phone.connected).toBe(true);
   });
 
-  it('carries the DNI CAN in the encrypted request only when given', async () => {
+  it('carries the CAN, and the PIN when given, in the encrypted request only', async () => {
     const t = setup();
     const { seen } = autoPhone(t);
     (await t.signer.request(request)).finish(true);
-    (await t.signer.request({ ...request, can: '123456' })).finish(true);
+    (await t.signer.request({ ...request, pin: 'Abcd1234' })).finish(true);
     await until(() => seen.filter((m) => m.type === 'sign.request').length === 2);
-    const [plain, withCan] = seen.filter((m) => m.type === 'sign.request');
-    expect(plain).not.toHaveProperty('can');
-    expect(withCan).toMatchObject({ can: '123456' });
+    const [plain, withPin] = seen.filter((m) => m.type === 'sign.request');
+    expect(plain).toMatchObject({ can: '123456' });
+    expect(plain).not.toHaveProperty('pin');
+    expect(withPin).toMatchObject({ can: '123456', pin: 'Abcd1234' });
     expect(t.pairing.link).not.toContain('123456');
-    const base = { ...withCan, requestId: crypto.randomUUID() };
+    expect(t.pairing.link).not.toContain('Abcd1234');
+    const base = { ...withPin, requestId: crypto.randomUUID() };
+    const { can: _can, ...noCan } = base;
+    expect(DesktopToPhone.safeParse(noCan).success).toBe(false);
     for (const can of ['12345', '1234567', 'abcdef', 123456])
       expect(DesktopToPhone.safeParse({ ...base, can }).success, String(can)).toBe(false);
-  });
-
-  it('carries the DNIe PIN only when given, and never again once the card refused it', async () => {
-    const t = setup();
-    const { phone, seen } = autoPhone(t);
-    const requests = () => seen.filter((m) => m.type === 'sign.request');
-    (await t.signer.request(request)).finish(true);
-    let refused = 0;
-    const key = await t.signer.request({
-      ...request,
-      pin: 'Abcd1234',
-      onWrongPin: () => refused++,
-    });
-    await until(() => requests().length === 2);
-    const [plain, withPin] = requests();
-    expect(plain).not.toHaveProperty('pin');
-    expect(withPin).toMatchObject({ pin: 'Abcd1234' });
-    expect(t.pairing.link).not.toContain('Abcd1234');
-
-    // The phone reports it, and again after a reconnect: the desktop hears it once.
-    const requestId = withPin!.requestId;
-    phone.send({ type: 'sign.wrongPin', requestId });
-    phone.send({ type: 'sign.wrongPin', requestId });
-    await until(() => refused > 0);
-    // What is sent again after a reconnect no longer carries the PIN.
-    t.relay.drop(roomId(phone.pairing.room), 'phone');
-    await until(() => requests().length === 3);
-    expect(requests()[2]).toMatchObject({ requestId });
-    expect(requests()[2]).not.toHaveProperty('pin');
-    expect(refused).toBe(1);
-    key.finish(true);
-
-    // 8 to 16 characters, as the phone accepts them; the report has no room for a PIN.
-    const base = { ...withPin, requestId: crypto.randomUUID() };
+    // 8 to 16 characters.
     for (const pin of ['1234567', '12345678901234567', 12345678])
       expect(DesktopToPhone.safeParse({ ...base, pin }).success, String(pin)).toBe(false);
     expect(DesktopToPhone.safeParse({ ...base, pin: '1234567890123456' }).success).toBe(true);
-    expect(
-      PhoneToDesktop.safeParse({ type: 'sign.wrongPin', requestId, pin: 'Abcd1234' }).success,
-    ).toBe(false);
+  });
+
+  it('asks for a new PIN when the card refuses it, and sends it once', async () => {
+    const t = setup();
+    const phone = t.connectPhone();
+    const needs: unknown[] = [];
+    let answer: (value: string | null) => void = () => {};
+    const pending = t.signer.request({
+      ...request,
+      pin: 'Abcd1234',
+      reviewTimeoutMs: 60,
+      onNeed: (need) => {
+        needs.push(need);
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      },
+    });
+    await until(() => t.phoneMessages.some((m) => m.type === 'sign.request'));
+    const requestId = (t.phoneMessages[0] as { requestId: string }).requestId;
+    const need = {
+      type: 'sign.need',
+      requestId,
+      what: 'pin',
+      refused: true,
+      triesLeft: 2,
+    } as const;
+    phone.send(need);
+    phone.send(need);
+    await until(() => needs.length > 0);
+    // Asking the user: the request's timers wait.
+    await new Promise((r) => setTimeout(r, 120));
+    expect(t.signer.busy).toBe(true);
+    expect(needs).toEqual([{ what: 'pin', refused: true, triesLeft: 2 }]);
+    answer('Nuevo5678');
+    await until(() => t.phoneMessages.some((m) => m.type === 'sign.unlock'));
+    expect(t.phoneMessages.find((m) => m.type === 'sign.unlock')).toMatchObject({
+      requestId,
+      pin: 'Nuevo5678',
+    });
+    expect(t.phoneMessages.find((m) => m.type === 'sign.unlock')).not.toHaveProperty('can');
+    // Re-sent while it's on its way: not asked again.
+    phone.send(need);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(needs).toHaveLength(1);
+    // Answered: neither the PIN nor the unlock goes again after a reconnect.
+    phone.send({ type: 'sign.progress', requestId, stage: 'card' });
+    phone.send({ type: 'sign.certificate', requestId, certificates: [cert.toString('base64')] });
+    const key = await pending;
+    const sent = t.phoneMessages.length;
+    t.relay.drop(roomId(phone.pairing.room), 'phone');
+    await until(() => t.phoneMessages.length > sent);
+    expect(t.phoneMessages.slice(sent).map((m) => m.type)).toEqual(['sign.request']);
+    expect(t.phoneMessages.at(-1)).not.toHaveProperty('pin');
+    key.finish(true);
+    // The report has no room for a PIN.
+    expect(PhoneToDesktop.safeParse({ ...need, pin: 'Abcd1234' }).success).toBe(false);
+  });
+
+  it('cancels when the user gives no new CAN, or nobody can ask', async () => {
+    const t = setup();
+    const phone = t.connectPhone();
+    const asking = t.signer.request({ ...request, onNeed: async () => null });
+    await until(() => t.phoneMessages.some((m) => m.type === 'sign.request'));
+    const first = (t.phoneMessages.at(-1) as { requestId: string }).requestId;
+    phone.send({ type: 'sign.need', requestId: first, what: 'can', refused: true });
+    await expect(asking).rejects.toMatchObject({ code: 'cancelled' });
+    await until(() => t.phoneMessages.some((m) => m.type === 'sign.cancel'));
+
+    const silent = t.signer.request(request);
+    await until(() => t.phoneMessages.filter((m) => m.type === 'sign.request').length === 2);
+    const second = (t.phoneMessages.at(-1) as { requestId: string }).requestId;
+    phone.send({ type: 'sign.need', requestId: second, what: 'pin', refused: false });
+    await expect(silent).rejects.toMatchObject({ code: 'cancelled' });
   });
 
   it('sends the PIN once: after the phone answers, a re-sent request leaves it out', async () => {

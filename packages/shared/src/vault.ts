@@ -4,7 +4,7 @@ import { SPANISH_PROVINCES } from './provinces';
 
 /**
  * Local, encrypted data vault: personal data, documents and credentials.
- * Everything here stays on the device. Secrets (passwords, .p12 files, API keys, the DNIe PIN)
+ * Everything here stays on the device. Secrets (passwords, .p12 files, API keys)
  * are never sent to the renderer or to the agent; only the summaries below are.
  */
 
@@ -386,19 +386,16 @@ export const CredentialKind = z.enum([
   'clave_permanente', // username (DNI/NIE) + password (+ SMS code at login time)
   'clave_movil', // no stored secret: the user approves on their phone (Cl@ve app)
   'certificate', // X.509 certificate in a .p12/.pfx file + passphrase (e.g. FNMT Persona Física)
-  'dnie', // the DNIe, read by the paired phone app over NFC; optionally its PIN (D18)
+  'dnie', // the DNIe, read by the paired phone app over NFC (no stored secret: D20)
 ]);
 export type CredentialKind = z.infer<typeof CredentialKind>;
 
 /**
- * The DNIe PIN, as the phone app accepts it: 8 to 16 characters. Saved on the `dnie` credential
- * and sent only to the paired phone, inside the encrypted channel (DECISIONS D18).
+ * The DNIe PIN: 8 to 16 characters. Typed on the desktop when a DNIe signature or login needs
+ * it, kept in memory for an hour and sent only to the paired phone, inside the encrypted channel
+ * (DECISIONS D18, D20). Never stored.
  */
 export const DniePin = z.string().min(8).max(16);
-
-/** A saved DNIe PIN: `saved`, or `wrong` once the card refused it (not sent until replaced). */
-export const DniePinState = z.enum(['saved', 'wrong']);
-export type DniePinState = z.infer<typeof DniePinState>;
 
 export const CredentialPolicy = z.enum(['auto', 'ask']);
 export type CredentialPolicy = z.infer<typeof CredentialPolicy>;
@@ -435,8 +432,6 @@ export const CredentialSummary = z.object({
   usernameHint: z.string().optional(),
   /** `.p12` certificates; for the DNIe, its signing certificate once the phone has read it. */
   certificate: CertificateInfo.optional(),
-  /** The DNIe: whether a PIN is saved, never the PIN itself. Absent without one. */
-  pin: DniePinState.optional(),
 });
 export type CredentialSummary = z.infer<typeof CredentialSummary>;
 

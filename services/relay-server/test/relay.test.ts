@@ -248,6 +248,8 @@ describe('companion through the real relay', () => {
         format: 'CAdES',
         documents: [{ mimeType: 'text/plain', data: Buffer.from('hola') }],
         verifiable: false,
+        can: '123456',
+        pin: '12345678',
       });
       expect(key.certificates[0]?.equals(cert)).toBe(true);
       // The phone app is killed and opened again (same link, new process).

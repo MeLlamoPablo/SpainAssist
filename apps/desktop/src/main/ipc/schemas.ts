@@ -3,6 +3,7 @@ import {
   ByokInput,
   CredentialPolicy,
   CustomProviderInput,
+  DniAccessNumber,
   DniePin,
   DocumentKind,
   PersonalDataInput,
@@ -95,7 +96,6 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   ]),
   'vault.addClaveMovil': none,
   'vault.addDnie': none,
-  'vault.setDniePin': z.tuple([id, DniePin.nullable()]),
   'vault.addCertificate': z.tuple([
     z.object({
       fileName: z.string().trim().min(1).max(255),
@@ -114,6 +114,10 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'companion.status': none,
   'companion.pair': none,
   'companion.unpair': none,
+  'companion.unlock': z.tuple([
+    id,
+    z.strictObject({ can: DniAccessNumber.optional(), pin: DniePin.optional() }),
+  ]),
   'media.get': z.tuple([id]),
   'browser.show': z.tuple([id]),
 };

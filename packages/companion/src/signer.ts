@@ -1,9 +1,10 @@
 /**
  * Desktop: signatures with the DNIe in the paired phone. One request at a time.
  *
- * `request()` sends `sign.request` and resolves with a `PhoneKey` once the phone has read the
- * card's certificate (the user approved, typed the PIN or got the desktop's, and held the card
- * to the phone). Each
+ * `request()` sends `sign.request` (with the CAN and the PIN the user typed on the desktop) and
+ * resolves with a `PhoneKey` once the phone has read the card's certificate (the user approved
+ * and held the card to the phone). When the card refuses the CAN or the PIN, the phone asks for
+ * a new one (`sign.need`): `onNeed` gets it from the user and it goes as `sign.unlock`. Each
  * `key.sign()` is a `sign.toBeSigned` → `sign.signature` round trip while the card stays near
  * the phone; `key.finish()` ends the request.
  *
@@ -18,6 +19,7 @@ import {
   type CompanionCheck,
   type CompanionDocument,
   type CompanionErrorCode,
+  type CompanionNeed,
   type CompanionPurpose,
   type CompanionStage,
   type DesktopToPhone,
@@ -50,19 +52,28 @@ export interface PhoneSignRequest {
   /** Every `sign()` will carry a `check` (see `CompanionSignRequest.verifiable`). */
   verifiable: boolean;
   signatures?: number;
-  /** The DNI's CAN (6 digits), so the phone doesn't ask for it. */
-  can?: string;
-  /**
-   * The saved DNIe PIN, so the phone doesn't ask for it. Only after the desktop approval this
-   * use needs (DECISIONS D18).
-   */
+  /** The DNI's CAN (6 digits). */
+  can: string;
+  /** The DNIe PIN (D20); left out for `certificate` requests. */
   pin?: string;
-  /** The card refused `pin`: the phone dropped it and asks the user. Called at most once. */
-  onWrongPin?(): void;
-  /** Time to review, type the PIN and read the card. Default 5 minutes. */
+  /**
+   * The phone needs a new CAN or PIN (the card refused it, or a re-sent request came without
+   * it). Resolves with what the user typed, or null to cancel the request. The request's timers
+   * wait meanwhile. Without it, the request ends with `cancelled`.
+   */
+  onNeed?(need: PhoneNeed): Promise<string | null>;
+  /** Time to review and read the card. Default 5 minutes. */
   reviewTimeoutMs?: number;
   signal?: AbortSignal;
   onStage?(stage: CompanionStage): void;
+}
+
+export interface PhoneNeed {
+  what: CompanionNeed;
+  /** The card refused the one the phone had (else the request came without it). */
+  refused: boolean;
+  /** PIN tries the card has left after a wrong PIN. */
+  triesLeft?: number;
 }
 
 export interface PhoneKey {
@@ -94,23 +105,31 @@ interface Active {
   verifiable: boolean;
   certificates?: Buffer[];
   certificate: Waiter<Buffer[]>;
-  signatures: Map<number, Waiter<Buffer> & { timer: ReturnType<typeof setTimeout> }>;
+  signatures: Map<number, Waiter<Buffer> & { timer: ReturnType<typeof setTimeout> | undefined }>;
   nextSeq: number;
+  reviewMs: number;
   timer?: ReturnType<typeof setTimeout>;
   onStage?(stage: CompanionStage): void;
-  /** Only while the request carries a PIN the card hasn't refused. */
-  onWrongPin?(): void;
+  onNeed?(need: PhoneNeed): Promise<string | null>;
+  /** Waiting for the user to type what the phone needs: timers stopped. */
+  needing: boolean;
   cleanup(): void;
 }
 
 const SIGNATURE_TIMEOUT_MS = 90_000;
 
-/** Removes the PIN from the request kept for re-sending. */
-function dropPin(active: Active): void {
+/**
+ * Removes the PIN from the request kept for re-sending, and an answered `sign.unlock`: they go
+ * once, so a phone that joins later (anyone with the pairing link) never gets them.
+ */
+function dropSecrets(active: Active, message: PhoneToDesktop): void {
   const request = active.outbox.get('request');
-  if (request?.type !== 'sign.request' || !request.pin) return;
-  const { pin: _sent, ...rest } = request;
-  active.outbox.set('request', rest);
+  if (request?.type === 'sign.request' && request.pin) {
+    const { pin: _sent, ...rest } = request;
+    active.outbox.set('request', rest);
+  }
+  // A `sign.need` re-sent after a reconnect doesn't answer the unlock; anything else does.
+  if (message.type !== 'sign.need') active.outbox.delete('unlock');
 }
 
 export class PhoneSigner {
@@ -154,16 +173,15 @@ export class PhoneSigner {
         },
         signatures: new Map(),
         nextSeq: 1,
+        reviewMs,
         onStage: req.onStage,
-        ...(req.pin ? { onWrongPin: () => req.onWrongPin?.() } : {}),
+        onNeed: req.onNeed,
+        needing: false,
         cleanup: () => req.signal?.removeEventListener('abort', onAbort),
       };
       this.active = active;
       req.signal?.addEventListener('abort', onAbort, { once: true });
-      active.timer = setTimeout(
-        () => this.fail(id, new PhoneSignError('timeout'), 'timeout'),
-        reviewMs,
-      );
+      this.armReview(active);
       this.post(active, 'request', {
         type: 'sign.request',
         requestId: id,
@@ -175,7 +193,7 @@ export class PhoneSigner {
         verifiable,
         ...(req.signatures ? { signatures: req.signatures } : {}),
         expiresAt: new Date(Date.now() + reviewMs).toISOString(),
-        ...(req.can ? { can: req.can } : {}),
+        can: req.can,
         ...(req.pin ? { pin: req.pin } : {}),
       });
     });
@@ -185,9 +203,8 @@ export class PhoneSigner {
   onMessage(message: PhoneToDesktop): void {
     const active = this.active;
     if (!active || message.type === 'bye' || message.requestId !== active.id) return;
-    // The phone has the request: the PIN goes once. A request sent again after a reconnect
-    // leaves it out, so a phone that joins later (anyone with the pairing link) never gets it.
-    dropPin(active);
+    // The phone has the request (and any unlock): the PIN goes once.
+    dropSecrets(active, message);
     switch (message.type) {
       case 'sign.progress':
         active.onStage?.(message.stage);
@@ -214,13 +231,15 @@ export class PhoneSigner {
         waiter.resolve(Buffer.from(message.signature, 'base64'));
         return;
       }
-      case 'sign.wrongPin': {
-        const onWrongPin = active.onWrongPin;
-        if (!onWrongPin) return;
-        active.onWrongPin = undefined;
-        onWrongPin();
+      case 'sign.need':
+        // Already asking the user, or re-sent while the unlock is on its way.
+        if (active.needing || active.outbox.has('unlock')) return;
+        this.need(active, {
+          what: message.what,
+          refused: message.refused,
+          ...(message.triesLeft ? { triesLeft: message.triesLeft } : {}),
+        });
         return;
-      }
       case 'sign.error':
         this.fail(active.id, new PhoneSignError(message.code, message.message));
         return;
@@ -241,6 +260,51 @@ export class PhoneSigner {
     if (this.active) this.fail(this.active.id, new PhoneSignError(reason));
   }
 
+  /** Asks `onNeed` with the timers stopped, then sends `sign.unlock` and starts them again. */
+  private need(active: Active, need: PhoneNeed): void {
+    if (!active.onNeed) {
+      this.fail(active.id, new PhoneSignError('cancelled'), 'cancelled');
+      return;
+    }
+    active.needing = true;
+    clearTimeout(active.timer);
+    for (const waiter of active.signatures.values()) clearTimeout(waiter.timer);
+    active.onNeed(need).then(
+      (value) => {
+        if (this.active !== active) return;
+        active.needing = false;
+        if (!value) {
+          this.fail(active.id, new PhoneSignError('cancelled'), 'cancelled');
+          return;
+        }
+        if (!active.certificates) this.armReview(active);
+        for (const waiter of active.signatures.values()) waiter.timer = this.signatureTimer(active);
+        this.post(active, 'unlock', {
+          type: 'sign.unlock',
+          requestId: active.id,
+          ...(need.what === 'can' ? { can: value } : { pin: value }),
+          expiresAt: new Date(Date.now() + active.reviewMs).toISOString(),
+        });
+      },
+      () => this.fail(active.id, new PhoneSignError('cancelled'), 'cancelled'),
+    );
+  }
+
+  private armReview(active: Active): void {
+    clearTimeout(active.timer);
+    active.timer = setTimeout(
+      () => this.fail(active.id, new PhoneSignError('timeout'), 'timeout'),
+      active.reviewMs,
+    );
+  }
+
+  private signatureTimer(active: Active): ReturnType<typeof setTimeout> {
+    return setTimeout(
+      () => this.fail(active.id, new PhoneSignError('timeout'), 'timeout'),
+      SIGNATURE_TIMEOUT_MS,
+    );
+  }
+
   private post(active: Active, key: string, message: DesktopToPhone): void {
     active.outbox.set(key, message);
     this.link.send(message);
@@ -253,10 +317,8 @@ export class PhoneSigner {
         if (this.active !== active) return Promise.reject(new PhoneSignError('cancelled'));
         const seq = active.nextSeq++;
         return new Promise<Buffer>((resolve, reject) => {
-          const timer = setTimeout(
-            () => this.fail(active.id, new PhoneSignError('timeout'), 'timeout'),
-            SIGNATURE_TIMEOUT_MS,
-          );
+          // While the user types a new PIN the timer waits; `need` starts it afterwards.
+          const timer = active.needing ? undefined : this.signatureTimer(active);
           active.signatures.set(seq, { resolve, reject, timer });
           this.post(active, `tbs:${seq}`, {
             type: 'sign.toBeSigned',

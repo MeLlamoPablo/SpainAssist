@@ -7,8 +7,8 @@
     <string name="start_lead">When Spain Assist on your computer needs your signature, you sign here: the phone reads your DNIe over NFC.</string>
     <string name="start_step1">On your computer, Spain Assist shows you a QR code.</string>
     <string name="start_step2">Scan it with this phone to pair them.</string>
-    <string name="start_step3">Check each signature here, type your PIN and hold your DNIe to the phone.</string>
-    <string name="start_need">You need your DNIe with a chip (3.0 or 4.0) and its PIN.</string>
+    <string name="start_step3">Type the CAN and the PIN on your computer, check each signature here and hold your DNIe to the phone.</string>
+    <string name="start_need">You need your DNIe with a chip (3.0 or 4.0), its CAN number and its PIN.</string>
     <string name="start_scan">Scan the code</string>
     <string name="scan_title">Point at the code on your computer</string>
     <string name="camera_denied">To scan the code, let the app use the camera.</string>
@@ -38,9 +38,6 @@
     <string name="home_away">Your computer isn’t connected. Open Spain Assist on your computer.</string>
     <string name="home_outdated">This app and Spain Assist on your computer don’t understand each other. Update both.</string>
     <string name="home_waiting">When the assistant needs your signature, you’ll see it here. Keep this app open meanwhile.</string>
-    <string name="home_pin_remembered">Your DNIe PIN is kept on this phone for one hour.</string>
-    <string name="home_forget_pin">Forget the PIN</string>
-    <string name="home_forget_can">Change the CAN number</string>
     <string name="home_unpair">Unpair</string>
 
     <!-- Review -->
@@ -60,21 +57,14 @@
     <string name="review_decline">Don’t sign</string>
     <string name="review_disconnected">Waiting for your computer…</string>
 
-    <!-- CAN -->
-    <string name="can_title">Type the CAN number</string>
-    <string name="can_body">It’s the 6 digits on the front of your DNIe, bottom right. We only ask once.</string>
-    <string name="can_wrong">The CAN doesn’t match this DNIe. Check it.</string>
-    <string name="can_wrong_computer">The CAN number saved on your computer doesn’t match this DNIe. Type the one on the card, and fix it in My data too.</string>
-    <string name="can_label">CAN number</string>
-
-    <!-- PIN -->
-    <string name="pin_title">Type your DNIe PIN</string>
-    <string name="pin_body">It’s the PIN you got with your DNIe (8 to 16 characters). This phone remembers it for one hour and never sends it anywhere.</string>
-    <string name="pin_wrong">Wrong PIN. You have %1$d tries left.</string>
-    <string name="pin_wrong_computer">That was the PIN saved on your computer: fix it in My data. We won’t use it until then. For now, type your PIN here.</string>
+    <!-- CAN and PIN: typed on the computer -->
+    <string name="wait_can_title">Type the CAN number on your computer</string>
+    <string name="wait_can_wrong">Your DNIe didn’t accept the CAN number. Check it on the card and type it in Spain Assist, on your computer.</string>
+    <string name="wait_pin_title">Type your PIN on your computer</string>
+    <string name="wait_pin_wrong">Wrong PIN. You have %1$d tries left. Type it again in Spain Assist, on your computer.</string>
+    <string name="wait_pin_missing">Type your DNIe PIN in Spain Assist, on your computer.</string>
     <string name="pin_last_try">Careful: one try left. If it fails, the DNIe is blocked and you’ll have to go to a police station.</string>
-    <string name="pin_label">DNIe PIN</string>
-    <string name="continue_label">Continue</string>
+    <string name="wait_body">Then hold your DNIe to the phone again.</string>
     <string name="cancel_label">Cancel</string>
 
     <!-- Card -->

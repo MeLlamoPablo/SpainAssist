@@ -23,7 +23,7 @@ version (1) = 1 | room id (16) | secret (32) | desktop public key (65, P-256 unc
 ```
 
 The phone app opens it as an App Link or scans it, and asks the user to confirm before pairing.
-The relay's `/p` page also opens it as `sa-firma://pair?d=<payload>`. A pairing lasts 12 hours
+The relay's `/p` page also opens it as `sa-firma://pair?d=<payload>`. A pairing lasts 72 hours
 (the desktop's lifetime). It ends earlier with "Desvincular" on either side, or when the
 desktop app quits. The same QR can be scanned again while the pairing lasts: a new phone
 connection replaces the old one.
@@ -62,14 +62,15 @@ built from HMAC so that it also runs on Electron.
 
 ```
 desktop                                            phone
-sign.request (documents, verifiable, can?, pin?) ▶ shows what, for whom; user approves,
-                                                   types the PIN and the CAN when the request
-                                                   has none, holds the card
+(the user typed the CAN and the PIN on the desktop)
+sign.request (documents, verifiable, can, pin?) ─▶ shows what, for whom; user approves and
+                                                   holds the card
          ◀────────────────────────────────────    sign.progress reviewing / card / reading
          ◀────────────────────────────────────    sign.certificate (read from the card)
 sign.toBeSigned seq 1 (+ check) ───────────────▶   checks the binding, card signs
-         ◀────────────────────────────────────    sign.wrongPin, if the card refused the `pin`
-                                                   (then the user types it)
+         ◀────────────────────────────────────    sign.need, if the card refused the CAN or
+                                                   the PIN (the phone waits)
+sign.unlock (the new one the user typed) ──────▶   tries it
          ◀────────────────────────────────────    sign.progress signing, sign.signature 1
 … more seqs (batches, triphase) …
 sign.done ─────────────────────────────────────▶   "Firmado"
@@ -91,16 +92,17 @@ sign.done ───────────────────────�
   certificate and every signature again. Both sides ignore duplicates (same request id, same seq),
   so the card never signs a blob twice. A certificate that changes after a reconnect ends the
   request with `wrong_card`.
-- **The CAN.** `PhoneSignRequest.can` (the DNI's six-digit CAN from Mis datos) goes in the
-  request only when given. The pairing link never carries it. The phone uses it instead of asking,
-  and keeps it once the card accepts it.
-- **The PIN** (D18). `PhoneSignRequest.pin` (the DNIe PIN saved in Mis datos, 8 to 16
-  characters) goes in the request only when given; the desktop gives it only after the approval
-  that use needs. It goes once: as soon as the phone answers anything for the request,
-  `PhoneSigner` drops it from its outbox, so a request re-sent after a reconnect leaves it out.
-  The phone uses it for that request only and never stores it. When the card refuses it, the
-  phone sends `sign.wrongPin` (again after a reconnect) and asks the user; `PhoneSigner` calls
-  `onWrongPin` once. The phone never sends a PIN.
+- **The CAN and the PIN** (D20). The user types them on the desktop. `PhoneSignRequest.can`
+  (six digits) always goes in the request; `pin` (8 to 16 characters) goes unless it's a
+  certificate read. The pairing link never carries them. The PIN goes once: as soon as the phone
+  answers anything for the request, `PhoneSigner` drops it from its outbox, so a request re-sent
+  after a reconnect leaves it out. The phone uses them for that request only and never stores
+  them. When the card refuses one, or the request came without the PIN, the phone sends
+  `sign.need` (`what`, `refused`, `triesLeft`; again after a reconnect) and waits.
+  `PhoneSigner` calls `onNeed` once, with the request's timers stopped, and sends what it
+  resolves with as `sign.unlock` (once, like the PIN; with a new `expiresAt`), or cancels the
+  request on null. The phone keeps a hash of each refused CAN and PIN in memory and never tries
+  one again. The phone never sends a CAN or a PIN.
 - **One request at a time.** A second request while one is active gets `busy`. A request that
   arrives right after `sign.done` (batches) replaces the finished one.
 - **Timeouts (desktop).** 5 minutes for the user to review and read the card, then 90 seconds per
@@ -114,12 +116,13 @@ secrets, unpairing, cancel, timeouts, large documents), and the vectors.
 `services/relay-server` tests the same flow over real sockets. Its `interop` script runs the
 Android app's Kotlin code against this package (see `apps/mobile/README.md`).
 
-The application handshake is protocol 4, which adds the optional `pin` on `sign.request` and
-`sign.wrongPin` (protocol-3 phones can't decode them). Protocol 3 added the optional `can`.
+The application handshake is protocol 5, which makes `can` required on `sign.request` and adds
+`sign.need` and `sign.unlock` (protocol-4 phones can't decode them). Protocol 4 added the
+optional `pin`, protocol 3 the optional `can`.
 Protocol 2 added login: `login` requests show the site
 without a document, and `PhoneKey.sign(..., undefined, true)` sends a pre-hashed TLS digest.
 The phone rejects this flag on document requests and requires it on login requests.
 AUTENTICACIÓN is used for login, FIRMA for documents. The pairing link and encrypted frame
 formats are unchanged; matching phone and desktop releases are required. `vectors/v1.json` also
-includes login wire messages (the login request carries a `can` and a `pin`) and the
-`sign.wrongPin` report.
+includes login wire messages (the login request carries a `can` and a `pin`), a `sign.need` and
+a `sign.unlock`.

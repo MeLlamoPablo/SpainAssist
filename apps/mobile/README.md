@@ -2,8 +2,9 @@
 
 Signs documents and approves certificate logins with the user's DNIe over NFC when SpainAssist on the computer asks. The desktop
 shows a QR code; the phone pairs, shows each request (the PDF itself, or the XML or text), and
-signs after the user approves, types the PIN (unless the computer sent the one saved in Mis
-datos) and holds the card to the phone. The protocol is in
+signs after the user approves and holds the card to the phone. The user types the DNIe's CAN
+and PIN on the computer only (DECISIONS D20): they come with each request, and the phone never
+asks for them. The protocol is in
 `packages/companion/README.md`.
 
 Compose Multiplatform. Android is the app today. The shared module also compiles for iOS (the
@@ -21,27 +22,21 @@ Compose Multiplatform. Android is the app today. The shared module also compiles
   signatures with the FIRMA key. `jmulticard-crypto` bundles the BouncyCastle classes it needs:
   don't add BouncyCastle separately.
 - It reads the certificates after PACE without the PIN. Every signature opens a new PACE channel
-  and checks the PIN, as the card requires. A PIN the user types stays in memory for 60 minutes;
-  it is never stored or sent. When the desktop's Mis datos has the PIN, the request carries it
-  (D18) and there is no PIN step: that PIN serves that request only, is never stored or cached,
-  and is dropped when the request ends. The CAN comes with the request when the desktop's Mis datos has it (scanned
-  from the DNI), and then there is no CAN step; otherwise the user types it once. Either way it
-  is stored in the Keystore-encrypted store once the card accepts it, and the desktop's CAN wins
-  over the stored one.
+  and checks the PIN, as the card requires. The CAN and the PIN come with the request (the
+  desktop asked the user for them, and keeps the PIN in memory for an hour). They serve that
+  request only, are never stored or cached on the phone, and are dropped when the request ends.
 - **The card moving (Autofirma's AA300103).** Reader mode checks presence every 2 seconds, not
   every 125 ms, and IsoDep waits up to 5 seconds per command. When the card does leave the field,
   `IsoDepConnection` flags it, and whatever jmulticard throws becomes "the card moved". The app
   waits for the card again, checks it's the same one, and signs what was pending. The copy tells
   users to put the card on a table and rest the phone on it.
-- **Wrong PIN:** asked again, with the tries left (a warning at one), and never retried
-  automatically. When the wrong one came from the desktop, the step also says the PIN saved on
-  the computer is wrong (fix it in Mis datos), the phone tells the desktop (`sign.wrongPin`), and
-  that PIN isn't tried again, not even from a request re-sent after a reconnect. The desktop
-  then stops sending it. While the phone knows the card has fewer than three tries left (it saw a
-  wrong PIN and no PIN was accepted since), it doesn't use a PIN from the desktop: the user types
-  it. So a saved PIN costs at most one try. **Wrong CAN:** asked again, and the stored one is dropped. When the wrong one
-  came from the desktop, the copy says the CAN saved on the computer doesn't match (fix it in
-  Mis datos), and that CAN isn't tried again while the app runs. **Blocked PIN,
+- **Wrong PIN or CAN:** the phone asks the desktop for another (`sign.need`, with the tries left
+  after a wrong PIN) and shows "type it on the computer" (a warning at one try left); the desktop
+  asks the user and answers with `sign.unlock`. A CAN or PIN the card refused is never tried
+  again while the app runs (the phone keeps only a SHA-256 of it in memory), not even from a
+  request re-sent after a reconnect or a stale copy on the desktop: it asks again instead. So a
+  wrong PIN costs one try. A request that comes without a PIN (re-sent to a restarted app) asks
+  the desktop too. **Blocked PIN,
   no FIRMA certificate, expired certificate, not a DNIe 3.0/4.0, no NFC:** the request ends, and
   the desktop shows why.
 - Reader mode is on only while the app waits for a card and is in front. The screen stays on
@@ -65,9 +60,8 @@ cd apps/mobile
   `corepack pnpm --filter @sa/relay-server interop`. It runs the relay and a `DesktopPairing`,
   starts `InteropTest` (this app's controller, channel and ktor client, with a software RSA key
   as the DNIe), and signs CAdES, PAdES and XAdES through `@sa/signer`. Every signature is
-  verified. The desktop sends the card's CAN and PIN with CAdES and the login, and wrong ones with
-  PAdES: the phone must ask for each only after the wrong one, try the wrong PIN once and report
-  it.
+  verified. The desktop sends the card's CAN and PIN with CAdES, XAdES and the login, and wrong
+  ones with PAdES: the phone must try each wrong one once and ask the desktop for a new one.
 - **On a phone, against a local desktop:** `corepack pnpm services` starts the relay on
   `0.0.0.0:8794`. `corepack pnpm dev:local` makes the desktop put this machine's LAN address in
   the QR. Install the debug APK and scan. Both must be on the same Wi-Fi, and the debug build
@@ -87,8 +81,8 @@ cd apps/mobile
 Login uses the AUTENTICACIÓN certificate; documents use FIRMA. A `login` review shows the site
 without a document. TLS digests arrive already hashed (`prehashed`); the card adapter wraps
 DigestInfo without hashing them again, while preserving PACE/CWA cryptography. After approval,
-cancel from the desktop. Protocol 4 (the optional `pin` on requests and `sign.wrongPin`; protocol
-3 added `can`) requires a matching desktop; old apps must update.
+cancel from the desktop. Protocol 5 (the required `can`, `sign.need` and `sign.unlock`; protocol
+4 added the optional `pin`, protocol 3 `can`) requires a matching desktop; old apps must update.
 
 ## Licence
 

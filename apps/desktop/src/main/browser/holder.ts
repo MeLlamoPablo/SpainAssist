@@ -236,8 +236,8 @@ export class BrowserHolder {
    * AutoFirma replacement approval: pick a certificate or the DNIe (if several), then confirm
    * with the details of what is signed (+ Touch ID when available). Signatures with a `.p12`
    * always ask, whatever the credential's policy. The DNIe is approved on the phone instead
-   * (`CompanionService.approve`); the desktop asks first only to send its saved PIN, when the
-   * credential's policy says so (D18). Returns null when declined / cancelled / no certificate.
+   * (`CompanionService.approve`), after the desktop asks for its CAN and PIN when it doesn't
+   * have them (D20). Returns null when declined / cancelled / no certificate.
    */
   async approveSignature(
     procedureId: string,
@@ -287,11 +287,8 @@ export class BrowserHolder {
       if (!chosen) return null;
       if (chosen.kind === 'dnie') {
         if (!deps.companion) return null;
-        // Reading the certificate needs no PIN; signing sends the saved one after its approval.
-        const pin = chosen.pin === 'saved' && summary.method !== 'selectCertificate';
-        if (pin && chosen.policy === 'ask' && !(await this.confirm(procedureId, summary, chosen)))
-          return null;
-        return await deps.companion.approve(procedureId, summary, chosen, { pin });
+        // The consent happens on the phone; the desktop asks for the CAN and the PIN (D20).
+        return await deps.companion.approve(procedureId, summary, chosen);
       }
       if (!(await this.confirm(procedureId, summary, chosen))) return null;
       const secret = await vault.getCredentialSecret(chosen.id);
@@ -341,9 +338,7 @@ export class BrowserHolder {
       kind: 'confirm',
       confirmKind: 'signature',
       title: t(lang, 'signatureTitle'),
-      message: t(lang, chosen.kind === 'dnie' ? 'signatureMessageDnie' : 'signatureMessage', {
-        host,
-      }),
+      message: t(lang, 'signatureMessage', { host }),
       details,
       confirmLabel: t(lang, 'signLabel'),
       rejectLabel: t(lang, 'dontSignLabel'),

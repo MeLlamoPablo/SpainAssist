@@ -1,14 +1,10 @@
 import crypto from 'node:crypto';
 import { PhoneClient } from '@sa/companion';
 import { MemoryRelay } from '@sa/companion/testing';
-import type {
-  AfirmaSignatureSummary,
-  CompanionErrorCode,
-  DesktopToPhone,
-  ExternalSigningKey,
-} from '@sa/shared';
+import type { AfirmaSignatureSummary, DesktopToPhone, ExternalSigningKey } from '@sa/shared';
 import type { RemoteKey } from '@sa/sidecar';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { t } from '../core/i18n';
 import type { Biometric } from '../ports';
 import { createTestApp, type TestApp } from '../testing/harness';
 import { DNIE_LOGIN_IDLE_MS } from './service';
@@ -67,13 +63,37 @@ function phone(
 }
 
 const CERT = crypto.randomBytes(256);
+const CAN = '123456';
+const PIN = 'Abcd1234';
+
+/** Waits for the DNIe card's `unlock` stage and types what it asks for. */
+async function typeUnlock(
+  a: TestApp,
+  procedureId: string,
+  values: { can?: string; pin?: string } = { can: CAN, pin: PIN },
+) {
+  await a.waitFor(() => {
+    const p = a.pendingPrompt(procedureId)?.prompt;
+    return p?.kind === 'dnie_signature' && p.stage === 'unlock';
+  });
+  const item = a.pendingPrompt(procedureId)!;
+  await a.invoke('companion.unlock', item.id, values);
+  return item.prompt;
+}
 
 describe('DNIe signatures with the phone', () => {
   it('pairs on demand, shows the phone progress and signs through the phone', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
     const approval = a.services.browser.approveSignature(procedureId, summary);
+    // The desktop asks for the CAN and the PIN first.
+    expect(await typeUnlock(a, procedureId)).toMatchObject({
+      stage: 'unlock',
+      unlock: { can: true, pin: true },
+    });
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     await a.waitFor(() => a.services.companion!.status().state === 'waiting');
+    expect(a.pendingPrompt(procedureId)?.prompt).toMatchObject({ stage: 'phone' });
+    expect(a.pendingPrompt(procedureId)?.prompt).not.toHaveProperty('unlock');
     const status = await a.invoke('companion.status');
     expect(status.link).toMatch(/^https:\/\/relay\.example\.test\/p#/);
     // The QR link never goes into the saved prompt.
@@ -107,6 +127,8 @@ describe('DNIe signatures with the phone', () => {
     const request = received.find((m) => m.type === 'sign.request');
     expect(request).toMatchObject({
       origin: 'https://sede.example.gob.es',
+      can: CAN,
+      pin: PIN,
       verifiable: true,
       documents: [{ mimeType: 'text/plain', data: DOCUMENT.toString('base64') }],
     });
@@ -127,11 +149,22 @@ describe('DNIe signatures with the phone', () => {
       response: { kind: 'dnie_signature', outcome: 'signed' },
     });
     expect(a.vault.getCredential(dnie.id)?.lastUsedAt).toBeDefined();
+    // Never in prompts, transcripts, events, logs or the QR link.
+    const seen = JSON.stringify([
+      a.services.procedures.transcript(procedureId),
+      a.events,
+      a.logLines,
+      await a.invoke('vault.overview'),
+      await a.invoke('companion.status'),
+    ]);
+    expect(seen).not.toContain(PIN);
+    expect(seen).not.toContain(CAN);
   });
 
   it('cancels on the desktop, and tells the phone', async () => {
     const { relay, app: a, procedureId } = await setup();
     const approval = a.services.browser.approveSignature(procedureId, summary);
+    await typeUnlock(a, procedureId);
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     const { link } = await a.invoke('companion.status');
     const { received } = phone(relay, link as string, () => {});
@@ -155,6 +188,7 @@ describe('DNIe signatures with the phone', () => {
   it('explains a blocked PIN, and a procedure stop cancels the request', async () => {
     const { relay, app: a, procedureId } = await setup();
     const approval = a.services.browser.approveSignature(procedureId, summary);
+    await typeUnlock(a, procedureId);
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     const { link } = await a.invoke('companion.status');
     phone(relay, link as string, (m, send) => {
@@ -168,17 +202,22 @@ describe('DNIe signatures with the phone', () => {
       text: expect.stringContaining('PIN'),
     });
 
+    // A blocked card forgets the PIN: asked again (not the CAN, which the card accepted).
     const stopped = a.services.browser.approveSignature(procedureId, summary);
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
+    expect(a.pendingPrompt(procedureId)?.prompt).toMatchObject({
+      stage: 'unlock',
+      unlock: { can: false, pin: true },
+    });
     await a.invoke('procedures.stop', procedureId);
     expect(await stopped).toBeNull();
   });
 
-  it('sends the DNI CAN from Mis datos inside the request, only when it is valid', async () => {
+  it('uses the CAN from Mis datos when valid, and asks only for what it lacks', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
-    const sign = async () => {
-      const approval = a.services.browser.approveSignature(procedureId, summary);
-      await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
+    /** A phone that declines the next request (connected once the QR shows again). */
+    const refuseNext = async () => {
+      await a.waitFor(() => !!a.services.companion!.status().link);
       const request = await new Promise<DesktopToPhone>((resolve) => {
         phone(relay, a.services.companion!.status().link as string, (m, send) => {
           if (m.type !== 'sign.request') return;
@@ -186,29 +225,146 @@ describe('DNIe signatures with the phone', () => {
           send({ type: 'sign.error', requestId: m.requestId, code: 'rejected' });
         });
       });
-      expect(await approval).toBeNull();
       for (const p of phones.splice(0)) p.close();
       return request;
     };
-    expect(await sign()).not.toHaveProperty('can');
+    const sign = async (values?: { can?: string; pin?: string }) => {
+      const approval = a.services.browser.approveSignature(procedureId, summary);
+      await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
+      const shown = a.pendingPrompt(procedureId)!.prompt;
+      if (values) await typeUnlock(a, procedureId, values);
+      const request = await refuseNext();
+      expect(await approval).toBeNull();
+      return { shown, request };
+    };
     await a.vault.setPersonal([{ key: 'dniAccessNumber', value: '12345' }], 'manual');
-    expect(await sign()).not.toHaveProperty('can');
-    await a.vault.setPersonal([{ key: 'dniAccessNumber', value: '123456' }], 'manual');
-    expect(await sign()).toMatchObject({ type: 'sign.request', can: '123456' });
-    // The QR link never carries it.
-    expect(a.services.companion!.status().link).not.toContain('123456');
+    const invalid = await sign({ can: '654321', pin: PIN });
+    expect(invalid.shown).toMatchObject({ unlock: { can: true, pin: true } });
+    expect(invalid.request).toMatchObject({ can: '654321', pin: PIN });
+    // The CAN typed is kept while the app runs, the PIN for an hour: nothing asked.
+    const cached = await sign();
+    expect(cached.shown).toMatchObject({ stage: 'phone' });
+    expect(cached.request).toMatchObject({ can: '654321', pin: PIN });
+
+    // An hour later the PIN is asked again; Mis datos' CAN isn't preferred over the typed one.
+    await a.vault.setPersonal([{ key: 'dniAccessNumber', value: CAN }], 'manual');
+    const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61 * 60_000);
+    const expired = await sign({ pin: 'Nuevo5678' });
+    later.mockRestore();
+    expect(expired.shown).toMatchObject({ unlock: { can: false, pin: true } });
+    expect(expired.request).toMatchObject({ can: '654321', pin: 'Nuevo5678' });
+    expect(a.services.companion!.status().link).not.toContain('654321');
+
+    // Reading the certificate needs no PIN.
+    const read = a.services.browser.approveSignature(procedureId, {
+      ...summary,
+      method: 'selectCertificate',
+      documents: [],
+    });
+    const request = await refuseNext();
+    expect(await read).toBeNull();
+    expect(request).toMatchObject({ purpose: 'certificate', can: '654321' });
+    expect(request).not.toHaveProperty('pin');
 
     // Logins too.
     const login = a.services.companion!.login(procedureId, dnie, summary.origin);
-    const request = await new Promise<DesktopToPhone>((resolve) => {
-      phone(relay, a.services.companion!.status().link as string, (m, send) => {
-        if (m.type !== 'sign.request') return;
-        resolve(m);
-        send({ type: 'sign.error', requestId: m.requestId, code: 'rejected' });
-      });
-    });
-    expect(request).toMatchObject({ purpose: 'login', can: '123456' });
+    const loginRequest = await refuseNext();
+    expect(loginRequest).toMatchObject({ purpose: 'login', can: '654321', pin: 'Nuevo5678' });
     expect(await login).toBeNull();
+  });
+
+  it('takes only what the card asks for, validated, and only while it asks', async () => {
+    const { app: a, procedureId } = await setup();
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
+    const item = a.pendingPrompt(procedureId)!;
+    for (const bad of [
+      { can: '12345', pin: PIN },
+      { can: CAN, pin: '1234567' },
+      { can: CAN, pin: '12345678901234567' },
+      { can: CAN, pin: PIN, extra: 1 },
+    ])
+      await expect(a.invoke('companion.unlock', item.id, bad as never)).rejects.toThrow(
+        t('es', 'invalidRequest'),
+      );
+    await expect(a.invoke('companion.unlock', item.id, { can: CAN })).rejects.toThrow(
+      t('es', 'dnieUnlockMissing'),
+    );
+    await expect(a.invoke('companion.unlock', 'q-missing', { can: CAN, pin: PIN })).rejects.toThrow(
+      t('es', 'promptNotPending'),
+    );
+    await a.invoke('companion.unlock', item.id, { can: CAN, pin: PIN });
+    await expect(a.invoke('companion.unlock', item.id, { can: CAN, pin: PIN })).rejects.toThrow(
+      t('es', 'promptNotPending'),
+    );
+    await a.invoke('chat.respond', item.id, { kind: 'dnie_signature', outcome: 'cancelled' });
+    expect(await approval).toBeNull();
+  });
+
+  it('asks again when the card refuses the CAN or the PIN, and never offers them again', async () => {
+    const { relay, app: a, procedureId } = await setup();
+    await a.vault.setPersonal([{ key: 'dniAccessNumber', value: '111111' }], 'manual');
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await typeUnlock(a, procedureId, { pin: 'Malo1234' });
+    const { received } = phone(relay, a.services.companion!.status().link as string, (m, send) => {
+      if (m.type === 'sign.request')
+        send({ type: 'sign.need', requestId: m.requestId, what: 'can', refused: true });
+      else if (m.type === 'sign.unlock' && m.can)
+        send({
+          type: 'sign.certificate',
+          requestId: m.requestId,
+          certificates: [CERT.toString('base64')],
+        });
+      else if (
+        m.type === 'sign.toBeSigned' &&
+        !received.some((r) => r.type === 'sign.unlock' && r.pin)
+      )
+        send({
+          type: 'sign.need',
+          requestId: m.requestId,
+          what: 'pin',
+          refused: true,
+          triesLeft: 2,
+        });
+      else if (m.type === 'sign.unlock' && m.pin)
+        send({
+          type: 'sign.signature',
+          requestId: m.requestId,
+          seq: 1,
+          signature: Buffer.alloc(256, 7).toString('base64'),
+        });
+    });
+    expect(await typeUnlock(a, procedureId, { can: CAN })).toMatchObject({
+      unlock: { can: true, pin: false, refused: 'can' },
+    });
+    const key = (await approval) as ExternalSigningKey;
+    const signing = key.sign(Buffer.from('attrs'), 'sha256', { kind: 'cms', document: 0 });
+    expect(await typeUnlock(a, procedureId, { pin: PIN })).toMatchObject({
+      unlock: { can: false, pin: true, refused: 'pin', triesLeft: 2 },
+    });
+    expect(Buffer.from(await signing)).toEqual(Buffer.alloc(256, 7));
+    key.release(true);
+    expect(received.filter((m) => m.type === 'sign.unlock')).toMatchObject([
+      { can: CAN },
+      { pin: PIN },
+    ]);
+    expect(received.find((m) => m.type === 'sign.request')).toMatchObject({
+      can: '111111',
+      pin: 'Malo1234',
+    });
+
+    // The next request carries what the card accepted, without asking.
+    const next = a.services.browser.approveSignature(procedureId, summary);
+    await a.waitFor(() => received.filter((m) => m.type === 'sign.request').length === 2);
+    expect(received.filter((m) => m.type === 'sign.request').at(-1)).toMatchObject({
+      can: CAN,
+      pin: PIN,
+    });
+    await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
+      kind: 'dnie_signature',
+      outcome: 'cancelled',
+    });
+    expect(await next).toBeNull();
   });
 
   it('tells agents how the DNIe logs in and signs instead of typing it', async () => {
@@ -247,6 +403,7 @@ describe('DNIe signatures with the phone', () => {
 it('ends login after inactivity and asks again for the next handshake', async () => {
   const { relay, app: a, procedureId, dnie } = await setup();
   const approval = a.services.companion!.login(procedureId, dnie, summary.origin);
+  await typeUnlock(a, procedureId);
   await a.waitFor(() => a.services.companion!.status().state === 'waiting');
   const status = await a.invoke('companion.status');
   const { received } = phone(relay, status.link as string, (m, send) => {
@@ -300,12 +457,15 @@ it('enables DNIe browser login after origin policy, desktop consent and phone ap
     kind: 'confirm',
     approved: true,
   });
+  // After the desktop consent, the CAN and the PIN.
+  expect(await typeUnlock(a, procedureId)).toMatchObject({ purpose: 'login', stage: 'unlock' });
   await a.waitFor(() => a.services.companion!.status().state === 'waiting');
   const status = await a.invoke('companion.status');
   phone(relay, status.link as string, (m, send) => {
     if (m.type === 'sign.request') {
       expect(m.purpose).toBe('login');
       expect(m.origin).toBe(summary.origin);
+      expect(m.pin).toBe(PIN);
       send({
         type: 'sign.certificate',
         requestId: m.requestId,
@@ -323,210 +483,6 @@ it('enables DNIe browser login after origin policy, desktop consent and phone ap
   expect(a.pendingPrompt(procedureId)?.prompt).toMatchObject({
     kind: 'dnie_signature',
     purpose: 'login',
-  });
-});
-
-describe('the DNIe PIN saved in Mis datos', () => {
-  const PIN = 'Abcd1234';
-
-  /** Touch ID that records its prompts and answers `ok`. */
-  function touchId() {
-    const bio = {
-      ok: true,
-      prompts: 0,
-      available: () => true,
-      prompt: async () => {
-        bio.prompts++;
-        return bio.ok;
-      },
-    };
-    return bio;
-  }
-
-  /**
-   * A paired phone that reads the card for every request and signs. `card.refusePin`: the card
-   * refuses the request's PIN once (the phone reports it, the user types the right one);
-   * `card.error`: the phone answers the request or the signature with this error.
-   */
-  async function pairedPhone(a: TestApp, relay: MemoryRelay) {
-    const card: { refusePin?: boolean; error?: CompanionErrorCode; errorOnSign?: boolean } = {};
-    const { link } = await a.invoke('companion.pair');
-    const { received } = phone(relay, link as string, (m, send) => {
-      if (m.type === 'sign.request') {
-        if (card.error && !card.errorOnSign)
-          return send({ type: 'sign.error', requestId: m.requestId, code: card.error });
-        send({
-          type: 'sign.certificate',
-          requestId: m.requestId,
-          certificates: [CERT.toString('base64')],
-        });
-      } else if (m.type === 'sign.toBeSigned') {
-        if (card.error && card.errorOnSign)
-          return send({ type: 'sign.error', requestId: m.requestId, code: card.error });
-        if (card.refusePin) send({ type: 'sign.wrongPin', requestId: m.requestId });
-        card.refusePin = false;
-        send({
-          type: 'sign.signature',
-          requestId: m.requestId,
-          seq: m.seq,
-          signature: Buffer.alloc(256, 7).toString('base64'),
-        });
-      }
-    });
-    await a.waitFor(() => a.services.companion!.status().state === 'connected');
-    const requests = () =>
-      received.filter(
-        (m): m is Extract<DesktopToPhone, { type: 'sign.request' }> => m.type === 'sign.request',
-      );
-    return { card, requests };
-  }
-
-  /** Answers the desktop's signature confirmation. */
-  async function confirm(a: TestApp, procedureId: string, approved: boolean) {
-    await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'confirm');
-    const prompt = a.pendingPrompt(procedureId)!;
-    await a.invoke('chat.respond', prompt.id, { kind: 'confirm', approved });
-    return prompt.prompt;
-  }
-
-  /** The procedure's latest DNIe progress card. */
-  function lastDniePrompt(a: TestApp, procedureId: string) {
-    return a.services.procedures
-      .transcript(procedureId)
-      .flatMap((i) => (i.type === 'prompt' && i.prompt.kind === 'dnie_signature' ? [i.prompt] : []))
-      .at(-1);
-  }
-
-  /** Signs once with the key the phone gave, and ends the request. */
-  async function signWith(approval: Promise<unknown>) {
-    const key = (await approval) as ExternalSigningKey;
-    expect(key?.kind).toBe('external');
-    await key.sign(Buffer.from('attrs'), 'sha256', { kind: 'cms', document: 0 });
-    key.release(true);
-  }
-
-  it('sends it only after the desktop approval, and never once the card refused it', async () => {
-    const bio = touchId();
-    const { relay, app: a, procedureId, dnie } = await setup(bio);
-    expect(await a.invoke('vault.setDniePin', dnie.id, PIN)).toMatchObject({ pin: 'saved' });
-    const { card, requests } = await pairedPhone(a, relay);
-    const sign = (s: AfirmaSignatureSummary = summary) =>
-      a.services.browser.approveSignature(procedureId, s);
-
-    // The credential's policy is "ask": the desktop asks first, with Touch ID. Declining either
-    // sends nothing to the phone.
-    let approval = sign();
-    expect(await confirm(a, procedureId, false)).toMatchObject({
-      confirmKind: 'signature',
-      biometric: true,
-      message: expect.stringContaining('PIN guardado'),
-    });
-    expect(await approval).toBeNull();
-    bio.ok = false;
-    approval = sign();
-    await confirm(a, procedureId, true);
-    expect(await approval).toBeNull();
-    expect(bio.prompts).toBe(1);
-    expect(requests()).toHaveLength(0);
-
-    // Approved: the request carries the PIN, and the card refuses it.
-    bio.ok = true;
-    card.refusePin = true;
-    approval = sign();
-    await confirm(a, procedureId, true);
-    await signWith(approval);
-    expect(requests().at(-1)).toMatchObject({ purpose: 'document', pin: PIN });
-    // The progress card knows the phone won't ask for the PIN (its step hint leaves it out).
-    expect(lastDniePrompt(a, procedureId)).toMatchObject({
-      purpose: 'document',
-      savedPin: true,
-      message: expect.stringContaining('El móvil ya tiene tu PIN guardado.'),
-    });
-    expect(a.pendingPrompt(procedureId)).toBeUndefined();
-    await a.waitFor(() => a.vault.getCredential(dnie.id)?.pin === 'wrong');
-    expect((await a.invoke('vault.overview')).credentials).toMatchObject([
-      { id: dnie.id, pin: 'wrong' },
-    ]);
-    expect(a.events.filter((e) => e.type === 'vault.changed').length).toBeGreaterThan(1);
-
-    // Marked wrong: no desktop question, and no PIN, until a new one is saved.
-    await signWith(sign());
-    expect(requests().at(-1)).not.toHaveProperty('pin');
-    expect(lastDniePrompt(a, procedureId)).not.toHaveProperty('savedPin');
-    expect(lastDniePrompt(a, procedureId)?.message).toContain('escribe el PIN del DNIe');
-    await a.invoke('vault.setDniePin', dnie.id, 'Nuevo5678');
-    approval = sign();
-    await confirm(a, procedureId, true);
-    await signWith(approval);
-    expect(requests().at(-1)).toMatchObject({ pin: 'Nuevo5678' });
-
-    // Reading the certificate needs no PIN: no question, no PIN.
-    const read = sign({ ...summary, method: 'selectCertificate', documents: [] });
-    const key = (await read) as ExternalSigningKey;
-    key.release(true);
-    expect(requests().at(-1)).toMatchObject({ purpose: 'certificate' });
-    expect(requests().at(-1)).not.toHaveProperty('pin');
-    expect(lastDniePrompt(a, procedureId)).not.toHaveProperty('savedPin');
-
-    // "Use automatically" (policy auto): no question.
-    await a.invoke('vault.setCredentialPolicy', dnie.id, 'auto');
-    await signWith(sign());
-    expect(requests().at(-1)).toMatchObject({ pin: 'Nuevo5678' });
-    expect(bio.prompts).toBe(3);
-
-    // Never in prompts, transcripts, events, logs or the QR link.
-    const seen = JSON.stringify([
-      a.services.procedures.transcript(procedureId),
-      a.services.conversation.transcript(),
-      a.events,
-      a.logLines,
-      await a.invoke('vault.overview'),
-      await a.invoke('companion.status'),
-    ]);
-    for (const pin of [PIN, 'Nuevo5678']) expect(seen).not.toContain(pin);
-  });
-
-  it('marks it when the card is blocked', async () => {
-    for (const errorOnSign of [false, true]) {
-      const { relay, app: a, procedureId, dnie } = await setup();
-      await a.invoke('vault.setDniePin', dnie.id, PIN);
-      await a.invoke('vault.setCredentialPolicy', dnie.id, 'auto');
-      const { card, requests } = await pairedPhone(a, relay);
-      Object.assign(card, { error: 'pin_blocked', errorOnSign });
-      const approval = a.services.browser.approveSignature(procedureId, summary);
-      if (errorOnSign) await expect(signWith(approval)).rejects.toThrow('pin_blocked');
-      else expect(await approval).toBeNull();
-      expect(requests().at(-1)).toMatchObject({ pin: PIN });
-      await a.waitFor(() => a.vault.getCredential(dnie.id)?.pin === 'wrong');
-      await a.close();
-      for (const p of phones.splice(0)) p.close();
-    }
-    app = undefined;
-  });
-
-  it('goes with logins only after the desktop consent', async () => {
-    const bio = touchId();
-    const { relay, app: a, procedureId, token, dnie } = await setup(bio);
-    await a.invoke('vault.setDniePin', dnie.id, PIN);
-    const { requests } = await pairedPhone(a, relay);
-    const use = () =>
-      a.rpc('browser.useCertificate', { credentialId: dnie.id, origins: [summary.origin] }, token);
-
-    let response = use();
-    await confirm(a, procedureId, false);
-    expect((await response).body.error?.code).toBe('user_rejected');
-    expect(requests()).toHaveLength(0);
-
-    response = use();
-    expect(await confirm(a, procedureId, true)).toMatchObject({ confirmKind: 'credential' });
-    expect((await response).body.result).toMatchObject({ enabled: true });
-    expect(bio.prompts).toBe(1);
-    expect(requests()).toMatchObject([{ purpose: 'login', pin: PIN }]);
-    expect(a.pendingPrompt(procedureId)?.prompt).toMatchObject({
-      purpose: 'login',
-      savedPin: true,
-    });
-    expect(JSON.stringify((await response).body)).not.toContain(PIN);
   });
 });
 
@@ -550,11 +506,9 @@ describe('without the dnie-phone feature flag', () => {
     for (const method of ['companion.status', 'companion.pair', 'companion.unpair'] as const)
       await expect(a.invoke(method)).rejects.toThrow('no está disponible');
     await expect(a.invoke('vault.addDnie')).rejects.toThrow('no está disponible');
-    const dnie = a.vault.listCredentials().find((c) => c.kind === 'dnie')!;
-    await expect(a.invoke('vault.setDniePin', dnie.id, 'Abcd1234')).rejects.toThrow(
+    await expect(a.invoke('companion.unlock', 'q-1', { can: CAN, pin: PIN })).rejects.toThrow(
       'no está disponible',
     );
-    expect(a.vault.pins.size).toBe(0);
     expect(relay.rooms.size).toBe(0);
     expect(a.events.some((e) => e.type === 'companion.changed')).toBe(false);
   });

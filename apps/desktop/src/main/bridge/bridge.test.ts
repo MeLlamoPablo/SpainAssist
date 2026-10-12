@@ -464,7 +464,6 @@ describe('bridge: vault', () => {
 
   it('keeps the DNIe PIN from agents: no reading, typing, saving or asking for it', async () => {
     const dnie = await app.invoke('vault.addDnie');
-    await app.invoke('vault.setDniePin', dnie.id, 'Abcd1234');
     // A PIN the user wrote down as personal data (Mis datos allows custom fields) is hidden too.
     await app.vault.setPersonal(
       [{ key: 'custom.pin_dnie', label: 'PIN del DNIe', value: 'Abcd1234' }],
@@ -500,7 +499,7 @@ describe('bridge: vault', () => {
     // Saving: PINs are never personal data, and nothing reaches the credential.
     for (const key of ['custom.pin', 'custom.dnie-pin', 'custom.pin_dnie'])
       await refused('vault.save', { items: [{ key, label: 'PIN', value: '87654321' }] });
-    expect(await app.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: 'Abcd1234' });
+    expect(await app.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
     // Asking: no form field for it.
     for (const field of [
       { key: 'pin', label: 'PIN del DNIe', type: 'secret' },

@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonClassDiscriminator
  * The desktop validates with strict schemas, so the phone never sends fields it doesn't know
  * and leaves out empty optional ones.
  */
-const val COMPANION_PROTOCOL = 4
+const val COMPANION_PROTOCOL = 5
 
 /** Largest decrypted message, after joining fragments (same as the desktop). */
 const val MAX_MESSAGE_BYTES = 24 * 1024 * 1024
@@ -111,13 +111,25 @@ data class SignRequest(
     val verifiable: Boolean,
     val signatures: Int? = null,
     val expiresAt: String,
-    /** The DNI's CAN from the desktop's Mis datos (6 digits), so the phone doesn't ask for it. */
-    val can: String? = null,
+    /** The DNI's CAN (6 digits), typed on the desktop. The phone never stores it. */
+    val can: String,
     /**
-     * The DNIe PIN saved in the desktop's Mis datos (8 to 16 characters): used for this request
-     * only, never stored, and never tried again once the card refuses it ([SignWrongPin]).
+     * The DNIe PIN typed on the desktop (8 to 16 characters); absent for certificate reads and in
+     * a request sent again after a reconnect. Used for this request only, never stored, and never
+     * tried again once the card refuses it ([SignNeed]).
      */
     val pin: String? = null,
+) : DesktopToPhone
+
+/** The CAN or PIN the phone asked for with [SignNeed], typed on the desktop. */
+@Serializable
+@SerialName("sign.unlock")
+data class SignUnlock(
+    val requestId: String,
+    val can: String? = null,
+    val pin: String? = null,
+    /** The request's new deadline (ISO 8601). */
+    val expiresAt: String,
 ) : DesktopToPhone
 
 @Serializable
@@ -196,10 +208,25 @@ data class SignError(
     val message: String? = null,
 ) : PhoneToDesktop
 
-/** The card refused the request's [SignRequest.pin]: the phone asks the user. Never carries a PIN. */
 @Serializable
-@SerialName("sign.wrongPin")
-data class SignWrongPin(val requestId: String) : PhoneToDesktop
+enum class Need {
+    @SerialName("can") Can,
+    @SerialName("pin") Pin,
+}
+
+/**
+ * The phone needs a new CAN or PIN and waits for [SignUnlock]: the card refused the one it had
+ * ([refused]; [triesLeft] after a wrong PIN), or the request came without it. Never carries a CAN
+ * or a PIN.
+ */
+@Serializable
+@SerialName("sign.need")
+data class SignNeed(
+    val requestId: String,
+    val what: Need,
+    val refused: Boolean,
+    val triesLeft: Int? = null,
+) : PhoneToDesktop
 
 @Serializable
 @SerialName("bye")

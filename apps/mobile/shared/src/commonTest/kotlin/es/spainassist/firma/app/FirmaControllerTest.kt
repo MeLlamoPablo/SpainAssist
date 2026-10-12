@@ -17,7 +17,10 @@ import es.spainassist.firma.protocol.SignError
 import es.spainassist.firma.protocol.SignProgress
 import es.spainassist.firma.protocol.SignRequest
 import es.spainassist.firma.protocol.SignSignature
-import es.spainassist.firma.protocol.SignWrongPin
+import es.spainassist.firma.protocol.SignNeed
+import es.spainassist.firma.protocol.SignUnlock
+import es.spainassist.firma.protocol.Need
+import es.spainassist.firma.protocol.DesktopToPhone
 import es.spainassist.firma.protocol.Stage
 import es.spainassist.firma.protocol.ToBeSigned
 import es.spainassist.firma.relay.LinkStatus
@@ -32,6 +35,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -69,8 +73,8 @@ class FirmaControllerTest {
             verifiable: Boolean = false,
             purpose: Purpose = Purpose.Document,
             expiresIn: Long = 5 * 60_000,
-            can: String? = null,
-            pin: String? = null,
+            can: String = "123456",
+            pin: String? = "secreto1",
         ) = SignRequest(
             requestId = id,
             purpose = purpose,
@@ -84,13 +88,15 @@ class FirmaControllerTest {
             pin = pin,
         )
 
-        /** Approve, type CAN and PIN, hold [card]: up to the certificate. */
-        fun approveWith(card: FakeCard, can: String = "123456", pin: String = "secreto1") {
+        /** Approve and hold [card]: up to the certificate. */
+        fun approveWith(card: FakeCard) {
             controller.approve()
-            if (screen.step() is Step.EnterCan) controller.submitCan(can)
-            if (screen.step() is Step.EnterPin) controller.submitPin(pin)
             reader.present(card)
         }
+
+        fun unlock(id: String, can: String? = null, pin: String? = null) = link.deliver(
+            SignUnlock(id, can = can, pin = pin, expiresAt = Instant.fromEpochMilliseconds(platform.clock + 5 * 60_000).toString()),
+        )
     }
 
     /** A card whose PIN is [right]: it counts its tries down like a DNIe and records each PIN. */
@@ -114,13 +120,19 @@ class FirmaControllerTest {
         val request = CompanionJson.decodeFromString<es.spainassist.firma.protocol.DesktopToPhone>(vectors.getValue("request").toString()) as SignRequest
         assertEquals("123456", request.can)
         assertEquals("12345678", request.pin)
-        // The report as the desktop decodes it.
+        // The need as the desktop decodes it, and its answer.
         assertEquals(
-            vectors.getValue("wrongPin"),
+            vectors.getValue("need"),
             Json.parseToJsonElement(
-                CompanionJson.encodeToString(es.spainassist.firma.protocol.PhoneToDesktop.serializer(), SignWrongPin(request.requestId)),
+                CompanionJson.encodeToString(
+                    es.spainassist.firma.protocol.PhoneToDesktop.serializer(),
+                    SignNeed(request.requestId, Need.Pin, refused = true, triesLeft = 2),
+                ),
             ),
         )
+        val unlock = CompanionJson.decodeFromString<DesktopToPhone>(vectors.getValue("unlock").toString()) as SignUnlock
+        assertEquals("87654321", unlock.pin)
+        assertNull(unlock.can)
         h.link.deliver(request)
         val card = FakeCard()
         h.approveWith(card)
@@ -211,11 +223,7 @@ class FirmaControllerTest {
         assertEquals(Step.Review, h.screen.step())
         val card = FakeCard()
         h.controller.approve()
-        assertEquals(Step.EnterCan(false), h.screen.step())
-        h.controller.submitCan("12345") // too short: ignored
-        h.controller.submitCan("123456")
-        assertEquals(Step.EnterPin(false, null), h.screen.step())
-        h.controller.submitPin("secreto1")
+        // The CAN and the PIN came with the request: straight to the card.
         assertEquals(Step.HoldCard(false), h.screen.step())
         assertTrue(h.controller.readingCard.value)
         h.reader.present(card)
@@ -280,241 +288,179 @@ class FirmaControllerTest {
     }
 
     @Test
-    fun asksThePinAgainWhenItIsWrongAndStopsWhenBlocked() = runTest {
+    fun asksTheDesktopForANewPinWhenItIsWrongAndStopsWhenBlocked() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
-        h.link.deliver(h.request())
-        val card = FakeCard(onSign = { _, pin -> if (pin != "correcto") CardException.WrongPin(2) else null })
-        h.approveWith(card, pin = "secreto1")
-        h.link.deliver(ToBeSigned(h.request().requestId, 1, Algorithm.Sha256, "AQID"))
-        assertEquals(Step.EnterPin(wrong = true, retriesLeft = 2), h.screen.step())
-        h.controller.submitPin("correcto")
+        val request = h.request()
+        h.link.deliver(request)
+        val card = PinCard(right = "correcto")
+        h.approveWith(card.card)
+        h.link.deliver(ToBeSigned(request.requestId, 1, Algorithm.Sha256, "AQID"))
+        assertEquals(Step.WaitForComputer(Need.Pin, refused = true, triesLeft = 2), h.screen.step())
+        assertEquals(listOf(SignNeed(request.requestId, Need.Pin, refused = true, triesLeft = 2)), h.link.sentOf<SignNeed>())
+        assertFalse(h.controller.readingCard.value)
+        h.unlock(request.requestId, pin = "correcto")
         assertEquals(Step.HoldCard(false), h.screen.step())
-        h.reader.present(card)
+        h.reader.present(card.card)
+        assertEquals(listOf("secreto1", "correcto"), card.tried)
         assertEquals(1, h.link.sentOf<SignSignature>().size)
-        h.link.deliver(SignDone(h.request().requestId))
+        h.link.deliver(SignDone(request.requestId))
 
         h.controller.dismissResult()
-        h.link.deliver(h.request(id = "3f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
-        h.controller.approve()
-        // The PIN is remembered: straight to the card.
-        assertEquals(Step.HoldCard(false), h.screen.step())
-        h.reader.present(FakeCard(onSign = { _, _ -> CardException.PinBlocked() }))
+        h.link.deliver(h.request(id = "3f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", pin = "otro1234"))
+        h.approveWith(FakeCard(onSign = { _, _ -> CardException.PinBlocked() }))
         h.link.deliver(ToBeSigned("3f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", 1, Algorithm.Sha256, "AQID"))
         assertEquals(Step.Result(Outcome.Failed(ErrorCode.PinBlocked)), h.screen.step())
         assertEquals(ErrorCode.PinBlocked, h.link.sentOf<SignError>().last().code)
     }
 
     @Test
-    fun asksTheCanAgainWhenItDoesNotMatch() = runTest {
+    fun asksTheDesktopForANewCanWhenItDoesNotMatchAndNeverTriesItAgain() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
-        h.link.deliver(h.request())
-        val card = FakeCard(onOpen = { can -> if (can != "654321") CardException.WrongCan() else null })
-        h.approveWith(card, can = "123456")
-        assertEquals(Step.EnterCan(wrong = true), h.screen.step())
-        assertNull(h.platform.store.get(FirmaController.KEY_CAN))
-        h.controller.submitCan("654321")
-        h.reader.present(card)
-        assertEquals(1, h.link.sentOf<SignCertificate>().size)
-        assertEquals("654321", h.platform.store.get(FirmaController.KEY_CAN))
-    }
-
-    @Test
-    fun usesTheCanFromTheDesktopAndKeepsItOnceTheCardAcceptsIt() = runTest {
-        val h = Harness(this)
-        h.pairAndConnect()
-        h.platform.store.put(FirmaController.KEY_CAN, "111111") // an older card's
         val tried = ArrayList<String>()
         val card = FakeCard(onOpen = { can -> tried += can; if (can != "654321") CardException.WrongCan() else null })
-        h.link.deliver(h.request(can = "654321"))
-        h.controller.approve()
-        // No CAN step: straight to the PIN.
-        assertEquals(Step.EnterPin(false, null), h.screen.step())
-        h.controller.submitPin("secreto1")
-        h.reader.present(card)
-        assertEquals(1, h.link.sentOf<SignCertificate>().size)
-        assertEquals(listOf("654321"), tried)
-        assertEquals("654321", h.platform.store.get(FirmaController.KEY_CAN))
-        h.link.deliver(SignDone(h.request().requestId))
-
-        // Without a CAN from the desktop, the stored one is used.
-        h.controller.dismissResult()
-        h.link.deliver(h.request(id = "cf1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
-        h.controller.approve()
-        assertEquals(Step.HoldCard(false), h.screen.step())
-        h.reader.present(card)
-        assertEquals(listOf("654321", "654321"), tried)
-    }
-
-    @Test
-    fun asksTheCanWhenTheDesktopOneIsWrongAndDoesNotTryItAgain() = runTest {
-        val h = Harness(this)
-        h.pairAndConnect()
-        h.platform.store.put(FirmaController.KEY_CAN, "111111")
-        val tried = ArrayList<String>()
-        val card = FakeCard(onOpen = { can -> tried += can; if (can != "654321") CardException.WrongCan() else null })
-        h.link.deliver(h.request(can = "000000"))
+        val request = h.request(can = "000000")
+        h.link.deliver(request)
         h.approveWith(card)
-        assertEquals(Step.EnterCan(wrong = true, fromComputer = true), h.screen.step())
-        assertNull(h.platform.store.get(FirmaController.KEY_CAN), "the stored CAN is dropped")
-        h.controller.submitCan("654321")
+        assertEquals(Step.WaitForComputer(Need.Can, refused = true, triesLeft = null), h.screen.step())
+        assertEquals(listOf(SignNeed(request.requestId, Need.Can, refused = true)), h.link.sentOf<SignNeed>())
+        // A malformed or refused CAN isn't tried: the phone asks again for the refused one.
+        h.unlock(request.requestId, can = "12345")
+        h.unlock(request.requestId, can = "000000")
+        assertEquals(2, h.link.sentOf<SignNeed>().size)
+        h.unlock(request.requestId, can = "654321")
         h.reader.present(card)
         assertEquals(listOf("000000", "654321"), tried)
-        assertEquals("654321", h.platform.store.get(FirmaController.KEY_CAN))
-        h.link.deliver(SignDone(h.request().requestId))
+        assertEquals(1, h.link.sentOf<SignCertificate>().size)
+        h.link.deliver(SignDone(request.requestId))
+        // Only the pairing is stored.
+        assertEquals(setOf(FirmaController.KEY_PAIRING, FirmaController.KEY_PAIRED_AT, FirmaController.KEY_EXPIRES), h.platform.store.values.keys)
 
-        // Mis datos still has the wrong CAN: the phone uses the one the card accepted.
+        // The desktop sends the refused CAN again: not tried, the phone asks before the card.
         h.controller.dismissResult()
-        h.link.deliver(h.request(id = "df1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", can = "000000"))
+        val next = h.request(id = "df1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", can = "000000")
+        h.link.deliver(next)
         h.controller.approve()
-        assertEquals(Step.HoldCard(false), h.screen.step())
-        h.reader.present(card)
-        assertEquals(listOf("000000", "654321", "654321"), tried)
-        assertTrue(h.link.sentOf<SignError>().isEmpty())
-
-        // A typed CAN that is wrong says so without blaming the computer.
-        h.link.deliver(SignDone("df1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
-        h.controller.dismissResult()
-        h.platform.store.put(FirmaController.KEY_CAN, "222222")
-        h.link.deliver(h.request(id = "ef1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
-        h.approveWith(card)
-        assertEquals(Step.EnterCan(wrong = true, fromComputer = false), h.screen.step())
+        assertEquals(Step.WaitForComputer(Need.Can, refused = true, triesLeft = null), h.screen.step())
+        assertEquals(listOf("000000", "654321"), tried)
     }
 
     @Test
-    fun usesTheDesktopPinForThatRequestOnlyWithoutAskingOrKeepingIt() = runTest {
+    fun usesTheRequestPinForThatRequestOnlyWithoutKeepingIt() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
         val card = PinCard(right = "Desk1234")
-        h.link.deliver(h.request(can = "123456", pin = "Desk1234"))
+        h.link.deliver(h.request(pin = "Desk1234"))
         h.controller.approve()
-        // No CAN step and no PIN step: straight to the card.
         assertEquals(Step.HoldCard(false), h.screen.step())
         h.reader.present(card.card)
         h.link.deliver(ToBeSigned(h.request().requestId, 1, Algorithm.Sha256, "AQID"))
         assertEquals(listOf("Desk1234"), card.tried)
         assertEquals(1, h.link.sentOf<SignSignature>().size)
-        assertTrue(h.link.sentOf<SignWrongPin>().isEmpty())
+        assertTrue(h.link.sentOf<SignNeed>().isEmpty())
         assertFalse(h.screen.toString().contains("Desk1234"))
         h.link.deliver(SignDone(h.request().requestId))
         h.controller.dismissResult()
+        assertEquals(setOf(FirmaController.KEY_PAIRING, FirmaController.KEY_PAIRED_AT, FirmaController.KEY_EXPIRES), h.platform.store.values.keys)
 
-        // Never stored, nor remembered for the next request.
-        assertFalse((h.screen as Screen.Home).pinRemembered)
-        assertTrue(h.platform.store.values.values.none { it.contains("Desk1234") })
-        h.link.deliver(h.request(id = "1a1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
+        // A request without a PIN (sent again to a restarted phone): the phone asks the desktop.
+        val bare = h.request(id = "1a1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", pin = null)
+        h.link.deliver(bare)
         h.controller.approve()
-        assertEquals(Step.EnterPin(false, null), h.screen.step())
+        assertEquals(Step.WaitForComputer(Need.Pin, refused = false, triesLeft = null), h.screen.step())
+        assertEquals(SignNeed(bare.requestId, Need.Pin, refused = false), h.link.sentOf<SignNeed>().last())
+        // Sent again after a reconnect while it waits.
+        h.link.drop()
+        h.link.sent.clear()
+        h.link.connect()
+        assertEquals(listOf(SignNeed(bare.requestId, Need.Pin, refused = false)), h.link.sentOf<SignNeed>())
         h.controller.cancel()
         h.controller.dismissResult()
 
-        // Reading the certificate needs no PIN: the desktop's isn't used.
+        // Reading the certificate needs no PIN: the request's isn't used.
         val reader = PinCard(right = "Desk1234")
         h.link.deliver(h.request(id = "1b1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", purpose = Purpose.Certificate, pin = "Desk1234"))
         h.controller.approve()
         h.reader.present(reader.card)
-        assertEquals(2, h.link.sentOf<SignCertificate>().size)
+        assertEquals(1, h.link.sentOf<SignCertificate>().size)
         assertTrue(reader.tried.isEmpty())
     }
 
     @Test
-    fun triesAWrongDesktopPinOnceThenAsksWithTheTriesLeftAndTellsTheDesktop() = runTest {
+    fun triesAWrongPinOnceAndNeverAgain() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
         val card = PinCard(right = "Right123")
-        val request = h.request(can = "123456", pin = "Wrong123")
+        val request = h.request(pin = "Wrong123")
         h.link.deliver(request)
-        h.controller.approve()
-        h.reader.present(card.card)
+        h.approveWith(card.card)
         h.link.deliver(ToBeSigned(request.requestId, 1, Algorithm.Sha256, "AQID"))
-        assertEquals(Step.EnterPin(wrong = true, retriesLeft = 2, fromComputer = true), h.screen.step())
-        assertEquals(listOf(SignWrongPin(request.requestId)), h.link.sentOf<SignWrongPin>())
+        assertEquals(Step.WaitForComputer(Need.Pin, refused = true, triesLeft = 2), h.screen.step())
         assertEquals(listOf("Wrong123"), card.tried)
 
-        // After a reconnect the desktop sends its request again, PIN included: it's never tried
-        // again, and the phone repeats its report.
+        // After a reconnect the desktop sends its request again: the phone repeats its need.
         h.link.drop()
         h.link.sent.clear()
         h.link.connect()
         h.link.deliver(request)
         h.link.deliver(ToBeSigned(request.requestId, 1, Algorithm.Sha256, "AQID"))
         assertEquals(listOf("Wrong123"), card.tried)
-        assertEquals(setOf(SignWrongPin(request.requestId)), h.link.sentOf<SignWrongPin>().toSet())
-        assertEquals(Step.EnterPin(wrong = true, retriesLeft = 2, fromComputer = true), h.screen.step())
+        assertTrue(h.link.sentOf<SignNeed>().isNotEmpty())
+        assertTrue(h.link.sentOf<SignNeed>().all { it == SignNeed(request.requestId, Need.Pin, refused = true, triesLeft = 2) })
 
-        // The user types theirs: it signs once, and it's the one kept for an hour.
-        h.controller.submitPin("Right123")
+        // The same wrong PIN again (a stale one on the desktop): not tried.
+        h.link.sent.clear()
+        h.unlock(request.requestId, pin = "Wrong123")
+        assertEquals(listOf(SignNeed(request.requestId, Need.Pin, refused = true, triesLeft = 2)), h.link.sentOf<SignNeed>())
+        h.unlock(request.requestId, pin = "Right123")
         assertEquals(Step.HoldCard(false), h.screen.step())
         h.reader.present(card.card)
         assertEquals(listOf("Wrong123", "Right123"), card.tried)
         assertEquals(1, card.card.signed.size)
-        assertTrue(h.link.sentOf<SignSignature>().isNotEmpty())
         h.link.deliver(SignDone(request.requestId))
         h.controller.dismissResult()
-        assertTrue((h.screen as Screen.Home).pinRemembered)
-        assertTrue(h.platform.store.values.values.none { it.contains("Wrong123") || it.contains("Right123") })
+
+        // A later request with the refused PIN: asked for before the card, never tried.
+        val later = h.request(id = "2a1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", pin = "Wrong123")
+        h.link.deliver(later)
+        h.controller.approve()
+        assertEquals(Step.WaitForComputer(Need.Pin, refused = true, triesLeft = null), h.screen.step())
+        assertEquals(listOf("Wrong123", "Right123"), card.tried)
     }
 
     @Test
-    fun asksInsteadOfUsingADesktopPinWhileTheCardHasFewTriesLeft() = runTest {
+    fun ignoresAnUnlockItDidNotAskForAndGivesUpWaiting() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
-        val card = PinCard(right = "Right123", tries = 2)
-        // The user's own typo leaves one try.
-        h.link.deliver(h.request(can = "123456"))
-        h.controller.approve()
-        h.controller.submitPin("Typo1234")
-        h.reader.present(card.card)
-        h.link.deliver(ToBeSigned(h.request().requestId, 1, Algorithm.Sha256, "AQID"))
-        assertEquals(Step.EnterPin(wrong = true, retriesLeft = 1), h.screen.step())
-        h.controller.cancel()
-        h.controller.dismissResult()
-
-        // A PIN from the desktop could block the card: the phone asks, warning it's the last try.
-        val second = h.request(id = "2a1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", can = "123456", pin = "Desk1234")
-        h.link.deliver(second)
-        h.controller.approve()
-        assertEquals(Step.EnterPin(wrong = false, retriesLeft = 1), h.screen.step())
-        h.controller.submitPin("Right123")
-        h.reader.present(card.card)
-        h.link.deliver(ToBeSigned(second.requestId, 1, Algorithm.Sha256, "AQID"))
-        assertEquals(listOf("Typo1234", "Right123"), card.tried)
-        h.link.deliver(SignDone(second.requestId))
-        h.controller.dismissResult()
-
-        // Accepted: the tries are back, so the desktop's PIN is used again.
-        val third = h.request(id = "2b1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", can = "123456", pin = "Right123")
-        h.link.deliver(third)
-        h.controller.approve()
-        assertEquals(Step.HoldCard(false), h.screen.step())
-        h.reader.present(card.card)
-        h.link.deliver(ToBeSigned(third.requestId, 1, Algorithm.Sha256, "AQID"))
-        assertEquals(listOf("Typo1234", "Right123", "Right123"), card.tried)
-        assertTrue(h.link.sentOf<SignWrongPin>().isEmpty())
+        val card = PinCard(right = "Right123")
+        val request = h.request(pin = "Wrong123")
+        h.link.deliver(request)
+        h.approveWith(card.card)
+        // Not waiting: dropped, not kept for later.
+        h.unlock(request.requestId, pin = "Right123")
+        h.link.deliver(ToBeSigned(request.requestId, 1, Algorithm.Sha256, "AQID"))
+        assertEquals(Step.WaitForComputer(Need.Pin, refused = true, triesLeft = 2), h.screen.step())
+        advanceTimeBy(FirmaController.UNLOCK_WAIT_MS + 1)
+        runCurrent()
+        assertEquals(Step.Result(Outcome.Failed(ErrorCode.Timeout)), h.screen.step())
+        assertEquals(listOf("Wrong123"), card.tried)
     }
 
     @Test
-    fun endsWhenTheCardIsBlockedAndThenNeverTriesADesktopPinOnIt() = runTest {
+    fun endsWhenTheCardIsBlocked() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
         // Two wrong PINs elsewhere (another reader): the phone can't know.
         val card = PinCard(right = "Right123", tries = 1)
-        val request = h.request(can = "123456", pin = "Wrong123")
+        val request = h.request(pin = "Wrong123")
         h.link.deliver(request)
-        h.controller.approve()
-        h.reader.present(card.card)
+        h.approveWith(card.card)
         h.link.deliver(ToBeSigned(request.requestId, 1, Algorithm.Sha256, "AQID"))
         assertEquals(Step.Result(Outcome.Failed(ErrorCode.PinBlocked)), h.screen.step())
-        // `pin_blocked` tells the desktop, which marks its PIN.
         assertEquals(ErrorCode.PinBlocked, h.link.sentOf<SignError>().single().code)
         assertEquals(listOf("Wrong123"), card.tried)
-        h.controller.dismissResult()
-
-        h.link.deliver(h.request(id = "3a1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", can = "123456", pin = "Right123"))
-        h.controller.approve()
-        assertEquals(Step.EnterPin(wrong = false, retriesLeft = 0), h.screen.step())
-        assertEquals(listOf("Wrong123"), card.tried)
+        assertTrue(h.link.sentOf<SignNeed>().isEmpty())
     }
 
     @Test
@@ -529,7 +475,7 @@ class FirmaControllerTest {
     }
 
     @Test
-    fun refusesARequestWithAMalformedCan() = runTest {
+    fun refusesARequestWithAMalformedOrMissingCan() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
         for (can in listOf("12345", "1234567", "12345a", "")) {
@@ -537,6 +483,9 @@ class FirmaControllerTest {
             assertEquals(ErrorCode.Protocol, h.link.sentOf<SignError>().last().code, can)
             assertIs<Screen.Home>(h.screen)
         }
+        val vectors = Json.parseToJsonElement(VECTORS_JSON).jsonObject.getValue("login").jsonObject
+        val noCan = JsonObject(vectors.getValue("request").jsonObject - "can")
+        assertFails { CompanionJson.decodeFromString<DesktopToPhone>(noCan.toString()) }
     }
 
     @Test
@@ -593,14 +542,12 @@ class FirmaControllerTest {
         h.controller.dismissResult()
         h.link.deliver(h.request(id = "5f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
         h.controller.approve()
-        h.controller.submitCan("123456")
         h.link.deliver(SignCancel("5f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e", CancelReason.Cancelled))
         assertEquals(Step.Result(Outcome.CancelledByDesktop), h.screen.step())
 
         h.controller.dismissResult()
         h.link.deliver(h.request(id = "7f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
         h.controller.approve()
-        h.controller.submitPin("secreto1")
         h.controller.cancel()
         assertEquals(Step.Result(Outcome.Cancelled), h.screen.step())
         assertEquals(ErrorCode.Cancelled, h.link.sentOf<SignError>().last().code)
@@ -626,25 +573,6 @@ class FirmaControllerTest {
         h.controller.approve()
         assertEquals(Step.Result(Outcome.Failed(ErrorCode.NfcUnavailable)), h.screen.step())
         assertEquals(ErrorCode.NfcUnavailable, h.link.sentOf<SignError>().single().code)
-    }
-
-    @Test
-    fun forgetsThePinAfterAnHourAndWhenAsked() = runTest {
-        val h = Harness(this)
-        h.pairAndConnect()
-        h.link.deliver(h.request(purpose = Purpose.Document))
-        h.approveWith(FakeCard())
-        h.link.deliver(SignDone(h.request().requestId))
-        h.controller.dismissResult()
-        assertTrue((h.screen as Screen.Home).pinRemembered)
-        h.platform.clock += FirmaController.PIN_CACHE_MS + 1
-        h.link.deliver(h.request(id = "af1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
-        h.controller.approve()
-        assertEquals(Step.EnterPin(false, null), h.screen.step())
-        h.controller.cancel()
-        h.controller.dismissResult()
-        h.controller.forgetCan()
-        assertEquals(false, (h.screen as Screen.Home).canSaved)
     }
 
     @Test

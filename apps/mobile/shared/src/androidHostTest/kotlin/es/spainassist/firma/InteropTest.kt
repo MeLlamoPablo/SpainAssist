@@ -15,6 +15,7 @@ import es.spainassist.firma.card.CardReader
 import es.spainassist.firma.card.DnieSession
 import es.spainassist.firma.card.NfcAvailability
 import es.spainassist.firma.protocol.Algorithm
+import es.spainassist.firma.protocol.Need
 import es.spainassist.firma.relay.LinkStatus
 import es.spainassist.firma.relay.RelayEvents
 import es.spainassist.firma.relay.RelaySocket
@@ -47,7 +48,8 @@ import kotlin.test.assertTrue
  * `services/relay-server/scripts/interop.ts` starts the desktop side and runs this test with
  * `-Pinterop=<config.json>`; a software RSA key stands in for the DNIe. Skipped otherwise.
  * The desktop sends the card's CAN and PIN with some requests and wrong ones with another: the
- * phone must ask for each exactly once, after the wrong one, and try the wrong PIN only once.
+ * phone must try each wrong one only once and ask the desktop for a new one (`sign.need`), never
+ * the user.
  */
 class InteropTest {
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -152,8 +154,7 @@ class InteropTest {
         }
 
         val outcomes = ArrayList<Outcome>()
-        val canSteps = ArrayList<Step.EnterCan>()
-        val pinSteps = ArrayList<Step.EnterPin>()
+        val waits = ArrayList<Step.WaitForComputer>()
         runBlocking<Unit> {
             val controller = withContext(thread) { FirmaController(platform, scope) }
             controller.onLink(link)
@@ -180,14 +181,7 @@ class InteropTest {
                         last = step
                         when (step) {
                             Step.Review -> controller.approve()
-                            is Step.EnterCan -> {
-                                canSteps += step
-                                controller.submitCan(cardCan)
-                            }
-                            is Step.EnterPin -> {
-                                pinSteps += step
-                                controller.submitPin(cardPin)
-                            }
+                            is Step.WaitForComputer -> waits += step
                             is Step.Result -> outcomes += step.outcome
                             else -> Unit
                         }
@@ -201,12 +195,18 @@ class InteropTest {
         thread.close()
         // The desktop checks every signature; here, nothing may have failed on the phone.
         assertTrue(outcomes.none { it is Outcome.Failed }, "phone outcomes: $outcomes")
-        // The first request's CAN came from the desktop; only its wrong one made the phone ask.
+        // Every CAN and PIN came from the desktop; each wrong one was tried once, then the phone
+        // waited for the desktop's new one.
         assertEquals(cardCan, triedCans.first())
-        assertEquals(listOf(Step.EnterCan(wrong = true, fromComputer = true)), canSteps)
-        // The same for the PIN: the desktop's was used first, and its wrong one cost one try.
+        assertEquals(1, triedCans.count { it != cardCan }, "tried CANs: ${triedCans.size}")
         assertEquals(cardPin, triedPins.first())
         assertEquals(1, triedPins.count { it != cardPin }, "tried PINs: ${triedPins.size}")
-        assertEquals(listOf(Step.EnterPin(wrong = true, retriesLeft = 2, fromComputer = true)), pinSteps)
+        assertEquals(
+            listOf(
+                Step.WaitForComputer(Need.Can, refused = true, triesLeft = null),
+                Step.WaitForComputer(Need.Pin, refused = true, triesLeft = 2),
+            ),
+            waits,
+        )
     }
 }

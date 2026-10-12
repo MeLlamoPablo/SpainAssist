@@ -8,16 +8,18 @@ import { DniAccessNumber, DniePin } from './vault';
  * schemas in Kotlin (`apps/mobile/shared/src/commonMain/kotlin/es/spainassist/firma/protocol`).
  * Change both sides together, and bump COMPANION_PROTOCOL when old apps can't follow.
  *
- * A signature, seen from the desktop:
- *   sign.request ─▶ phone shows what and for whom, the user approves, types the PIN (unless the
- *                   request carries the saved one), holds the card to the phone
+ * A signature, seen from the desktop (the user typed the CAN and the PIN on the desktop first,
+ * DECISIONS D20; the phone never asks for them):
+ *   sign.request (with can, pin) ─▶ phone shows what and for whom, the user approves and holds
+ *                   the card to the phone
  *   ◀─ sign.progress (reviewing → card → reading → signing), any number of times
  *   ◀─ sign.certificate (read from the card, for `purpose: "document"` and `"certificate"`)
  *   sign.toBeSigned (seq 1..n) ─▶ ◀─ sign.signature (same seq), while the card stays near
- *   ◀─ sign.wrongPin, when the card refused the request's `pin` (the phone then asks the user)
+ *   ◀─ sign.need, when the card refused the CAN or the PIN: the desktop asks the user and
+ *      answers with sign.unlock ─▶, and the request goes on
  *   sign.done ─▶  (or sign.cancel from the desktop, sign.error from the phone, at any point)
  */
-export const COMPANION_PROTOCOL = 4;
+export const COMPANION_PROTOCOL = 5;
 
 /** Standard Base64 (with padding), as both JSON encoders produce it. */
 const Base64 = (max: number) =>
@@ -117,14 +119,16 @@ export const CompanionSignRequest = z.strictObject({
   /** The desktop gives up after this (ISO 8601). */
   expiresAt: z.iso.datetime(),
   /**
-   * The DNI's CAN from Mis datos, when the desktop has one: the phone uses it instead of asking,
-   * and keeps it once the card accepts it. Only inside the encrypted channel, never in the QR.
+   * The DNI's CAN, as the user typed it on the desktop (or Mis datos has it from the scanned
+   * DNI). Only inside the encrypted channel, never in the QR. The phone never stores it.
    */
-  can: DniAccessNumber.optional(),
+  can: DniAccessNumber,
   /**
-   * The DNIe PIN saved in Mis datos, only after the approval the desktop needs for this use
-   * (DECISIONS D18): the phone skips its PIN step. It uses it for this request only and never
-   * stores it. A PIN the card refuses is never tried again (`sign.wrongPin`).
+   * The DNIe PIN the user typed on the desktop (D20). Required for `document` and `login`, left
+   * out for `certificate` (reading the certificate needs no PIN). The phone uses it for this
+   * request only, never stores it, and never tries a PIN the card refused again (`sign.need`).
+   * The desktop sends it once: a request sent again after a reconnect leaves it out, and the
+   * phone then asks for it with `sign.need`.
    */
   pin: DniePin.optional(),
 });
@@ -170,6 +174,20 @@ export const CompanionToBeSigned = z.strictObject({
 });
 export type CompanionToBeSigned = z.infer<typeof CompanionToBeSigned>;
 
+/**
+ * The CAN or the PIN the phone asked for with `sign.need`, typed by the user on the desktop.
+ * Carries exactly the one asked for. `expiresAt` is the request's new deadline (the user took
+ * time to type it). Sent once, like the request's `pin`.
+ */
+export const CompanionSignUnlock = z.strictObject({
+  type: z.literal('sign.unlock'),
+  requestId: RequestId,
+  can: DniAccessNumber.optional(),
+  pin: DniePin.optional(),
+  expiresAt: z.iso.datetime(),
+});
+export type CompanionSignUnlock = z.infer<typeof CompanionSignUnlock>;
+
 export const CompanionSignDone = z.strictObject({
   type: z.literal('sign.done'),
   requestId: RequestId,
@@ -189,6 +207,7 @@ export const CompanionBye = z.strictObject({ type: z.literal('bye') });
 
 export const DesktopToPhone = z.discriminatedUnion('type', [
   CompanionSignRequest,
+  CompanionSignUnlock,
   CompanionToBeSigned,
   CompanionSignDone,
   CompanionSignCancel,
@@ -275,22 +294,31 @@ export const CompanionSignError = z.strictObject({
 });
 export type CompanionSignError = z.infer<typeof CompanionSignError>;
 
+/** What the phone needs again: the card's CAN or its PIN. */
+export const CompanionNeed = z.enum(['can', 'pin']);
+export type CompanionNeed = z.infer<typeof CompanionNeed>;
+
 /**
- * The card refused the PIN the request carried (`pin`). The phone dropped it and asks the user,
- * and the request goes on. The desktop stops sending that PIN until a new one is saved. The
- * phone never sends a PIN.
+ * The phone needs a new CAN or PIN for this request and waits for `sign.unlock`: the card
+ * refused the one it had (`refused`; after a wrong PIN, `triesLeft` says how many tries the card
+ * has left), or the request came without it (sent again after a reconnect). The phone sends it
+ * again after a reconnect while it waits. It never carries a CAN or a PIN.
  */
-export const CompanionSignWrongPin = z.strictObject({
-  type: z.literal('sign.wrongPin'),
+export const CompanionSignNeed = z.strictObject({
+  type: z.literal('sign.need'),
   requestId: RequestId,
+  what: CompanionNeed,
+  refused: z.boolean(),
+  triesLeft: z.number().int().min(1).max(2).optional(),
 });
+export type CompanionSignNeed = z.infer<typeof CompanionSignNeed>;
 
 export const PhoneToDesktop = z.discriminatedUnion('type', [
   CompanionSignProgress,
   CompanionSignCertificate,
   CompanionSignature,
   CompanionSignError,
-  CompanionSignWrongPin,
+  CompanionSignNeed,
   CompanionBye,
 ]);
 export type PhoneToDesktop = z.infer<typeof PhoneToDesktop>;

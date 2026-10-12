@@ -240,27 +240,6 @@ describe('vault IPC', () => {
     );
   });
 
-  it('takes the DNIe PIN once, validated like the phone does, and never sends it back', async () => {
-    const dnie = await app.invoke('vault.addDnie');
-    for (const bad of ['1234567', '12345678901234567', 12345678, undefined, { pin: 'Abcd1234' }])
-      await expect(app.invoke('vault.setDniePin', dnie.id, bad as never)).rejects.toThrow(
-        t('es', 'invalidRequest'),
-      );
-    expect(app.vault.pins.size).toBe(0);
-    const saved = await app.invoke('vault.setDniePin', dnie.id, 'Abcd1234');
-    expect(saved).toMatchObject({ id: dnie.id, kind: 'dnie', pin: 'saved' });
-    expect(await app.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: 'Abcd1234' });
-    expect(app.events.some((e) => e.type === 'vault.changed')).toBe(true);
-    const overview = await app.invoke('vault.overview');
-    expect(overview.credentials).toMatchObject([{ id: dnie.id, pin: 'saved' }]);
-    expect(JSON.stringify([saved, overview, app.events, app.logLines])).not.toContain('Abcd1234');
-
-    const movil = await app.invoke('vault.addClaveMovil');
-    await expect(app.invoke('vault.setDniePin', movil.id, 'Abcd1234')).rejects.toThrow();
-    expect(await app.invoke('vault.setDniePin', dnie.id, null)).not.toHaveProperty('pin');
-    expect(await app.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
-  });
-
   it('wipeAll deletes everything and relaunches', async () => {
     await app.invoke('providers.redeemVoucher', 'VALID-CODE');
     await app.invoke('settings.update', { onboardingCompleted: true });

@@ -437,50 +437,11 @@ describe('credentials', () => {
     expect(reopened.getCredential(dnie.id)?.certificate?.holderName).toBe('JUAN ESPAÑOL ESPAÑOL');
   });
 
-  it('keeps the DNIe PIN encrypted and out of summaries, and stops releasing it once refused', async () => {
-    const { dir, vault } = await openVault();
+  it('keeps no secret for the DNIe', async () => {
+    const { vault } = await openVault();
     const dnie = await vault.addDnie();
     expect(dnie).not.toHaveProperty('pin');
-    // The phone's rule: 8 to 16 characters.
-    for (const bad of ['1234567', '12345678901234567', 12345678 as never])
-      await expectVaultError(vault.setDniePin(dnie.id, bad), 'invalid_input');
-    const movil = await vault.addClaveMovil();
-    await expectVaultError(vault.setDniePin(movil.id, 'Abcd1234'), 'invalid_input');
-    await expectVaultError(vault.setDniePin('missing', 'Abcd1234'), 'not_found');
-
-    expect(await vault.setDniePin(dnie.id, 'Abcd1234')).toMatchObject({
-      id: dnie.id,
-      pin: 'saved',
-    });
-    expect(await vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: 'Abcd1234' });
-    // Only whether one is saved leaves the vault, never the PIN.
-    for (const out of [vault.overview(), vault.listCredentials(), vault.getCredential(dnie.id)])
-      expect(JSON.stringify(out)).not.toContain('Abcd1234');
-    // Encrypted at rest, and kept across reopen.
-    for (const file of ['vault.bin', 'key.bin'])
-      expect((await readFile(join(dir, file))).toString('latin1')).not.toContain('Abcd1234');
-    const reopened = await Vault.open(dir, keys());
-    expect(await reopened.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: 'Abcd1234' });
-    // Learnings scrub it, should the user write it in the chat.
-    expect(reopened.knownSensitiveValues()).toContain('Abcd1234');
-
-    // Refused by the card: no longer released, and shown as wrong. A mark for another PIN (one
-    // replaced since) does nothing.
-    expect(await reopened.markDniePinWrong(dnie.id, 'Otro1234')).toBe(false);
-    expect(await reopened.markDniePinWrong(dnie.id, 'Abcd1234')).toBe(true);
-    expect(await reopened.markDniePinWrong(dnie.id, 'Abcd1234')).toBe(false);
-    expect(await reopened.markDniePinWrong(movil.id, 'Abcd1234')).toBe(false);
-    expect(reopened.getCredential(dnie.id)?.pin).toBe('wrong');
-    expect(await reopened.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
-    expect((await Vault.open(dir, keys())).getCredential(dnie.id)?.pin).toBe('wrong');
-
-    // A new PIN clears the mark; null removes it.
-    expect((await reopened.setDniePin(dnie.id, 'Nuevo5678')).pin).toBe('saved');
-    expect(await reopened.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: 'Nuevo5678' });
-    expect(await reopened.setDniePin(dnie.id, null)).not.toHaveProperty('pin');
-    expect(await reopened.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
-    expect(reopened.knownSensitiveValues()).not.toContain('Nuevo5678');
-    expect((await Vault.open(dir, keys())).getCredential(dnie.id)).not.toHaveProperty('pin');
+    expect(await vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
   });
 
   it('rejects Cl@ve usernames that are not a DNI/NIE', async () => {

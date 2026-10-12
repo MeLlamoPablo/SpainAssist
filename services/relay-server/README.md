@@ -36,7 +36,7 @@ The relay also pings every 20 s and drops sockets that miss a pong.
 
 | Limit | Default |
 | --- | --- |
-| Room lifetime | 12 h 10 min (the desktop ends pairings at 12 h) |
+| Room lifetime | 72 h 10 min (the desktop ends pairings at 72 h) |
 | Room with nobody connected | removed after 30 min |
 | Bytes forwarded per room | 512 MiB |
 | Binary frame | 1 MiB (the channel's fragments are 256 KiB) |

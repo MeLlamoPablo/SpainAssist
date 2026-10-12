@@ -17,19 +17,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,12 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +56,7 @@ import es.spainassist.firma.app.StartNotice
 import es.spainassist.firma.app.Step
 import es.spainassist.firma.card.NfcAvailability
 import es.spainassist.firma.protocol.ErrorCode
+import es.spainassist.firma.protocol.Need
 import es.spainassist.firma.protocol.Purpose
 import es.spainassist.firma.relay.LinkStatus
 import es.spainassist.firma.resources.Res
@@ -259,14 +253,6 @@ private fun HomeScreen(s: Screen.Home, controller: FirmaController, openLicenses
         }
         NfcBanner(s.nfc, controller)
         Body(stringResource(Res.string.home_waiting))
-        if (s.pinRemembered) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Lock, contentDescription = null, tint = colors.fgSubtle, modifier = Modifier.size(18.dp))
-                Text(stringResource(Res.string.home_pin_remembered), color = colors.fgMuted, fontSize = 14.sp)
-            }
-            TextButton(onClick = { controller.forgetPin() }) { Text(stringResource(Res.string.home_forget_pin)) }
-        }
-        if (s.canSaved) TextButton(onClick = { controller.forgetCan() }) { Text(stringResource(Res.string.home_forget_can)) }
         Spacer(Modifier.height(8.dp))
         Secondary(stringResource(Res.string.home_unpair)) { controller.unpair() }
         TextButton(onClick = openLicenses) { Text(stringResource(Res.string.licenses_open)) }
@@ -283,8 +269,7 @@ private fun SigningScreen(s: Screen.Signing, controller: FirmaController, platfo
         if (!s.connected && s.step !is Step.Result) Banner(stringResource(Res.string.review_disconnected), Tone.Info)
         when (val step = s.step) {
             Step.Review -> ReviewStep(s.request, s.nfc, controller, platform)
-            is Step.EnterCan -> CanStep(step, controller, s.request.purpose != Purpose.Login)
-            is Step.EnterPin -> PinStep(step, controller, s.request.purpose != Purpose.Login)
+            is Step.WaitForComputer -> WaitStep(step, controller, s.request.purpose != Purpose.Login)
             is Step.HoldCard -> {
                 Title(stringResource(Res.string.card_title))
                 NfcBanner(s.nfc, controller)
@@ -364,47 +349,22 @@ private fun DocumentPreview(d: ReviewDocument, platform: Platform) {
     }
 }
 
+/** The card refused the CAN or the PIN (or none came): the user types it on the computer. */
 @Composable
-private fun CanStep(step: Step.EnterCan, controller: FirmaController, canCancel: Boolean) {
-    var can by rememberSaveable { mutableStateOf("") }
-    Title(stringResource(Res.string.can_title))
-    Body(stringResource(Res.string.can_body))
-    if (step.wrong) Banner(stringResource(if (step.fromComputer) Res.string.can_wrong_computer else Res.string.can_wrong), Tone.Attention)
-    OutlinedTextField(
-        value = can,
-        onValueChange = { can = it.filter(Char::isDigit).take(6) },
-        label = { Text(stringResource(Res.string.can_label)) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "can" },
-    )
-    Primary(stringResource(Res.string.continue_label), onClick = { controller.submitCan(can) }, enabled = can.length == 6)
-    if (canCancel) Secondary(stringResource(Res.string.cancel_label)) { controller.cancel() }
-}
-
-@Composable
-private fun PinStep(step: Step.EnterPin, controller: FirmaController, canCancel: Boolean) {
-    var pin by remember { mutableStateOf("") }
-    Title(stringResource(Res.string.pin_title))
-    Body(stringResource(Res.string.pin_body))
-    val left = step.retriesLeft
-    // One try left is worth a warning even when this PIN step isn't after a wrong PIN.
-    if (left == 1) {
-        Banner(stringResource(Res.string.pin_last_try), Tone.Blocked)
-    } else if (step.wrong && left != null) {
-        Banner(stringResource(Res.string.pin_wrong, left), Tone.Attention)
+private fun WaitStep(step: Step.WaitForComputer, controller: FirmaController, canCancel: Boolean) {
+    val pin = step.what == Need.Pin
+    Title(stringResource(if (pin) Res.string.wait_pin_title else Res.string.wait_can_title))
+    val left = step.triesLeft
+    when {
+        !pin -> Banner(stringResource(Res.string.wait_can_wrong), Tone.Attention)
+        left == 1 -> Banner(stringResource(Res.string.pin_last_try), Tone.Blocked)
+        step.refused && left != null -> Banner(stringResource(Res.string.wait_pin_wrong, left), Tone.Attention)
+        else -> Body(stringResource(Res.string.wait_pin_missing), colors.fg)
     }
-    if (step.fromComputer) Body(stringResource(Res.string.pin_wrong_computer), colors.fg)
-    OutlinedTextField(
-        value = pin,
-        onValueChange = { pin = it.take(16) },
-        label = { Text(stringResource(Res.string.pin_label)) },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "pin" },
-    )
-    Primary(stringResource(Res.string.continue_label), onClick = { controller.submitPin(pin) }, enabled = pin.length in 8..16)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+        Body(stringResource(Res.string.wait_body))
+    }
     if (canCancel) Secondary(stringResource(Res.string.cancel_label)) { controller.cancel() }
 }
 

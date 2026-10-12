@@ -6,7 +6,6 @@ import {
   CredentialPolicy,
   type CredentialSummary,
   DEFAULT_CREDENTIAL_POLICY,
-  DniePin,
   DocumentKind,
   type DocumentMeta,
   DocumentSource,
@@ -72,8 +71,7 @@ export type CredentialSecret =
   | ClaveSecret
   | CertificateSecret
   | { kind: 'clave_movil' }
-  /** `pin`: the saved DNIe PIN, unless there is none or the card refused it. */
-  | { kind: 'dnie'; pin?: string };
+  | { kind: 'dnie' };
 
 export interface AddDocumentOptions {
   name: string;
@@ -146,8 +144,6 @@ function summarize(credential: StoredCredential): CredentialSummary {
   if (credential.kind === 'certificate') summary.certificate = { ...credential.certificate };
   if (credential.kind === 'dnie' && credential.certificate)
     summary.certificate = { ...credential.certificate };
-  if (credential.kind === 'dnie' && credential.pin)
-    summary.pin = credential.pinWrong ? 'wrong' : 'saved';
   return summary;
 }
 
@@ -531,38 +527,6 @@ export class Vault {
   }
 
   /**
-   * Saves the DNIe PIN (8 to 16 characters), replacing any other and clearing a "wrong" mark, or
-   * removes it with null.
-   */
-  async setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
-    return this.lock.run(async () => {
-      if (pin !== null && !DniePin.safeParse(pin).success)
-        throw invalid('The DNIe PIN must have 8 to 16 characters');
-      const updated = await this.updateCredential(id, (c) => {
-        if (c.kind !== 'dnie') throw invalid('Not a DNIe credential');
-        const { pin: _pin, pinWrong: _wrong, ...rest } = c;
-        return pin === null ? rest : { ...rest, pin };
-      });
-      return summarize(updated);
-    });
-  }
-
-  /**
-   * The card refused `pin` (or is blocked): the vault stops releasing it until a new one is
-   * saved. Does nothing when the saved PIN is another one (saved since). Returns whether it
-   * marked it.
-   */
-  async markDniePinWrong(id: string, pin: string): Promise<boolean> {
-    return this.lock.run(async () => {
-      const credential = this.state.credentials.find((c) => c.id === id);
-      if (!credential) throw notFound('Credential');
-      if (credential.kind !== 'dnie' || credential.pinWrong || credential.pin !== pin) return false;
-      await this.updateCredential(id, (c) => ({ ...c, pinWrong: true }));
-      return true;
-    });
-  }
-
-  /**
    * Validates the passphrase, parses the certificate (RSA or ECDSA; modern, 3DES or RC2-40
    * files), rejects expired ones and stores a normalized PBES2/AES-256 copy. Importing the same
    * certificate again returns the existing credential.
@@ -641,9 +605,7 @@ export class Vault {
       case 'clave_movil':
         return { kind: credential.kind };
       case 'dnie':
-        return credential.pin && !credential.pinWrong
-          ? { kind: credential.kind, pin: credential.pin }
-          : { kind: credential.kind };
+        return { kind: credential.kind };
     }
   }
 
@@ -721,7 +683,6 @@ export class Vault {
       certificateHolders: this.state.credentials.flatMap((c) =>
         c.kind === 'certificate' ? [c.certificate] : [],
       ),
-      dniePins: this.state.credentials.flatMap((c) => (c.kind === 'dnie' && c.pin ? [c.pin] : [])),
     });
   }
 

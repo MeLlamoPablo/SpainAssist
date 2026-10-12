@@ -24,7 +24,6 @@ import {
   type CredentialPolicy,
   type CredentialSummary,
   DEFAULT_CREDENTIAL_POLICY,
-  DniePin,
   type DocumentMeta,
   maskValue,
   type PersonalDataInput,
@@ -66,7 +65,6 @@ export class MemoryVault implements VaultPort {
   >();
   readonly secrets = new Map<string, { label: string; value: string; createdAt: string }>();
   /** DNIe PINs by credential id; `wrong` once the card refused them. */
-  readonly pins = new Map<string, { pin: string; wrong: boolean }>();
 
   constructor(private readonly storage = { backend: 'memory (temporary)', secure: false }) {}
 
@@ -210,29 +208,6 @@ export class MemoryVault implements VaultPort {
     return entry.summary;
   }
 
-  async setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
-    const entry = this.credentials.get(id);
-    if (!entry) throw new VaultError('not_found', 'Credential not found');
-    if (entry.summary.kind !== 'dnie') throw new VaultError('invalid_input', 'Not a DNIe');
-    if (pin !== null && !DniePin.safeParse(pin).success)
-      throw new VaultError('invalid_input', 'The DNIe PIN must have 8 to 16 characters');
-    const { pin: _state, ...summary } = entry.summary;
-    if (pin === null) this.pins.delete(id);
-    else this.pins.set(id, { pin, wrong: false });
-    entry.summary = pin === null ? summary : { ...summary, pin: 'saved' };
-    return entry.summary;
-  }
-
-  async markDniePinWrong(id: string, pin: string): Promise<boolean> {
-    const entry = this.credentials.get(id);
-    if (!entry) throw new VaultError('not_found', 'Credential not found');
-    const saved = this.pins.get(id);
-    if (!saved || saved.wrong || saved.pin !== pin) return false;
-    saved.wrong = true;
-    entry.summary = { ...entry.summary, pin: 'wrong' };
-    return true;
-  }
-
   async addCertificate(input: {
     fileName: string;
     p12: Buffer;
@@ -276,8 +251,7 @@ export class MemoryVault implements VaultPort {
   async getCredentialSecret(id: string): Promise<CredentialSecret> {
     const c = this.credentials.get(id);
     if (!c) throw new VaultError('not_found', 'Credential not found');
-    const saved = this.pins.get(id);
-    return saved && !saved.wrong ? { kind: 'dnie', pin: saved.pin } : c.secret;
+    return c.secret;
   }
 
   async markCredentialUsed(id: string): Promise<void> {
@@ -287,7 +261,6 @@ export class MemoryVault implements VaultPort {
 
   async deleteCredential(id: string): Promise<void> {
     if (!this.credentials.delete(id)) throw new VaultError('not_found', 'Credential not found');
-    this.pins.delete(id);
   }
 
   listSecrets(): SecretSummary[] {
@@ -314,7 +287,6 @@ export class MemoryVault implements VaultPort {
     const values = [...this.personal.values()].map((p) => p.value);
     for (const c of this.credentials.values())
       if (c.secret.kind === 'clave_permanente') values.push(c.secret.username);
-    for (const { pin } of this.pins.values()) values.push(pin);
     return values.filter((v) => v.trim().length > 0);
   }
 
@@ -323,7 +295,6 @@ export class MemoryVault implements VaultPort {
     this.documents.clear();
     this.credentials.clear();
     this.secrets.clear();
-    this.pins.clear();
   }
 }
 

@@ -13,6 +13,7 @@ describe('vectors/v1.json', () => {
     const { login } = await buildVectors();
     expect(DesktopToPhone.parse(login.request)).toEqual(login.request);
     expect(DesktopToPhone.parse(login.toBeSigned)).toEqual(login.toBeSigned);
-    expect(PhoneToDesktop.parse(login.wrongPin)).toEqual(login.wrongPin);
+    expect(DesktopToPhone.parse(login.unlock)).toEqual(login.unlock);
+    expect(PhoneToDesktop.parse(login.need)).toEqual(login.need);
   });
 });

@@ -227,13 +227,25 @@ export async function buildVectors() {
         documents: [],
         verifiable: false,
         expiresAt: '2026-10-11T12:00:00.000Z',
-        /** The DNI CAN from the desktop's Mis datos: the phone skips asking for it. */
+        /** The CAN and the PIN the user typed on the desktop. */
         can: '123456',
-        /** The DNIe PIN saved in Mis datos: the phone skips asking for it. */
         pin: '12345678',
       },
-      /** The phone's report when the card refused that PIN. */
-      wrongPin: { type: 'sign.wrongPin', requestId: '6f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e' },
+      /** The phone's request when the card refused that PIN. */
+      need: {
+        type: 'sign.need',
+        requestId: '6f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e',
+        what: 'pin',
+        refused: true,
+        triesLeft: 2,
+      },
+      /** The desktop's answer: the PIN the user typed again. */
+      unlock: {
+        type: 'sign.unlock',
+        requestId: '6f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e',
+        pin: '87654321',
+        expiresAt: '2026-10-11T12:05:00.000Z',
+      },
       toBeSigned: {
         type: 'sign.toBeSigned',
         requestId: '6f1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e',

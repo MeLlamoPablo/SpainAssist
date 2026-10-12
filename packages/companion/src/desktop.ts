@@ -1,7 +1,7 @@
 /**
  * Desktop side of a pairing: creates the link (QR), keeps the relay connection, answers the
  * phone's handshake and carries messages. One pairing lasts until `unpair()`, the phone says
- * `bye`, or its lifetime (12 h) ends; a new QR means a new pairing.
+ * `bye`, or its lifetime (72 h) ends; a new QR means a new pairing.
  *
  * Every time either side (re)connects, the relay reports the phone as present and the desktop
  * sends a fresh CHALLENGE: the phone must handshake again, so a session never outlives a
@@ -35,7 +35,7 @@ import {
 import { encodePairingLink, PUBLIC_KEY_BYTES, ROOM_BYTES, roomId, SECRET_BYTES } from './link';
 import { RelaySocket, type RelaySocketOptions, type RelayState } from './relay-socket';
 
-export const PAIRING_LIFETIME_MS = 12 * 60 * 60 * 1000;
+export const PAIRING_LIFETIME_MS = 72 * 60 * 60 * 1000;
 const CHALLENGE_TTL_MS = 2 * 60 * 1000;
 
 export type PairingEndReason = 'unpaired' | 'phone_unpaired' | 'expired' | 'relay_refused';

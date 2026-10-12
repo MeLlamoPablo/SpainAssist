@@ -59,9 +59,9 @@ import {
  * ?freeze=1 (no live simulation at all: static screens) · ?speed=N (time multiplier) ·
  * ?latency=ms (per-call delay) · ?chatgpt=ineligible (ChatGPT login fails: free account) ·
  * ?phone=1 (the DNI card asks for a phone call) · ?dnie=1 (feature flag: DNIe with the phone on;
- * ?companion, ?dniePin and the playground imply it) · ?companion=waiting|away|connected (phone
- * pairing for DNIe signatures; the playground starts connected) · ?dniePin=none|saved|wrong (a
- * saved DNIe in Mis datos, without a PIN, with one, or with one the card refused).
+ * ?companion, ?dnieSaved and the playground imply it) · ?companion=waiting|away|connected (phone
+ * pairing for DNIe signatures; the playground starts connected) · ?dnieSaved=1 (a saved DNIe in
+ * Mis datos).
  */
 
 type Handlers = { [M in SaMethod]: (...args: SaArgs<M>) => SaResult<M> | Promise<SaResult<M>> };
@@ -93,12 +93,9 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const initialLang: Lang = params.get('lang') === 'en' ? 'en' : 'es';
   const onboarding = params.has('onboarding') && params.get('onboarding') !== '0';
   const chatgptIneligible = params.get('chatgpt') === 'ineligible';
-  const dniePin = params.get('dniePin');
+  const dnieSaved = params.has('dnieSaved');
   const dniePhone =
-    params.get('dnie') === '1' ||
-    params.has('companion') ||
-    params.has('playground') ||
-    dniePin !== null;
+    params.get('dnie') === '1' || params.has('companion') || params.has('playground') || dnieSaved;
 
   let state: MockState = createDemoState(Date.now(), {
     provider: params.get('provider'),
@@ -160,14 +157,13 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         });
     } else state.personal = state.personal.filter((p) => !p.key.startsWith('address'));
   }
-  if (dniePin !== null)
+  if (dnieSaved)
     state.credentials.push({
       id: 'cred-dnie',
       kind: 'dnie',
       label: 'DNIe con el móvil',
       policy: 'ask',
       createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
-      ...(dniePin === 'saved' || dniePin === 'wrong' ? { pin: dniePin } : {}),
     });
   if (params.has('phone')) {
     // The DNI card asks for a phone call instead of its form (the call card's states).
@@ -202,7 +198,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
 
   // The phone pairing for DNIe signatures: a fake link that pairs a demo phone after a moment.
   const demoLink = 'https://relay.example.invalid/p#demo';
-  const pairedUntil = new Date(Date.now() + 12 * 3600_000).toISOString();
+  const pairedUntil = new Date(Date.now() + 72 * 3600_000).toISOString();
   const companionParam = params.get('companion') ?? (params.has('playground') ? 'connected' : '');
   let companion: CompanionStatus =
     companionParam === 'connected'
@@ -1215,16 +1211,6 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       emit({ type: 'vault.changed' });
       return cred;
     },
-    'vault.setDniePin': (id, pin) => {
-      requireDniePhone();
-      const cred = state.credentials.find((c) => c.id === id && c.kind === 'dnie');
-      if (!cred) throw new Error(tr('Credencial no encontrada.', 'Credential not found.'));
-      // Like main: only whether one is saved, never the PIN.
-      if (pin === null) delete cred.pin;
-      else cred.pin = 'saved';
-      emit({ type: 'vault.changed' });
-      return clone(cred);
-    },
     'vault.addCertificate': async (input) => {
       await sleep(900);
       if (!input.passphrase || input.passphrase.toLowerCase() === 'mal')
@@ -1303,7 +1289,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'companion.pair': () => {
       requireDniePhone();
       if (companion.state !== 'off') return companion;
-      const expiresAt = new Date(Date.now() + 12 * 3600_000).toISOString();
+      const expiresAt = new Date(Date.now() + 72 * 3600_000).toISOString();
       setCompanion({ state: 'waiting', link: demoLink, expiresAt });
       if (!freeze)
         void sleep(4000).then(() => {
@@ -1316,6 +1302,23 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       requireDniePhone();
       setCompanion({ state: 'off' });
       return companion;
+    },
+    'companion.unlock': (promptItemId) => {
+      requireDniePhone();
+      // Like main: the CAN and the PIN are never kept or shown; the card moves on.
+      const item = findPrompt(promptItemId);
+      if (item?.status !== 'pending' || item.prompt.kind !== 'dnie_signature')
+        throw new Error(
+          tr('Esta pregunta ya no está pendiente.', 'This question is no longer pending.'),
+        );
+      const { unlock: _unlock, ...prompt } = item.prompt;
+      const next = { ...item, prompt: { ...prompt, stage: 'phone' as const } };
+      if (item.procedureId)
+        setCardPrompts(
+          item.procedureId,
+          cardPrompts(item.procedureId).map((i) => (i.id === item.id ? next : i)),
+        );
+      else putChat(next);
     },
     'media.get': (id) => state.media.get(id) ?? null,
     'browser.show': () => {

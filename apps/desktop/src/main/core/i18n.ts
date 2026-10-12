@@ -94,11 +94,6 @@ const STRINGS = {
     es: '{host} te pide firmar con tu certificado digital. La firma tiene validez legal: comprueba que es lo que esperas.',
     en: '{host} asks you to sign with your digital certificate. A signature is legally binding: check it is what you expect.',
   },
-  /** The DNIe with a saved PIN: this approval sends the PIN to the phone (D18). */
-  signatureMessageDnie: {
-    es: '{host} te pide firmar con tu DNIe. Si sigues, tu móvil recibe el PIN guardado y no te lo pide: revisa la firma en el móvil y acerca el DNIe.',
-    en: "{host} asks you to sign with your DNIe. If you go on, your phone gets the saved PIN and won't ask for it: check the signature on your phone and hold the DNIe to it.",
-  },
   detailWhat: { es: 'Qué', en: 'What' },
   detailFor: { es: 'Para', en: 'For' },
   detailFormat: { es: 'Formato', en: 'Format' },
@@ -141,12 +136,8 @@ const STRINGS = {
   },
   dnieSignatureTitle: { es: 'Firma con tu DNIe', en: 'Sign with your DNIe' },
   dnieSignatureMessage: {
-    es: '{host} te pide firmar. Sigue en el móvil: revisa la firma, escribe el PIN del DNIe y acerca el DNIe al móvil.',
-    en: '{host} asks you to sign. Carry on on your phone: check the signature, type your DNIe PIN and hold the DNIe to the phone.',
-  },
-  dnieSignatureMessageSavedPin: {
-    es: '{host} te pide firmar. Sigue en el móvil: revisa la firma y acerca el DNIe al móvil. El móvil ya tiene tu PIN guardado.',
-    en: '{host} asks you to sign. Carry on on your phone: check the signature and hold the DNIe to the phone. The phone already has your saved PIN.',
+    es: '{host} te pide firmar con tu DNIe. Revisa la firma en el móvil y acerca el DNIe al móvil.',
+    en: '{host} asks you to sign with your DNIe. Check the signature on your phone and hold the DNIe to it.',
   },
   dnieCertificateMessage: {
     es: '{host} quiere saber con qué certificado firmarás. Sigue en el móvil: no se firma nada todavía.',
@@ -156,6 +147,11 @@ const STRINGS = {
   dniePhoneOff: {
     es: 'El DNIe con el móvil no está disponible en esta versión de la app.',
     en: "DNIe with your phone isn't available in this version of the app.",
+  },
+  /** `companion.unlock` without what the prompt asks for. */
+  dnieUnlockMissing: {
+    es: 'Escribe el número CAN (6 números) y el PIN del DNIe (de 8 a 16 caracteres).',
+    en: 'Type the CAN (6 digits) and the DNIe PIN (8 to 16 characters).',
   },
   dnieUnavailable: {
     es: 'No se puede usar el DNIe con el móvil ahora mismo. Inténtalo más tarde o usa un certificado digital.',

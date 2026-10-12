@@ -6,10 +6,11 @@
  * Starts this relay, pairs a DesktopPairing, and runs the Android app's InteropTest (the real
  * Kotlin controller, channel and relay client, with a software RSA key for the DNIe) through
  * Gradle. Then it signs CAdES, PAdES and XAdES through @sa/signer's AutoFirma handler with the
- * phone as the key, and checks every signature the phone returns. The CAdES request and the login
- * carry the card's CAN and PIN, the PAdES one a wrong CAN and a wrong PIN: the phone asks for each
- * only then, and reports the wrong PIN once. Needs JDK 17 and the Android SDK (apps/mobile);
- * offline once Gradle has its dependencies.
+ * phone as the key, and checks every signature the phone returns. Every request carries the CAN
+ * and the PIN, as the user types them on the desktop: the card's, except for PAdES, which carries
+ * a wrong CAN and a wrong PIN. The phone tries each wrong one once and asks the desktop for a new
+ * one (`sign.need`), answered as if the user typed it (`sign.unlock`). Needs JDK 17 and the
+ * Android SDK (apps/mobile); offline once Gradle has its dependencies.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -18,7 +19,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DesktopPairing, PhoneSigner } from '@sa/companion';
+import { DesktopPairing, type PhoneNeed, PhoneSigner } from '@sa/companion';
 import type {
   AfirmaCall,
   AfirmaHandlerContext,
@@ -160,11 +161,17 @@ async function main(): Promise<void> {
   void exited.then(() => phoneSigner.onEnded('unpaired'));
 
   let verified = 0;
-  let wrongPins = 0;
-  // The CAN and PIN the desktop sends with each signature, as if from Mis datos: right, wrong,
-  // none.
-  const cans: Record<string, string | undefined> = { CAdES: CAN, PAdES: '000000' };
-  const pins: Record<string, string | undefined> = { CAdES: PIN, PAdES: '87654321' };
+  const needs: PhoneNeed[] = [];
+  // The user types the right one after a moment.
+  const onNeed = async (need: PhoneNeed) => {
+    needs.push(need);
+    console.log(`desktop: the phone needs a new ${need.what} (refused: ${need.refused})`);
+    await new Promise((r) => setTimeout(r, 300));
+    return need.what === 'can' ? CAN : PIN;
+  };
+  // The CAN and PIN the desktop sends with each signature: right, except for PAdES.
+  const cans: Record<string, string> = { CAdES: CAN, PAdES: '000000', XAdES: CAN };
+  const pins: Record<string, string> = { CAdES: PIN, PAdES: '87654321', XAdES: PIN };
   const ctx: AfirmaHandlerContext = {
     procedureId: 'interop',
     approveSignature: async (summary) => {
@@ -175,12 +182,9 @@ async function main(): Promise<void> {
         format: summary.format,
         documents: summary.documents,
         verifiable: summary.verifiable,
-        can: cans[summary.format],
-        pin: pins[summary.format],
-        onWrongPin: () => {
-          wrongPins++;
-          console.log(`desktop: ${summary.format} PIN refused by the card`);
-        },
+        can: cans[summary.format] ?? CAN,
+        pin: pins[summary.format] ?? PIN,
+        onNeed,
         reviewTimeoutMs: 180_000,
       });
       return {
@@ -217,6 +221,7 @@ async function main(): Promise<void> {
     verifiable: false,
     can: CAN,
     pin: PIN,
+    onNeed,
     reviewTimeoutMs: 180_000,
   });
   const handshake = Buffer.from('A test TLS handshake');
@@ -231,11 +236,20 @@ async function main(): Promise<void> {
   const code = await exited;
   await relay.close();
   console.log(
-    `interop: ${calls.length - failures}/${calls.length} signed on the desktop, ${verified} phone signatures verified, ${wrongPins} wrong PIN reported, Gradle exit ${code}`,
+    `interop: ${calls.length - failures}/${calls.length} signed on the desktop, ${verified} phone signatures verified, needs ${JSON.stringify(needs)}, Gradle exit ${code}`,
   );
   if (code !== 0) console.log(lines.filter((l) => /FAILED|Exception|expected/.test(l)).join('\n'));
   process.exit(
-    failures === 0 && code === 0 && verified === calls.length && wrongPins === 1 ? 0 : 1,
+    failures === 0 &&
+      code === 0 &&
+      verified === calls.length &&
+      JSON.stringify(needs) ===
+        JSON.stringify([
+          { what: 'can', refused: true },
+          { what: 'pin', refused: true, triesLeft: 2 },
+        ])
+      ? 0
+      : 1,
   );
 }
 

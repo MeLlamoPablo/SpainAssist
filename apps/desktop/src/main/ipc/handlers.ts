@@ -28,7 +28,7 @@ export interface IpcServices {
   media: MediaStore;
   browser: BrowserHolder;
   /** DNIe with the phone; absent without the `dnie-phone` feature flag. */
-  companion?: Pick<CompanionService, 'status' | 'pair' | 'unpair'>;
+  companion?: Pick<CompanionService, 'status' | 'pair' | 'unpair' | 'unlock'>;
   logger: Logger;
   /** Map lookups (Mapbox, via our maps server): pins only, never stored. */
   places: Pick<Maps, 'home'> & {
@@ -160,9 +160,6 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('vault.addClave', S['vault.addClave'], (input) => s.vault.addClave(input));
   router.register('vault.addClaveMovil', S['vault.addClaveMovil'], () => s.vault.addClaveMovil());
   router.register('vault.addDnie', S['vault.addDnie'], () => s.vault.addDnie());
-  router.register('vault.setDniePin', S['vault.setDniePin'], (id, pin) =>
-    s.vault.setDniePin(id, pin),
-  );
   router.register('vault.addCertificate', S['vault.addCertificate'], (input) =>
     s.vault.addCertificate(input),
   );
@@ -184,6 +181,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('companion.status', S['companion.status'], () => companion().status());
   router.register('companion.pair', S['companion.pair'], () => companion().pair());
   router.register('companion.unpair', S['companion.unpair'], () => companion().unpair());
+  router.register('companion.unlock', S['companion.unlock'], (itemId, values) =>
+    companion().unlock(itemId, values),
+  );
 
   router.register('media.get', S['media.get'], (id) => s.media.dataUrl(id));
   router.register('browser.show', S['browser.show'], async (id) => {

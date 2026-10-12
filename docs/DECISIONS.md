@@ -414,7 +414,7 @@ AA300103 when the card moves during a read.
   and CryptoKit, so there's no native library to ship (instead of the libsodium first planned).
   No gateway key is needed: the relay costs no money per use. Limits per room and per address
   stop abuse.
-- **Pairing: one desktop session.** 12 hours or until the desktop app quits, no push
+- **Pairing: one desktop session.** 72 hours (12 at first; D20) or until the desktop app quits, no push
   notifications, nothing to unpair later. The phone keeps the pairing (Keystore-encrypted) to
   reconnect after the app is killed. A new QR means a new pairing.
 - **Consent on the phone, and what you see is what you sign.** The phone shows the document
@@ -585,6 +585,9 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
 
 ## D18 — The DNIe PIN as a desktop credential, sent only to the paired phone (2026-10-12)
 
+**Superseded by D20:** the PIN is no longer saved in the vault; the desktop asks for it per use
+and keeps it in memory. The secrets rule and the one-try rule below still hold.
+
 The phone asked for the DNIe PIN, kept it in memory for an hour and asked again after that. Users
 who sign often would rather type it once, like their Cl@ve password. So the `dnie` credential
 may hold the PIN, and the desktop gives it to the phone with the request.
@@ -660,3 +663,33 @@ may hold the PIN, and the desktop gives it to the phone with the request.
   give it a version constraint: on its own it would block every version, the newest included.
 - **Trust.** Unsigned, whoever can publish a release on the repo can ship code to every Windows
   install. Keep release rights limited until Windows builds are signed.
+
+## D20 — The DNIe CAN and PIN are typed only on the desktop (2026-10-12)
+
+The CAN and the PIN could be typed on the phone, saved on the phone (the CAN), saved in Mis datos
+(the PIN, D18) or taken from the scanned DNI (the CAN). Too many places, and the phone screen was
+doing two jobs. Now the desktop asks, and the phone only reviews and reads the card.
+
+- **One place to type them.** When a DNIe signature or login needs them, the procedure's
+  `dnie_signature` card starts in the `unlock` stage and asks for what the desktop lacks: the
+  CAN (unless typed earlier in this run, or Mis datos has a valid one from the scanned DNI) and
+  the PIN (unless typed in the last hour; certificate reads need none). It has short help on what
+  the PIN is, where it came from (the sealed envelope given with the DNI), and how to reset or
+  change it (the Puntos de Actualización del DNIe in the police stations that issue the DNI, with
+  the fingerprint; it can't be changed online). Only then does the request go to the phone.
+- **Memory only.** The renderer sends them once (`companion.unlock`, zod: 6 digits, 8 to 16
+  characters). `CompanionService` keeps the PIN for 60 minutes and the CAN while the app runs;
+  nothing is written to disk. The vault's `dnie` credential has no secret any more, Mis datos has
+  no PIN row, and the phone has no CAN or PIN screens and stores neither.
+- **Refused ones (protocol 5).** `sign.request` always carries `can`, and `pin` except for
+  certificate reads. When the card refuses one, the phone sends `sign.need` (`what`, `refused`,
+  `triesLeft`) and waits; the desktop forgets that value, asks again in the same card, and answers
+  `sign.unlock` with a new deadline. The request goes on. The phone keeps a hash of every refused
+  CAN and PIN in memory and never tries one again (a stale value from the desktop costs no try).
+  A request re-sent without its PIN after a reconnect gets `sign.need` with `refused: false`.
+- **Consent.** The phone's review stays. The desktop's extra confirmation for signatures with a
+  saved PIN (D18) is gone: typing the PIN is the desktop step, and logins keep
+  `browser.useCertificate`'s consent.
+- **Pairing lasts 72 hours** (was 12), or until the desktop app quits; the relay keeps rooms 10
+  minutes longer.
+- **Trade-off.** The user types the PIN about once an hour of use, like the phone used to ask.

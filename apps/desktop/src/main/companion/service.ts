@@ -3,6 +3,7 @@ import {
   DesktopPairing,
   type PairingStatus,
   type PhoneKey,
+  type PhoneNeed,
   PhoneSignError,
   type PhoneSignErrorCode,
   PhoneSigner,
@@ -15,7 +16,10 @@ import {
   type CompanionStatus,
   type CredentialSummary,
   DniAccessNumber,
+  DniePin,
   type DnieSignaturePrompt,
+  type DnieUnlock,
+  type DnieUnlockValues,
   type ExternalSigningKey,
   type Language,
   type SignatureBinding,
@@ -23,6 +27,7 @@ import {
 } from '@sa/shared';
 import { SidecarError, type SidecarHash, type SidecarIdentity } from '@sa/sidecar';
 import type { PromptManager } from '../chat/prompts';
+import { UserError } from '../core/errors';
 import type { EventBus } from '../core/events';
 import { type StringKey, t } from '../core/i18n';
 import type { Logger } from '../core/logger';
@@ -50,6 +55,15 @@ export interface CompanionDeps {
 
 /** Close the phone approval after a quiet period, before its next-item timeout. */
 export const DNIE_LOGIN_IDLE_MS = 30_000;
+
+/** How long the desktop remembers the DNIe PIN the user typed (in memory only, D20). */
+export const DNIE_PIN_CACHE_MS = 60 * 60_000;
+
+/** A `dnie_signature` prompt waiting in its `unlock` stage. */
+interface UnlockWaiter {
+  unlock: DnieUnlock;
+  resolve(values: { can?: string; pin?: string }): void;
+}
 
 const TLS_ALGORITHMS: Record<SidecarHash, SignatureDigest> = {
   'SHA-1': 'sha1',
@@ -117,6 +131,13 @@ export class CompanionService {
   private endLogin?: () => void;
   private readonly signer: PhoneSigner;
   private readonly relayUrl?: string;
+  /** The PIN the user typed, for DNIE_PIN_CACHE_MS. Never stored, never logged. */
+  private pin?: { value: string; at: number };
+  /** The CAN the user typed, while the app runs. */
+  private can?: string;
+  /** CANs the card refused: not offered again while the app runs (also Mis datos' one). */
+  private readonly refusedCans = new Set<string>();
+  private readonly unlocks = new Map<string, UnlockWaiter>();
 
   constructor(private readonly deps: CompanionDeps) {
     this.relayUrl = deps.relayUrl && deps.lanRelay ? lanRelayUrl(deps.relayUrl) : deps.relayUrl;
@@ -147,7 +168,28 @@ export class CompanionService {
     return this.status();
   }
 
+  /**
+   * What the user typed in a pending prompt's `unlock` stage (`companion.unlock`). It must hold
+   * what the prompt asks for. Validated by the IPC schema; never logged.
+   */
+  unlock(itemId: string, values: DnieUnlockValues): void {
+    const lang = this.deps.lang();
+    const waiter = this.unlocks.get(itemId);
+    if (!waiter) throw new UserError(t(lang, 'promptNotPending'), 'not_pending');
+    if (values.pin) this.deps.logger.addSecret(values.pin);
+    const can = DniAccessNumber.safeParse(values.can).success ? values.can : undefined;
+    const pin = DniePin.safeParse(values.pin).success ? values.pin : undefined;
+    if ((waiter.unlock.can && !can) || (waiter.unlock.pin && !pin))
+      throw new UserError(t(lang, 'dnieUnlockMissing'), 'invalid_input');
+    this.unlocks.delete(itemId);
+    waiter.resolve({
+      ...(waiter.unlock.can ? { can } : {}),
+      ...(waiter.unlock.pin ? { pin } : {}),
+    });
+  }
+
   shutdown(): void {
+    this.pin = undefined;
     this.endLogin?.();
     this.signer.onEnded('unpaired');
     const pairing = this.pairing;
@@ -156,21 +198,16 @@ export class CompanionService {
   }
 
   /**
-   * A signature with the DNIe in the phone: shows the progress card (with the QR code when no
-   * phone is connected), sends the request, and resolves with the key once the phone has read
-   * the card's certificate. Null when the user cancels, declines or it fails (with a notice).
-   *
-   * `pin`: the caller has the approval the credential's policy asks for this use, so the request
-   * carries the PIN saved in Mis datos, if there is one the card hasn't refused (D18).
+   * A signature with the DNIe in the phone: shows the card, which first asks for the CAN and the
+   * PIN when the desktop doesn't have them (D20), then the QR code when no phone is connected,
+   * sends the request, and resolves with the key once the phone has read the card's
+   * certificate. Null when the user cancels, declines or it fails (with a notice).
    */
   async approve(
     procedureId: string,
     summary: AfirmaSignatureSummary,
     credential: CredentialSummary,
-    options: {
-      pin?: boolean;
-      login?: { signal?: AbortSignal; onCancelled?: () => void };
-    } = {},
+    options: { login?: { signal?: AbortSignal; onCancelled?: () => void } } = {},
   ): Promise<ExternalSigningKey | null> {
     const { login } = options;
     if (!login) this.endLogin?.();
@@ -198,10 +235,12 @@ export class CompanionService {
       });
     if (summary.dataSize !== undefined && purpose === 'document' && !summary.signatures)
       details.push({ label: t(lang, 'detailSize'), value: formatBytes(summary.dataSize) });
-    // Reading certificates needs no PIN.
-    const pin =
-      options.pin && purpose !== 'certificate' ? await this.savedPin(credential) : undefined;
-    let prompt: DnieSignaturePrompt = {
+    // Reading the certificate needs no PIN.
+    const needsPin = purpose !== 'certificate';
+    let can = this.knownCan();
+    let pin = needsPin ? this.cachedPin() : undefined;
+    const first: DnieUnlock = { can: !can, pin: needsPin && !pin };
+    const base: DnieSignaturePrompt = {
       kind: 'dnie_signature',
       purpose,
       title: t(lang, login ? 'dnieLoginTitle' : 'dnieSignatureTitle'),
@@ -211,15 +250,14 @@ export class CompanionService {
           ? 'dnieLoginMessage'
           : purpose === 'certificate'
             ? 'dnieCertificateMessage'
-            : pin
-              ? 'dnieSignatureMessageSavedPin'
-              : 'dnieSignatureMessage',
+            : 'dnieSignatureMessage',
         { host },
       ),
       details,
       stage: 'phone',
-      ...(pin ? { savedPin: true } : {}),
     };
+    let prompt: DnieSignaturePrompt =
+      first.can || first.pin ? { ...base, stage: 'unlock', unlock: first } : base;
 
     let itemId: string | undefined;
     const abort = new AbortController();
@@ -236,18 +274,50 @@ export class CompanionService {
       // The procedure stopped or the app quits.
       () => cancel(),
     );
+    const show = (next: DnieSignaturePrompt) => {
+      prompt = next;
+      if (itemId) deps.prompts.update(itemId, prompt);
+    };
     const settle = (outcome: 'signed' | 'failed' | 'cancelled') => {
       login?.signal?.removeEventListener('abort', cancel);
       if (itemId) deps.prompts.settle(itemId, { kind: 'dnie_signature', outcome });
     };
 
-    const can = this.savedCan();
-    // The card refused the PIN (the phone asks the user now), or is blocked: stop sending it.
-    const refused = (err: unknown) => {
-      if (err instanceof PhoneSignError && err.code === 'pin_blocked')
-        void this.pinRefused(credential, pin);
-      return err;
+    if (prompt.stage === 'unlock') {
+      const typed = await this.waitUnlock(itemId, first, abort.signal);
+      if (!typed) {
+        settle('cancelled');
+        return null;
+      }
+      can = typed.can ?? can;
+      pin = typed.pin ?? pin;
+      show(base);
+    }
+
+    // The phone needs a new CAN or PIN: the card refused it (never offered again), or a request
+    // sent again after a reconnect came without the PIN. The user types it here.
+    const onNeed = async (need: PhoneNeed): Promise<string | null> => {
+      if (need.what === 'can') this.canRefused(can);
+      else if (need.refused && this.pin?.value === pin) this.pin = undefined;
+      const unlock: DnieUnlock = {
+        can: need.what === 'can',
+        pin: need.what === 'pin',
+        ...(need.refused ? { refused: need.what } : {}),
+        ...(need.triesLeft ? { triesLeft: need.triesLeft } : {}),
+      };
+      deps.logger.info('dnie needs a new value', { procedureId, what: need.what });
+      show({ ...base, stage: 'unlock', unlock });
+      const typed = await this.waitUnlock(itemId, unlock, abort.signal);
+      if (!typed) return null;
+      show({ ...base, stage: 'card' });
+      if (need.what === 'can') {
+        can = typed.can;
+        return can ?? null;
+      }
+      pin = typed.pin;
+      return pin ?? null;
     };
+
     let key: PhoneKey;
     try {
       key = await this.signer.request({
@@ -258,17 +328,15 @@ export class CompanionService {
         documents: summary.documents,
         verifiable: summary.verifiable,
         ...(summary.signatures ? { signatures: summary.signatures } : {}),
-        ...(can ? { can } : {}),
-        ...(pin ? { pin, onWrongPin: () => void this.pinRefused(credential, pin) } : {}),
+        can: can as string,
+        ...(pin ? { pin } : {}),
+        onNeed,
         signal: abort.signal,
-        onStage: (stage) => {
-          prompt = { ...prompt, stage };
-          if (itemId) deps.prompts.update(itemId, prompt);
-        },
+        onStage: (stage) => show({ ...base, stage }),
       });
     } catch (err) {
-      refused(err);
       const code: PhoneSignErrorCode = err instanceof PhoneSignError ? err.code : 'internal';
+      if (code === 'pin_blocked') this.pin = undefined;
       deps.logger.info('dnie signature not approved', { procedureId, code });
       const declined = code === 'cancelled' || code === 'rejected';
       settle(declined ? 'cancelled' : 'failed');
@@ -291,7 +359,8 @@ export class CompanionService {
       certificates: key.certificates,
       sign: (data, digest, binding) =>
         key.sign(data, ALGORITHMS[digest], toCheck(binding), !!login).catch((err) => {
-          throw refused(err);
+          if (err instanceof PhoneSignError && err.code === 'pin_blocked') this.pin = undefined;
+          throw err;
         }),
       release: (ok) => {
         if (released) return;
@@ -306,8 +375,7 @@ export class CompanionService {
 
   /**
    * Authentication key for the browser sidecar; the private key stays on the phone. Called once
-   * `browser.useCertificate` has applied the credential's policy (its consent, with Touch ID),
-   * so every approval request of this login carries the saved PIN (D18).
+   * `browser.useCertificate` has applied the credential's policy (its consent, with Touch ID).
    */
   async login(
     procedureId: string,
@@ -345,7 +413,7 @@ export class CompanionService {
           verifiable: false,
         },
         credential,
-        { pin: true, login: { signal, onCancelled: () => end(false) } },
+        { login: { signal, onCancelled: () => end(false) } },
       );
       if (!key) throw new SidecarError('declined', 'DNIe login was not approved.');
       if (chain && !Buffer.from(chain[0]!).equals(Buffer.from(key.certificates[0]!))) {
@@ -399,43 +467,63 @@ export class CompanionService {
     };
   }
 
-  /** The DNI's CAN from Mis datos, so the phone doesn't ask for it. Never logged. */
-  private savedCan(): string | undefined {
+  /**
+   * The CAN the user typed, or Mis datos' one (scanned with the DNI), unless the card refused it.
+   * Never logged.
+   */
+  private knownCan(): string | undefined {
+    if (this.can) return this.can;
     try {
       const can = this.deps.vault().getPersonal('dniAccessNumber')?.value;
-      return DniAccessNumber.safeParse(can).success ? can : undefined;
+      return can && DniAccessNumber.safeParse(can).success && !this.refusedCans.has(can)
+        ? can
+        : undefined;
     } catch {
-      // The vault can't be read: the phone asks for the CAN itself.
+      // The vault can't be read: the user types it.
       return undefined;
     }
   }
 
-  /** The DNIe PIN from Mis datos, unless the card refused it. Never logged. */
-  private async savedPin(credential: CredentialSummary): Promise<string | undefined> {
-    try {
-      const secret = await this.deps.vault().getCredentialSecret(credential.id);
-      if (secret.kind !== 'dnie' || !secret.pin) return undefined;
-      this.deps.logger.addSecret(secret.pin);
-      return secret.pin;
-    } catch {
-      // The vault can't be read: the phone asks for the PIN itself.
-      return undefined;
-    }
+  private canRefused(can: string | undefined): void {
+    if (!can) return;
+    this.refusedCans.add(can);
+    if (this.can === can) this.can = undefined;
+  }
+
+  /** The PIN the user typed, for DNIE_PIN_CACHE_MS. */
+  private cachedPin(): string | undefined {
+    const now = Date.now();
+    if (this.pin && now - this.pin.at > DNIE_PIN_CACHE_MS) this.pin = undefined;
+    return this.pin?.value;
   }
 
   /**
-   * The card refused the saved PIN, or is blocked: Mis datos shows it, and it isn't sent again
-   * until the user saves a new one. `sent`: the PIN the request carried (else the saved one).
+   * Waits for `companion.unlock` on the prompt, and remembers what the user typed: the PIN for
+   * DNIE_PIN_CACHE_MS, the CAN while the app runs. Null when the request is cancelled first.
    */
-  private async pinRefused(credential: CredentialSummary, sent: string | undefined): Promise<void> {
-    try {
-      const pin = sent ?? (await this.savedPin(credential));
-      if (!pin || !(await this.deps.vault().markDniePinWrong(credential.id, pin))) return;
-      this.deps.logger.info('dnie saved PIN refused by the card');
-      this.deps.events.emit({ type: 'vault.changed' });
-    } catch (err) {
-      this.deps.logger.warn('dnie saved PIN not marked', { error: errorMessage(err) });
-    }
+  private waitUnlock(
+    itemId: string | undefined,
+    unlock: DnieUnlock,
+    signal: AbortSignal,
+  ): Promise<{ can?: string; pin?: string } | null> {
+    if (!itemId || signal.aborted) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const onAbort = () => {
+        if (this.unlocks.get(itemId)?.resolve === done) this.unlocks.delete(itemId);
+        resolve(null);
+      };
+      const done = (values: { can?: string; pin?: string }) => {
+        signal.removeEventListener('abort', onAbort);
+        if (values.can) {
+          this.refusedCans.delete(values.can);
+          this.can = values.can;
+        }
+        if (values.pin) this.pin = { value: values.pin, at: Date.now() };
+        resolve(values);
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      this.unlocks.set(itemId, { unlock, resolve: done });
+    });
   }
 
   /** Keeps the card's certificate details on the credential (shown in Mis datos). */

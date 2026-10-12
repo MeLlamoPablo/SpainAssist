@@ -6,10 +6,12 @@ import es.spainassist.firma.card.DnieSession
 import es.spainassist.firma.card.NfcAvailability
 import es.spainassist.firma.channel.Base64Std
 import es.spainassist.firma.channel.ChannelException
+import es.spainassist.firma.channel.Crypto
 import es.spainassist.firma.channel.PairingLink
 import es.spainassist.firma.protocol.DesktopBye
 import es.spainassist.firma.protocol.DesktopToPhone
 import es.spainassist.firma.protocol.ErrorCode
+import es.spainassist.firma.protocol.Need
 import es.spainassist.firma.protocol.Hello
 import es.spainassist.firma.protocol.PhoneToDesktop
 import es.spainassist.firma.protocol.Purpose
@@ -20,7 +22,8 @@ import es.spainassist.firma.protocol.SignError
 import es.spainassist.firma.protocol.SignProgress
 import es.spainassist.firma.protocol.SignRequest
 import es.spainassist.firma.protocol.SignSignature
-import es.spainassist.firma.protocol.SignWrongPin
+import es.spainassist.firma.protocol.SignNeed
+import es.spainassist.firma.protocol.SignUnlock
 import es.spainassist.firma.protocol.Stage
 import es.spainassist.firma.protocol.ToBeSigned
 import es.spainassist.firma.relay.LinkListener
@@ -64,15 +67,15 @@ typealias LinkFactory = (pairing: PairingLink, hello: Hello, listener: LinkListe
  * thread on Android); card I/O runs on IO threads.
  *
  * Pairing: a scanned or opened link is confirmed by the user, stored encrypted, and restored on
- * the next launch until it expires. Signing: review → CAN (sent by the desktop from Mis datos, or
- * typed once; stored when the card accepts it) → PIN (sent by the desktop from Mis datos for this
- * request only, or typed and cached for 60 minutes in memory) → hold the card → read the
- * certificate → sign each `sign.toBeSigned` while the card stays near, checking each one against
- * the reviewed documents when the request is verifiable. The card may move (we wait for it again
- * and check it's the same one), the PIN or CAN may be wrong (asked again; a cached or desktop PIN
- * is never retried, and a refused desktop PIN is reported with `sign.wrongPin`), the desktop may
- * cancel or reconnect (everything it may have missed is sent again; duplicates are answered from
- * cache, never signed twice).
+ * the next launch until it expires. Signing: review → hold the card → open it with the CAN and
+ * PIN the user typed on the desktop (they come with the request; the phone never asks for them,
+ * never stores them, and drops them when the request ends) → read the certificate → sign each
+ * `sign.toBeSigned` while the card stays near, checking each one against the reviewed documents
+ * when the request is verifiable. The card may move (we wait for it again and check it's the same
+ * one), the CAN or PIN may be wrong (the phone asks the desktop for another with `sign.need` and
+ * waits for `sign.unlock`; a CAN or PIN the card refused is never tried again while the app runs),
+ * the desktop may cancel or reconnect (everything it may have missed is sent again; duplicates are
+ * answered from cache, never signed twice).
  */
 @OptIn(ExperimentalTime::class)
 class FirmaController(
@@ -106,18 +109,15 @@ class FirmaController(
     private var linkStatus: LinkStatus = LinkStatus.Connecting
     private var proposed: PairingLink? = null
     private var notice: StartNotice? = null
-    private var pin: String? = null
-    private var pinAt = 0L
     private var active: Active? = null
 
-    /** A CAN from the desktop that the card refused: not tried again until Mis datos changes. */
-    private var rejectedCan: String? = null
-
     /**
-     * The tries the card said it has left after a wrong PIN, until it accepts one. While it's
-     * known, a PIN from the desktop isn't used: the user types it. So a saved PIN costs at most
-     * one try, even if the desktop never hears that it was wrong (DECISIONS D18).
+     * SHA-256 of every CAN and PIN the card refused while the app runs (memory only): they are
+     * never tried again, so a stale PIN on the desktop costs no second try.
      */
+    private val refused = HashSet<String>()
+
+    /** The PIN tries the card said it has left after a wrong PIN, until it accepts one. */
     private var pinTriesLeft: Int? = null
 
     /**
@@ -240,7 +240,6 @@ class FirmaController(
         link = null
         if (sendBye) current?.unpair() else current?.close()
         clearPairing()
-        pin = null
         active?.let { stopActive(it, Outcome.Cancelled, sendError = null) }
         active = null
         linkStatus = LinkStatus.Connecting
@@ -252,39 +251,29 @@ class FirmaController(
         store.remove(KEY_EXPIRES)
     }
 
-    // ------------------------------------------------------------------------------------------
-    // Settings
-    // ------------------------------------------------------------------------------------------
-
-    fun forgetPin() = scope.launch {
-        pin = null
-        render()
-    }
-
-    fun forgetCan() = scope.launch {
-        store.remove(KEY_CAN)
-        render()
-    }
-
     fun openNfcSettings() = platform.openNfcSettings()
 
     // ------------------------------------------------------------------------------------------
     // Requests
     // ------------------------------------------------------------------------------------------
 
-    /** [request] has no PIN: [desktopPin] holds it until the card refuses it or the request ends. */
-    private class Active(val request: SignRequest, val review: Review, var desktopPin: String?) {
+    /**
+     * [request] holds neither the CAN nor the PIN: [can] and [pin] do, until the card refuses them
+     * or the request ends.
+     */
+    private class Active(val request: SignRequest, val review: Review, var can: String?, var pin: String?, var deadline: Long) {
         var step: Step = Step.Review
         var job: Job? = null
         val actions = Channel<Action>(Channel.UNLIMITED)
         val inbox = Channel<DesktopToPhone>(Channel.UNLIMITED)
+        val unlocks = Channel<SignUnlock>(Channel.UNLIMITED)
         var progress: Stage = Stage.Reviewing
         var certificates: List<String>? = null
 
-        /** The desktop's CAN, until the card accepts it (then it is the stored one). */
-        var desktopCan: String? = request.can
+        /** What the phone asked the desktop for and still waits for (sent again after a reconnect). */
+        var waiting: SignNeed? = null
 
-        /** The card refused [desktopPin]: told to the desktop (again after a reconnect). */
+        /** The card refused this request's PIN at least once. */
         var pinRefused = false
         val signatures = LinkedHashMap<Int, String>()
         var error: SignError? = null
@@ -302,10 +291,6 @@ class FirmaController(
         data object Decline : Action
 
         data object Cancel : Action
-
-        data class Can(val value: String) : Action
-
-        data class Pin(val value: String) : Action
     }
 
     fun approve() = act(Action.Approve)
@@ -314,10 +299,6 @@ class FirmaController(
 
     /** Stops a request half-way (after approving). */
     fun cancel() = act(Action.Cancel)
-
-    fun submitCan(can: String) = act(Action.Can(can.filter(Char::isDigit)))
-
-    fun submitPin(pin: String) = act(Action.Pin(pin))
 
     /** Leaves a finished request's result. */
     fun dismissResult() = scope.launch {
@@ -345,6 +326,11 @@ class FirmaController(
                 if (current.request.requestId != id || current.finished) return
                 if (message is SignDone) current.done = true
                 current.inbox.trySend(message)
+            }
+            is SignUnlock -> {
+                val current = active ?: return
+                if (current.request.requestId != message.requestId || current.finished || current.waiting == null) return
+                current.unlocks.trySend(message)
             }
             is SignCancel -> {
                 val current = active ?: return
@@ -391,7 +377,7 @@ class FirmaController(
             send(SignError(request.requestId, ErrorCode.Protocol, "bad signature count"))
             return
         }
-        if (request.can != null && !CAN_PATTERN.matches(request.can)) {
+        if (!CAN_PATTERN.matches(request.can)) {
             send(SignError(request.requestId, ErrorCode.Protocol, "bad CAN"))
             return
         }
@@ -409,14 +395,13 @@ class FirmaController(
             verifiable = request.verifiable,
             signatures = request.signatures,
         )
-        // Reading the certificate needs no PIN; after a wrong PIN the user types it.
-        val desktopPin = request.pin?.takeIf { request.purpose != Purpose.Certificate && pinTriesLeft == null }
-        val next = Active(request.copy(pin = null), review, desktopPin)
-        if (next.desktopCan == rejectedCan) next.desktopCan = null
+        // Reading the certificate needs no PIN.
+        val pin = request.pin?.takeIf { request.purpose != Purpose.Certificate }
+        val next = Active(request.copy(can = "", pin = null), review, request.can, pin, expiresAt)
         active = next
         next.job = scope.launch {
             try {
-                run(next, expiresAt)
+                run(next)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -428,14 +413,12 @@ class FirmaController(
         render()
     }
 
-    private suspend fun run(r: Active, expiresAt: Long) {
+    private suspend fun run(r: Active) {
         progress(r, Stage.Reviewing)
         setStep(r, Step.Review)
-        val prepared = withTimeoutOrNull(expiresAt - platform.now()) {
+        val prepared = withTimeoutOrNull(r.deadline - platform.now()) {
             if (r.actions.receive() != Action.Approve) return@withTimeoutOrNull Prepared.Declined
             if (cardReader.nfc.value == NfcAvailability.Missing) return@withTimeoutOrNull Prepared.NoNfc
-            ensureCan(r, wrong = false)
-            if (r.request.purpose != Purpose.Certificate) ensurePin(r, wrong = false, retriesLeft = pinTriesLeft)
             Prepared.Ready
         }
         when (prepared) {
@@ -444,45 +427,61 @@ class FirmaController(
             Prepared.NoNfc -> return finish(r, Outcome.Failed(ErrorCode.NfcUnavailable), ErrorCode.NfcUnavailable)
             Prepared.Ready -> Unit
         }
-        readAndSign(r, expiresAt)
+        readAndSign(r)
     }
 
-    private suspend fun ensureCan(r: Active, wrong: Boolean, fromComputer: Boolean = false) {
-        if (!wrong && (r.desktopCan != null || store.get(KEY_CAN) != null)) return
-        setStep(r, Step.EnterCan(wrong, fromComputer))
-        while (true) {
-            val action = r.actions.receive()
-            if (action is Action.Can && action.value.length == CAN_LENGTH) {
-                store.put(KEY_CAN, action.value)
-                return
+    private fun fingerprint(kind: Need, value: String): String =
+        Base64Std.encode(Crypto.digest("SHA-256", "$kind:$value".encodeToByteArray()))
+
+    private fun wasRefused(kind: Need, value: String?) = value != null && fingerprint(kind, value) in refused
+
+    /**
+     * Makes sure [r] has a CAN, and a PIN unless it only reads the certificate, that the card hasn't
+     * refused: otherwise asks the desktop (`sign.need`) and waits for `sign.unlock`. False on timeout.
+     */
+    private suspend fun ensureSecrets(r: Active): Boolean {
+        val can = r.can
+        if (can == null || wasRefused(Need.Can, can)) {
+            r.can = obtain(r, Need.Can, refused = true, triesLeft = null) ?: return false
+        }
+        if (r.request.purpose == Purpose.Certificate) return true
+        val pin = r.pin
+        if (pin == null || wasRefused(Need.Pin, pin)) {
+            val wrong = r.pinRefused || pin != null
+            r.pin = obtain(r, Need.Pin, refused = wrong, triesLeft = if (wrong) pinTriesLeft else null) ?: return false
+        }
+        return true
+    }
+
+    /** Asks the desktop for [what] and waits for a value the card hasn't refused. Null on timeout. */
+    private suspend fun obtain(r: Active, what: Need, refused: Boolean, triesLeft: Int?): String? {
+        val need = SignNeed(r.request.requestId, what, refused, triesLeft?.takeIf { it in 1..2 })
+        r.waiting = need
+        send(need)
+        _readingCard.value = false
+        setStep(r, Step.WaitForComputer(what, need.refused, need.triesLeft))
+        try {
+            while (true) {
+                val unlock = withTimeoutOrNull(UNLOCK_WAIT_MS) { r.unlocks.receive() } ?: return null
+                parseInstant(unlock.expiresAt)?.let { r.deadline = it }
+                val value = if (what == Need.Can) unlock.can else unlock.pin
+                val valid = if (what == Need.Can) value != null && CAN_PATTERN.matches(value) else value != null && value.length in PIN_LENGTH
+                if (!valid) continue
+                if (wasRefused(what, value)) {
+                    // Never tried twice: ask again.
+                    val again = need.copy(refused = true)
+                    r.waiting = again
+                    send(again)
+                    continue
+                }
+                return value
             }
+        } finally {
+            r.waiting = null
         }
     }
 
-    private suspend fun ensurePin(r: Active, wrong: Boolean, retriesLeft: Int?, fromComputer: Boolean = false) {
-        if (!wrong && (r.desktopPin != null || currentPin() != null)) return
-        setStep(r, Step.EnterPin(wrong, retriesLeft, fromComputer))
-        while (true) {
-            val action = r.actions.receive()
-            if (action is Action.Pin && action.value.length in PIN_LENGTH) {
-                pin = action.value
-                pinAt = platform.now()
-                render()
-                return
-            }
-        }
-    }
-
-    private fun currentPin(): String? {
-        val cached = pin ?: return null
-        if (platform.now() - pinAt > PIN_CACHE_MS) {
-            pin = null
-            return null
-        }
-        return cached
-    }
-
-    private suspend fun readAndSign(r: Active, expiresAt: Long) {
+    private suspend fun readAndSign(r: Active) {
         var card: Card? = null
         var session: DnieSession? = null
         var moved = false
@@ -490,8 +489,9 @@ class FirmaController(
         try {
             while (true) {
                 if (session == null) {
+                    if (!ensureSecrets(r)) return finish(r, Outcome.Failed(ErrorCode.Timeout), ErrorCode.Timeout)
                     // Until the card is read the request's own deadline applies.
-                    if (r.certificates == null && platform.now() > expiresAt) {
+                    if (r.certificates == null && platform.now() > r.deadline) {
                         return finish(r, Outcome.Expired, ErrorCode.Timeout)
                     }
                     setStep(r, Step.HoldCard(moved))
@@ -500,7 +500,7 @@ class FirmaController(
                     // tag, so it can't go off as soon as the card shows up.
                     _readingCard.value = true
                     val held = if (r.certificates == null) {
-                        withTimeoutOrNull(expiresAt - platform.now()) { cardReader.awaitCard() }
+                        withTimeoutOrNull(r.deadline - platform.now()) { cardReader.awaitCard() }
                             ?: return finish(r, Outcome.Expired, ErrorCode.Timeout)
                     } else {
                         withTimeoutOrNull(CARD_AGAIN_MS) { cardReader.awaitCard() }
@@ -509,9 +509,10 @@ class FirmaController(
                     card = held
                     setStep(r, Step.Working(reading = true, signed = r.signatures.size))
                     progress(r, Stage.Reading)
-                    val can = r.desktopCan ?: store.get(KEY_CAN) ?: return finish(r, Outcome.Failed(ErrorCode.Internal), ErrorCode.Internal)
+                    val can = r.can ?: return finish(r, Outcome.Failed(ErrorCode.Internal), ErrorCode.Internal)
+                    val pin = r.pin
                     val opened = try {
-                        withContext(io) { held.open(can, r.request.purpose) { r.desktopPin ?: currentPin() ?: throw CardException.Failed("no PIN") } }
+                        withContext(io) { held.open(can, r.request.purpose) { pin ?: throw CardException.Failed("no PIN") } }
                     } catch (e: CardException) {
                         held.closeQuietly()
                         card = null
@@ -521,20 +522,13 @@ class FirmaController(
                                 continue
                             }
                             is CardException.WrongCan -> {
-                                val fromComputer = r.desktopCan != null
-                                if (fromComputer) rejectedCan = r.desktopCan
-                                r.desktopCan = null
-                                store.remove(KEY_CAN)
-                                ensureCan(r, wrong = true, fromComputer = fromComputer)
+                                refused += fingerprint(Need.Can, can)
+                                r.can = null
                                 moved = false
                                 continue
                             }
                             else -> return fail(r, e)
                         }
-                    }
-                    r.desktopCan?.let {
-                        store.put(KEY_CAN, it)
-                        r.desktopCan = null
                     }
                     val certificates = opened.certificates.map { Base64Std.encode(it) }
                     val first = r.certificates
@@ -608,17 +602,12 @@ class FirmaController(
                                     continue
                                 }
                                 is CardException.WrongPin -> {
-                                    // Never tried again: neither the cached PIN nor the desktop's.
-                                    val fromComputer = r.desktopPin != null
-                                    r.desktopPin = null
-                                    pin = null
+                                    // Never tried again; the desktop asks the user for another.
+                                    r.pin?.let { refused += fingerprint(Need.Pin, it) }
+                                    r.pin = null
+                                    r.pinRefused = true
                                     pinTriesLeft = e.retriesLeft
-                                    if (fromComputer) {
-                                        r.pinRefused = true
-                                        send(SignWrongPin(r.request.requestId))
-                                    }
                                     if (e.retriesLeft <= 0) return fail(r, CardException.PinBlocked())
-                                    ensurePin(r, wrong = true, retriesLeft = e.retriesLeft, fromComputer = fromComputer)
                                     continue
                                 }
                                 else -> return fail(r, e)
@@ -648,10 +637,7 @@ class FirmaController(
             is CardException.CertificateExpired -> ErrorCode.CertificateExpired
             else -> ErrorCode.Internal
         }
-        if (code == ErrorCode.PinBlocked) {
-            pin = null
-            pinTriesLeft = 0
-        }
+        if (code == ErrorCode.PinBlocked) pinTriesLeft = 0
         platform.log("card error: ${e::class.simpleName} ${e.message}")
         finish(r, Outcome.Failed(code), code)
     }
@@ -664,7 +650,9 @@ class FirmaController(
     }
 
     private fun finish(r: Active, outcome: Outcome, sendError: ErrorCode?) {
-        r.desktopPin = null
+        r.can = null
+        r.pin = null
+        r.waiting = null
         if (r.finished) return
         if (sendError != null) {
             val error = SignError(r.request.requestId, sendError)
@@ -686,7 +674,6 @@ class FirmaController(
     /** After a reconnect: everything the desktop may have missed for this request. */
     private fun resend(r: Active) {
         val id = r.request.requestId
-        if (r.pinRefused) send(SignWrongPin(id))
         r.error?.let {
             send(it)
             return
@@ -695,6 +682,7 @@ class FirmaController(
         send(SignProgress(id, r.progress))
         r.certificates?.let { send(SignCertificate(id, it)) }
         for ((seq, signature) in r.signatures) send(SignSignature(id, seq, signature))
+        r.waiting?.let(::send)
     }
 
     private fun progress(r: Active, stage: Stage) {
@@ -722,7 +710,7 @@ class FirmaController(
         _screen.value = when {
             candidate != null -> Screen.ConfirmPairing(nfc, candidate, replacing = link != null)
             current != null -> Screen.Signing(nfc, current.review, current.step, link?.connected == true)
-            link != null -> Screen.Home(nfc, linkStatus, pinRemembered = currentPin() != null, canSaved = store.get(KEY_CAN) != null)
+            link != null -> Screen.Home(nfc, linkStatus)
             else -> Screen.Start(nfc, notice)
         }
     }
@@ -733,12 +721,11 @@ class FirmaController(
         const val KEY_PAIRING = "pairing"
         const val KEY_PAIRED_AT = "pairedAt"
         const val KEY_EXPIRES = "pairingExpiresAt"
-        const val KEY_CAN = "can"
-        const val CAN_LENGTH = 6
         private val CAN_PATTERN = Regex("[0-9]{6}")
         val PIN_LENGTH = 8..16
-        const val PIN_CACHE_MS = 60 * 60_000L
-        const val PAIRING_MAX_MS = 12 * 60 * 60_000L
+        const val PAIRING_MAX_MS = 72 * 60 * 60_000L
+        /** Waiting for the user to type a CAN or PIN on the desktop. */
+        const val UNLOCK_WAIT_MS = 5 * 60_000L
         /** Waiting for the card again after it moved. */
         const val CARD_AGAIN_MS = 2 * 60_000L
         /** Waiting for the desktop's next to-be-signed blob (triphase servers can be slow). */

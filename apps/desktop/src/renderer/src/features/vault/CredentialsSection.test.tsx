@@ -68,26 +68,9 @@ describe('Mis datos: DNIe with the phone', () => {
     expect(saved).toContain('Vincular el móvil');
   });
 
-  it('shows whether the DNIe PIN is saved, refused by the card, or missing', () => {
-    const none = render(true, [DNIE]);
-    expect(none).toContain('data-testid="dnie-pin"');
-    expect(none).toContain('Guarda el PIN del DNIe y el móvil no te lo pedirá.');
-    expect(none).toContain('Guardar PIN');
-    expect(none).not.toContain('Quitar');
-
-    const saved = render(true, [{ ...DNIE, pin: 'saved' }]);
-    expect(saved).toContain('PIN del DNIe guardado.');
-    expect(saved).toContain('Cambiar');
-    expect(saved).toContain('Quitar');
-    expect(saved).not.toContain('Guardar PIN');
-
-    const wrong = render(true, [{ ...DNIE, pin: 'wrong' }]);
-    expect(wrong).toContain('Tu DNIe no aceptó el PIN guardado.');
-    expect(wrong).toContain('Corregir PIN');
-    expect(wrong).toContain('Quitar');
-    expect(wrong).toContain('bg-st-attention-bg');
-
-    // Without the feature flag there is no card, so no PIN either.
-    expect(render(false, [{ ...DNIE, pin: 'saved' }])).not.toContain('dnie-pin');
+  it('has no place for the DNIe CAN or PIN: they are typed when a signature needs them', () => {
+    const saved = render(true, [DNIE]);
+    expect(saved).not.toContain('dnie-pin');
+    expect(saved).not.toContain('PIN');
   });
 });

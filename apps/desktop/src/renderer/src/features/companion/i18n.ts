@@ -16,6 +16,7 @@ export const companionDict = defineDict({
     rescan: 'Si no se conecta, escanea otra vez el código.',
     connected: (device: string) => `Conectado con ${device}`,
     stage: {
+      unlock: 'Escribe los datos de tu DNIe',
       phone: 'Mira tu móvil',
       reviewing: 'Revisa la firma en el móvil',
       card: 'Acerca el DNIe a la parte de atrás del móvil',
@@ -23,16 +24,40 @@ export const companionDict = defineDict({
       signing: 'Firmando…',
     },
     stageHint: {
+      unlock: 'Los necesita el móvil para leer tu DNIe.',
       phone: 'La petición de firma está llegando a la app.',
-      reviewing: 'Comprueba qué firmas y para quién, y escribe el PIN de tu DNIe.',
+      reviewing: 'Comprueba qué firmas y para quién.',
       card: 'Pon el DNIe sobre una mesa y apoya el móvil encima.',
       reading: 'No muevas el DNIe ni el móvil hasta que termine.',
       signing: 'No muevas el DNIe ni el móvil hasta que termine.',
     },
-    /** The `reviewing` hint when the phone doesn't ask for the PIN. */
-    reviewingNoPin: {
-      savedPin: 'Comprueba qué firmas y para quién.',
-      certificate: 'Comprueba quién lo pide y comparte tu certificado.',
+    /** The `reviewing` hint of a certificate read. */
+    reviewingCertificate: 'Comprueba quién lo pide y comparte tu certificado.',
+    unlock: {
+      lead: 'Solo los recibe tu móvil vinculado, cifrados. El asistente nunca los ve. Recuerdo el PIN durante una hora.',
+      can: 'Número CAN',
+      canHelp: 'Son los 6 números de la parte de delante de tu DNIe, abajo a la derecha.',
+      canInvalid: 'El número CAN tiene 6 números.',
+      canRefused: 'El número CAN no coincide con tu DNIe. Míralo otra vez en la tarjeta.',
+      pin: 'PIN del DNIe',
+      pinHelp: 'De 8 a 16 letras y números. No es el número CAN.',
+      pinInvalid: 'El PIN tiene entre 8 y 16 caracteres.',
+      pinRefused: (tries: number) =>
+        tries === 1
+          ? 'El PIN no es correcto. Cuidado: te queda un intento. Si fallas, el DNIe se bloquea.'
+          : `El PIN no es correcto. Te quedan ${tries} intentos.`,
+      pinRefusedUnknown: 'El PIN no es correcto. Escríbelo otra vez.',
+      helpTitle: '¿Qué es el PIN y dónde lo encuentro?',
+      canHelpTitle: '¿Dónde está el número CAN?',
+      help: [
+        'El PIN es la contraseña de tu DNI electrónico. Tiene de 8 a 16 letras y números. No es el número CAN.',
+        'Te lo dieron en un sobre cerrado cuando te hicieron el DNI.',
+        '¿Lo has perdido o no lo recuerdas? Ve a un Punto de Actualización del DNIe. Son unas máquinas que hay en las comisarías donde se hace el DNI. Con tu huella pones un PIN nuevo. No hace falta cita.',
+        'Para cambiar el PIN, usa esas mismas máquinas. Por seguridad, no se puede cambiar por internet.',
+        'Si fallas el PIN 3 veces, el DNIe se bloquea. Se desbloquea en esas máquinas, con tu huella.',
+        'El número CAN son los 6 números impresos en la parte de delante del DNIe, abajo a la derecha.',
+      ],
+      submit: 'Continuar',
     },
     login: {
       reviewing: 'Aprueba el acceso en el móvil',
@@ -51,7 +76,7 @@ export const companionDict = defineDict({
     unpaired: 'Móvil desvinculado',
     pairTitle: 'Vincula tu móvil',
     pairLead:
-      'El móvil lee tu DNIe por NFC y firma con él. La vinculación dura 12 horas o hasta que cierres la app.',
+      'El móvil lee tu DNIe por NFC y firma con él. La vinculación dura 72 horas o hasta que cierres la app.',
     noPhone: 'Ningún móvil vinculado',
     done: 'Hecho',
   },
@@ -69,6 +94,7 @@ export const companionDict = defineDict({
     rescan: "If it doesn't connect, scan the code again.",
     connected: (device: string) => `Connected to ${device}`,
     stage: {
+      unlock: 'Type your DNIe details',
       phone: 'Look at your phone',
       reviewing: 'Check the signature on your phone',
       card: 'Hold your DNIe to the back of the phone',
@@ -76,15 +102,39 @@ export const companionDict = defineDict({
       signing: 'Signing…',
     },
     stageHint: {
+      unlock: 'Your phone needs them to read your DNIe.',
       phone: 'The signature request is reaching the app.',
-      reviewing: 'Check what you sign and for whom, and type your DNIe PIN.',
+      reviewing: 'Check what you sign and for whom.',
       card: 'Put the DNIe on a table and rest the phone on it.',
       reading: "Don't move the DNIe or the phone until it's done.",
       signing: "Don't move the DNIe or the phone until it's done.",
     },
-    reviewingNoPin: {
-      savedPin: 'Check what you sign and for whom.',
-      certificate: 'Check who asks and share your certificate.',
+    reviewingCertificate: 'Check who asks and share your certificate.',
+    unlock: {
+      lead: 'Only your paired phone gets them, encrypted. The assistant never sees them. I remember the PIN for an hour.',
+      can: 'CAN number',
+      canHelp: 'The 6 digits on the front of your DNIe, at the bottom right.',
+      canInvalid: 'The CAN has 6 digits.',
+      canRefused: "The CAN doesn't match your DNIe. Check it again on the card.",
+      pin: 'DNIe PIN',
+      pinHelp: '8 to 16 letters and numbers. It’s not the CAN.',
+      pinInvalid: 'The PIN has 8 to 16 characters.',
+      pinRefused: (tries: number) =>
+        tries === 1
+          ? 'The PIN is wrong. Careful: you have one try left. If it fails, your DNIe gets blocked.'
+          : `The PIN is wrong. You have ${tries} tries left.`,
+      pinRefusedUnknown: 'The PIN is wrong. Type it again.',
+      helpTitle: 'What is the PIN and where do I find it?',
+      canHelpTitle: 'Where is the CAN?',
+      help: [
+        'The PIN is the password of your electronic DNI. It has 8 to 16 letters and numbers. It’s not the CAN.',
+        'You got it in a sealed envelope when your DNI was issued.',
+        'Lost it or can’t remember it? Go to a DNIe Update Point (Punto de Actualización del DNIe). These are machines at the police stations that issue the DNI. With your fingerprint you set a new PIN. No appointment needed.',
+        'To change the PIN, use those same machines. For security, it can’t be changed online.',
+        'After 3 wrong PINs your DNIe gets blocked. You unblock it at those machines, with your fingerprint.',
+        'The CAN is the 6 digits printed on the front of the DNIe, at the bottom right.',
+      ],
+      submit: 'Continue',
     },
     login: {
       reviewing: 'Approve login on your phone',
@@ -103,7 +153,7 @@ export const companionDict = defineDict({
     unpaired: 'Phone unpaired',
     pairTitle: 'Pair your phone',
     pairLead:
-      'The phone reads your DNIe over NFC and signs with it. The pairing lasts 12 hours or until you quit the app.',
+      'The phone reads your DNIe over NFC and signs with it. The pairing lasts 72 hours or until you quit the app.',
     noPhone: 'No phone paired',
     done: 'Done',
   },

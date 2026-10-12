@@ -85,7 +85,14 @@ it('logs in with the phone companion and signs each TLS digest without hashing i
       await readFile(sede.demo.certificateP12Path),
       sede.demo.certificatePassphrase,
     );
+    // The CAN from the scanned DNI; the PIN the user types on the desktop.
+    await app.vault.setPersonal([{ key: 'dniAccessNumber', value: '123456' }], 'manual');
     const signing = app.services.companion!.login(procedureId, credential, sede.certUrl);
+    await app.waitFor(() => {
+      const prompt = app.pendingPrompt(procedureId)?.prompt;
+      return prompt?.kind === 'dnie_signature' && prompt.stage === 'unlock';
+    });
+    await app.invoke('companion.unlock', app.pendingPrompt(procedureId)!.id, { pin: 'Abcd1234' });
     await app.waitFor(() => app.services.companion!.status().state === 'waiting');
     const status = app.services.companion!.status();
     expect(status.state).toBe('waiting');

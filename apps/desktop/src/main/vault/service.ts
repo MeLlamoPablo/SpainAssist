@@ -239,18 +239,6 @@ export class VaultService {
     });
   }
 
-  /** Saves (or, with null, removes) the DNIe PIN. It goes only to the paired phone (D18). */
-  setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
-    return this.guard(async () => {
-      if (!this.deps.dniePhone)
-        throw new UserError(t(this.deps.lang(), 'dniePhoneOff'), 'unavailable');
-      this.deps.logger.addSecret(pin);
-      const summary = await this.deps.vault.setDniePin(id, pin);
-      this.changed();
-      return summary;
-    });
-  }
-
   addCertificate(input: AddCertificateInput): Promise<CredentialSummary> {
     return this.guard(async () => {
       this.deps.logger.addSecret(input.passphrase);

@@ -298,17 +298,40 @@ export const PhoneCallOutcome = z.enum([
 export type PhoneCallOutcome = z.infer<typeof PhoneCallOutcome>;
 
 /**
- * Where a DNIe signature is on the phone (raised by the app, never by the agent):
+ * Where a DNIe signature is (raised by the app, never by the agent):
+ * - `unlock`: the desktop asks for the DNIe's CAN and/or PIN (`unlock`), before anything goes to
+ *   the phone, or again when the card refused one (D20);
  * - `phone`: waiting for the phone app (shows the QR code when no phone is connected);
  * - `reviewing`: the request is on the phone; `card`: approved, hold the DNIe to the phone;
  * - `reading` / `signing`: the phone is talking to the card.
  */
-export const DnieSignatureStage = z.enum(['phone', 'reviewing', 'card', 'reading', 'signing']);
+export const DnieSignatureStage = z.enum([
+  'unlock',
+  'phone',
+  'reviewing',
+  'card',
+  'reading',
+  'signing',
+]);
 export type DnieSignatureStage = z.infer<typeof DnieSignatureStage>;
 
 /**
- * A signature or login with the DNIe through the paired phone. The card follows the phone's progress;
- * the user approves on the phone and can only cancel here. The QR code is not part of the
+ * What the `unlock` stage asks for. `refused`: the card refused the CAN or the PIN the phone
+ * had; `triesLeft`: the PIN tries the card has left after a wrong one. The CAN and the PIN
+ * themselves never go into the prompt: the card sends them to main with `companion.unlock`.
+ */
+export const DnieUnlock = z.object({
+  can: z.boolean(),
+  pin: z.boolean(),
+  refused: z.enum(['can', 'pin']).optional(),
+  triesLeft: z.number().int().min(1).max(2).optional(),
+});
+export type DnieUnlock = z.infer<typeof DnieUnlock>;
+
+/**
+ * A signature or login with the DNIe through the paired phone. The card first asks for the CAN
+ * and the PIN when the desktop doesn't have them, then follows the phone's progress; the user
+ * approves on the phone and can only cancel here. The QR code is not part of the
  * prompt (it carries the pairing secret): the card reads it from `companion.status`.
  */
 export const DnieSignaturePrompt = z.object({
@@ -321,11 +344,8 @@ export const DnieSignaturePrompt = z.object({
     .max(20)
     .optional(),
   stage: DnieSignatureStage,
-  /**
-   * The request carries the DNIe PIN saved in Mis datos (D18), so the phone doesn't ask for it
-   * (unless the card refuses it). The PIN itself never goes into the prompt.
-   */
-  savedPin: z.boolean().optional(),
+  /** Only in the `unlock` stage. */
+  unlock: DnieUnlock.optional(),
 });
 export type DnieSignaturePrompt = z.infer<typeof DnieSignaturePrompt>;
 

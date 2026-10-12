@@ -1,6 +1,7 @@
 import type {
   ChatItem,
   DnieSignatureStage,
+  DnieUnlock,
   FormField,
   Language,
   NextAction,
@@ -407,19 +408,14 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     details: [{ label: t('Web', 'Website'), value: 'sede.example.gob.es' }],
     stage: 'reviewing',
   });
-  const dnieSignature = (stage: DnieSignatureStage, savedPin = false): Prompt => ({
+  const dnieSignature = (stage: DnieSignatureStage, unlock?: DnieUnlock): Prompt => ({
     kind: 'dnie_signature',
     purpose: 'document',
     title: t('Firma con tu DNIe', 'Sign with your DNIe'),
-    message: savedPin
-      ? t(
-          'La sede de ejemplo te pide firmar. Sigue en el móvil: revisa la firma y acerca el DNIe al móvil. El móvil ya tiene tu PIN guardado.',
-          'The example site asks you to sign. Carry on on your phone: check the signature and hold the DNIe to the phone. The phone already has your saved PIN.',
-        )
-      : t(
-          'La sede de ejemplo te pide firmar. Sigue en el móvil: revisa la firma, escribe el PIN del DNIe y acerca el DNIe al móvil.',
-          'The example site asks you to sign. Carry on on your phone: check the signature, type your DNIe PIN and hold the DNIe to the phone.',
-        ),
+    message: t(
+      'La sede de ejemplo te pide firmar con tu DNIe. Revisa la firma en el móvil y acerca el DNIe al móvil.',
+      'The example site asks you to sign with your DNIe. Check the signature on your phone and hold the DNIe to it.',
+    ),
     details: [
       {
         label: t('Qué', 'What'),
@@ -428,8 +424,22 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       { label: t('Para', 'For'), value: 'sede.example.gob.es' },
     ],
     stage,
-    ...(savedPin ? { savedPin } : {}),
+    ...(unlock ? { unlock } : {}),
   });
+  addPrompt(
+    'dnie-unlock',
+    'confirmations',
+    t('DNIe · CAN y PIN', 'DNIe · CAN and PIN'),
+    'dnie_signature',
+    dnieSignature('unlock', { can: true, pin: true }),
+  );
+  addPrompt(
+    'dnie-unlock-wrong-pin',
+    'confirmations',
+    t('DNIe · PIN incorrecto', 'DNIe · Wrong PIN'),
+    'dnie_signature',
+    dnieSignature('unlock', { can: false, pin: true, refused: 'pin', triesLeft: 2 }),
+  );
   for (const stage of ['phone', 'reviewing', 'card', 'reading'] as const)
     addPrompt(
       `dnie-${stage}`,
@@ -438,13 +448,6 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       'dnie_signature',
       dnieSignature(stage),
     );
-  addPrompt(
-    'dnie-saved-pin',
-    'confirmations',
-    t('DNIe · PIN guardado', 'DNIe · Saved PIN'),
-    'dnie_signature',
-    dnieSignature('reviewing', true),
-  );
   examples.push({
     id: 'message',
     group: 'output',
