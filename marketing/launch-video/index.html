@@ -29,15 +29,15 @@
         </div>
         <div id="chat">
           <div class="item" id="c-user"><div class="bubble">Me quiero empadronar</div></div>
-          <div class="item" id="c-chip1"><span class="chip"><span data-icon="rocket"></span>Empiezo el trámite «Empadronarme en Madrid»<span class="chip-go" data-icon="arrow-up-right"></span></span></div>
+          <div class="item" id="c-chip1"><span class="chip"><span data-icon="rocket"></span>Empiezo el trámite «Empadronarme en Sevilla»<span class="chip-go" data-icon="arrow-up-right"></span></span></div>
           <div class="item" id="c-ai1"><p class="ai stream">¡Vamos allá! Para empadronarte necesito tu <b>contrato de alquiler</b>. Te lo pido en su tarjeta.</p></div>
           <div class="item" id="c-ai2"><p class="ai stream">Recibido. Ahora <b>firma la solicitud con tu DNIe</b>, desde el móvil.</p></div>
-          <div class="item" id="c-chip2"><span class="chip"><span data-icon="inbox"></span>Novedades de «Empadronarme en Madrid»<span class="chip-go" data-icon="arrow-up-right"></span></span></div>
+          <div class="item" id="c-chip2"><span class="chip"><span data-icon="inbox"></span>Novedades de «Empadronarme en Sevilla»<span class="chip-go" data-icon="arrow-up-right"></span></span></div>
           <div class="item" id="c-ai3">
             <p class="ai stream">¡Hecho! Ya estás empadronado. Aquí tienes tu <b>certificado de empadronamiento</b>:</p>
             <div class="attach" id="attach">
               <span class="attach-icon" data-icon="file-text"></span>
-              <span class="attach-text"><b>Certificado de empadronamiento.pdf</b><small>PDF · 1 página · Ayuntamiento de Madrid</small></span>
+              <span class="attach-text"><b>Certificado de empadronamiento.pdf</b><small>PDF · 1 página · Ayuntamiento de Sevilla</small></span>
               <span class="attach-dl" data-icon="download"></span>
             </div>
           </div>
@@ -71,8 +71,8 @@
         <section id="card">
           <div class="card-head">
             <div>
-              <h2>Empadronarme en Madrid</h2>
-              <p class="org"><span data-icon="landmark"></span>Ayuntamiento de Madrid<span class="sep">·</span><span id="updated">Actualizado ahora</span></p>
+              <h2>Empadronarme en Sevilla</h2>
+              <p class="org"><span data-icon="landmark"></span>Ayuntamiento de Sevilla</p>
             </div>
             <span class="pill done" id="pill-done"><i></i>Completado</span>
             <span class="more">···</span>
@@ -85,8 +85,8 @@
             </ul>
             <ol class="steps">
               <li class="step" id="s1"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Leer los requisitos</span></li>
-              <li class="step" id="s2"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Subir el contrato de alquiler</span><span class="you">Tú</span></li>
-              <li class="step" id="s3"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Firmar la solicitud con tu DNIe</span><span class="you">Tú</span></li>
+              <li class="step" id="s2"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Subir el contrato de alquiler</span></li>
+              <li class="step" id="s3"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Firmar la solicitud con tu DNIe</span></li>
               <li class="step" id="s4"><span class="st"><i class="o"></i><i class="cur"></i><i class="ok" data-icon="check"></i><i class="burst"></i></span><span class="lbl">Descargar el certificado</span></li>
             </ol>
           </div>
@@ -115,9 +115,8 @@
             </div>
             <div class="details"><span>Qué</span><b>Solicitud de alta en el padrón (PDF)</b></div>
           </div></div>
-          <div class="col" id="q2done"><div class="answered"><span data-icon="circle-check"></span>Firmado con el DNIe<small>Hecho</small></div></div>
 
-          <div class="col" id="strip"><div class="strip"><span class="spin" id="spin"></span><span id="strip-text">Leyendo sede.madrid.es</span></div></div>
+          <div class="strip"><span class="working" id="working"><svg class="spin" id="spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M21 12a9 9 0 0 0-9-9" /></svg><span id="strip-text"></span><span class="elapsed" id="elapsed"></span></span><span class="toggle">Detalles<span data-icon="chevron-down"></span></span></div>
         </section>
       </main>
 
@@ -138,10 +137,9 @@
       <div class="p-status"><span>9:41</span><span class="p-notch"></span><span>5G ▮</span></div>
       <div class="p-brand"><svg class="flag" viewBox="0 0 58 58"><use href="#flag" /></svg><span class="brand-name">Spain <i>Assist</i></span></div>
       <div class="p-view" id="pv1">
-        <span class="p-kicker">Firma digital · te necesito</span>
         <h3>Firma con tu DNIe</h3>
-        <p>El Ayuntamiento de Madrid te pide firmar:</p>
-        <div class="p-box"><span>Qué</span><b>Solicitud de alta en el padrón</b><span>Para</span><b>sede.madrid.es</b></div>
+        <p>El Ayuntamiento de Sevilla te pide firmar:</p>
+        <div class="p-box"><span>Qué</span><b>Solicitud de alta en el padrón</b><span>Para</span><b>sede.sevilla.org</b></div>
         <span class="p-btn" id="p-btn">Firmar con el DNIe</span>
         <span class="p-cancel">Cancelar</span>
       </div>
@@ -166,12 +164,12 @@
   <canvas id="confetti" width="1920" height="1080"></canvas>
   <div id="cert">
     <div class="sheet">
-      <p class="cert-org">Ayuntamiento de Madrid · Padrón Municipal</p>
+      <p class="cert-org">Ayuntamiento de Sevilla</p>
       <h2>Certificado de empadronamiento</h2>
       <i class="rule"></i>
       <dl>
         <dt>Nombre</dt><dd>Lucía García Martín</dd>
-        <dt>Domicilio</dt><dd>Calle del Ejemplo 12, 3.º B<br />28012 Madrid</dd>
+        <dt>Domicilio</dt><dd>Calle Amor de Dios 148, 3.º B<br />41002 Sevilla</dd>
         <dt>Fecha de alta</dt><dd>12 de octubre de 2026</dd>
       </dl>
       <div class="cert-lines"><i class="w100"></i><i class="w90"></i><i class="w95"></i><i class="w70"></i></div>

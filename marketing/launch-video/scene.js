@@ -122,7 +122,7 @@ const streams = {
   ai2: { words: splitWords($('c-ai2').querySelector('.ai')), from: T.ai2 + 0.2, rate: 26 },
   ai3: { words: splitWords($('c-ai3').querySelector('.ai')), from: T.ai3 + 0.2, rate: 26 },
 };
-const cols = ['q1', 'q2', 'q2done', 'strip'].map((id) => $(id));
+const cols = ['q1', 'q2'].map((id) => $(id));
 const heights = new Map();
 
 export async function ready() {
@@ -200,9 +200,7 @@ function title(t) {
   set($('t-w1'), { transform: `translateY(${(1 - w1) * 110}%)` });
   set($('t-w2'), { transform: `translateY(${(1 - w2) * 110}%)` });
   const tagEl = $('t-tag');
-  tagEl.textContent = outro
-    ? 'Tus trámites, resueltos.'
-    : 'Tus trámites en España, en una conversación.';
+  tagEl.textContent = outro ? 'Tus trámites, resueltos.' : 'España, sin complicaciones';
   set(tagEl, { opacity: tag, transform: `translateY(${(1 - tag) * 16}px)` });
   const url = outro ? P(t, t0 + 0.85, 0.5, E.back) : 0;
   set($('t-url'), {
@@ -282,7 +280,7 @@ function chat(t) {
   set($('attach'), { opacity: clamp01(att * 1.5), transform: `translateY(${(1 - att) * 16}px)` });
 }
 
-function stepState(t, id, current, done, you) {
+function stepState(t, id, current, done) {
   const el = $(id);
   const isCur = t >= current && t < done;
   const ok = P(t, done, 0.4, E.back);
@@ -296,11 +294,10 @@ function stepState(t, id, current, done, you) {
   const b = P(t, done, 0.6, E.out);
   set(burst, { opacity: t >= done ? (1 - b) * 0.9 : 0, transform: `scale(${1 + b * 1.4})` });
   set(el.querySelector('.lbl'), {
-    color: t >= done || isCur ? 'var(--fg)' : 'var(--fg-faint)',
-    fontWeight: isCur ? 600 : 500,
+    color: t >= done || isCur ? 'var(--fg)' : 'var(--fg-subtle)',
+    fontWeight: isCur ? 600 : t >= done ? 500 : 400,
   });
-  const youEl = el.querySelector('.you');
-  if (youEl) set(youEl, { opacity: you && isCur ? P(t, current, 0.3) : 0 });
+  set(el, { '--line-cur': t >= done ? 'rgba(23, 163, 95, 0.4)' : 'rgba(212, 206, 200, 0.7)' });
 }
 
 function card(t) {
@@ -313,39 +310,40 @@ function card(t) {
   });
   set($('badge'), { transform: `scale(${P(t, T.card + 0.2, 0.4, E.back)})` });
 
-  stepState(t, 's1', T.card, T.step1, false);
-  stepState(t, 's2', T.step1, T.step2, true);
-  stepState(t, 's3', T.step2, T.step3, true);
-  stepState(t, 's4', T.step3, T.step4, false);
+  stepState(t, 's1', T.card, T.step1);
+  stepState(t, 's2', T.step1, T.step2);
+  stepState(t, 's3', T.step2, T.step3);
+  stepState(t, 's4', T.step3, T.step4);
 
-  // Your turn: the card glows amber. Done: it glows green, then settles.
+  // While the card asks, it has the app's amber border and ring.
   const glow = inOut(t, T.q1, 0.3, T.q1Close, 0.3) + inOut(t, T.q2, 0.3, T.phoneOut, 0.3);
-  set($('card'), { '--glow': glow, '--doneglow': inOut(t, T.step4, 0.3, T.step4 + 1.3, 0.6) });
+  set($('card'), { '--glow': glow });
   const pill = P(t, T.step4 + 0.05, 0.45, E.back);
   set($('pill-done'), {
     opacity: clamp01(pill * 2),
     transform: `scale(${pill})`,
     display: pill > 0 ? 'inline-flex' : 'none',
   });
-  $('updated').textContent = t > T.step4 ? 'Completado ahora' : 'Actualizado ahora';
 
   // Collapsible sections.
   const open = (el, p) =>
     set(el, { height: `${heights.get(el) * p}px`, opacity: clamp01(p * 1.4) });
   open($('q1'), inOut(t, T.q1, 0.4, T.q1Close, 0.35));
   open($('q2'), inOut(t, T.q2, 0.4, T.phoneOut, 0.35));
-  open($('q2done'), inOut(t, T.phoneOut + 0.15, 0.35, T.step4 + 0.6, 0.35));
-  const research = inOut(t, T.card + 0.4, 0.35, T.step1 + 0.2, 0.35);
-  const sending = inOut(t, T.step3 + 0.1, 0.35, T.step4, 0.35);
-  open($('strip'), Math.max(research, sending));
-  $('strip-text').textContent =
-    t < T.step1 + 0.6
-      ? t < T.card + 0.85
-        ? 'Buscando cómo empadronarte en Madrid'
-        : 'Leyendo sede.madrid.es'
-      : t < T.step3 + 0.45
-        ? 'Presentando la solicitud en sede.madrid.es'
-        : 'Descargando tu certificado';
+
+  // The status strip: the agent's current activity while it works, else only "Detalles".
+  const runs = [
+    [T.card + 0.3, T.step1, 'Leyendo sede.sevilla.org'],
+    [T.step3, T.step4, 'Abriendo sede.sevilla.org'],
+  ];
+  const run = runs.find(([a, b]) => t >= a && t < b);
+  set($('working'), { visibility: run ? 'visible' : 'hidden' });
+  if (run) {
+    $('strip-text').textContent = run[2];
+    // A procedure's agent takes a while; the clock runs faster than the video.
+    $('elapsed').textContent = `${Math.floor((t - run[0]) * 6) + 3}s`;
+  }
+  set($('working').parentElement, { background: run ? 'rgba(252, 251, 249, 0.6)' : 'transparent' });
   set($('spin'), { transform: `rotate(${t * 420}deg)` });
 
   // Upload question: hover, drop, chosen file.
