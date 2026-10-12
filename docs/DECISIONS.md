@@ -551,7 +551,7 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
 - **Targets.** macOS dmg + zip, arm64 and x64 as separate builds (a universal app would carry two
   copies of every native helper). Windows NSIS x64, per-user, no admin rights. Linux: a `.deb` x64
   only, package `spain-assist` (no AppImage, snap or apt repository; users download it from the
-  release). Its maintainer is the repo owner's GitHub noreply address. App id
+  release). Its maintainer is `pablo@rodriguezcaballero.me`. App id
   `es.spainassist.desktop`, product name "Spain Assist". The internal name stays
   `SpainAssistant` (the name before the rename to Spain Assist), so userData and the Keychain
   item don't move.

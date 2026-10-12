@@ -166,8 +166,8 @@ const config: Configuration = {
     category: 'Office',
     executableName: 'spain-assist',
     synopsis: 'Tu ayuda con los trámites en España',
-    // Published in every .deb's control file (Maintainer, Vendor): no personal address.
-    maintainer: 'Spain Assist <MeLlamoPablo@users.noreply.github.com>',
+    // Published in every .deb's control file (Maintainer, Vendor).
+    maintainer: 'Pablo Rodríguez Caballero <pablo@rodriguezcaballero.me>',
     vendor: 'Spain Assist',
   },
   deb: { packageName: 'spain-assist' },
