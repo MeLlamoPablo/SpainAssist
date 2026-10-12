@@ -362,7 +362,9 @@ first and pass `--publish never`.
   arm64 and x64 are separate builds, with no universal app. Windows: NSIS x64, one-click and
   per-user. Linux: AppImage x64 with `toolsets.appimage: "1.0.3"`. `.deb` waits for a
   maintainer address: fpm requires one. Artifacts are named
-  `SpainAssist-<version>-<os>-<arch>.<ext>`. App id `es.spainassist.desktop`, product
+  `SpainAssist-<os>-<arch>.<ext>`, with no version, so
+  `github.com/MeLlamoPablo/SpainAssist/releases/latest/download/SpainAssist-mac-arm64.dmg`
+  always points at the newest stable release. App id `es.spainassist.desktop`, product
   name "Spain Assist". `electronLanguages: [en, es]` keeps the en/es Chromium locales and
   their regional variants.
 - **Package on the target machine.** pnpm installs only the host's platform packages. For

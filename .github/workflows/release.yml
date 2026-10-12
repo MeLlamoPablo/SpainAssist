@@ -2,6 +2,8 @@
 # commit of `master` builds the installers on one native runner per target and publishes
 # them as a GitHub Release, with SHA256SUMS.txt. Windows also uploads `latest.yml` and the
 # installer's blockmap: installed Windows apps update from them (electron-updater, D19).
+# Installer names carry no version (`SpainAssist-mac-arm64.dmg`), so
+# `releases/latest/download/<name>` links always reach the newest stable release.
 #
 # Unsigned for now: macOS builds are ad-hoc signed and not notarized, Windows builds are unsigned
 # (PRODUCTION_CHECKLIST.md). Signing turns on when its secrets are passed as the environment

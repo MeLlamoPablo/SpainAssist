@@ -90,7 +90,7 @@ const config: Configuration = {
   productName: 'Spain Assist',
   copyright: 'Copyright © 2026 Pablo Rodríguez Caballero',
   // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder macros
-  artifactName: 'SpainAssist-${version}-${os}-${arch}.${ext}',
+  artifactName: 'SpainAssist-${os}-${arch}.${ext}',
   directories: { buildResources: 'packaging', output: 'dist' },
   files: [
     'out/**',
