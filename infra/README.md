@@ -93,7 +93,8 @@ Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443 (+ ICMP)
 
 `<domain>` is `var.domain`, or `<ipv4-with-dashes>.sslip.io` while it is empty. The real
 domain, `spainassist.es` (`var.dns_domain`), is registered with Route 53 Domains, and its
-hosted zone already has an A and an AAAA record for every host above (see `dns.tf`).
+hosted zone already has an A and an AAAA record for every host above (see `dns.tf`). The apex
+and `www` point at the website, which is on Framer.
 
 | File | What |
 | --- | --- |
@@ -103,7 +104,7 @@ hosted zone already has an A and an AAAA record for every host above (see `dns.t
 | `coolify.tf` + `templates/databases.sql.tftpl` | Project, Postgres and its per-service roles, GitHub deploy key, both services, their env vars and deployments |
 | `litellm.tf` | LiteLLM's compose file, `config.yaml` (models, search tools), env vars, restart on change |
 | `unleash.tf` | Unleash's compose file, env vars, restart on change, the desktop app's frontend tokens |
-| `dns.tf` | Route 53: the registered domain (name servers, auto-renew), its hosted zone and the service records |
+| `dns.tf` | Route 53: the registered domain (name servers, auto-renew), its hosted zone, the service records and the website's (Framer) |
 | `aws_iam.tf` | The IAM user Terraform manages AWS with: only `dns.tf`'s resources, never deleting or transferring a domain |
 | `tf.sh` | Runs Terraform with an SSH tunnel to Coolify's API |
 

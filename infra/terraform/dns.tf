@@ -1,6 +1,7 @@
 # DNS on Route 53. var.dns_domain is registered with Route 53 Domains, and its hosted zone is
 # the one the registrar created with the domain (imported below, so the delegation never
-# changes). The zone holds an A and an AAAA record for every service host.
+# changes). The zone holds an A and an AAAA record for every service host, and the records of
+# the website, which is on Framer (at the end).
 #
 # The records exist whatever var.domain says. The apps keep using <ipv4-with-dashes>.sslip.io
 # until var.domain = var.dns_domain in terraform.tfvars; then ./tf.sh apply moves Coolify's
@@ -65,4 +66,22 @@ resource "aws_route53_record" "aaaa" {
   type     = "AAAA"
   ttl      = 300
   records  = [cidrhost(hcloud_primary_ip.ipv6.ip_network, 1)]
+}
+
+# The website: spainassist.es and www.spainassist.es, with the values Framer's custom-domain
+# settings ask for. Framer serves both names and gets their certificates itself.
+resource "aws_route53_record" "website" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.dns_domain
+  type    = "A"
+  ttl     = 300
+  records = ["31.43.160.6", "31.43.161.6"]
+}
+
+resource "aws_route53_record" "website_www" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = "www.${var.dns_domain}"
+  type    = "CNAME"
+  ttl     = 300
+  records = ["sites.framer.app"]
 }
