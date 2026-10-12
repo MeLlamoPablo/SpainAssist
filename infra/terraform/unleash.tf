@@ -103,3 +103,13 @@ resource "unleash_api_token" "desktop_development" {
 
   depends_on = [coolify_resource_action.unleash]
 }
+
+# The desktop app's version, sent with every flags request (`properties[appVersion]`, D19), so
+# flags such as must-update can be constrained by version (SEMVER_LT).
+resource "unleash_context_field" "app_version" {
+  name        = "appVersion"
+  description = "Spain Assist desktop version (semver)"
+  stickiness  = false
+
+  depends_on = [coolify_resource_action.unleash]
+}
