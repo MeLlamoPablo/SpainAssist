@@ -99,7 +99,6 @@ export const chatDict = defineDict({
       irreversible: 'Esto no se puede deshacer.',
       rejected: 'No aprobado',
       biometric: 'Te pediré Touch ID para confirmar',
-      biometricOther: 'Te pediré que confirmes tu identidad',
       confirmKind: {
         action: 'Confirmación',
         submission: 'Envío oficial',
@@ -233,7 +232,6 @@ export const chatDict = defineDict({
       irreversible: 'This can’t be undone.',
       rejected: 'Not approved',
       biometric: 'I’ll ask for Touch ID to confirm',
-      biometricOther: 'I’ll ask you to confirm it’s you',
       confirmKind: {
         action: 'Confirmation',
         submission: 'Official submission',

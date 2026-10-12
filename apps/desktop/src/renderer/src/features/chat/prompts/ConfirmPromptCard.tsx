@@ -15,7 +15,6 @@ import { Button } from '../../../components/ui/button';
 import { useT } from '../../../i18n';
 import { api, errorMessage } from '../../../lib/api';
 import { cn } from '../../../lib/cn';
-import { useAppStore } from '../../../store/app';
 import { toast } from '../../../store/toast';
 import { chatDict } from '../i18n';
 import { Markdown } from '../Markdown';
@@ -40,7 +39,6 @@ export function ConfirmPromptCard({
   embedded?: boolean;
 }) {
   const t = useT(chatDict);
-  const platform = useAppStore((s) => s.info?.platform);
   const [busy, setBusy] = useState<'yes' | 'no' | null>(null);
 
   const respond = async (approved: boolean) => {
@@ -99,7 +97,7 @@ export function ConfirmPromptCard({
         {prompt.biometric ? (
           <span className="flex items-center gap-2 text-[12.5px] text-fg-muted">
             <FingerprintPattern size={16} className="text-accent-text" aria-hidden />
-            {platform === 'darwin' ? t.prompt.biometric : t.prompt.biometricOther}
+            {t.prompt.biometric}
           </span>
         ) : (
           <span />
