@@ -170,6 +170,9 @@ function createWindow(): BrowserWindow {
       backgroundThrottling: !env.hideWindow,
     },
   });
+  // Electron's default File/Edit/View/Window bar means nothing to this app. macOS keeps it, in
+  // the system menu bar, for the standard shortcuts (copy, paste, quit).
+  if (process.platform !== 'darwin') win.removeMenu();
   // For the onboarding, the window opens invisible and click-through: the renderer draws (and
   // warms the GPU up) and calls `app.reveal` once it can run without stalls.
   if (!env.hideWindow)
