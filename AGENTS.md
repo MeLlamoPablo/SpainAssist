@@ -134,9 +134,10 @@ The UI is designed in the Framer project "Spain Assistant"
 
 ## Git
 
-- **Never rewrite or squash history without reading `PRODUCTION_CHECKLIST.md`**: commit `fc83e68`
-  is the only recovery path for the git-crypt secrets in `infra/terraform/`. Never commit a
-  secret file that `.gitattributes` does not encrypt (check `git-crypt status`).
+- **Never rewrite or squash history without reading `PRODUCTION_CHECKLIST.md`**: the root
+  commit `89c22c9` (tag `yubikey-recovery`) is the only recovery path for the git-crypt secrets
+  in `infra/terraform/`. Never commit a secret file that `.gitattributes` does not encrypt
+  (check `git-crypt status`).
 - **git-crypt in worktrees**: the key lives only in the main checkout, so in a worktree run git
   with `-c filter.git-crypt.smudge=cat -c filter.git-crypt.clean=cat -c
   filter.git-crypt.required=false` (also for `git worktree remove`), and never stage

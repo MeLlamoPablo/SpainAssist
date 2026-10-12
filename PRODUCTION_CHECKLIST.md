@@ -1,10 +1,11 @@
 # Production checklist
 
-Things to do, or not to undo, before going to production. The plan is to publish a
-copy of `master` squashed into one commit at that point.
+Things to do, or not to undo, before going to production. `master` was squashed on
+2026-10-12 into a root commit plus one commit that drops the YubiKey's git-crypt key file. The
+public repository will be a copy without the encrypted files or this history.
 
-- [ ] **Keep the git-crypt recovery commit when squashing.** Commit `fc83e68` ("git-crypt:
-      encrypt Terraform secrets") is the only place where git-crypt's key is encrypted to the
+- [ ] **Keep the git-crypt recovery commit when squashing.** The root commit `89c22c9` (tag
+      `yubikey-recovery`) is the only place where git-crypt's key is encrypted to the
       YubiKey GPG key (`93C1AE6AA35C5B388955984612BF2F12483FD814`); the next commit deletes that
       file so everyday unlocks only use the on-device key (`652182…24E6AA2E`). Squash around it
       (keep it as its own commit, or keep a branch or tag pointing at it), or re-add the YubiKey
@@ -12,8 +13,8 @@ copy of `master` squashed into one commit at that point.
       `infra/terraform/terraform.tfvars` and `terraform.tfstate` (voucher pepper, LiteLLM salt
       key, …) depend on one laptop. Recovery steps: `infra/README.md`, "Secrets and git-crypt".
 - [x] **Deploy from `master`, not `mvp`.** Done on 2026-10-12: the four Coolify apps build
-      `master` (`git_branch` default in `infra/terraform/variables.tf`). Left: delete
-      `origin/mvp`.
+      `master` (`git_branch` default in `infra/terraform/variables.tf`), and `mvp` is
+      deleted.
 - [ ] **Deploy the relay and publish the phone app.** `./tf.sh apply` adds the `relay-server`
       Coolify app on `relay.<domain>` (`PRODUCTION_SERVICES.relayServerUrl` and the app's
       `linkHost` already point there; change both with the real domain). Set
