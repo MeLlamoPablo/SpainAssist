@@ -145,8 +145,8 @@ The procedure agent first uses `web_research`, with anonymized context from the 
 data (age, municipality, document dates…) and a `mode` it chooses (`fast`, `balanced`,
 `deep`). Voucher users run it on Parallel's Task API through our key server, paid from the
 voucher (D13; `lite`, `core`, `pro`). ChatGPT plans run one Responses request with OpenAI's
-hosted `web_search` tool on the plan's usage (D21; `gpt-6-luna` low, `gpt-6.1-sol` medium,
-`gpt-6.1-sol` high). Other providers (API keys, custom endpoints) have no web research. One request
+hosted `web_search` tool on the plan's usage (D21; `gpt-6-luna`, `gpt-6.1-sol`,
+`gpt-6-astra`, all at high effort). Other providers (API keys, custom endpoints) have no web research. One request
 stays
 open until a terminal event arrives: progress updates reach the activity log, and the model
 receives only the final result, without polling turns. Abort closes the stream; a disconnect or

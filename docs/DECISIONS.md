@@ -711,11 +711,13 @@ it spends the plan the user already pays for.
   turns) with `tools: [{type: "web_search"}]`, and returns the answer with its `url_citation`s
   as `basis`. An `outputSchema` goes into the instructions; the answer is parsed as JSON when it
   can be.
-- **Mode → model and effort.** `fast` → `gpt-6-luna` low, `balanced` → `gpt-6.1-sol` medium,
-  `deep` → `gpt-6.1-sol` high (`CHATGPT_RESEARCH_MODELS`). The prompt still gives no guidance on
+- **Mode → model and effort.** All at high effort: `fast` → `gpt-6-luna`, `balanced` →
+  `gpt-6.1-sol`, `deep` → `gpt-6-astra` (`CHATGPT_RESEARCH_MODELS`). The prompt still gives no guidance on
   the mode.
 - **Progress.** Each finished `web_search_call` in the stream is a progress update; the model
   waits for the one final result, as with vouchers.
 - **Trade-offs.** No domain allowlist: the instructions ask for official sources and say which
-  facts come from unofficial ones. Research uses the user's plan limits. Unverified against the
+  facts come from unofficial ones. Research uses the user's plan limits. Plus includes GPT-6
+  Astra only in Codex and Work, as it rolls out, with 5–45 local messages per 5 h; the SIWC docs
+  don't list which models plan usage can call, so `deep` may be refused or soon run out on Plus. Unverified against the
   live SIWC route; e2e runs cannot cover it (the mock LLM has no Responses API).

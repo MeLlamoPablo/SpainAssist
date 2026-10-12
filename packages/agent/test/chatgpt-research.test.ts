@@ -80,9 +80,9 @@ describe('web research on a ChatGPT plan', () => {
   });
 
   it.each([
-    ['fast', 'gpt-6-luna', 'low'],
-    ['balanced', 'gpt-6.1-sol', 'medium'],
-    ['deep', 'gpt-6.1-sol', 'high'],
+    ['fast', 'gpt-6-luna', 'high'],
+    ['balanced', 'gpt-6.1-sol', 'high'],
+    ['deep', 'gpt-6-astra', 'high'],
   ] as const)(
     'runs %s research on %s with %s effort and OpenAI web search',
     async (mode, id, effort) => {

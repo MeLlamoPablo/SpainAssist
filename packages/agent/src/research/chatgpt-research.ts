@@ -18,12 +18,12 @@ export interface ResearchModel {
 
 /**
  * Model and reasoning effort of each research mode on a ChatGPT plan. Every mode searches with
- * OpenAI's hosted `web_search` tool; deeper modes reason longer and so search and read more.
+ * OpenAI's hosted `web_search` tool at high effort; deeper modes use larger models.
  */
 export const CHATGPT_RESEARCH_MODELS: Readonly<Record<ResearchMode, ResearchModel>> = {
-  fast: { id: 'gpt-6-luna', thinkingLevel: 'low' },
-  balanced: { id: 'gpt-6.1-sol', thinkingLevel: 'medium' },
-  deep: { id: 'gpt-6.1-sol', thinkingLevel: 'high' },
+  fast: { id: 'gpt-6-luna', thinkingLevel: 'high' },
+  balanced: { id: 'gpt-6.1-sol', thinkingLevel: 'high' },
+  deep: { id: 'gpt-6-astra', thinkingLevel: 'high' },
 };
 
 const INSTRUCTIONS = `You research Spanish administrative procedures on the web for an assistant that will carry them out for a user. Search the web as much as the question needs. Prefer official sources (gob.es, boe.es, regional and municipal sites, sede electrónica pages) and say when a fact comes only from an unofficial source. Answer in the language of the question. Report eligibility, national, regional and local variations, requirements, documents, fees, deadlines, official entry points, authentication, signatures, online and in-person steps, exceptions and common blockers, as far as the question asks for them. Cite the official URL of every fact. List gaps and conflicting information instead of guessing.`;
