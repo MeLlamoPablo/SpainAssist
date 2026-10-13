@@ -30,7 +30,7 @@ Our MIT code stays MIT inside it: you may also use it on its own under the MIT L
 
 Source code. Whoever gets the APK can get its complete corresponding source:
 - this app, with its build scripts: apps/mobile in
-  https://github.com/MeLlamoPablo/SpainAssistant, for every release we distribute;
+  https://github.com/MeLlamoPablo/SpainAssist, for every release we distribute;
 - jmulticard: https://github.com/ctt-gob-es/jmulticard (version 2.1), unmodified.
 
 The iOS app (planned) doesn't include jmulticard: it is MIT, plus the licences of its

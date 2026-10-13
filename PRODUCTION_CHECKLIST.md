@@ -29,7 +29,7 @@ public repository will be a copy without the encrypted files or this history.
       whole is EUPL-1.2 because it bundles jmulticard (`apps/mobile/NOTICE`). Before any APK
       goes out:
       - Publish the app's complete source wherever the APK is distributed, for as long as it
-        is: make `Licenses.SOURCE_URL` (`github.com/MeLlamoPablo/SpainAssistant`) public, or
+        is: make `Licenses.SOURCE_URL` (`github.com/MeLlamoPablo/SpainAssist`) public, or
         point it at a source archive of `apps/mobile` per release. Keep encrypted files and
         history out of a public copy.
       - Check the "Licencias de código abierto" screen in the release build, and update

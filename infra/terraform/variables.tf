@@ -139,7 +139,7 @@ variable "coolify_tunnel_port" {
 variable "github_repository" {
   description = "GitHub repository (owner/name) Coolify builds the key server and the feedback server from."
   type        = string
-  default     = "MeLlamoPablo/SpainAssistant"
+  default     = "MeLlamoPablo/SpainAssist"
 }
 
 variable "git_branch" {

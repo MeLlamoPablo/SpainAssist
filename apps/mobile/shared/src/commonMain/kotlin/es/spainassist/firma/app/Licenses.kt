@@ -29,7 +29,7 @@ data class Licenses(
 ) {
     companion object {
         /** The app's complete source, for every release. */
-        const val SOURCE_URL = "https://github.com/MeLlamoPablo/SpainAssistant"
+        const val SOURCE_URL = "https://github.com/MeLlamoPablo/SpainAssist"
         const val JMULTICARD_SOURCE_URL = "https://github.com/ctt-gob-es/jmulticard"
 
         /** The EUPL-1.2 in every official EU language. */
