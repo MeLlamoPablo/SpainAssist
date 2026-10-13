@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, type SaEvent } from '@sa/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EventBus } from '../core/events';
 import { silentLogger } from '../core/logger';
-import { AppStateStore, normalizeSettings, SettingsStore } from './store';
+import { AppStateStore, languageForLocales, normalizeSettings, SettingsStore } from './store';
 
 let dir: string;
 let file: string;
@@ -99,6 +99,31 @@ describe('SettingsStore', () => {
       ...DEFAULT_SETTINGS,
       language: 'en',
     });
+  });
+
+  it('starts in the OS language until the user picks one, and again after a wipe', async () => {
+    const store = await SettingsStore.open(file, { logger: silentLogger, language: 'en' });
+    expect(store.get().language).toBe('en');
+    await store.update({ language: 'es' });
+    const reopened = await SettingsStore.open(file, { logger: silentLogger, language: 'en' });
+    expect(reopened.get().language).toBe('es');
+    await reopened.reset();
+    expect(reopened.get().language).toBe('en');
+  });
+});
+
+describe('languageForLocales', () => {
+  it('picks the first language the app speaks', () => {
+    expect(languageForLocales(['en-GB', 'es-ES'])).toBe('en');
+    expect(languageForLocales(['es-419'])).toBe('es');
+    expect(languageForLocales(['ca-ES', 'en-US'])).toBe('es');
+    expect(languageForLocales(['eu', 'gl_ES'])).toBe('es');
+    expect(languageForLocales(['fr-FR', 'es-ES'])).toBe('es');
+  });
+
+  it('falls back to English for other languages and to Spanish when the OS says nothing', () => {
+    expect(languageForLocales(['fr-FR', 'de-DE'])).toBe('en');
+    expect(languageForLocales([])).toBe('es');
   });
 });
 

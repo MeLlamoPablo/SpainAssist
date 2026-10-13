@@ -1,6 +1,6 @@
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type AppInfo, ASSISTANT_AGENT_ID } from '@sa/shared';
+import { type AppInfo, ASSISTANT_AGENT_ID, type Language } from '@sa/shared';
 import type { Sidecar } from '@sa/sidecar';
 import type { KeyProvider } from '@sa/vault';
 import { AgentManager } from '../agents/manager';
@@ -81,6 +81,8 @@ export interface MainDeps {
   openPath(path: string): Promise<string>;
   /** User exports, separate from browser download staging. */
   documentDownloadsDir: string;
+  /** Language for a profile that has none stored yet (from the OS); Spanish when absent. */
+  systemLanguage?: Language;
   /** Restart the app (after wiping all data). */
   relaunch(): void;
   /** Resolves the agent host script (throws when it is not built). */
@@ -147,6 +149,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     overlay: {},
     events,
     logger: logger.child('settings'),
+    language: deps.systemLanguage,
   });
   const state = await AppStateStore.open(paths.stateFile, logger);
   const lang = () => settings.get().language;

@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
-import { DEFAULT_SETTINGS, ProviderConfig, Settings, type SettingsPatch } from '@sa/shared';
+import {
+  DEFAULT_SETTINGS,
+  type Language,
+  ProviderConfig,
+  Settings,
+  type SettingsPatch,
+} from '@sa/shared';
 import type { EventBus } from '../core/events';
 import { readJsonFile, writeFileAtomic } from '../core/fs';
 import type { Logger } from '../core/logger';
@@ -26,6 +32,7 @@ export class SettingsStore {
   private constructor(
     private readonly file: string,
     initial: Settings,
+    private readonly defaults: Settings,
     private readonly overlay: SettingsOverlay,
     private readonly events: EventBus | undefined,
     private readonly logger: Logger,
@@ -35,16 +42,26 @@ export class SettingsStore {
 
   static async open(
     file: string,
-    opts: { overlay?: SettingsOverlay; events?: EventBus; logger: Logger },
+    opts: {
+      overlay?: SettingsOverlay;
+      events?: EventBus;
+      logger: Logger;
+      /** Language when settings.json stores none (first run, after a wipe): the OS language. */
+      language?: Language;
+    },
   ): Promise<SettingsStore> {
+    const defaults: Settings = {
+      ...DEFAULT_SETTINGS,
+      language: opts.language ?? DEFAULT_SETTINGS.language,
+    };
     let raw: unknown;
     try {
       raw = await readJsonFile(file);
     } catch (err) {
       opts.logger.warn('settings.json is not valid JSON; using defaults', err);
     }
-    const stored = normalizeSettings(raw, opts.logger);
-    return new SettingsStore(file, stored, opts.overlay ?? {}, opts.events, opts.logger);
+    const stored = normalizeSettings(raw, opts.logger, defaults);
+    return new SettingsStore(file, stored, defaults, opts.overlay ?? {}, opts.events, opts.logger);
   }
 
   /** Effective settings (stored + env overlay). */
@@ -83,7 +100,7 @@ export class SettingsStore {
   async reset(): Promise<void> {
     await this.mutex.run(async () => {
       await rm(this.file, { force: true });
-      this.stored = structuredClone(DEFAULT_SETTINGS);
+      this.stored = structuredClone(this.defaults);
     });
   }
 
@@ -119,9 +136,28 @@ function applyOverlay(s: Settings, overlay: SettingsOverlay): Settings {
   };
 }
 
+/**
+ * The app language for the OS's preferred languages (`app.getPreferredSystemLanguages()`, most
+ * preferred first): the first one the app speaks wins, Spain's co-official languages count as
+ * Spanish, and English is the fallback for everything else.
+ */
+export function languageForLocales(locales: readonly string[]): Language {
+  if (locales.length === 0) return DEFAULT_SETTINGS.language;
+  for (const locale of locales) {
+    const primary = locale.toLowerCase().split(/[-_]/)[0];
+    if (primary === 'es' || primary === 'ca' || primary === 'eu' || primary === 'gl') return 'es';
+    if (primary === 'en') return 'en';
+  }
+  return 'en';
+}
+
 /** Field-by-field merge of an untrusted object over the defaults. */
-export function normalizeSettings(raw: unknown, logger?: Logger): Settings {
-  const out: Settings = structuredClone(DEFAULT_SETTINGS);
+export function normalizeSettings(
+  raw: unknown,
+  logger?: Logger,
+  defaults: Settings = DEFAULT_SETTINGS,
+): Settings {
+  const out: Settings = structuredClone(defaults);
   if (!raw || typeof raw !== 'object') return out;
   const r = raw as Record<string, unknown>;
   const shape = Settings.shape;

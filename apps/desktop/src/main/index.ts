@@ -59,6 +59,7 @@ import { createCameraRequester, logCameraEvent } from './scanner/camera';
 import { OpenRouterFrameGate } from './scanner/decider';
 import { DocumentScanner } from './scanner/service';
 import { prepareScanStorage } from './scanner/transcript';
+import { languageForLocales } from './settings/store';
 import { createUpdates, updatesSupported } from './updates/updater';
 import { createSafeStorageKeyProvider, createTouchIdBiometric } from './vault/keyProvider';
 
@@ -361,6 +362,8 @@ async function main(): Promise<void> {
     documentDownloadsDir: env.e2e
       ? join(paths.userData, 'exported-downloads')
       : app.getPath('downloads'),
+    // e2e runs stay in Spanish whatever the machine's language.
+    systemLanguage: env.e2e ? undefined : languageForLocales(app.getPreferredSystemLanguages()),
     logger: log,
     appInfo,
     updates,
