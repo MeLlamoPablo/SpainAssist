@@ -341,6 +341,111 @@ describe('PUT /admin/feedback/:id', () => {
   });
 });
 
+describe('POST /admin/feedback', () => {
+  const post = (app: App, body: unknown, headers: Record<string, string> = AUTH) =>
+    Promise.resolve(
+      app.request('/admin/feedback', {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: typeof body === 'string' ? body : JSON.stringify(body),
+      }),
+    );
+
+  it('creates a human-authored entry that search finds', async () => {
+    const app = adminApp();
+    const res = await post(
+      app,
+      edit({
+        procedure: 'Empadronamiento',
+        administration: 'Ayuntamiento de Madrid',
+        title: 'El volante de empadronamiento se descarga al momento',
+        body: 'Con certificado digital, el volante sale en PDF en la sede del ayuntamiento.',
+        tags: ['Padrón', 'volante'],
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const { entry, redactions } = FeedbackEditResponse.parse(await res.json());
+    expect(redactions).toBe(0);
+    expect(entry).toMatchObject({
+      procedure: 'Empadronamiento',
+      administration: 'Ayuntamiento de Madrid',
+      tags: ['padrón', 'volante'],
+      author: 'human',
+      votes: 0,
+      chance: 0.5,
+      upVotes: 0,
+      downVotes: 0,
+      humanVotes: 0,
+    });
+    expect(entry.updatedAt).toBeUndefined();
+    expect(entry.appVersion).toBeUndefined();
+
+    const detail = FeedbackAdminDetail.parse(
+      await (await get(app, `/admin/feedback/${entry.id}`)).json(),
+    );
+    expect(detail.votes).toEqual([]);
+    const search = await app.request('/v1/feedback/search?q=volante+empadronamiento');
+    expect(search.status).toBe(200);
+    const { results } = (await search.json()) as { results: { id: string; author?: string }[] };
+    expect(results.find((r) => r.id === entry.id)?.author).toBe('human');
+  });
+
+  it('keeps an agent author when given one', async () => {
+    const app = adminApp();
+    const res = await post(app, edit({ author: AUTHOR }));
+    expect(res.status).toBe(201);
+    expect(FeedbackEditResponse.parse(await res.json()).entry.author).toBe(AUTHOR);
+    expect((await post(app, edit({ author: 'Pablo' }))).status).toBe(400);
+  });
+
+  it('needs the admin token, and does not exist without ADMIN_TOKEN', async () => {
+    const app = adminApp();
+    expect((await post(app, edit(), {})).status).toBe(401);
+    expect((await post(app, edit(), { authorization: 'Bearer nope' })).status).toBe(401);
+    expect((await post(makeApp(db), edit())).status).toBe(404);
+    expect((await list(app)).total).toBe(0);
+  });
+
+  it('scrubs personal data and rejects mostly personal text', async () => {
+    const app = adminApp();
+    const scrubbed = await post(
+      app,
+      edit({
+        body: 'Si te piden el DNI 12345678Z en la cita, es solo para comprobar la identidad.',
+        urls: ['https://sede.policia.gob.es/cita?dni=12345678Z#paso-2'],
+      }),
+    );
+    expect(scrubbed.status).toBe(201);
+    const { entry, redactions } = FeedbackEditResponse.parse(await scrubbed.json());
+    expect(redactions).toBeGreaterThanOrEqual(2);
+    expect(entry.body).not.toContain('12345678Z');
+    expect(entry.urls).toEqual(['https://sede.policia.gob.es/cita']);
+
+    const rejected = await post(app, edit({ body: 'DNI 12345678Z, móvil 612345678.' }));
+    expect(rejected.status).toBe(422);
+    expect(await rejected.json()).toMatchObject({ error: { code: 'pii_detected' } });
+    expect((await list(app)).total).toBe(1);
+  });
+
+  it('validates the body', async () => {
+    const app = adminApp();
+    expect((await post(app, edit({ title: 'no' }))).status).toBe(400);
+    expect((await post(app, edit({ kind: 'rumor' }))).status).toBe(400);
+    expect(
+      (await post(app, edit({ tags: Array.from({ length: 11 }, (_, i) => `t${i}`) }))).status,
+    ).toBe(400);
+    const { procedure: _p, ...noProcedure } = edit();
+    expect((await post(app, noProcedure)).status).toBe(400);
+    const notJson = await post(app, '{');
+    expect(notJson.status).toBe(400);
+    expect(await notJson.json()).toMatchObject({ error: { code: 'bad_request' } });
+    const tooLarge = await post(app, edit({ body: 'x'.repeat(70 * 1024) }));
+    expect(tooLarge.status).toBe(413);
+    expect((await list(app)).total).toBe(0);
+  });
+});
+
 describe('votes and deletion', () => {
   it('removes a single vote', async () => {
     const app = adminApp();

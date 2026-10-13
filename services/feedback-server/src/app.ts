@@ -14,6 +14,7 @@ import {
   FeedbackAdminListQuery,
   type FeedbackAdminSearchResponse,
   type FeedbackAdminStats,
+  FeedbackCreate,
   FeedbackEdit,
   type FeedbackEditResponse,
   FeedbackSearchQuery,
@@ -45,6 +46,7 @@ import {
   deleteFeedback,
   feedbackExists,
   insertFeedback,
+  type NewFeedback,
   searchFeedback,
   type VoteContext,
 } from './feedback/repo';
@@ -292,33 +294,50 @@ export function createApp(deps: AppDeps): Hono {
     const detail = await adminDetail(db, c.req.param('id'), voteContext());
     return detail ? c.json(detail satisfies FeedbackAdminDetail) : notFound(c);
   });
-  // Edits are scrubbed like submissions: maintainers can fix wording, not add personal data.
-  admin.put(
-    '/feedback/:id',
-    bodyLimit({
-      maxSize: MAX_BODY_BYTES,
-      onError: (c) => fail(c, 413, 'payload_too_large', 'The entry is too large.'),
-    }),
-    async (c) => {
-      let body: unknown;
-      try {
-        body = await c.req.json();
-      } catch {
-        return fail(c, 400, 'bad_request', 'The body must be JSON.');
-      }
-      const parsed = FeedbackEdit.safeParse(body);
-      if (!parsed.success) return fail(c, 400, 'bad_request', describe(parsed.error));
-      const { feedback, redactions, piiShare } = scrubSubmission(parsed.data);
-      if (piiShare > MAX_PII_SHARE) {
-        return fail(c, 422, 'pii_detected', 'The title or body is mostly personal data.');
-      }
-      const id = c.req.param('id').toLowerCase();
-      if (!(await updateFeedback(db, id, feedback))) return notFound(c);
-      const entry = await adminEntry(db, id, voteContext());
-      if (!entry) return notFound(c); // deleted meanwhile
-      return c.json({ entry, redactions } satisfies FeedbackEditResponse);
-    },
-  );
+  // New entries and edits are scrubbed like submissions: maintainers can write and fix wording,
+  // not add personal data.
+  const entryBodyLimit = bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => fail(c, 413, 'payload_too_large', 'The entry is too large.'),
+  });
+  /** Parses and scrubs an entry body; returns the scrubbed entry or an error response. */
+  const readEntry = async (
+    c: Context,
+    schema: typeof FeedbackEdit | typeof FeedbackCreate,
+  ): Promise<{ feedback: NewFeedback; redactions: number } | { response: Response }> => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return { response: fail(c, 400, 'bad_request', 'The body must be JSON.') };
+    }
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) return { response: fail(c, 400, 'bad_request', describe(parsed.error)) };
+    const { feedback, redactions, piiShare } = scrubSubmission(parsed.data);
+    if (piiShare > MAX_PII_SHARE) {
+      return {
+        response: fail(c, 422, 'pii_detected', 'The title or body is mostly personal data.'),
+      };
+    }
+    return { feedback, redactions };
+  };
+  admin.post('/feedback', entryBodyLimit, async (c) => {
+    const read = await readEntry(c, FeedbackCreate);
+    if ('response' in read) return read.response;
+    const id = await insertFeedback(db, read.feedback);
+    const entry = await adminEntry(db, id, voteContext());
+    if (!entry) return notFound(c); // deleted meanwhile
+    return c.json({ entry, redactions: read.redactions } satisfies FeedbackEditResponse, 201);
+  });
+  admin.put('/feedback/:id', entryBodyLimit, async (c) => {
+    const read = await readEntry(c, FeedbackEdit);
+    if ('response' in read) return read.response;
+    const id = c.req.param('id').toLowerCase();
+    if (!(await updateFeedback(db, id, read.feedback))) return notFound(c);
+    const entry = await adminEntry(db, id, voteContext());
+    if (!entry) return notFound(c); // deleted meanwhile
+    return c.json({ entry, redactions: read.redactions } satisfies FeedbackEditResponse);
+  });
   // Human votes (maintainers): each weighs the vote threshold and is always counted.
   admin.post('/feedback/:id/vote', bodyLimit({ maxSize: 1024 }), async (c) => {
     const value = await readVote(c);

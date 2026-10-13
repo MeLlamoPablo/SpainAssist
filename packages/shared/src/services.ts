@@ -234,7 +234,7 @@ export type FeedbackKind = z.infer<typeof FeedbackKind>;
 /**
  * Who wrote a learning. Agents: "<model id> · <reasoning level>", e.g. "gpt-6-luna · high" or
  * "anthropic/claude-haiku-5.5 · medium" (the app sets it, never the model). Maintainers who
- * edit an entry on the admin page: "human".
+ * write or edit an entry on the admin page: "human".
  */
 export const HUMAN_AUTHOR = 'human';
 
@@ -281,7 +281,7 @@ export const FeedbackSubmission = z.object({
   /** Official URLs involved (query strings and fragments are stripped). */
   urls: z.array(z.string().url()).max(5).default([]),
   appVersion: z.string().max(40).optional(),
-  /** The submitting agent (see AgentAuthor); the server only stores "human" from admin edits. */
+  /** The submitting agent (see AgentAuthor); the server only stores "human" from the admin API. */
   author: AgentAuthor,
 });
 export type FeedbackSubmission = z.infer<typeof FeedbackSubmission>;
@@ -419,9 +419,19 @@ export const FeedbackEdit = FeedbackSubmission.omit({ appVersion: true, author: 
 });
 export type FeedbackEdit = z.infer<typeof FeedbackEdit>;
 
+/**
+ * POST /admin/feedback: a new entry written by a maintainer, scrubbed like a submission. Same
+ * fields as an edit; `author` defaults to "human".
+ */
+export const FeedbackCreate = FeedbackEdit.extend({
+  author: FeedbackAuthor.default(HUMAN_AUTHOR),
+});
+export type FeedbackCreate = z.infer<typeof FeedbackCreate>;
+
+/** Answer to PUT /admin/feedback/:id (200) and POST /admin/feedback (201). */
 export const FeedbackEditResponse = z.object({
   entry: FeedbackAdminEntry,
-  /** Redactions the server applied to the edit. */
+  /** Redactions the server applied to the edit or the new entry. */
   redactions: z.number().int().nonnegative(),
 });
 export type FeedbackEditResponse = z.infer<typeof FeedbackEditResponse>;

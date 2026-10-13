@@ -77,7 +77,7 @@ export function scrubSubmission(
   const appVersion =
     sub.appVersion && /^[\w.+\- ]{1,40}$/.test(sub.appVersion) ? sub.appVersion : undefined;
 
-  // Submissions only validate agent authors; admin edits may also set "human". An author
+  // Submissions only validate agent authors; the admin API may also set "human". An author
   // carrying personal data is dropped.
   let author: string | undefined;
   if (sub.author !== undefined) {

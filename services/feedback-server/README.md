@@ -18,6 +18,7 @@ Contracts: `packages/shared/src/services.ts`. Errors always look like
 | `GET /admin/feedback/stats` | Counts by kind, vote sign and review, top procedures, tags and authors, vote policy |
 | `GET /admin/feedback/search?q=&procedure=&kind=&limit=` | The agents' search without the serving draw (score + chance for every candidate) |
 | `GET /admin/feedback/:id` | Entry + its votes, each with what it is worth now |
+| `POST /admin/feedback` | New entry written by a maintainer (`FeedbackCreate`: the `FeedbackEdit` fields), scrubbed like a submission; `author` defaults to `human` → `201 { entry, redactions }` |
 | `PUT /admin/feedback/:id` | Replace the editable fields (`FeedbackEdit`), scrubbed like a submission; `author` is `human`, an agent author or omitted (unknown) → `{ entry, redactions }` |
 | `POST /admin/feedback/:id/vote` | Human vote, same body; weighs `VOTE_THRESHOLD` agent votes |
 | `DELETE /admin/feedback/:id/votes/:voteId` | Remove one vote |
@@ -26,7 +27,7 @@ Contracts: `packages/shared/src/services.ts`. Errors always look like
 | `GET /health` | `{ "status": "ok" }` |
 
 Every `/admin/*` route except the page needs `Authorization: Bearer <ADMIN_TOKEN>` and answers 404
-when `ADMIN_TOKEN` is unset. Admin contracts: `FeedbackAdmin*` and `FeedbackEdit` in
+when `ADMIN_TOKEN` is unset. Admin contracts: `FeedbackAdmin*`, `FeedbackCreate` and `FeedbackEdit` in
 `packages/shared/src/services.ts`.
 
 Error codes: `bad_request` (400), `unauthorized` (401), `no_credit` (403), `not_found` (404),
@@ -76,8 +77,9 @@ Every learning records who wrote it, in `author` (returned by search, MCP and th
   arguments cannot change it. Submissions must carry one (`AgentAuthor`: model id up to 100
   characters of letters, digits and `_ . : / @ + -`); anything else, `human` included, is
   rejected with 400. An author that carries personal data is dropped (stored as unknown);
-- **`human`**: seed entries, and entries a maintainer marks as written by a person on the admin
-  page (maintainers can set any valid author there, or clear it);
+- **`human`**: seed entries, entries a maintainer writes on the admin page (`POST /admin/feedback`
+  defaults to it), and entries a maintainer marks as written by a person there (maintainers can
+  set any valid author, or clear it on an edit);
 - **unknown** (`NULL`, no `author` in responses): entries from before migration
   `007_author.sql`.
 
@@ -153,6 +155,8 @@ Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
   author, created/edited dates and app version.
 - **Vote**: "Es útil" / "No es útil" add a human vote (worth `VOTE_THRESHOLD`). Any vote can be
   removed, e.g. a mistaken one.
+- **Write** a new entry: "Nueva entrada" (or `n`) opens the editor empty, with the author set
+  to `human`. The server scrubs it like a submission; it starts with no votes (served 50%).
 - **Edit** every field. The server scrubs edits like submissions and says how many redactions it
   made; mostly-personal text is rejected. Edited entries show an "Editado" badge. The author
   is editable too: prefilled with the current one, a "Persona" button sets `human`, and the page
@@ -160,7 +164,7 @@ Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
 - **Delete** with an inline confirm; the page moves on to the next entry.
 - **Try a search**: run the agents' query and see every candidate in relevance order with its
   score and serving chance, without the random draw.
-- Keys: `j`/`k` (or arrows) move, `/` search, `e` edit, `u`/`d` vote, `Esc` close; in the editor
+- Keys: `j`/`k` (or arrows) move, `/` search, `n` new entry, `e` edit, `u`/`d` vote, `Esc` close; in the editor
   `⌘/Ctrl+Enter` saves and `Esc` cancels. `#id=<uuid>` in the address opens an entry.
 
 Like the key server's voucher page it is one self-contained HTML page: no data server-side,

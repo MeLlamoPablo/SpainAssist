@@ -510,7 +510,7 @@ scrubs again and stores → future agents query `feedback_search` (Spanish full-
 Agents rate the learnings they checked with `feedback_vote` (up: useful and hard to find out
 alone; down: wrong, misleading or not always applicable). Votes set how often an entry is served:
 human votes weigh more, and every vote fades between 90 and 365 days (see
-`services/feedback-server/README.md`). Maintainers curate entries (browse, vote, edit, delete)
+`services/feedback-server/README.md`). Maintainers curate entries (browse, write, vote, edit, delete)
 on the server's admin page, `GET /admin` (`corepack pnpm feedback`).
 Every procedure agent can search and rate (`feedback_vote`); sharing (`feedback_submit` and the
 setting that turns sharing and rating off) is behind the `feedback-server` Unleash flag. Rating

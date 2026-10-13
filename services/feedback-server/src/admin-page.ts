@@ -251,6 +251,10 @@ const T = {
     never: 'Nunca', copy: 'Copiar', copied: 'Copiado',
     editTitle: 'Editar aprendizaje',
     editHint: 'Al guardar, el servidor vuelve a quitar los datos personales, como con los envíos de la app.',
+    newEntry: 'Nueva entrada', newTitle: 'Nuevo aprendizaje',
+    newHint: 'Escribe lo que conviene saber del trámite. Al guardar, el servidor quita los datos personales, como con los envíos de la app.',
+    newAuthorHint: '«human» si lo escribes tú, o «modelo · nivel», p. ej. gpt-6-luna · high. Vacío: «human».',
+    savedNew: 'Aprendizaje creado', keyNew: 'nueva',
     administration: 'Administración', region: 'Región', fTitle: 'Título', body: 'Texto',
     tagsHint: 'Separadas por comas. Hasta 10.', urlsHint: 'Una por línea. Hasta 5. Sin parámetros.',
     save: 'Guardar', saving: 'Guardando…', saved: 'Guardado',
@@ -310,6 +314,10 @@ const T = {
     never: 'Never', copy: 'Copy', copied: 'Copied',
     editTitle: 'Edit learning',
     editHint: 'When you save, the server removes personal data again, as it does with submissions from the app.',
+    newEntry: 'New entry', newTitle: 'New learning',
+    newHint: 'Write what is worth knowing about the procedure. When you save, the server removes personal data, as it does with submissions from the app.',
+    newAuthorHint: '“human” if you write it, or “model · level”, e.g. gpt-6-luna · high. Empty: “human”.',
+    savedNew: 'Learning created', keyNew: 'new',
     administration: 'Administration', region: 'Region', fTitle: 'Title', body: 'Text',
     tagsHint: 'Comma separated. Up to 10.', urlsHint: 'One per line. Up to 5. No parameters.',
     save: 'Save', saving: 'Saving…', saved: 'Saved',
@@ -352,7 +360,7 @@ let total = 0;
 let results = null; // "try a search" results
 let selectedId = null;
 let detail = null; // { entry, votes }
-let mode = 'view'; // view | edit | delete
+let mode = 'view'; // view | edit | new | delete
 let confirmVote = null; // vote id awaiting removal
 let listSeq = 0;
 let detailSeq = 0;
@@ -472,6 +480,7 @@ function showSignedIn(on) {
   $('login').hidden = on;
   $('app').hidden = !on;
   $('logout').hidden = !on;
+  $('new').hidden = !on;
   $('header-stats').hidden = !on;
 }
 
@@ -506,7 +515,7 @@ async function loadStats() {
   stats = await api('GET', '/admin/feedback/stats');
   renderFilters();
   renderHeaderStats();
-  if (!selectedId) renderDetail();
+  if (!selectedId && mode !== 'new') renderDetail(); // keep a new entry's draft
 }
 
 function renderHeaderStats() {
@@ -662,7 +671,7 @@ function setTab(next) {
 // --- entry ------------------------------------------------------------------------------------
 
 function guardEdit() {
-  if (mode === 'edit' && $('edit-form') && $('edit-form').dataset.dirty === '1') {
+  if ((mode === 'edit' || mode === 'new') && $('edit-form') && $('edit-form').dataset.dirty === '1') {
     toast(t('unsaved'));
     return false;
   }
@@ -718,9 +727,10 @@ function closeDetail() {
 
 function renderDetail() {
   const pane = $('detail');
-  if (!selectedId || !detail) { pane.replaceChildren(overview()); return; }
-  pane.replaceChildren(mode === 'edit' ? editView(detail.entry) : entryView(detail));
-  if (mode === 'edit') { const first = pane.querySelector('[name="title"]'); if (first) first.focus(); }
+  if (mode === 'new') pane.replaceChildren(editView(null));
+  else if (!selectedId || !detail) { pane.replaceChildren(overview()); return; }
+  else pane.replaceChildren(mode === 'edit' ? editView(detail.entry) : entryView(detail));
+  if (mode === 'edit' || mode === 'new') { const first = pane.querySelector('[name="title"]'); if (first) first.focus(); }
 }
 
 function entryView(d) {
@@ -873,6 +883,16 @@ async function removeEntry(button) {
 
 function startEdit() { mode = 'edit'; renderDetail(); }
 
+/** Opens the editor empty, written by a person; saving creates the entry. */
+function startNew() {
+  if (mode === 'new' || !guardEdit()) return;
+  selectedId = null; detail = null; confirmVote = null; mode = 'new';
+  setHash();
+  markSelected();
+  $('app').classList.add('has-detail');
+  renderDetail();
+}
+
 function counted(input, max) {
   const counter = el('span', { class: 'counter' });
   const update = () => {
@@ -888,7 +908,9 @@ function field(label, control, extra) {
   return el('label', {}, el('span', {}, label), control, extra || null);
 }
 
-function editView(e) {
+/** The entry editor; with no entry, an empty one for a new entry by a person. */
+function editView(entry) {
+  const e = entry || { kind: 'tip', title: '', body: '', procedure: '', tags: [], urls: [], author: HUMAN };
   const input = (name, value, attrs) => el('input', Object.assign({ name, value: value || '', autocomplete: 'off' }, attrs));
   const kind = el('select', { name: 'kind' }, ...KINDS.map((k) => el('option', { value: k }, t('k_' + k))));
   kind.value = e.kind;
@@ -907,7 +929,7 @@ function editView(e) {
   const save = el('button', { type: 'submit', class: 'primary' }, t('save'));
 
   const form = el('form', { class: 'card edit', id: 'edit-form', autocomplete: 'off' },
-    el('div', {}, el('h2', {}, t('editTitle')), el('p', { class: 'hint' }, t('editHint'))),
+    el('div', {}, el('h2', {}, t(entry ? 'editTitle' : 'newTitle')), el('p', { class: 'hint' }, t(entry ? 'editHint' : 'newHint'))),
     field(t('kind'), kind),
     field(t('fTitle'), title, counted(title, 200)),
     field(t('body'), body, counted(body, 4000)),
@@ -918,7 +940,7 @@ function editView(e) {
     field(t('fTags'), tags, el('span', { class: 'field-hint' }, t('tagsHint'))),
     field(t('fUrls'), urls, el('span', { class: 'field-hint' }, t('urlsHint'))),
     el('label', {}, el('span', {}, t('author')), el('span', { class: 'row author-row' }, author, asHuman),
-      el('span', { class: 'field-hint' }, t('authorHint'))),
+      el('span', { class: 'field-hint' }, t(entry ? 'authorHint' : 'newAuthorHint'))),
     error,
     el('div', { class: 'row' }, save,
       el('button', { type: 'button', onclick: cancelEdit }, t('cancel')),
@@ -936,7 +958,10 @@ function editView(e) {
     form);
 }
 
-function cancelEdit() { mode = 'view'; renderDetail(); }
+function cancelEdit() {
+  if (mode === 'new') { mode = 'view'; closeDetail(); return; }
+  mode = 'view'; renderDetail();
+}
 
 async function saveEdit(form, button, error) {
   error.hidden = true;
@@ -954,12 +979,22 @@ async function saveEdit(form, button, error) {
   for (const name of ['administration', 'region', 'author']) if (value(name)) body[name] = value(name);
   button.disabled = true;
   button.textContent = t('saving');
+  const creating = mode === 'new';
   try {
-    const res = await api('PUT', '/admin/feedback/' + encodeURIComponent(selectedId), body);
-    toast(res.redactions > 0 ? t('savedScrubbed')(res.redactions) : t('saved'));
+    const res = creating
+      ? await api('POST', '/admin/feedback', body)
+      : await api('PUT', '/admin/feedback/' + encodeURIComponent(selectedId), body);
+    toast(res.redactions > 0 ? t('savedScrubbed')(res.redactions) : t(creating ? 'savedNew' : 'saved'));
     form.dataset.dirty = '';
     mode = 'view';
-    await refreshAfterChange();
+    if (creating) {
+      // Show the new entry, and list it (newest first by default).
+      selectedId = res.entry.id;
+      setHash();
+      await Promise.all([refreshAfterChange(), loadList(false).catch(fail)]);
+      markSelected();
+      $('detail').scrollTop = 0;
+    } else await refreshAfterChange();
   } catch (err) {
     if (err.status !== 401) { error.textContent = t('failed') + err.message; error.hidden = false; }
     button.disabled = false;
@@ -1030,11 +1065,12 @@ function step(delta) {
 document.addEventListener('keydown', (event) => {
   if ($('app').hidden || event.metaKey || event.ctrlKey || event.altKey) return;
   if (event.key === 'Escape' && typing(event.target) && event.target.closest('.filters')) { event.target.blur(); return; }
-  if (typing(event.target) || mode === 'edit') return;
+  if (typing(event.target) || mode === 'edit' || mode === 'new') return;
   const keys = {
     j: () => step(1), ArrowDown: () => step(1), k: () => step(-1), ArrowUp: () => step(-1),
     '/': () => { setTab('browse'); $('f-q').focus(); $('f-q').select(); },
     e: () => { if (detail) startEdit(); },
+    n: startNew,
     u: () => { if (detail) vote('up'); },
     d: () => { if (detail) vote('down'); },
     Escape: () => { if (mode === 'delete' || confirmVote) { mode = 'view'; confirmVote = null; renderDetail(); } else closeDetail(); },
@@ -1056,6 +1092,7 @@ $('login-form').addEventListener('submit', (event) => {
   start();
 });
 $('logout').addEventListener('click', () => signOut());
+$('new').addEventListener('click', startNew);
 $('lang').addEventListener('click', () => {
   lang = lang === 'es' ? 'en' : 'es';
   store.set('localStorage', 'sa-admin-lang', lang);
@@ -1095,6 +1132,7 @@ const BODY = `
 <header>
   <h1><span data-t="title"></span> <span>· Spain Assist</span></h1>
   <span class="header-stats" id="header-stats" hidden></span>
+  <button type="button" id="new" class="small primary" data-t="newEntry" hidden></button>
   <button type="button" class="link" id="lang" data-t="lang"></button>
   <button type="button" id="logout" class="small" data-t="logout" hidden></button>
 </header>
@@ -1151,7 +1189,8 @@ const BODY = `
       <div class="empty" id="list-empty" hidden></div>
       <div class="list-foot"><button type="button" class="small" id="more" data-t="more" hidden></button></div>
       <div class="keys"><span data-t="keys"></span>: <kbd>j</kbd> <kbd>k</kbd> <span data-t="keyNav"></span> ·
-        <kbd>/</kbd> <span data-t="keyFind"></span> · <kbd>e</kbd> <span data-t="keyEdit"></span> ·
+        <kbd>/</kbd> <span data-t="keyFind"></span> · <kbd>n</kbd> <span data-t="keyNew"></span> ·
+        <kbd>e</kbd> <span data-t="keyEdit"></span> ·
         <kbd>u</kbd> <kbd>d</kbd> <span data-t="keyVote"></span></div>
     </aside>
     <section class="pane-detail" id="detail" aria-live="polite"></section>
