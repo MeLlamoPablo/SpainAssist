@@ -25,7 +25,7 @@ export interface ToolDeps {
   bridge: BridgeTransport;
   /** Whether the model accepts images (browser_screenshot). */
   imagesSupported: boolean;
-  /** Dev/e2e only: fetch_url may reach localhost / private networks. */
+  /** Dev/e2e only: fetch_url and run_script may reach localhost / private networks. */
   allowPrivateHosts?: boolean;
   /** BOE API base URL override (tests). */
   boeBaseUrl?: string;
@@ -65,7 +65,7 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
       ...downloadTools(deps.bridge),
       ...researchTools(deps.bridge, { baseUrl: deps.boeBaseUrl, fetchImpl: deps.fetchImpl }),
       fetchUrlTool({ allowPrivateHosts: deps.allowPrivateHosts, fetchImpl: deps.fetchImpl }),
-      runScriptTool({ fetchImpl: deps.fetchImpl }),
+      runScriptTool({ allowPrivateHosts: deps.allowPrivateHosts, fetchImpl: deps.fetchImpl }),
     ].filter((tool) => active(tool.name)),
   );
 }

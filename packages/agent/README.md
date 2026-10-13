@@ -67,7 +67,7 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 | `feedback_search`, `feedback_submit`, `feedback_vote` | `feedback.*` | Submit text must be PII-free (the app scrubs again); votes rate a search result by id |
 | `fetch_url` | local | 20 s timeout, 6 MB (HTML) / 25 MB (PDF) cap, ≤ 5 redirects (each re-checked), private hosts blocked, `offset`/`maxChars` paging, `mode: full`, 10-minute cache |
 | `boe_search` | local (BOE open data) | `legislacion-consolidada` search, in-force by default |
-| `run_script` | local (QuickJS in WebAssembly) | Model-written JavaScript, fresh engine per call, 30 s (≤ 120 s) and 64 MB caps, no Node APIs; `fetch` to any URL (any method/headers/body, text or binary, responses ≤ 10 MB, ≤ 50 requests), plus URL, URLSearchParams, TextEncoder/TextDecoder and atob/btoa (`src/tools/run-script-prelude.ts`); returns logs + JSON result (≤ 30k chars) |
+| `run_script` | local (QuickJS in WebAssembly) | Model-written JavaScript, fresh engine per call, 30 s (≤ 120 s) and 64 MB caps, no Node APIs; `fetch` of public URLs only (GET/HEAD, no body, only `accept`/`accept-language` headers, no localhost or private networks, each redirect re-checked like `fetch_url`; responses ≤ 10 MB, ≤ 50 requests), plus URL, URLSearchParams, TextEncoder/TextDecoder and atob/btoa (`src/tools/run-script-prelude.ts`); returns logs + JSON result (≤ 30k chars) |
 
 Browser, prompt, plan and vault-write tools run sequentially (`executionMode`); research tools
 may run in parallel.
