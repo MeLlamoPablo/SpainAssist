@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { parseHostConfig } from '../src/config';
 import { promptResearch, researchBackend } from '../src/host/research';
 import { createExaTools, EXA_MCP_URL, EXA_OFFICIAL_DOMAINS } from '../src/research/exa';
+import type { ScrubOutgoing } from '../src/research/scrub';
 import type { AnyToolDefinition, ToolResult } from '../src/tools/common';
 import { EXA_TOOL_NAMES, WEB_RESEARCH_TOOL_NAME } from '../src/tools/names';
+import { DNI, failingScrub, fakeScrub } from './helpers/scrub';
 
 const ctx = {} as ExtensionToolContext;
 const KEY = 'exa-user-key-1234567890';
@@ -42,10 +44,16 @@ const mcp = (text: string, isError = false) =>
   );
 const searchAnswer = (body: unknown) => mcp(JSON.stringify(body));
 
-function tools(fetch: typeof globalThis.fetch, key: string | null = null, language = 'es') {
+function tools(
+  fetch: typeof globalThis.fetch,
+  key: string | null = null,
+  language = 'es',
+  scrub: ScrubOutgoing = fakeScrub,
+) {
   const [search, read] = createExaTools({
     apiKey: async () => key ?? undefined,
     language: language as 'es' | 'en',
+    scrub,
     fetch,
   });
   return { search: search!, read: read! };
@@ -213,11 +221,28 @@ describe('Exa tools', () => {
         throw new Error('bridge timeout');
       },
       language: 'es',
+      scrub: fakeScrub,
       fetch,
     });
     const result = await run(search!, { query: 'x y' });
     expect(result.isError).toBeUndefined();
     expect(new Headers(calls[0]!.init.headers).get('x-api-key')).toBeNull();
+  });
+
+  it('search only after the app removed personal data from the query', async () => {
+    const { fetch, calls } = fakeFetch(() => searchAnswer({ results: [] }));
+    const result = await run(tools(fetch).search, { query: `renovar DNI ${DNI}` });
+    expect(calls[0]!.args).toMatchObject({ query: 'renovar DNI [DNI]' });
+    expect(text(result)).toContain('"renovar DNI [DNI]"');
+    expect(String(calls[0]!.init.body)).not.toContain(DNI);
+
+    const blocked = fakeFetch(() => searchAnswer({ results: [] }));
+    const failed = await run(tools(blocked.fetch, null, 'es', failingScrub).search, {
+      query: `renovar DNI ${DNI}`,
+    });
+    expect(blocked.calls).toHaveLength(0);
+    expect(failed.isError).toBe(true);
+    expect(text(failed)).toContain('nothing was sent');
   });
 
   it('propagate cancellation', async () => {
@@ -277,6 +302,7 @@ describe('Exa tools', () => {
     const [search] = createExaTools({
       apiKey: async () => KEY,
       language: 'en',
+      scrub: fakeScrub,
       baseUrl: 'http://127.0.0.1:9999/',
       fetch,
     });

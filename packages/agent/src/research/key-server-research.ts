@@ -3,6 +3,7 @@ import { ApiError, ResearchEvent, ResearchMode } from '@sa/shared';
 import { Type } from 'typebox';
 import { defineSaTool, errorResult, StringEnum, textResult } from '../tools/common';
 import { WEB_RESEARCH_TOOL_NAME } from '../tools/names';
+import { anonymizeQuery, type ScrubOutgoing } from './scrub';
 import { events } from './sse';
 
 const MAX_WAIT_MS = 30 * 60_000;
@@ -15,6 +16,8 @@ export interface KeyServerResearchOptions {
   /** The voucher key, read when the tool runs (it may rotate); undefined = no voucher. */
   apiKey: () => Promise<string | undefined>;
   language: 'es' | 'en';
+  /** Removes personal data from the query before it is sent. */
+  scrub: ScrubOutgoing;
   fetch?: typeof fetch;
 }
 
@@ -48,7 +51,7 @@ export function createKeyServerResearchTool(options: KeyServerResearchOptions) {
     name: WEB_RESEARCH_TOOL_NAME,
     label: options.language === 'es' ? 'Investigación en la web' : 'Web research',
     description:
-      'Research a procedure on the web using official sources. This call waits for the final result and streams progress to the app; do not poll or start duplicate research while waiting. Each call costs the user credit. Include everything known about the user that may matter, anonymized: never names, ID or document numbers, street addresses, phone numbers, emails or exact birth dates.',
+      'Research a procedure on the web using official sources. This call waits for the final result and streams progress to the app; do not poll or start duplicate research while waiting. Each call costs the user credit. Include everything known about the user that may matter, anonymized: never names, ID or document numbers, street addresses, phone numbers, emails or exact birth dates. The app also removes the personal data it recognizes before sending.',
     parameters: Type.Object({
       query: Type.String({
         minLength: 1,
@@ -74,6 +77,8 @@ export function createKeyServerResearchTool(options: KeyServerResearchOptions) {
             'Web research is blocked: no voucher key is available. Report this research blocker.',
           );
         }
+        const anonymized = await anonymizeQuery(options.scrub, params.query, requestSignal);
+        if ('error' in anonymized) return anonymized.error;
         const headers = {
           authorization: `Bearer ${apiKey}`,
           accept: 'text/event-stream',
@@ -82,7 +87,7 @@ export function createKeyServerResearchTool(options: KeyServerResearchOptions) {
           method: 'POST',
           headers: { ...headers, 'content-type': 'application/json' },
           body: JSON.stringify({
-            input: params.query,
+            input: anonymized.query,
             mode: params.mode,
             ...(params.outputSchema ? { outputSchema: params.outputSchema } : {}),
             requestId: randomUUID(),

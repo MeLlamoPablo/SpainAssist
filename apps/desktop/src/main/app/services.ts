@@ -389,6 +389,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       events,
       providers,
       feedback,
+      pii: deps.pii,
       biometric: deps.biometric,
       certificateOrigins: deps.certificateOrigins,
       logger: logger.child('bridge'),

@@ -1,7 +1,9 @@
 import type { ExtensionToolContext } from '@earendil-works/pi-coding-agent';
 import { describe, expect, it } from 'vitest';
 import { createKeyServerResearchTool } from '../src/research/key-server-research';
+import type { ScrubOutgoing } from '../src/research/scrub';
 import type { ToolResult } from '../src/tools/common';
+import { DNI, failingScrub, fakeScrub } from './helpers/scrub';
 
 const ctx = {} as ExtensionToolContext;
 const RUN = '0b6c1d7e-2f3a-4b5c-8d9e-0f1a2b3c4d5e';
@@ -44,11 +46,16 @@ function fakeFetch(answers: Array<(call: Call) => Response>) {
   return { fetch, calls };
 }
 
-function tool(fetch: typeof globalThis.fetch, apiKey: string | null = KEY) {
+function tool(
+  fetch: typeof globalThis.fetch,
+  apiKey: string | null = KEY,
+  scrub: ScrubOutgoing = fakeScrub,
+) {
   return createKeyServerResearchTool({
     keyServerUrl: 'https://keys.example.org/',
     apiKey: async () => apiKey ?? undefined,
     language: 'es',
+    scrub,
     fetch,
   });
 }
@@ -183,5 +190,32 @@ describe('web research through the key server', () => {
     await expect(
       tool(fetch).execute('call', { query: 'x', mode: 'fast' }, controller.signal, undefined, ctx),
     ).rejects.toThrow();
+  });
+
+  it('sends the query only after the app removed personal data from it', async () => {
+    const fake = fakeFetch([() => sse([created, completed])]);
+    await tool(fake.fetch).execute(
+      'call',
+      { query: `renovar el NIE, DNI ${DNI}`, mode: 'fast' },
+      undefined,
+      undefined,
+      ctx,
+    );
+    expect(fake.calls[0]!.body).toMatchObject({ input: 'renovar el NIE, DNI [DNI]' });
+    expect(JSON.stringify(fake.calls)).not.toContain(DNI);
+  });
+
+  it('sends nothing when the app cannot scrub the query', async () => {
+    const fake = fakeFetch([() => sse([created, completed])]);
+    const result = await tool(fake.fetch, KEY, failingScrub).execute(
+      'call',
+      { query: `DNI ${DNI}`, mode: 'fast' },
+      undefined,
+      undefined,
+      ctx,
+    );
+    expect(fake.calls).toHaveLength(0);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain('nothing was sent');
   });
 });

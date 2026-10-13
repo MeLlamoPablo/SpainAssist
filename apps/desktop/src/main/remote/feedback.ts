@@ -16,13 +16,17 @@ import { scrubbableKnownValues } from '../core/secrets';
 import type { PiiLib, VaultPort } from '../ports';
 import { type FetchFn, HttpError, joinUrl, NetworkError, requestJson } from './http';
 
-/** Removes personal data from text that leaves the device (feedback queries and submissions). */
+/**
+ * Removes personal data from text that leaves the device (feedback, web research queries),
+ * except the values of the `keep` personal keys.
+ */
 export function scrubOutgoing(
   pii: PiiLib,
   vault: VaultPort,
   text: string,
+  keep: readonly string[] = [],
 ): { text: string; redactions: number } {
-  const result = pii.scrubPii(text, { knownValues: scrubbableKnownValues(vault) });
+  const result = pii.scrubPii(text, { knownValues: scrubbableKnownValues(vault, keep) });
   return { text: result.text, redactions: result.findings.length };
 }
 

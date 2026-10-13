@@ -129,6 +129,11 @@ describe('agent host over RPC (integration)', () => {
     bridge = await createFakeBridge({
       'agent.credential': () => ({ credential: { type: 'api_key', key: 'llm-key-from-bridge' } }),
       'procedure.update': (params) => procedure(params),
+      // The app's scrubber, reduced to the one value these tests send.
+      'research.scrub': (params) => ({
+        text: String(params.text).replaceAll('X1234567L', '[NIE]'),
+        redactions: String(params.text).includes('X1234567L') ? 1 : 0,
+      }),
       'prompt.form': () => ({
         kind: 'form',
         values: { addressProvince: 'Madrid' },
@@ -621,7 +626,10 @@ describe('agent host over RPC (integration)', () => {
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                { name: 'web_research', arguments: { query: 'renovar NIE', mode: 'balanced' } },
+                {
+                  name: 'web_research',
+                  arguments: { query: 'renovar NIE X1234567L', mode: 'balanced' },
+                },
               ],
             },
           },
@@ -646,8 +654,13 @@ describe('agent host over RPC (integration)', () => {
       expect(keyServer.requests[0]).toMatchObject({
         url: '/v1/research',
         headers: { authorization: 'Bearer sk-litellm-voucher', accept: 'text/event-stream' },
-        body: { input: 'renovar NIE', mode: 'balanced' },
+        body: { input: 'renovar NIE [NIE]', mode: 'balanced' },
       });
+      // Personal data leaves the device only after the app scrubbed it.
+      expect(bridge.callsTo('research.scrub')[0]?.params).toEqual({
+        text: 'renovar NIE X1234567L',
+      });
+      expect(JSON.stringify(keyServer.requests)).not.toContain('X1234567L');
       const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
       const body = requests[0]?.body as ChatRequest;
       expect((body.tools ?? []).map((t) => t.function?.name).sort()).toEqual(
