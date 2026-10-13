@@ -49,6 +49,20 @@ describe('host policy', () => {
     expect(call).toHaveBeenCalledTimes(2);
   });
 
+  it('asks separately to read a site and to browse it', async () => {
+    const { bridge, call } = bridgeAnswering(true);
+    const hosts = createHostPolicy({ bridge, language: 'en' });
+    await hosts.approve(new URL('https://example.com/'));
+    await hosts.approve(new URL('https://example.com/form'), undefined, 'browse');
+    await hosts.approve(new URL('https://example.com/other'), undefined, 'browse');
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(call).toHaveBeenLastCalledWith(
+      'prompt.confirm',
+      expect.objectContaining({ title: 'Let the assistant use example.com?' }),
+      expect.anything(),
+    );
+  });
+
   it('remembers a refusal and shares one prompt between waiting requests', async () => {
     let answer: (value: boolean) => void = () => {};
     const { bridge, call } = bridgeAnswering(

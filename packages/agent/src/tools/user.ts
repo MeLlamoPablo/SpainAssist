@@ -112,6 +112,14 @@ export const ConfirmActionParams = Type.Object({
   confirmLabel: Type.Optional(Type.String({ maxLength: 40 })),
   rejectLabel: Type.Optional(Type.String({ maxLength: 40 })),
   danger: Type.Optional(Type.Boolean({ description: 'true for irreversible actions' })),
+  ref: Type.Optional(
+    Type.String({
+      minLength: 1,
+      maxLength: 32,
+      description:
+        'Ref of the button you will click (latest snapshot): the approval then allows only that action',
+    }),
+  ),
   site: Type.Optional(
     Type.String({ maxLength: 300, description: 'certificate_site only: the https origin' }),
   ),
@@ -298,7 +306,7 @@ export function userTools(
       name: 'confirm_action',
       label: 'Ask for approval',
       description:
-        'Ask the user to approve an irreversible or binding action BEFORE doing it: submitting a form or application, booking or cancelling an appointment, paying, signing. Summarize exactly what will be sent, to whom and any cost. For identity data, name whose it is and what it triggers for that person (SMS, account in their name). Returns whether the user approved; never proceed without approval. The app blocks binding browser actions until approved; one approval covers one action.',
+        'Ask the user to approve an irreversible or binding action BEFORE doing it: submitting a form or application, booking or cancelling an appointment, paying, signing. Summarize exactly what will be sent, to whom and any cost. For identity data, name whose it is and what it triggers for that person (SMS, account in their name). Returns whether the user approved; never proceed without approval. The app blocks binding browser actions until approved; one approval covers one action on the current site (pass ref to name it).',
       parameters: ConfirmActionParams,
       async execute(_id, params, signal) {
         const siteConsent = params.confirmKind === 'certificate_site';
@@ -308,10 +316,14 @@ export function userTools(
           return errorResult('site and sources are only for certificate_site.');
         const bad = [params.site, ...(params.sources ?? [])].find((u) => u && !isWebUrl(u));
         if (bad) return errorResult(`Invalid URL "${bad}": use https://….`);
+        if (siteConsent && params.ref) return errorResult('ref is not for certificate_site.');
+        const { ref, ...prompt } = params;
         // Only the user's answer authorises a binding browser action; a new request replaces it.
-        if (!siteConsent) options.gate?.setApproval(false);
-        return callBridge(bridge, 'prompt.confirm', compact({ ...params }), signal, (response) => {
-          if (!siteConsent) options.gate?.setApproval(response.approved);
+        const approval = siteConsent ? undefined : options.gate?.approvalFor(ref);
+        if (typeof approval === 'string') return errorResult(approval);
+        if (!siteConsent) options.gate?.revoke();
+        return callBridge(bridge, 'prompt.confirm', compact({ ...prompt }), signal, (response) => {
+          if (approval && response.approved) options.gate?.grant(approval);
           return response.approved
             ? textResult(
                 siteConsent

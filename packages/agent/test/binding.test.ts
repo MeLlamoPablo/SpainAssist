@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BindingGate, classifyAction, isBindingLabel, parseSnapshot } from '../src/tools/binding';
+import {
+  BindingGate,
+  classifyAction,
+  isBindingLabel,
+  isReviewText,
+  parseSnapshot,
+} from '../src/tools/binding';
 
 const URL = 'https://sede.example.gob.es/tramite';
 
@@ -154,29 +160,116 @@ describe('classifyAction', () => {
   });
 });
 
+describe('review steps', () => {
+  const REVIEW = [
+    '- heading "Resumen de tu solicitud" [level=1] [ref=e1]',
+    '- paragraph [ref=e2]: Revisa los datos antes de continuar.',
+    '- checkbox "Declaro que los datos son ciertos" [ref=e3]',
+    '- button "Volver" [ref=e4]',
+    '- button "Continuar" [ref=e5]',
+    '- button [ref=e6]:',
+    '  - img [ref=e7]',
+    '- link "Siguiente" [ref=e8]:',
+    '  - /url: https://sede.example.gob.es/otra',
+  ].join('\n');
+
+  it('spots review pages from their text, not from button labels', () => {
+    expect(isReviewText('Importe a pagar: 12 €')).toBe(true);
+    expect(isReviewText('Acepto las condiciones de uso')).toBe(true);
+    expect(isReviewText('Paso 2 de 4: datos personales')).toBe(false);
+    expect(parseSnapshot(REVIEW, URL).review).toBe(true);
+    expect(parseSnapshot('- button "Revisar" [ref=e1]', URL).review).toBe(false);
+    expect(parseSnapshot('- textbox "Nombre" [ref=e1]: Resumen', URL).review).toBe(false);
+  });
+
+  it('gates "Continuar" and unlabelled buttons only on review pages', () => {
+    const page = parseSnapshot(REVIEW, URL);
+    const click = (ref: string) => classifyAction(page, { kind: 'click', ref });
+    expect(click('e5')).toEqual({ binding: true, label: 'Continuar' });
+    expect(click('e6')).toEqual({ binding: true, label: '(unlabelled button)' });
+    expect(click('e4')).toEqual({ binding: false });
+    // A link to another page is still a navigation.
+    expect(click('e8')).toEqual({ binding: false });
+    const plain = parseSnapshot(
+      [
+        '- heading "Datos personales" [ref=e1]',
+        '- button "Continuar" [ref=e2]',
+        '- button [ref=e3]',
+      ].join('\n'),
+      URL,
+    );
+    expect(classifyAction(plain, { kind: 'click', ref: 'e2' })).toEqual({ binding: false });
+    expect(classifyAction(plain, { kind: 'click', ref: 'e3' })).toEqual({ binding: false });
+  });
+});
+
 describe('BindingGate', () => {
-  it('needs one approval per binding action', () => {
+  const gateOn = (snapshot = FORM, url = URL) => {
     const gate = new BindingGate();
-    gate.setPage(FORM, URL);
+    gate.setPage(snapshot, url);
+    return gate;
+  };
+  const grant = (gate: BindingGate, ref?: string) => {
+    const approval = gate.approvalFor(ref);
+    if (typeof approval === 'string') throw new Error(approval);
+    gate.grant(approval);
+  };
+
+  it('needs one approval per binding action', () => {
+    const gate = gateOn();
     expect(gate.check({ kind: 'click', ref: 'e5' })).toBeUndefined();
     expect(gate.check({ kind: 'click', ref: 'e6' })).toContain('confirm_action');
-    gate.setApproval(true);
+    grant(gate);
     expect(gate.check({ kind: 'click', ref: 'e6' })).toBeUndefined();
     expect(gate.check({ kind: 'click', ref: 'e6' })).toContain('confirm_action');
   });
 
-  it('forgets an approval when the user declines a later request', () => {
-    const gate = new BindingGate();
-    gate.setPage(FORM, URL);
-    gate.setApproval(true);
-    gate.setApproval(false);
+  it('forgets an approval when a later request is asked', () => {
+    const gate = gateOn();
+    grant(gate);
+    gate.revoke();
     expect(gate.check({ kind: 'click', ref: 'e6' })).toContain('looks binding');
+  });
+
+  it('ties an approval to the site it was given on', () => {
+    const gate = gateOn();
+    grant(gate);
+    gate.setPage(FORM, 'https://pagos.example.com/tpv');
+    expect(gate.check({ kind: 'click', ref: 'e6' })).toContain(
+      'approval was for https://sede.example.gob.es',
+    );
+    // Same site, another page: still fine.
+    gate.setPage(FORM, 'https://sede.example.gob.es/otro-paso');
+    expect(gate.check({ kind: 'click', ref: 'e6' })).toBeUndefined();
+  });
+
+  it('ties an approval to the named element', () => {
+    const gate = gateOn();
+    grant(gate, 'e7');
+    expect(gate.check({ kind: 'click', ref: 'e6' })).toContain('the user approved "Pagar tasa"');
+    expect(gate.check({ kind: 'submit' })).toContain('not submitting this form');
+    // Refs may change between snapshots: the label is what counts.
+    gate.setPage(FORM.replace('[ref=e7]', '[ref=e70]'), URL);
+    expect(gate.check({ kind: 'click', ref: 'e70' })).toBeUndefined();
+    expect(gate.approvalFor('e99')).toContain('not in the latest page snapshot');
   });
 
   it('asks for a fresh snapshot when it cannot see the target', () => {
     const gate = new BindingGate();
     expect(gate.check({ kind: 'click', ref: 'e1' })).toContain('browser_snapshot');
-    gate.setApproval(true);
+    grant(gate);
     expect(gate.check({ kind: 'click', ref: 'e1' })).toBeUndefined();
+    const named = gateOn();
+    grant(named, 'e6');
+    expect(named.check({ kind: 'click', ref: 'e99' })).toContain('browser_snapshot');
+  });
+
+  it('knows the page and its link targets', () => {
+    const gate = gateOn();
+    expect(gate.pageUrl()).toBe(URL);
+    expect(gate.linkUrl('e9')).toBe('https://sede.example.gob.es/cita');
+    expect(gate.linkUrl('e6')).toBeUndefined();
+    gate.setPage(undefined);
+    expect(gate.pageUrl()).toBeUndefined();
   });
 });

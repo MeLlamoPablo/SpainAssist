@@ -9,16 +9,19 @@ import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
 import type { BindingGate, GatedAction } from './binding';
 import {
+  bridgeErrorText,
   callBridge,
   clip,
   compact,
   defineSaTool,
   errorResult,
+  isAbortError,
   isWebUrl,
   StringEnum,
   type ToolResult,
   textResult,
 } from './common';
+import { type HostPolicy, hostKey } from './hosts';
 
 const MAX_SNAPSHOT_CHARS = 60_000;
 
@@ -112,6 +115,8 @@ export interface BrowserToolOptions {
   redactPages?: boolean;
   /** Binding actions need an approved confirm_action (see binding.ts). */
   gate: BindingGate;
+  /** Non-official sites need the user's approval before the agent browses them. */
+  hosts: HostPolicy;
 }
 
 export function browserTools(bridge: BridgeTransport, options: BrowserToolOptions) {
@@ -129,15 +134,50 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
     gate.setPage(undefined);
     return callBridge(bridge, method, params, signal, observationResult);
   };
-  /** Runs a page action unless it is binding without an approved confirm_action. */
-  const gated = <M extends PageMethod>(
+  /** Undefined when the agent may browse `url`'s site; otherwise the result for the model. */
+  const browseRefusal = async (
+    url: string,
+    signal: AbortSignal | undefined,
+  ): Promise<ToolResult | undefined> => {
+    if (!isWebUrl(url)) return undefined;
+    const target = new URL(url);
+    let allowed: boolean;
+    try {
+      allowed = await options.hosts.approve(target, signal, 'browse');
+    } catch (error) {
+      if (isAbortError(error, signal)) throw error;
+      return errorResult(bridgeErrorText(error), { error: 'host_prompt_failed' });
+    }
+    if (allowed) return undefined;
+    return errorResult(
+      `The user did not allow the assistant to use ${hostKey(target)} (not an official site). Do not open or use it, or reach it another way. Go back (browser_back) or use an official site, and tell the user if the procedure needs that site.`,
+      { error: 'host_declined' },
+    );
+  };
+  /**
+   * Runs an action on the current page: only on a known page of an allowed site, and unless it
+   * is binding without an approved confirm_action.
+   */
+  const gated = async <M extends PageMethod>(
     action: GatedAction | undefined,
     method: M,
     params: BridgeParamsOf<M>,
     signal: AbortSignal | undefined,
   ) => {
+    const pageUrl = gate.pageUrl();
+    if (!pageUrl) {
+      return errorResult(
+        'The app does not know which page is open now. Call browser_snapshot first, then use a ref from it.',
+        { error: 'page_unknown' },
+      );
+    }
+    const link = action?.kind === 'click' ? gate.linkUrl(action.ref) : undefined;
+    for (const url of link ? [pageUrl, link] : [pageUrl]) {
+      const refusal = await browseRefusal(url, signal);
+      if (refusal) return refusal;
+    }
     const refusal = action && gate.check(action);
-    if (refusal) return Promise.resolve(errorResult(refusal, { error: 'confirmation_required' }));
+    if (refusal) return errorResult(refusal, { error: 'confirmation_required' });
     return act(method, params, signal);
   };
   return [
@@ -145,13 +185,15 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       name: 'browser_open',
       label: 'Open page',
       description:
-        "Open a URL in this procedure's browser window (the user can watch). Returns the page with element refs. Prefer official sites.",
+        "Open a URL in this procedure's browser window (the user can watch). Returns the page with element refs. Prefer official sites: others need the user's approval the first time (the user sees the address); if refused, do not retry that site.",
       parameters: Type.Object({
         url: Type.String({ minLength: 1, maxLength: 2000 }),
         newTab: Type.Optional(Type.Boolean()),
       }),
       async execute(_id, params, signal) {
         if (!isWebUrl(params.url)) return errorResult('Use a full http(s) URL.');
+        const refusal = await browseRefusal(params.url, signal);
+        if (refusal) return refusal;
         return act('browser.open', { url: params.url, newTab: params.newTab ?? false }, signal);
       },
     }),
@@ -269,7 +311,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         values: Type.Array(Type.String({ maxLength: 500 }), { minItems: 1, maxItems: 20 }),
       }),
       async execute(_id, params, signal) {
-        return act('browser.select', params, signal);
+        return gated(undefined, 'browser.select', params, signal);
       },
     }),
     defineSaTool({
@@ -278,7 +320,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       description: 'Check or uncheck a checkbox or radio button (ref).',
       parameters: Type.Object({ ref: Ref, checked: Type.Boolean() }),
       async execute(_id, params, signal) {
-        return act('browser.check', params, signal);
+        return gated(undefined, 'browser.check', params, signal);
       },
     }),
     defineSaTool({
@@ -382,7 +424,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         documentIds: Type.Array(Type.String({ maxLength: 120 }), { minItems: 1, maxItems: 10 }),
       }),
       async execute(_id, params, signal) {
-        return act('browser.upload', params, signal);
+        return gated(undefined, 'browser.upload', params, signal);
       },
     }),
     defineSaTool({

@@ -618,14 +618,29 @@ the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
   `run_script` runs model-written JavaScript in QuickJS (WebAssembly, fresh per call, CPU and
   memory capped) with no Node APIs or secrets; its only I/O is a read-only `fetch` (GET/HEAD, no
   body, only `accept`/`accept-language` headers) with `fetch_url`'s host checks.
-- `fetch_url` and `run_script` share one host policy (`packages/agent/src/tools/hosts.ts`):
+- `fetch_url`, `run_script` and the browser tools share one host policy
+  (`packages/agent/src/tools/hosts.ts`):
   official domains (`isOfficialHost`, @sa/shared `OFFICIAL_DOMAINS`) are read freely; any
   other host needs the user's approval through `prompt.confirm` (the prompt shows the host and
   the full address), asked before any DNS lookup or connection, once per host per agent run,
   and checked again on every redirect hop. Localhost and private networks are always blocked
   (unless `allowPrivateHosts`, dev/e2e), and connections are DNS-pinned: the socket only gets
   addresses that passed the check (`publicLookup`), so DNS rebinding can't reach the LAN. An
-  approved non-official host can still receive data in its URLs.
+  approved non-official host can still receive data in its URLs. The browser asks separately
+  ("use" instead of "read", since it can type and click there): `browser_open`, clicks on links
+  to another host, and any action on a page the browser landed on (e.g. after a redirect) need
+  that host approved. Redirects themselves happen inside the browser, so data in a redirect URL
+  is not caught; the next action there is.
+- Binding browser actions (`packages/agent/src/tools/binding.ts`) need a `confirm_action` the
+  user approved, enforced by the agent host and not only by the prompt. The target is
+  classified from the latest page snapshot: binding verbs in the label (enviar, presentar,
+  firmar, pagar, confirmar, solicitar, reservar, cancelar cita, submit, pay, sign…), and on a
+  page that looks like a final review (resumen, declaro, total a pagar…) also "Aceptar",
+  "Continuar", "Siguiente" and unlabelled buttons. Enter in a field counts when the page has a
+  binding control; unknown targets count as binding. One approval allows one binding action on
+  the origin where it was given and, if `confirm_action` named a `ref`, only on the element
+  with that label. "Acceder" (AutoFirma login) is not gated; "Firmar" is, on top of the app's
+  own signing approval. Labels that don't say what they do can still slip through.
 - Known MVP gaps: procedure metadata, transcripts, screenshots and pi session files are private
   local files without encryption. ChatGPT OAuth tokens are stored in the encrypted vault and
   supplied to pi in memory through the authenticated bridge.

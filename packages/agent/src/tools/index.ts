@@ -55,7 +55,7 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
         : name === 'feedback_vote'
           ? !!deps.feedback?.vote
           : true;
-  // One per agent run: an approved host stays approved for both fetch_url and run_script.
+  // One per agent run: an approved host stays approved for fetch_url, run_script and the browser.
   const hosts = createHostPolicy({ bridge: deps.bridge, language: deps.language });
   // Shared by confirm_action (the user's approval) and the browser tools (binding actions).
   const gate = new BindingGate();
@@ -71,6 +71,7 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
         dniePhone: deps.dniePhone ?? false,
         redactPages: deps.redactPages ?? false,
         gate,
+        hosts,
       }),
       ...downloadTools(deps.bridge),
       ...researchTools(deps.bridge, { baseUrl: deps.boeBaseUrl, fetchImpl: deps.fetchImpl }),
