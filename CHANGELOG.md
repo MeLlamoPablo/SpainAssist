@@ -3,6 +3,19 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.2.1 (2026-10-13)
+
+### App
+
+- **Web research needs no key.** With your own API key or a custom endpoint, research now uses
+  Exa's free tier through its hosted MCP server. An Exa key is optional and only raises the
+  limits; Settings no longer warns that it is missing. (D24)
+
+### Maintenance
+
+- The secrets check allows Exa's MCP host and still catches a key in its URL.
+- Version 0.2.1 everywhere, Android version code 4.
+
 ## 0.2.0 (2026-10-13)
 
 ### App

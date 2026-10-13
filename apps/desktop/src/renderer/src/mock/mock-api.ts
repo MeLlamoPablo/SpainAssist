@@ -813,7 +813,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     },
     'app.info': () => ({
       name: 'Spain Assist',
-      version: '0.2.0',
+      version: '0.2.1',
       platform: 'darwin',
       isDev: true,
       isE2E: false,

@@ -16,8 +16,8 @@ android {
         applicationId = "es.spainassist.firma"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.2.1"
         // The host of pairing links (App Links): the production relay.
         manifestPlaceholders["linkHost"] = "relay.2-31-6-160.sslip.io"
     }
