@@ -221,9 +221,9 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const mustUpdate = mustUpdateParam !== null && mustUpdateParam !== '0';
   let updates: UpdateStatus =
     mustUpdateParam === 'downloading'
-      ? { state: 'downloading', version: '0.2.0', percent: 42 }
+      ? { state: 'downloading', version: '0.3.0', percent: 42 }
       : mustUpdateParam === 'ready'
-        ? { state: 'ready', version: '0.2.0' }
+        ? { state: 'ready', version: '0.3.0' }
         : mustUpdateParam === 'checking' ||
             mustUpdateParam === 'error' ||
             mustUpdateParam === 'upToDate'
@@ -240,10 +240,10 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     window.setTimeout(() => {
       const timer = window.setInterval(() => {
         percent = Math.min(100, percent + 7);
-        if (percent < 100) setUpdates({ state: 'downloading', version: '0.2.0', percent });
+        if (percent < 100) setUpdates({ state: 'downloading', version: '0.3.0', percent });
         else {
           window.clearInterval(timer);
-          setUpdates({ state: 'ready', version: '0.2.0' });
+          setUpdates({ state: 'ready', version: '0.3.0' });
         }
       }, 400 / speed);
     }, 1500 / speed);
@@ -813,7 +813,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     },
     'app.info': () => ({
       name: 'Spain Assist',
-      version: '0.1.1',
+      version: '0.2.0',
       platform: 'darwin',
       isDev: true,
       isE2E: false,
