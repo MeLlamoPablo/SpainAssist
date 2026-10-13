@@ -1,6 +1,7 @@
 import type { Language } from '@sa/shared';
 import type { BridgeTransport } from '../bridge/client';
 import { assistantTools } from './assistant';
+import { BindingGate } from './binding';
 import { browserTools } from './browser';
 import type { AnyToolDefinition } from './common';
 import { documentTools } from './documents';
@@ -56,17 +57,20 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
           : true;
   // One per agent run: an approved host stays approved for both fetch_url and run_script.
   const hosts = createHostPolicy({ bridge: deps.bridge, language: deps.language });
+  // Shared by confirm_action (the user's approval) and the browser tools (binding actions).
+  const gate = new BindingGate();
   return finish(
     TOOL_NAMES.filter(active),
     [
       ...procedureTools(deps.bridge),
-      ...userTools(deps.bridge, { dniePhone: deps.dniePhone ?? false }),
+      ...userTools(deps.bridge, { dniePhone: deps.dniePhone ?? false, gate }),
       ...vaultTools(deps.bridge, { timeZone: deps.timeZone }),
       ...documentTools(deps.bridge, { imagesSupported: deps.imagesSupported }),
       ...browserTools(deps.bridge, {
         imagesSupported: deps.imagesSupported,
         dniePhone: deps.dniePhone ?? false,
         redactPages: deps.redactPages ?? false,
+        gate,
       }),
       ...downloadTools(deps.bridge),
       ...researchTools(deps.bridge, { baseUrl: deps.boeBaseUrl, fetchImpl: deps.fetchImpl }),

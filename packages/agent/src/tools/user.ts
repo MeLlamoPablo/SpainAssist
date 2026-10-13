@@ -1,6 +1,7 @@
 import { AGENT_PERSONAL_FIELD_KEYS, FormPrompt, PhoneCallPrompt } from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
+import type { BindingGate } from './binding';
 import {
   callBridge,
   compact,
@@ -219,7 +220,10 @@ function formatValue(value: string | string[] | boolean): string {
   return value === '' ? '(empty)' : value;
 }
 
-export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolean } = {}) {
+export function userTools(
+  bridge: BridgeTransport,
+  options: { dniePhone?: boolean; gate?: BindingGate } = {},
+) {
   return [
     defineSaTool({
       name: 'ask_user',
@@ -294,7 +298,7 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
       name: 'confirm_action',
       label: 'Ask for approval',
       description:
-        'Ask the user to approve an irreversible or binding action BEFORE doing it: submitting a form or application, booking or cancelling an appointment, paying, signing. Summarize exactly what will be sent, to whom and any cost. For identity data, name whose it is and what it triggers for that person (SMS, account in their name). Returns whether the user approved; never proceed without approval.',
+        'Ask the user to approve an irreversible or binding action BEFORE doing it: submitting a form or application, booking or cancelling an appointment, paying, signing. Summarize exactly what will be sent, to whom and any cost. For identity data, name whose it is and what it triggers for that person (SMS, account in their name). Returns whether the user approved; never proceed without approval. The app blocks binding browser actions until approved; one approval covers one action.',
       parameters: ConfirmActionParams,
       async execute(_id, params, signal) {
         const siteConsent = params.confirmKind === 'certificate_site';
@@ -304,8 +308,11 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
           return errorResult('site and sources are only for certificate_site.');
         const bad = [params.site, ...(params.sources ?? [])].find((u) => u && !isWebUrl(u));
         if (bad) return errorResult(`Invalid URL "${bad}": use https://….`);
-        return callBridge(bridge, 'prompt.confirm', compact({ ...params }), signal, (response) =>
-          response.approved
+        // Only the user's answer authorises a binding browser action; a new request replaces it.
+        if (!siteConsent) options.gate?.setApproval(false);
+        return callBridge(bridge, 'prompt.confirm', compact({ ...params }), signal, (response) => {
+          if (!siteConsent) options.gate?.setApproval(response.approved);
+          return response.approved
             ? textResult(
                 siteConsent
                   ? `The user allowed certificate logins on ${params.site} for this procedure. Call browser_use_certificate again with that origin.`
@@ -317,8 +324,8 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
                   ? 'The user did NOT allow the certificate on that site. Do not use it there; tell the user how else the procedure can be done (another login method, another channel).'
                   : 'The user did NOT approve. Do not do it; ask what they want to change or how to continue.',
                 { approved: false },
-              ),
-        );
+              );
+        });
       },
     }),
 

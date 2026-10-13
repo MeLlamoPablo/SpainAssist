@@ -732,9 +732,52 @@ describe('tools', () => {
         field: 'password',
       });
       expect(textOf(denied)).toContain("Blocked by the app's safety policy");
-      const clicked = await h.run('browser_click', { ref: 'e9' });
+      bridge.setHandler('browser.snapshot', () => observation);
+      await h.run('browser_snapshot', {});
+      const clicked = await h.run('browser_click', { ref: 'e2' });
       expect(clicked.isError).toBe(true);
       expect(textOf(clicked)).toContain('browser_snapshot');
+    });
+
+    it('refuses binding actions without an approved confirm_action', async () => {
+      const form: BrowserObservation = {
+        ...observation,
+        snapshot: [
+          '- textbox "Nombre" [active] [ref=e1]: Ana',
+          '- button "Volver" [ref=e2]',
+          '- button "Enviar solicitud" [ref=e3]',
+        ].join('\n'),
+      };
+      for (const method of ['browser.open', 'browser.click', 'browser.press', 'browser.type'])
+        bridge.setHandler(method, () => form);
+      let approved = true;
+      bridge.setHandler('prompt.confirm', () => ({ kind: 'confirm', approved }));
+      const confirm = () =>
+        h.run('confirm_action', { confirmKind: 'submission', title: 'Enviar', message: 'x' });
+      await h.run('browser_open', { url: 'https://sede.policia.gob.es/tramite' });
+
+      expect((await h.run('browser_click', { ref: 'e2' })).isError).toBeFalsy();
+      const blocked = await h.run('browser_click', { ref: 'e3' });
+      expect(blocked.isError).toBe(true);
+      expect(blocked.details).toEqual({ error: 'confirmation_required' });
+      expect(textOf(blocked)).toContain('confirm_action');
+      expect((await h.run('browser_press', { key: 'Enter' })).isError).toBe(true);
+      expect((await h.run('browser_type', { ref: 'e1', text: 'Ana', submit: true })).isError).toBe(
+        true,
+      );
+      expect(bridge.callsTo('browser.click')).toHaveLength(1);
+      expect(bridge.callsTo('browser.press')).toHaveLength(0);
+      expect(bridge.callsTo('browser.type')).toHaveLength(0);
+
+      await confirm();
+      expect((await h.run('browser_click', { ref: 'e3' })).isError).toBeFalsy();
+      // One approval, one binding action.
+      expect((await h.run('browser_press', { key: 'Enter' })).isError).toBe(true);
+
+      approved = false;
+      await confirm();
+      expect((await h.run('browser_click', { ref: 'e3' })).isError).toBe(true);
+      expect(bridge.callsTo('browser.click')).toHaveLength(2);
     });
 
     it('asks the user for one-time codes through the app', async () => {

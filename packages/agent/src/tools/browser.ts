@@ -1,6 +1,13 @@
-import type { BrowserObservation, VaultValueRef } from '@sa/shared';
+import type {
+  BridgeMethod,
+  BridgeParamsOf,
+  BridgeResults,
+  BrowserObservation,
+  VaultValueRef,
+} from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
+import type { BindingGate, GatedAction } from './binding';
 import {
   callBridge,
   clip,
@@ -26,6 +33,11 @@ const Element = Type.Optional(
 const Submit = Type.Optional(Type.Boolean({ description: 'Press Enter after typing' }));
 
 const SNAPSHOT_HEADING = 'Page snapshot';
+
+/** Bridge methods that act on the page and return its observation. */
+type PageMethod = {
+  [M in BridgeMethod]: BridgeResults[M] extends BrowserObservation ? M : never;
+}[BridgeMethod];
 
 /**
  * Compact, model-facing rendering of a browser observation (never includes images). `redacted`:
@@ -98,11 +110,36 @@ export interface BrowserToolOptions {
   dniePhone?: boolean;
   /** Old page results are redacted from the context (see host/redaction.ts). */
   redactPages?: boolean;
+  /** Binding actions need an approved confirm_action (see binding.ts). */
+  gate: BindingGate;
 }
 
 export function browserTools(bridge: BridgeTransport, options: BrowserToolOptions) {
-  const observationResult = (obs: BrowserObservation) =>
-    pageResult(obs, options.redactPages ?? false);
+  const { gate } = options;
+  const observationResult = (obs: BrowserObservation) => {
+    gate.setPage(obs.snapshot ?? '', obs.url);
+    return pageResult(obs, options.redactPages ?? false);
+  };
+  /** Calls a page action; the page is unknown until its observation comes back. */
+  const act = <M extends PageMethod>(
+    method: M,
+    params: BridgeParamsOf<M>,
+    signal: AbortSignal | undefined,
+  ) => {
+    gate.setPage(undefined);
+    return callBridge(bridge, method, params, signal, observationResult);
+  };
+  /** Runs a page action unless it is binding without an approved confirm_action. */
+  const gated = <M extends PageMethod>(
+    action: GatedAction | undefined,
+    method: M,
+    params: BridgeParamsOf<M>,
+    signal: AbortSignal | undefined,
+  ) => {
+    const refusal = action && gate.check(action);
+    if (refusal) return Promise.resolve(errorResult(refusal, { error: 'confirmation_required' }));
+    return act(method, params, signal);
+  };
   return [
     defineSaTool({
       name: 'browser_open',
@@ -115,13 +152,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       }),
       async execute(_id, params, signal) {
         if (!isWebUrl(params.url)) return errorResult('Use a full http(s) URL.');
-        return callBridge(
-          bridge,
-          'browser.open',
-          { url: params.url, newTab: params.newTab ?? false },
-          signal,
-          observationResult,
-        );
+        return act('browser.open', { url: params.url, newTab: params.newTab ?? false }, signal);
       },
     }),
     defineSaTool({
@@ -131,21 +162,21 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         'Get the current page: URL, title, tabs, downloads, signatures, dialogs, page script errors, notes and an accessibility snapshot with element refs (e.g. [ref=e12]). Refs change after every snapshot.',
       parameters: Type.Object({}),
       async execute(_id, _params, signal) {
-        return callBridge(bridge, 'browser.snapshot', {}, signal, observationResult);
+        return act('browser.snapshot', {}, signal);
       },
     }),
     defineSaTool({
       name: 'browser_click',
       label: 'Click',
-      description: 'Click an element (link, button, tab...) by ref from the latest snapshot.',
+      description:
+        'Click an element (link, button, tab...) by ref from the latest snapshot. Binding actions (submit, pay, sign, book or cancel) need an approved confirm_action first.',
       parameters: Type.Object({ ref: Ref, element: Element }),
       async execute(_id, params, signal) {
-        return callBridge(
-          bridge,
+        return gated(
+          { kind: 'click', ref: params.ref },
           'browser.click',
           compact({ ...params }),
           signal,
-          observationResult,
         );
       },
     }),
@@ -160,12 +191,11 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         submit: Submit,
       }),
       async execute(_id, params, signal) {
-        return callBridge(
-          bridge,
+        return gated(
+          params.submit ? { kind: 'submit' } : undefined,
           'browser.type',
           { ref: params.ref, text: params.text, submit: params.submit ?? false },
           signal,
-          observationResult,
         );
       },
     }),
@@ -195,12 +225,11 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
           }
           value = { source: 'credential', credentialId: params.credentialId, field: params.field };
         }
-        return callBridge(
-          bridge,
+        return gated(
+          params.submit ? { kind: 'submit' } : undefined,
           'browser.fillFromVault',
           { ref: params.ref, value, submit: params.submit ?? false },
           signal,
-          observationResult,
         );
       },
     }),
@@ -223,12 +252,11 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         submit: Submit,
       }),
       async execute(_id, params, signal) {
-        return callBridge(
-          bridge,
+        return gated(
+          params.submit ? { kind: 'submit' } : undefined,
           'browser.fillFromUser',
           compact({ ...params, submit: params.submit ?? false }),
           signal,
-          observationResult,
         );
       },
     }),
@@ -241,7 +269,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         values: Type.Array(Type.String({ maxLength: 500 }), { minItems: 1, maxItems: 20 }),
       }),
       async execute(_id, params, signal) {
-        return callBridge(bridge, 'browser.select', params, signal, observationResult);
+        return act('browser.select', params, signal);
       },
     }),
     defineSaTool({
@@ -250,7 +278,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       description: 'Check or uncheck a checkbox or radio button (ref).',
       parameters: Type.Object({ ref: Ref, checked: Type.Boolean() }),
       async execute(_id, params, signal) {
-        return callBridge(bridge, 'browser.check', params, signal, observationResult);
+        return act('browser.check', params, signal);
       },
     }),
     defineSaTool({
@@ -259,7 +287,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       description: 'Press a key in the page, e.g. Enter, Tab, Escape, ArrowDown, PageDown.',
       parameters: Type.Object({ key: Type.String({ minLength: 1, maxLength: 40 }) }),
       async execute(_id, params, signal) {
-        return callBridge(bridge, 'browser.press', params, signal, observationResult);
+        return gated({ kind: 'key', key: params.key }, 'browser.press', params, signal);
       },
     }),
     defineSaTool({
@@ -280,13 +308,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         ) {
           return errorResult('Pass text, textGone or seconds.');
         }
-        return callBridge(
-          bridge,
-          'browser.wait',
-          compact({ ...params }),
-          signal,
-          observationResult,
-        );
+        return act('browser.wait', compact({ ...params }), signal);
       },
     }),
     defineSaTool({
@@ -295,7 +317,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       description: 'Go back to the previous page.',
       parameters: Type.Object({}),
       async execute(_id, _params, signal) {
-        return callBridge(bridge, 'browser.back', {}, signal, observationResult);
+        return act('browser.back', {}, signal);
       },
     }),
     defineSaTool({
@@ -310,6 +332,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         if (params.action !== 'list' && params.index === undefined) {
           return errorResult(`"${params.action}" needs a tab index.`);
         }
+        if (params.action !== 'list') gate.setPage(undefined);
         return callBridge(bridge, 'browser.tabs', compact({ ...params }), signal, (result) =>
           textResult(
             result.tabs.length === 0
@@ -359,13 +382,13 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
         documentIds: Type.Array(Type.String({ maxLength: 120 }), { minItems: 1, maxItems: 10 }),
       }),
       async execute(_id, params, signal) {
-        return callBridge(bridge, 'browser.upload', params, signal, observationResult);
+        return act('browser.upload', params, signal);
       },
     }),
     defineSaTool({
       name: 'browser_use_certificate',
       label: 'Use certificate',
-      description: `Enable TLS client-certificate login with the user's digital certificate${options.dniePhone ? ' or DNIe in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser: for sites where the browser itself asks for a certificate when you open the login page (e.g. "Certificado electrónico" in Cl@ve, AEAT). The app may ask the user to approve. Afterwards click the site's certificate login button.${options.dniePhone ? " With the DNIe, the user approves each login on their phone, once for all the hosts of one organisation (e.g. Seguridad Social's idp, ipce and w2), and must keep the card on the phone until the login ends. Browser results say in Notes when a DNIe login waits for the user, was approved or failed: while one waits, use browser_wait instead of clicking again, and tell the user what to do if it fails." : ''} Not for AutoFirma logins and signatures (the page uses AutoFirma or its "Acceder"/"Firmar" button calls AutoScript): there, just click the button; the app signs.`,
+      description: `Enable TLS client-certificate login with the user's digital certificate${options.dniePhone ? ' or DNIe in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser: for sites where the browser itself asks for a certificate when you open the login page (e.g. "Certificado electrónico" in Cl@ve, AEAT). The app may ask the user to approve. Afterwards click the site's certificate login button.${options.dniePhone ? " With the DNIe, the user approves each login on their phone, once for all the hosts of one organisation (e.g. Seguridad Social's idp, ipce and w2), and must keep the card on the phone until the login ends. Browser results say in Notes when a DNIe login waits for the user, was approved or failed: while one waits, use browser_wait instead of clicking again, and tell the user what to do if it fails." : ''} Not for AutoFirma logins and signatures (the page uses AutoFirma or its "Acceder"/"Firmar" button calls AutoScript): there, just click the button (after confirm_action for "Firmar"); the app signs.`,
       parameters: Type.Object({
         credentialId: Type.String({ minLength: 1, maxLength: 120 }),
         origins: Type.Optional(
@@ -396,6 +419,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       description: "Close this procedure's browser when you no longer need it.",
       parameters: Type.Object({}),
       async execute(_id, _params, signal) {
+        gate.setPage(undefined);
         return callBridge(bridge, 'browser.close', {}, signal, (r) =>
           textResult(r.closed ? 'Browser closed.' : 'The browser was not open.', {
             closed: r.closed,
