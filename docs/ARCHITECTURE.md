@@ -79,6 +79,8 @@ A procedure agent researches first, then plans, then asks for what's missing, th
 - Voucher users get `web_research` on Parallel, sold by the key server from the voucher.
 - ChatGPT users get `web_research` with OpenAI's hosted web search, on their plan.
 - BYOK and custom endpoints get Exa search (free, or with their own Exa key).
+- Before any query leaves the device, main scrubs it (bridge `research.scrub`: `@sa/pii` with the
+  vault's values, keeping the municipality). If that fails, nothing is sent.
 
 It can also read pages (`fetch_url`), search the BOE, browse read-only and search
 community learnings. It records status, steps, requirements, sources and the next action on the

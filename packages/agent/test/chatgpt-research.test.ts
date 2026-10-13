@@ -1,17 +1,20 @@
-import type { Api, AssistantMessage, Model } from '@earendil-works/pi-ai';
+import type { Api, AssistantMessage, Context, Model } from '@earendil-works/pi-ai';
 import type { ExtensionToolContext, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { describe, expect, it } from 'vitest';
 import {
   CHATGPT_RESEARCH_MODELS,
   createChatGPTResearchTool,
 } from '../src/research/chatgpt-research';
+import type { ScrubOutgoing } from '../src/research/scrub';
 import type { ToolResult } from '../src/tools/common';
+import { DNI, failingScrub, fakeScrub } from './helpers/scrub';
 
 const ctx = {} as ExtensionToolContext;
 type Options = NonNullable<Parameters<ModelRuntime['streamSimple']>[2]>;
 
 interface Sent {
   model: Model<Api>;
+  context: Context;
   options: Options;
   payload: Record<string, unknown>;
 }
@@ -40,13 +43,13 @@ const messageDone = {
 function fakeRuntime(reply: Partial<AssistantMessage>, events: unknown[] = []) {
   const sent: Sent[] = [];
   const runtime = {
-    streamSimple: (model: Model<Api>, _context: unknown, options: Options) => ({
+    streamSimple: (model: Model<Api>, context: Context, options: Options) => ({
       result: async () => {
         const payload = (await options.onPayload?.(
           { model: model.id, include: ['reasoning.encrypted_content'], store: false },
           model,
         )) as Record<string, unknown>;
-        sent.push({ model, options, payload });
+        sent.push({ model, context, options, payload });
         for (const event of events) await options.onProviderStreamEvent?.(event as never, model);
         return { stopReason: 'stop', content: [], ...reply } as AssistantMessage;
       },
@@ -55,11 +58,12 @@ function fakeRuntime(reply: Partial<AssistantMessage>, events: unknown[] = []) {
   return { runtime, sent };
 }
 
-function tool(runtime: Pick<ModelRuntime, 'streamSimple'>) {
+function tool(runtime: Pick<ModelRuntime, 'streamSimple'>, scrub: ScrubOutgoing = fakeScrub) {
   return createChatGPTResearchTool({
     runtime,
     model: (id) => ({ id, provider: 'openai' }) as Model<Api>,
     language: 'es',
+    scrub,
   });
 }
 
@@ -182,5 +186,34 @@ describe('web research on a ChatGPT plan', () => {
       ),
     ).rejects.toThrow();
     expect(fake.sent).toHaveLength(0);
+  });
+
+  it('sends the query only after the app removed personal data from it', async () => {
+    const fake = fakeRuntime(answer('Información oficial'));
+    await tool(fake.runtime).execute(
+      'call',
+      { query: `renovar el permiso, DNI ${DNI}`, mode: 'fast' },
+      undefined,
+      undefined,
+      ctx,
+    );
+    expect(fake.sent[0]!.context.messages).toMatchObject([
+      { role: 'user', content: 'renovar el permiso, DNI [DNI]' },
+    ]);
+    expect(JSON.stringify(fake.sent[0]!.context)).not.toContain(DNI);
+  });
+
+  it('sends nothing when the app cannot scrub the query', async () => {
+    const fake = fakeRuntime(answer('x'));
+    const result = await tool(fake.runtime, failingScrub).execute(
+      'call',
+      { query: `DNI ${DNI}`, mode: 'fast' },
+      undefined,
+      undefined,
+      ctx,
+    );
+    expect(fake.sent).toHaveLength(0);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain('nothing was sent');
   });
 });

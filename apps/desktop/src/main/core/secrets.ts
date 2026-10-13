@@ -34,16 +34,20 @@ const norm = (v: string) =>
 /**
  * Values to remove from any text that leaves the device: everything the vault considers
  * sensitive, minus very short values and pure categories ("DNI", "M", "España"...), which would
- * otherwise destroy useful text without protecting anyone.
+ * otherwise destroy useful text without protecting anyone. `keep` lists more personal keys whose
+ * values the caller needs in its text.
  */
-export function scrubbableKnownValues(vault: {
-  knownSensitiveValues(): string[];
-  listPersonal(): { key: string; value: string }[];
-}): string[] {
+export function scrubbableKnownValues(
+  vault: {
+    knownSensitiveValues(): string[];
+    listPersonal(): { key: string; value: string }[];
+  },
+  keep: readonly string[] = [],
+): string[] {
   const categories = new Set(
     vault
       .listPersonal()
-      .filter((p) => NON_IDENTIFYING_KEYS.has(p.key))
+      .filter((p) => NON_IDENTIFYING_KEYS.has(p.key) || keep.includes(p.key))
       .map((p) => norm(p.value)),
   );
   return vault.knownSensitiveValues().filter((v) => {

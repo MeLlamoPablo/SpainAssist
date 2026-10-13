@@ -317,13 +317,14 @@ export function createResearchStub(options: ResearchStubOptions): HostResearchSt
   const context: StubContext = { log: options.log };
   return {
     backend: shape === 'chatgpt' ? 'chatgpt' : 'key server',
-    tools({ language }): AnyToolDefinition[] {
+    tools({ language, scrub }): AnyToolDefinition[] {
       if (shape === 'chatgpt') {
         return [
           createChatGPTResearchTool({
             runtime: createResearchRuntime(answer, context),
             model: (id) => stubModel(id, options.provider),
             language,
+            scrub,
           }),
         ];
       }
@@ -332,6 +333,7 @@ export function createResearchStub(options: ResearchStubOptions): HostResearchSt
           keyServerUrl: RESEARCH_ORIGIN,
           apiKey: async () => STUB_KEY,
           language,
+          scrub,
           fetch: createKeyServerFetch(answer, context),
         }),
       ];

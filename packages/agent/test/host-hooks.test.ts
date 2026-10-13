@@ -87,6 +87,7 @@ describe('HostHooks (real host process)', () => {
     llm = await createMockLlm({ scenario: { fallback: { text: 'Hecho.' } }, chunkSize: 16 });
     bridge = await createFakeBridge({
       'agent.credential': () => ({ credential: { type: 'api_key', key: 'llm-key-from-bridge' } }),
+      'research.scrub': (params) => ({ text: String(params.text), redactions: 0 }),
       'procedure.update': (params) => ({
         id: 'p1',
         title: 'Trámite',

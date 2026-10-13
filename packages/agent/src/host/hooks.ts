@@ -2,6 +2,7 @@ import type { Api, Model } from '@earendil-works/pi-ai';
 import type { BridgeTransport } from '../bridge/client';
 import type { ResolvedHostConfig } from '../config';
 import type { BlockedRequest, HostResolver } from '../research/fetch';
+import type { ScrubOutgoing } from '../research/scrub';
 import type { AnyToolDefinition } from '../tools/common';
 import type { ResearchBackend } from './research';
 
@@ -49,6 +50,8 @@ export interface HostResearchStub {
     config: ResolvedHostConfig;
     bridge: BridgeTransport;
     language: 'es' | 'en';
+    /** The app's scrubber for queries that leave the device (bridge `research.scrub`). */
+    scrub: ScrubOutgoing;
   }): AnyToolDefinition[];
 }
 

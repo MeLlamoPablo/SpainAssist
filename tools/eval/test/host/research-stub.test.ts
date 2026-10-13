@@ -29,7 +29,9 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const noRuntime = { config: {} as never, bridge: {} as never };
+/** The app's scrubber, a no-op: the queries here hold no personal data. */
+const scrub = async (text: string) => ({ text, redactions: 0 });
+const noRuntime = { config: {} as never, bridge: {} as never, scrub };
 
 function webResearch(
   shape: 'auto' | 'key-server' | 'chatgpt',
@@ -130,6 +132,7 @@ describe('the research stub: key-server shape', () => {
         keyServerUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
         apiKey: async () => 'sk-whatever',
         language: 'es',
+        scrub,
       });
       const product = await run(real as AnyToolDefinition);
       const { tool } = webResearch('key-server', 'litellm');

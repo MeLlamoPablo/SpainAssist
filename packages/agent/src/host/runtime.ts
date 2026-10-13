@@ -19,6 +19,7 @@ export {
   createKeyServerResearchTool,
   type KeyServerResearchOptions,
 } from '../research/key-server-research';
+export type { ScrubOutgoing } from '../research/scrub';
 export type { AnyToolDefinition } from '../tools/common';
 export type { HostEgress, HostHooks, HostResearchStub } from './hooks';
 export { hostLog } from './log';
