@@ -402,16 +402,23 @@ describe('ProviderManager', () => {
   });
 
   it('cancels a sign-in in progress', async () => {
+    // Wait until the manager reaches the provider library (it first reads and may persist the
+    // device id), not a fixed delay: under load that takes longer than any sleep.
+    let started!: () => void;
+    const reachedLib = new Promise<void>((r) => {
+      started = r;
+    });
     app = await createTestApp({
       providerLib: createFakeProviderLib({
         loginChatGPT: (cb: ChatGPTLoginCallbacks) =>
           new Promise((_resolve, reject) => {
             cb.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            started();
           }),
       }),
     });
     const pending = app.invoke('providers.loginChatGPT');
-    await new Promise((r) => setTimeout(r, 10));
+    await reachedLib;
     expect(await app.invoke('providers.loginChatGPT')).toEqual({
       ok: false,
       error: t('es', 'loginInProgress'),
