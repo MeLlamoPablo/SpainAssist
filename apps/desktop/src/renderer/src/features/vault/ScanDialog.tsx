@@ -442,21 +442,20 @@ function CameraStep({
           {error}
         </p>
       ) : null}
-      <div className="flex flex-wrap justify-center gap-2">
-        {error && settingsAvailable ? (
-          <Button variant="secondary" onClick={() => void window.saScanner?.openCameraSettings()}>
-            {t.cameraSettings}
-          </Button>
-        ) : null}
-        {!ready || (error && !busy) ? (
-          <Button variant="secondary" icon={RefreshCw} onClick={() => setRetry((r) => r + 1)}>
-            {t.retryCamera}
-          </Button>
-        ) : null}
-        <Button variant="secondary" icon={ImageUp} onClick={onBack}>
-          {t.switchToPhoto}
-        </Button>
-      </div>
+      {!ready || error ? (
+        <div className="flex flex-wrap justify-center gap-2">
+          {error && settingsAvailable ? (
+            <Button variant="secondary" onClick={() => void window.saScanner?.openCameraSettings()}>
+              {t.cameraSettings}
+            </Button>
+          ) : null}
+          {!ready || (error && !busy) ? (
+            <Button variant="secondary" icon={RefreshCw} onClick={() => setRetry((r) => r + 1)}>
+              {t.retryCamera}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
