@@ -30,13 +30,18 @@ export const LANGUAGE_NAMES: Record<SystemPromptOptions['language'], string> = {
   en: 'English',
 };
 
-export function formatToday(now: Date, timeZone = 'Europe/Madrid'): string {
-  let zone = timeZone;
+/** The user's time zone if Intl knows it, otherwise Europe/Madrid. */
+export function resolveTimeZone(timeZone = 'Europe/Madrid'): string {
   try {
-    new Intl.DateTimeFormat('en-GB', { timeZone: zone });
+    new Intl.DateTimeFormat('en-GB', { timeZone });
+    return timeZone;
   } catch {
-    zone = 'Europe/Madrid';
+    return 'Europe/Madrid';
   }
+}
+
+export function formatToday(now: Date, timeZone?: string): string {
+  const zone = resolveTimeZone(timeZone);
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: zone,
     year: 'numeric',

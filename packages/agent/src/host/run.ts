@@ -63,7 +63,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
 
   const assistant = config.role === 'assistant';
   const tools = assistant
-    ? createAssistantTools({ bridge })
+    ? createAssistantTools({ bridge, timeZone: config.timeZone })
     : createTools({
         bridge,
         imagesSupported,
@@ -72,6 +72,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         feedback: config.feedback,
         dniePhone: config.dniePhone,
         redactPages,
+        timeZone: config.timeZone,
       });
   // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
   // OpenAI's hosted web search, BYOK and custom endpoints with the user's own Exa key.

@@ -36,6 +36,8 @@ export interface ToolDeps {
   dniePhone?: boolean;
   /** Old page results are redacted from the context (see host/redaction.ts). */
   redactPages?: boolean;
+  /** The user's IANA time zone, for times in tool results (default Europe/Madrid). */
+  timeZone?: string;
 }
 
 /** The tools of a procedure's agent. */
@@ -53,7 +55,7 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
     [
       ...procedureTools(deps.bridge),
       ...userTools(deps.bridge, { dniePhone: deps.dniePhone ?? false }),
-      ...vaultTools(deps.bridge),
+      ...vaultTools(deps.bridge, { timeZone: deps.timeZone }),
       ...documentTools(deps.bridge, { imagesSupported: deps.imagesSupported }),
       ...browserTools(deps.bridge, {
         imagesSupported: deps.imagesSupported,
@@ -69,12 +71,14 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
 }
 
 /** The tools of the assistant (orchestrator). */
-export function createAssistantTools(deps: Pick<ToolDeps, 'bridge'>): AnyToolDefinition[] {
+export function createAssistantTools(
+  deps: Pick<ToolDeps, 'bridge' | 'timeZone'>,
+): AnyToolDefinition[] {
   const ask = userTools(deps.bridge).filter((tool) => tool.name === 'ask_user');
   return finish(ASSISTANT_TOOL_NAMES, [
     ...assistantTools(deps.bridge),
     ...ask,
-    ...vaultTools(deps.bridge),
+    ...vaultTools(deps.bridge, { timeZone: deps.timeZone }),
   ]);
 }
 

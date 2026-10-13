@@ -476,7 +476,18 @@ describe('tools', () => {
   describe('vault', () => {
     it('renders saved data without secrets', async () => {
       bridge.setHandler('vault.read', () => ({
-        personal: [{ key: 'givenName', label: 'Nombre', value: 'Ana' }],
+        personal: [
+          { key: 'givenName', label: 'Nombre', value: 'Ana' },
+          { key: 'dniExpiry', label: 'Fecha de validez', value: '2031-05-12' },
+          {
+            key: 'drivingLicenceCategories',
+            label: 'Categorías',
+            value: JSON.stringify([
+              { category: 'B', issueDate: '2010-03-04', expiry: '2030-03-04' },
+            ]),
+          },
+          { key: 'custom.ref', label: 'Referencia', value: '2024-01-02' },
+        ],
         documents: [
           {
             id: 'doc_1',
@@ -508,9 +519,30 @@ describe('tools', () => {
       }));
       const text = textOf(await h.run('vault_read', {}));
       expect(text).toContain('givenName (Nombre): Ana');
-      expect(text).toContain('doc_1: dni.jpg');
+      expect(text).toContain('dniExpiry (Fecha de validez): 12/05/2031');
+      expect(text).toContain('{"category":"B","issueDate":"04/03/2010","expiry":"04/03/2030"}');
+      expect(text).toContain('custom.ref (Referencia): 2024-01-02');
+      // Times are in Europe/Madrid by default.
+      expect(text).toContain('doc_1: dni.jpg (image/jpeg, 01/09/2026 12:00:00)');
       expect(text).toContain('cred_1: clave_permanente "Mi Cl@ve"');
-      expect(text).toContain('valid to 2027-01-01');
+      expect(text).toContain('valid to 01/01/2027 01:00:00');
+    });
+
+    it("renders times in the user's time zone", async () => {
+      bridge.setHandler('vault.read', () => ({
+        personal: [],
+        documents: [
+          {
+            id: 'doc_1',
+            name: 'a.pdf',
+            mimeType: 'application/pdf',
+            createdAt: '2026-09-01T10:05:09Z',
+          },
+        ],
+        credentials: [],
+      }));
+      const text = textOf(await toolHarness(bridge, { timeZone: 'UTC' }).run('vault_read', {}));
+      expect(text).toContain('a.pdf (application/pdf, 01/09/2026 10:05:09)');
     });
 
     it('saves data and requires labels for custom keys', async () => {

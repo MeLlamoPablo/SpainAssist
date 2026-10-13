@@ -1,6 +1,12 @@
-import { AGENT_PERSONAL_FIELD_KEYS, PERSONAL_FIELDS, type VaultReadResult } from '@sa/shared';
+import {
+  AGENT_PERSONAL_FIELD_KEYS,
+  PERSONAL_FIELDS,
+  personalFieldDef,
+  type VaultReadResult,
+} from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
+import { resolveTimeZone } from '../prompt/system';
 import { callBridge, compact, defineSaTool, errorResult, textResult } from './common';
 
 /** Well-known keys with a short fixed list of values, e.g. "maritalStatus: single | married…". */
@@ -34,7 +40,7 @@ export const VaultSaveParams = Type.Object({
       }),
       value: Type.String({
         maxLength: 2000,
-        description: `These keys take exactly one of their values: ${PERSONAL_CHOICES}`,
+        description: `Dates as YYYY-MM-DD. These keys take exactly one of their values: ${PERSONAL_CHOICES}`,
       }),
       label: Type.Optional(
         Type.String({ maxLength: 160, description: 'Required for custom.<slug> keys' }),
@@ -44,18 +50,69 @@ export const VaultSaveParams = Type.Object({
   ),
 });
 
-export function renderVault(result: VaultReadResult): string {
+/** A saved YYYY-MM-DD date as Spanish forms write it: dd/mm/yyyy. Anything else as is. */
+export function formatVaultDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+}
+
+/** An ISO timestamp as dd/mm/yyyy hh:mm:ss (24 h) in the user's time zone. */
+export function formatVaultDateTime(value: string, timeZone: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value;
+  return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}:${get('second')}`;
+}
+
+/** A personal data value with its dates (also inside licence categories) as dd/mm/yyyy. */
+function formatPersonalValue(key: string, value: string): string {
+  const input = personalFieldDef(key)?.input;
+  if (input === 'date') return formatVaultDate(value);
+  if (input !== 'licenceCategories') return value;
+  try {
+    const rows: unknown = JSON.parse(value);
+    if (!Array.isArray(rows)) return value;
+    return JSON.stringify(
+      rows.map((row) =>
+        Object.fromEntries(
+          Object.entries(row as Record<string, unknown>).map(([k, v]) => [
+            k,
+            (k === 'issueDate' || k === 'expiry') && typeof v === 'string' ? formatVaultDate(v) : v,
+          ]),
+        ),
+      ),
+    );
+  } catch {
+    return value;
+  }
+}
+
+export function renderVault(result: VaultReadResult, timeZone = resolveTimeZone()): string {
   const lines: string[] = [];
   if (result.personal.length > 0) {
-    lines.push(`Personal data (${result.personal.length}):`);
-    for (const item of result.personal) lines.push(`- ${item.key} (${item.label}): ${item.value}`);
+    lines.push(`Personal data (${result.personal.length}; dates as dd/mm/yyyy):`);
+    for (const item of result.personal) {
+      lines.push(`- ${item.key} (${item.label}): ${formatPersonalValue(item.key, item.value)}`);
+    }
   } else {
     lines.push('Personal data: none saved.');
   }
   if (result.documents.length > 0) {
     lines.push(`Documents (${result.documents.length}):`);
     for (const doc of result.documents) {
-      lines.push(`- ${doc.id}: ${doc.name} (${doc.mimeType}, ${doc.createdAt.slice(0, 10)})`);
+      lines.push(
+        `- ${doc.id}: ${doc.name} (${doc.mimeType}, ${formatVaultDateTime(doc.createdAt, timeZone)})`,
+      );
     }
   } else {
     lines.push('Documents: none.');
@@ -68,7 +125,7 @@ export function renderVault(result: VaultReadResult): string {
       if (cred.certificate) {
         const c = cred.certificate;
         parts.push(
-          `certificate${c.holderName ? ` of ${c.holderName}` : ''}, issuer ${c.issuer}, valid to ${c.validTo.slice(0, 10)}`,
+          `certificate${c.holderName ? ` of ${c.holderName}` : ''}, issuer ${c.issuer}, valid to ${formatVaultDateTime(c.validTo, timeZone)}`,
         );
       }
       lines.push(parts.join(', '));
@@ -79,7 +136,8 @@ export function renderVault(result: VaultReadResult): string {
   return lines.join('\n');
 }
 
-export function vaultTools(bridge: BridgeTransport) {
+export function vaultTools(bridge: BridgeTransport, options: { timeZone?: string } = {}) {
+  const timeZone = resolveTimeZone(options.timeZone);
   return [
     defineSaTool({
       name: 'vault_read',
@@ -89,7 +147,7 @@ export function vaultTools(bridge: BridgeTransport) {
       parameters: VaultReadParams,
       async execute(_id, params, signal) {
         return callBridge(bridge, 'vault.read', compact({ keys: params.keys }), signal, (result) =>
-          textResult(renderVault(result), {
+          textResult(renderVault(result, timeZone), {
             personal: result.personal.length,
             documents: result.documents.length,
             credentials: result.credentials.length,
