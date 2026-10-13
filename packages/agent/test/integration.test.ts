@@ -672,13 +672,27 @@ describe('agent host over RPC (integration)', () => {
   it('BYOK and custom endpoints research with the Exa tools and the user key, not web_research', async () => {
     const exa = await createFakeSse({
       frames: [
-        JSON.stringify({
-          results: [
-            { title: 'Renovar el NIE', url: 'https://sede.gob.es/nie', text: 'Research complete' },
-          ],
+        sseEvent('message', {
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  results: [
+                    {
+                      title: 'Renovar el NIE',
+                      url: 'https://sede.gob.es/nie',
+                      text: 'Research complete',
+                    },
+                  ],
+                }),
+              },
+            ],
+          },
         }),
       ],
-      contentType: 'application/json',
     });
     bridge.setHandler('agent.exaKey', () => ({ key: 'exa-user-key' }));
     try {
@@ -705,9 +719,15 @@ describe('agent host over RPC (integration)', () => {
       });
       expect(exa.requests).toHaveLength(1);
       expect(exa.requests[0]).toMatchObject({
-        url: '/search',
+        url: '/mcp?tools=web_search_advanced_exa,web_fetch_exa',
         headers: { 'x-api-key': 'exa-user-key' },
-        body: { query: 'renovar NIE', userLocation: 'ES' },
+        body: {
+          method: 'tools/call',
+          params: {
+            name: 'web_search_advanced_exa',
+            arguments: { query: 'renovar NIE', userLocation: 'ES' },
+          },
+        },
       });
       const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
       const body = requests[0]?.body as ChatRequest;

@@ -1,7 +1,7 @@
 /**
  * Fails when the desktop app would ship an Exa API key (DECISIONS D23): BYOK and custom-endpoint
- * users bring their own, kept in their vault, so no build, environment default or service config
- * carries one.
+ * research uses Exa's keyless tier, or the user's own key kept in their vault, so no build,
+ * environment default or service config carries one.
  *
  *   corepack pnpm --filter @sa/desktop check:secrets
  *
@@ -42,11 +42,7 @@ const RULES: { rule: string; pattern: RegExp }[] = [
   },
   {
     rule: 'an Exa key in a URL',
-    pattern: /exaApiKey=|api\.exa\.ai[^"'`\s]*[?&](?:api_?key|key|token)=/gi,
-  },
-  {
-    rule: "Exa's hosted MCP server: research uses the official REST API with the user's key",
-    pattern: /mcp\.exa\.ai/gi,
+    pattern: /exaApiKey=|(?:api|mcp)\.exa\.ai[^"'`\s]*[?&](?:api_?key|key|token)=/gi,
   },
 ];
 

@@ -117,8 +117,8 @@ function isOAuth(p: ProviderConfig | undefined): p is Extract<ProviderConfig, { 
 }
 
 /**
- * BYOK and custom endpoints: no gateway key, so their web research uses the user's own Exa key
- * (D23) instead of `web_research`.
+ * BYOK and custom endpoints: no gateway key, so their web research uses Exa (keyless, or the
+ * user's own key, D23) instead of `web_research`.
  */
 function researchesWithExa(p: ProviderConfig | undefined): boolean {
   return p?.kind === 'byok' || p?.kind === 'custom';

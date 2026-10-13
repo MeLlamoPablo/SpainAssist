@@ -332,8 +332,9 @@ describe('procedure research workflow', () => {
     expect(prompt).toContain(
       'never put names, ID numbers, street addresses, contact details, birth dates',
     );
-    // Without a working key: the blocker, and where the user adds it.
-    expect(prompt).toContain("web research needs the user's own Exa API key");
+    // A broken optional key: the blocker, and where the user fixes it.
+    expect(prompt).toContain('the user replaces or removes their Exa key');
+    expect(prompt).not.toContain("spends the user's own Exa credit");
     expect(prompt).toContain('Ajustes → Proveedor de IA');
     expect(prompt).toContain(
       'do not ask the user for information or execute the procedure until the research can be completed',

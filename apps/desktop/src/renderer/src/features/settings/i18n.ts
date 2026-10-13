@@ -38,9 +38,8 @@ export const settingsDict = defineDict({
       },
       exa: {
         title: 'Búsqueda en internet',
-        body: 'Para investigar tus trámites en internet uso Exa, con tu propia clave. Puedes crearla gratis en exa.ai; cada mes trae saldo gratuito. Se guarda cifrada en este dispositivo y solo se envía a Exa.',
-        missing: 'Sin esta clave no puedo investigar tus trámites, así que tampoco puedo hacerlos.',
-        label: 'Clave de Exa',
+        body: 'Para investigar tus trámites en internet uso Exa, gratis y sin clave. Si a veces va lento o se queda sin búsquedas, añade tu propia clave: la creas gratis en exa.ai y sube el límite. Se guarda cifrada en este dispositivo y solo se envía a Exa.',
+        label: 'Clave de Exa (opcional)',
         saved: 'Guardada',
         none: 'Sin guardar',
         save: 'Guardar',
@@ -173,9 +172,8 @@ export const settingsDict = defineDict({
       },
       exa: {
         title: 'Web search',
-        body: 'To research your procedures on the web, I use Exa with your own key. You can create one for free at exa.ai; it comes with free credit every month. It’s stored encrypted on this device and only sent to Exa.',
-        missing: 'Without this key I can’t research your procedures, so I can’t do them either.',
-        label: 'Exa key',
+        body: 'To research your procedures on the web, I use Exa, free and with no key. If it gets slow or runs out of searches, add your own key: create one for free at exa.ai to raise the limit. It’s stored encrypted on this device and only sent to Exa.',
+        label: 'Exa key (optional)',
         saved: 'Saved',
         none: 'Not saved',
         save: 'Save',

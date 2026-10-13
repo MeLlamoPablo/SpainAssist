@@ -18,7 +18,7 @@ describe('findEmbeddedExaKeys', () => {
     ['a literal header', `headers: { 'x-api-key': 'sk-${FAKE_KEY}' }`],
     ['a minified literal header', `{"x-api-key":"${FAKE_KEY}"}`],
     ['a key in a URL', `fetch("https://api.exa.ai/search?apiKey=${FAKE_KEY}")`],
-    ["Exa's hosted MCP", 'const url = "https://mcp.exa.ai/mcp";'],
+    ["a key in the MCP server's URL", `fetch("https://mcp.exa.ai/mcp?tools=x&key=${FAKE_KEY}")`],
     ['a UUID next to Exa', `const exa = { url: "https://api.exa.ai", k: "${FAKE_KEY}" };`],
   ])('catches %s', (_name, text) => {
     expect(rules(text).length).toBeGreaterThan(0);
@@ -30,6 +30,7 @@ describe('findEmbeddedExaKeys', () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: source text with a template literal
     ['a template header', 'headers: { "x-api-key": `${apiKey}` }'],
     ['the official endpoint', "export const EXA_API_URL = 'https://api.exa.ai';"],
+    ['the keyless MCP endpoint', "const url = 'https://mcp.exa.ai/mcp?tools=web_fetch_exa';"],
     ['an unrelated UUID', `const run = "${FAKE_KEY}";`],
   ])('allows %s', (_name, text) => {
     expect(rules(text)).toEqual([]);

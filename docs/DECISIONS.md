@@ -103,8 +103,8 @@ There is no reliable keyless web search in 2026 (DuckDuckGo/Mojeek/SearXNG all c
 > `exa` search tool. Deep research is D13's voucher path and, for ChatGPT plans, D21; other
 > providers get the "research blocked" path. Refinement uses `fetch_url`, `boe_search` and the browser.
 >
-> 2026-10-13: Exa is back for BYOK and custom endpoints only, on its REST API with the user's own
-> key (D23). There is still no shared or development key.
+> 2026-10-13: Exa is back for BYOK and custom endpoints only (D23), keyless on its hosted MCP
+> server with an optional user key (D24). There is still no shared or development key.
 
 Simplify research to one provider.
 - **Exa only.** The agent host registers Exa's hosted MCP server (`https://mcp.exa.ai/mcp`,
@@ -765,6 +765,9 @@ the Cl@ve password; D20's "typed only on the desktop" and its refused-PIN protoc
 
 ## D23 — Web research for BYOK and custom endpoints: the user's own Exa key (2026-10-13)
 
+> **Partly superseded by D24:** research runs keyless on Exa's hosted MCP server; the key is
+> optional.
+
 BYOK and custom-endpoint users had no web research (no gateway key, D8), so every procedure
 stopped at "research blocked": the app was unusable for them. They now bring an Exa key, as they
 bring their model's key.
@@ -800,3 +803,22 @@ bring their model's key.
   anonymized ones, as for `web_research`). Exa bills the user: $7 per 1,000 searches, $1 per
   1,000 pages, with $10 of free credit a month. Exa offers zero data retention only on
   Enterprise. A free account is one more setup step for non-technical users.
+
+## D24 — Exa research is keyless, on Exa's hosted MCP server (2026-10-13)
+
+Supersedes D23's transport and key requirement; its tools, prompt, official-domain bias and
+"no key ships" check stand. Requiring an Exa account was one setup step too many for BYOK and
+custom-endpoint users, and Exa's hosted MCP server is free without a key.
+
+- **Transport.** `exa_search` and `exa_fetch` call `https://mcp.exa.ai/mcp?tools=web_search_advanced_exa,web_fetch_exa`
+  with plain JSON-RPC `tools/call` over HTTP: no MCP client and no session. The advanced search
+  tool keeps `includeDomains` (the official-domain list) and `userLocation: "ES"`. Exa's MCP
+  fetch has no `maxAgeHours`, so `exa_fetch` loses `fresh`, and the answers carry no cost.
+- **The key is optional.** Saved in Settings → AI provider as before, it raises Exa's limits and
+  is sent only in the `x-api-key` header (Exa also accepts it in the URL; we never put it there).
+  A rejected key or an empty account is a research blocker telling the user to replace or
+  remove it; on the free tier, a rate limit tells the agent to slow down and suggest a key.
+- **Secrets check.** The rule against Exa's MCP host is gone; a key in an `mcp.exa.ai` URL is
+  still caught.
+- **Trade-offs.** The free tier is shared per IP and rate-limited, and Exa can change or close it
+  at any time; the optional key is the fallback. Queries still leave the device as written.

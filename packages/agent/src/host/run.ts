@@ -75,7 +75,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         timeZone: config.timeZone,
       });
   // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
-  // OpenAI's hosted web search, BYOK and custom endpoints with the user's own Exa key.
+  // OpenAI's hosted web search, BYOK and custom endpoints on Exa's keyless tier.
   const keyServerUrl = config.research.keyServerUrl;
   const research = await researchBackend(
     config,

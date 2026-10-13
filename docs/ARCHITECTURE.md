@@ -159,12 +159,13 @@ open until a terminal event arrives: progress updates reach the activity log, an
 receives only the final result, without polling turns. Abort closes the stream; a disconnect or
 30-minute timeout reports the known run ID without automatically creating a replacement run.
 BYOK and custom endpoints have no `web_research`: their agents get `exa_search` and `exa_fetch`
-instead, on Exa's official REST API with the user's own Exa key (D23). Searches default to
-Spanish administrations' domains (`userLocation: "ES"`); the agent can widen them. The key is
-in the vault (set in Settings → AI provider; the renderer only sees whether it is saved), and the
-host reads it over the bridge (`agent.exaKey`) on every call and sends it only to `api.exa.ai`.
-Without a key, or with a rejected one, the tools return a research blocker that names where to
-add it. The prompt describes only the research tools the agent has.
+instead, on Exa's hosted MCP server (`mcp.exa.ai`, JSON-RPC `tools/call` with no session),
+which is free and keyless (D23). Searches default to Spanish administrations' domains
+(`userLocation: "ES"`); the agent can widen them. An optional key raises Exa's limits: it is in
+the vault (set in Settings → AI provider; the renderer only sees whether it is saved), and the
+host reads it over the bridge (`agent.exaKey`) on every call and sends it only to Exa, in the
+`x-api-key` header. A rejected key or an empty account is a research blocker that names where to
+fix it; a rate limit on the free tier suggests adding a key. The prompt describes only the research tools the agent has.
 After research completes, the agent refines and verifies the findings with `fetch_url`,
 `boe_search`, read-only browser navigation and `feedback_search` (community learnings).
 It resolves research uncertainties and formulates the plan before asking for missing user
@@ -559,8 +560,8 @@ Without a user key these are off: scan frame screening (frames go to the extract
 phone-call transcription (`phoneCall.transcriptionAvailable` is false), map lookups (no pins),
 and sharing and rating learnings (the agent gets neither `feedback_submit` nor
 `feedback_vote`; it can still search). Web research is separate: voucher users pay for it from
-the voucher, ChatGPT plans from their plan usage (D21), BYOK and custom endpoints with their own
-Exa key (D23).
+the voucher, ChatGPT plans from their plan usage (D21), BYOK and custom endpoints on Exa's free
+keyless tier or their own Exa key (D23).
 
 ### Feature flags
 Main reads the flags once per launch from Unleash's frontend API (`remote/flags.ts`, with

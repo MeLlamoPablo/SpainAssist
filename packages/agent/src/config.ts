@@ -53,8 +53,8 @@ export const AgentHostConfigSchema = z.object({
        */
       keyServerUrl: z.string().url().optional(),
       /**
-       * BYOK and custom endpoints: web research with the user's own Exa key (exa_search,
-       * exa_fetch, D23) instead of `web_research`. The key comes from the app at call time
+       * BYOK and custom endpoints: web research on Exa's keyless tier (exa_search, exa_fetch,
+       * D23) instead of `web_research`. The user's optional key comes from the app at call time
        * (bridge `agent.exaKey`), never through this config.
        */
       exa: z.boolean().optional(),

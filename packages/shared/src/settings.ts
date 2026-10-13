@@ -99,8 +99,8 @@ export const ProviderStatus = z.object({
   /** ISO 8601, when the voucher key expires (voucher only, when known). */
   expiresAt: z.string().optional(),
   /**
-   * BYOK and custom endpoints only: whether the user's Exa API key, which their web research
-   * needs, is saved. The key itself never leaves the main process except to Exa.
+   * BYOK and custom endpoints only: whether the user's optional Exa API key, which raises their
+   * web research's limits, is saved. The key itself never leaves the main process except to Exa.
    */
   exaKey: z.boolean().optional(),
   error: z.string().optional(),

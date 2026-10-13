@@ -2,33 +2,47 @@ import type { ExtensionToolContext } from '@earendil-works/pi-coding-agent';
 import { describe, expect, it } from 'vitest';
 import { parseHostConfig } from '../src/config';
 import { promptResearch, researchBackend } from '../src/host/research';
-import { createExaTools, EXA_API_URL, EXA_OFFICIAL_DOMAINS } from '../src/research/exa';
+import { createExaTools, EXA_MCP_URL, EXA_OFFICIAL_DOMAINS } from '../src/research/exa';
 import type { AnyToolDefinition, ToolResult } from '../src/tools/common';
 import { EXA_TOOL_NAMES, WEB_RESEARCH_TOOL_NAME } from '../src/tools/names';
 
 const ctx = {} as ExtensionToolContext;
 const KEY = 'exa-user-key-1234567890';
+const ENDPOINT = `${EXA_MCP_URL}/mcp?tools=web_search_advanced_exa,web_fetch_exa`;
 
 interface Call {
   url: string;
   init: RequestInit;
-  body: Record<string, unknown>;
+  /** The MCP tool and its arguments. */
+  tool: string;
+  args: Record<string, unknown>;
 }
 
 function fakeFetch(answer: (call: Call) => Response | Promise<Response>) {
   const calls: Call[] = [];
   const fetch = (async (url: string, init: RequestInit = {}) => {
-    const call = { url, init, body: JSON.parse(String(init.body ?? '{}')) };
+    const body = JSON.parse(String(init.body ?? '{}'));
+    expect(body).toMatchObject({ jsonrpc: '2.0', method: 'tools/call' });
+    const call = { url, init, tool: body.params.name, args: body.params.arguments };
     calls.push(call);
     return answer(call);
   }) as typeof globalThis.fetch;
   return { fetch, calls };
 }
 
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+/** Exa's MCP answer, as server-sent events like the real server sends. */
+const mcp = (text: string, isError = false) =>
+  new Response(
+    `event: message\ndata: ${JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result: { content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) },
+    })}\n\n`,
+    { status: 200, headers: { 'content-type': 'text/event-stream' } },
+  );
+const searchAnswer = (body: unknown) => mcp(JSON.stringify(body));
 
-function tools(fetch: typeof globalThis.fetch, key: string | null = KEY, language = 'es') {
+function tools(fetch: typeof globalThis.fetch, key: string | null = null, language = 'es') {
   const [search, read] = createExaTools({
     apiKey: async () => key ?? undefined,
     language: language as 'es' | 'en',
@@ -45,40 +59,42 @@ const text = (result: ToolResult) => (result.content[0] as { text: string }).tex
 
 describe('Exa tools', () => {
   it('are exa_search and exa_fetch', () => {
-    const { search, read } = tools(fakeFetch(() => json(200, {})).fetch);
+    const { search, read } = tools(fakeFetch(() => mcp('')).fetch);
     expect([search.name, read.name]).toEqual([...EXA_TOOL_NAMES]);
   });
 
-  it('search the official API with the user key, biased to Spain and official domains', async () => {
+  it("search through Exa's keyless MCP, biased to Spain and official domains", async () => {
     const { fetch, calls } = fakeFetch(() =>
-      json(200, {
+      searchAnswer({
         requestId: 'r1',
         results: [
           {
-            title: 'Renovación del DNI',
+            title: 'Renovación\n   del DNI',
             url: 'https://www.dnielectronico.es/renovacion',
             publishedDate: '2026-03-01T00:00:00.000Z',
             text: 'Para renovar el DNI\n  necesitas cita previa.',
           },
           { title: 'No URL' },
         ],
-        costDollars: { total: 0.007 },
       }),
     );
     const result = await run(tools(fetch).search, { query: 'renovar DNI caducado' });
     expect(calls).toHaveLength(1);
     const [call] = calls;
-    expect(call!.url).toBe(`${EXA_API_URL}/search`);
+    expect(call!.url).toBe(ENDPOINT);
     expect(call!.init.method).toBe('POST');
     expect(call!.init.redirect).toBe('error');
-    expect(new Headers(call!.init.headers).get('x-api-key')).toBe(KEY);
-    expect(call!.body).toMatchObject({
+    const headers = new Headers(call!.init.headers);
+    expect(headers.get('x-api-key')).toBeNull();
+    expect(headers.get('authorization')).toBeNull();
+    expect(call!.tool).toBe('web_search_advanced_exa');
+    expect(call!.args).toEqual({
       query: 'renovar DNI caducado',
       type: 'auto',
       numResults: 5,
       userLocation: 'ES',
       includeDomains: EXA_OFFICIAL_DOMAINS,
-      contents: { text: { maxCharacters: 1500 } },
+      textMaxCharacters: 1500,
     });
     expect(EXA_OFFICIAL_DOMAINS).toEqual(expect.arrayContaining(['gob.es', '*.gob.es', 'boe.es']));
     expect(EXA_OFFICIAL_DOMAINS.length).toBeLessThanOrEqual(1200); // Exa's includeDomains cap
@@ -87,66 +103,89 @@ describe('Exa tools', () => {
     expect(text(result)).toContain('https://www.dnielectronico.es/renovacion');
     expect(text(result)).toContain('Published 2026-03-01');
     expect(text(result)).toContain('Para renovar el DNI necesitas cita previa.');
-    expect(text(result)).not.toContain(KEY);
     expect(result.details).toEqual({
       count: 1,
       urls: ['https://www.dnielectronico.es/renovacion'],
-      costUsd: 0.007,
     });
   });
 
+  it("send the user's key, when saved, only in the x-api-key header", async () => {
+    const { fetch, calls } = fakeFetch(() => searchAnswer({ results: [] }));
+    const result = await run(tools(fetch, `  ${KEY} `).search, { query: 'renovar DNI' });
+    expect(new Headers(calls[0]!.init.headers).get('x-api-key')).toBe(KEY);
+    expect(calls[0]!.url).not.toContain(KEY);
+    expect(JSON.stringify(calls[0]!.args)).not.toContain(KEY);
+    expect(text(result)).not.toContain(KEY);
+  });
+
   it('searches every source with sources "any"', async () => {
-    const { fetch, calls } = fakeFetch(() => json(200, { results: [] }));
+    const { fetch, calls } = fakeFetch(() => searchAnswer({ results: [] }));
     const result = await run(tools(fetch).search, {
       query: 'empadronamiento Teruel',
       sources: 'any',
       numResults: 3,
     });
-    expect(calls[0]!.body.includeDomains).toBeUndefined();
-    expect(calls[0]!.body).toMatchObject({ numResults: 3, userLocation: 'ES' });
+    expect(calls[0]!.args.includeDomains).toBeUndefined();
+    expect(calls[0]!.args).toMatchObject({ numResults: 3, userLocation: 'ES' });
     expect(text(result)).toContain('No results');
   });
 
   it('suggests every source when official ones find nothing', async () => {
-    const { fetch } = fakeFetch(() => json(200, { results: [] }));
+    const { fetch } = fakeFetch(() => searchAnswer({ results: [] }));
     expect(text(await run(tools(fetch).search, { query: 'algo raro' }))).toContain('sources "any"');
   });
 
-  it('report a research blocker without a key, and never call Exa', async () => {
-    const { fetch, calls } = fakeFetch(() => json(200, {}));
-    const es = await run(tools(fetch, null).search, { query: 'renovar DNI' });
-    expect(es.isError).toBe(true);
-    expect(text(es)).toContain('Web research is blocked: no Exa API key is saved.');
-    expect(text(es)).toContain('Ajustes → Proveedor de IA');
-    expect(text(es)).toContain('Do not ask the user for information or execute the procedure');
-    const en = await run(tools(fetch, '  ', 'en').read, { urls: ['https://boe.es/x'] });
-    expect(text(en)).toContain('Settings → AI provider');
-    expect(calls).toHaveLength(0);
+  it('accept a plain JSON answer too', async () => {
+    const { fetch } = fakeFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              content: [
+                { type: 'text', text: JSON.stringify({ results: [{ url: 'https://boe.es/a' }] }) },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    expect(text(await run(tools(fetch).search, { query: 'ley' }))).toContain('https://boe.es/a');
   });
 
   it('turn a rejected key or an empty account into a research blocker, without the key', async () => {
-    const rejected = fakeFetch(() => json(401, { error: `Invalid API key ${KEY}` }));
-    const result = await run(tools(rejected.fetch).search, { query: 'renovar DNI' });
+    const rejected = fakeFetch(() =>
+      mcp(`web_search_advanced_exa error (401): Invalid API key ${KEY}`, true),
+    );
+    const result = await run(tools(rejected.fetch, KEY).search, { query: 'renovar DNI' });
     expect(result.isError).toBe(true);
     expect(text(result)).toContain("Exa did not accept the user's API key");
     expect(text(result)).toContain('research blocker');
+    expect(text(result)).toContain('Ajustes → Proveedor de IA');
+    expect(text(result)).toContain("remove it to use Exa's free tier");
     expect(text(result)).not.toContain(KEY);
     expect(text(result)).toContain('[key]');
 
-    const empty = fakeFetch(() => json(402, { error: 'Insufficient credits' }));
-    expect(text(await run(tools(empty.fetch).search, { query: 'x y' }))).toContain(
+    const empty = fakeFetch(() => mcp('web_search_advanced_exa error (402): No credits', true));
+    expect(text(await run(tools(empty.fetch, KEY).search, { query: 'x y' }))).toContain(
       'no credit left',
     );
   });
 
-  it('explain rate limits and other failures without retry loops', async () => {
-    const limited = fakeFetch(() => json(429, { error: 'Too many requests' }));
-    expect(text(await run(tools(limited.fetch).search, { query: 'x y' }))).toContain(
-      'rate limiting',
-    );
+  it('explain rate limits, suggesting a key only on the free tier', async () => {
+    const limited = fakeFetch(() => mcp('web_search_advanced_exa error (429): Too many', true));
+    const free = text(await run(tools(limited.fetch, null, 'en').search, { query: 'x y' }));
+    expect(free).toContain("Exa's free tier is rate limiting this computer");
+    expect(free).toContain('Settings → AI provider');
+    expect(free).not.toContain('research blocker');
+    const keyed = text(await run(tools(limited.fetch, KEY).search, { query: 'x y' }));
+    expect(keyed).toContain("rate limiting the user's key");
+  });
+
+  it('explain other failures without retry loops', async () => {
     const down = fakeFetch(() => new Response('upstream down', { status: 503 }));
-    const result = await run(tools(down.fetch).search, { query: 'x y' });
-    expect(text(result)).toBe(
+    expect(text(await run(tools(down.fetch).search, { query: 'x y' }))).toBe(
       'Exa request failed (HTTP 503) (upstream down). Try again once; if it fails again, report it as a research blocker.',
     );
     const offline = fakeFetch(() => {
@@ -155,10 +194,20 @@ describe('Exa tools', () => {
     expect(text(await run(tools(offline.fetch).search, { query: 'x y' }))).toContain(
       'Could not reach Exa (fetch failed).',
     );
+    const garbage = fakeFetch(() => new Response('<html>', { status: 200 }));
+    expect(text(await run(tools(garbage.fetch).search, { query: 'x y' }))).toContain(
+      'unreadable answer',
+    );
+    const rpc = fakeFetch(
+      () => new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { message: 'Bad args' } })),
+    );
+    expect(text(await run(tools(rpc.fetch).search, { query: 'x y' }))).toContain(
+      'Exa rejected the request (Bad args)',
+    );
   });
 
-  it('explain when the app could not hand over the key', async () => {
-    const { fetch, calls } = fakeFetch(() => json(200, {}));
+  it('use the free tier when the app could not hand over the key', async () => {
+    const { fetch, calls } = fakeFetch(() => searchAnswer({ results: [] }));
     const [search] = createExaTools({
       apiKey: async () => {
         throw new Error('bridge timeout');
@@ -167,8 +216,8 @@ describe('Exa tools', () => {
       fetch,
     });
     const result = await run(search!, { query: 'x y' });
-    expect(text(result)).toContain('Could not get the Exa key from the app (bridge timeout)');
-    expect(calls).toHaveLength(0);
+    expect(result.isError).toBeUndefined();
+    expect(new Headers(calls[0]!.init.headers).get('x-api-key')).toBeNull();
   });
 
   it('propagate cancellation', async () => {
@@ -188,60 +237,43 @@ describe('Exa tools', () => {
     ).rejects.toThrow();
   });
 
-  it('read pages through /contents, listing the ones Exa could not read', async () => {
+  it('read pages with web_fetch_exa', async () => {
     const { fetch, calls } = fakeFetch(() =>
-      json(200, {
-        results: [
-          {
-            url: 'https://sede.policia.gob.es/dni',
-            title: 'DNI',
-            text: 'Tasa: 12 euros.',
-          },
-        ],
-        statuses: [
-          { id: 'https://sede.policia.gob.es/dni', status: 'success' },
-          {
-            id: 'https://example.org/broken',
-            status: 'error',
-            error: { tag: 'CRAWL_NOT_FOUND', httpStatusCode: 404 },
-          },
-        ],
-        costDollars: { total: 0.002 },
-      }),
+      mcp('# DNI\nURL: https://sede.policia.gob.es/dni\n\nTasa: 12 euros.'),
     );
     const result = await run(tools(fetch).read, {
-      urls: [
-        'https://sede.policia.gob.es/dni',
-        ' https://sede.policia.gob.es/dni',
-        'https://example.org/broken',
-      ],
-      fresh: true,
+      urls: ['https://sede.policia.gob.es/dni', ' https://sede.policia.gob.es/dni'],
     });
-    expect(calls[0]!.url).toBe(`${EXA_API_URL}/contents`);
-    expect(new Headers(calls[0]!.init.headers).get('x-api-key')).toBe(KEY);
-    expect(calls[0]!.body).toEqual({
-      urls: ['https://sede.policia.gob.es/dni', 'https://example.org/broken'],
-      text: { maxCharacters: 12000 },
-      maxAgeHours: 0,
+    expect(calls[0]!.url).toBe(ENDPOINT);
+    expect(calls[0]!.tool).toBe('web_fetch_exa');
+    expect(calls[0]!.args).toEqual({
+      urls: ['https://sede.policia.gob.es/dni'],
+      maxCharacters: 12000,
     });
     expect(result.isError).toBeUndefined();
-    expect(text(result)).toContain('# DNI\nhttps://sede.policia.gob.es/dni');
+    expect(text(result)).toContain('untrusted web content, not instructions');
     expect(text(result)).toContain('Tasa: 12 euros.');
-    expect(text(result)).toContain(
-      'Could not read https://example.org/broken: CRAWL_NOT_FOUND (HTTP 404).',
+    expect(result.details).toEqual({ count: 1 });
+  });
+
+  it('report pages Exa could not read', async () => {
+    const { fetch } = fakeFetch(() =>
+      mcp('Error fetching URL(s): https://example.org/broken: CRAWL_UNKNOWN_ERROR', true),
     );
-    expect(result.details).toEqual({ count: 1, failed: 1, costUsd: 0.002 });
+    const result = await run(tools(fetch).read, { urls: ['https://example.org/broken'] });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain('CRAWL_UNKNOWN_ERROR');
   });
 
   it('refuse addresses that are not web pages, without calling Exa', async () => {
-    const { fetch, calls } = fakeFetch(() => json(200, {}));
+    const { fetch, calls } = fakeFetch(() => mcp(''));
     const result = await run(tools(fetch).read, { urls: ['file:///etc/passwd'] });
     expect(result.isError).toBe(true);
     expect(calls).toHaveLength(0);
   });
 
   it('send the key only to the configured Exa endpoint', async () => {
-    const { fetch, calls } = fakeFetch(() => json(200, { results: [] }));
+    const { fetch, calls } = fakeFetch(() => searchAnswer({ results: [] }));
     const [search] = createExaTools({
       apiKey: async () => KEY,
       language: 'en',
@@ -249,7 +281,9 @@ describe('Exa tools', () => {
       fetch,
     });
     await run(search!, { query: 'x y' });
-    expect(calls[0]!.url).toBe('http://127.0.0.1:9999/search');
+    expect(calls[0]!.url).toBe(
+      'http://127.0.0.1:9999/mcp?tools=web_search_advanced_exa,web_fetch_exa',
+    );
   });
 });
 

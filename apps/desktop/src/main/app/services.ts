@@ -224,7 +224,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         research: {
           // Voucher users research through the key server (paid from the voucher).
           keyServerUrl: env.keyServerUrl,
-          // BYOK and custom endpoints research with the user's own Exa key (D23).
+          // BYOK and custom endpoints research with Exa, keyless or with the user's key (D23).
           ...(providers.researchesWithExa() ? { exa: true } : {}),
         },
         // Everyone reads community learnings. Sharing and rating them needs a user key (one vote

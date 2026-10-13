@@ -537,7 +537,8 @@ export function ByokForm() {
 const EXA_KEYS_URL = 'https://dashboard.exa.ai/api-keys';
 
 /**
- * BYOK and custom endpoints: the user's own Exa key, which their web research needs (D23).
+ * BYOK and custom endpoints: the user's optional Exa key, which raises the limits of Exa's free
+ * keyless tier that their web research uses (D23).
  * Main keeps the key; the renderer only learns whether one is saved (`ProviderStatus.exaKey`).
  */
 export function ExaKeyForm() {
@@ -602,12 +603,6 @@ export function ExaKeyForm() {
             if (apiKey.trim()) void submit(apiKey.trim());
           }}
         >
-          {saved ? null : (
-            <p className="flex items-center gap-2 rounded-lg bg-st-attention-bg px-3 py-2 text-[13px] font-medium text-st-attention-fg ring-1 ring-st-attention-line ring-inset">
-              <CircleAlert size={15} className="shrink-0" aria-hidden />
-              {tx.missing}
-            </p>
-          )}
           <Field label={tx.label} error={error}>
             {({ id, describedBy, invalid }) => (
               <PasswordInput
