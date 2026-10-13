@@ -314,6 +314,29 @@ describe('agent credentials over the bridge', () => {
     expect(app.logLines.join('\n')).not.toContain('sk-ant-secret-key');
   });
 
+  it('hands the Exa key to procedure agents of BYOK and custom endpoints only', async () => {
+    const { app, token } = await setup(() => jsonResponse(404, {}));
+    await app.invoke('providers.setByok', {
+      provider: 'anthropic',
+      apiKey: 'sk-ant-secret-key',
+      model: 'claude-x',
+    });
+    expect((await app.rpc('agent.exaKey', {}, token)).body.result).toEqual({ key: null });
+    await app.invoke('providers.setExaKey', 'exa-secret-key-123');
+    expect((await app.rpc('agent.exaKey', {}, token)).body.result).toEqual({
+      key: 'exa-secret-key-123',
+    });
+    // The assistant never researches: it can't read the key.
+    const assistant = await app.say('Hola');
+    expect((await app.rpc('agent.exaKey', {}, assistant.token)).body.error?.code).toBe(
+      'policy_denied',
+    );
+    expect(app.logLines.join('\n')).not.toContain('exa-secret-key-123');
+    // A voucher has no use for it: switching away deletes it.
+    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
+    expect((await app.rpc('agent.exaKey', {}, token)).body.result).toEqual({ key: null });
+  });
+
   it('gives custom endpoints without a key a placeholder', async () => {
     const { app, token } = await setup(() => jsonResponse(404, {}));
     await app.invoke('providers.setCustom', {

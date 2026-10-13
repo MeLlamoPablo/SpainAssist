@@ -266,6 +266,12 @@ export const BridgeParams = {
    */
   'agent.refreshCredential': z.object({ providerId: z.string() }),
   /**
+   * The user's own Exa API key, for the web research of BYOK and custom endpoints (D23). Null
+   * when none is saved or the provider is not BYOK or custom. Read on every Exa call (the user
+   * may add it while the agent runs) and sent only to Exa; never persisted by the host.
+   */
+  'agent.exaKey': z.object({}),
+  /**
    * The voucher key's spend and cap, from LiteLLM's response headers on each LLM call (see
    * VoucherCreditResponse). It is the spend before that call: for one cap, the app keeps the
    * highest spend it has seen.
@@ -345,6 +351,7 @@ export interface BridgeResults {
   'feedback.vote': { counted: boolean; reason?: string };
   'agent.credential': { credential: Record<string, unknown> | null };
   'agent.refreshCredential': { credential: Record<string, unknown> | null };
+  'agent.exaKey': { key: string | null };
   'agent.voucherSpend': Record<string, never>;
 }
 

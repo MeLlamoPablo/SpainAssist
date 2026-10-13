@@ -8,7 +8,7 @@ export const REPORT_PREFIX = '[Report from procedure';
  * It talks to the user and delegates every procedure to its own agent. Its context is compacted
  * forever, so it must stay lean: it never researches or browses itself.
  */
-export function buildAssistantPrompt(options: Omit<SystemPromptOptions, 'webResearch'>): string {
+export function buildAssistantPrompt(options: Omit<SystemPromptOptions, 'research'>): string {
   const today = formatToday(options.now ?? new Date(), options.timeZone);
   const language = LANGUAGE_NAMES[options.language];
   return `You are Spain Assist. You help people in Spain understand and complete their procedures ("trámites") with Spanish public administrations: state, regional and local. You are the one ongoing conversation with the user: it never ends, older parts get summarized.

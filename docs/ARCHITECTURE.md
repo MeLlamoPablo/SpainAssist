@@ -31,7 +31,7 @@
 │                                                   │ as Node), @sa/agent:        │──────► LLM provider (vouchers: LiteLLM)
 │                                                   │ • the assistant: 1, owns the│   │
 │                                                   │   chat, delegates           │   │
-│                                                   │ • one per active procedure: │──────► key server (research) / fetch
+│                                                   │ • one per active procedure: │──────► key server or Exa (research) / fetch
 │                                                   │   research, browser, card   │──────► feedback server (search)
 │                                                   └─────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -146,11 +146,17 @@ data (age, municipality, document dates…) and a `mode` it chooses (`fast`, `ba
 `deep`). Voucher users run it on Parallel's Task API through our key server, paid from the
 voucher (D13; `lite`, `core`, `pro`). ChatGPT plans run one Responses request with OpenAI's
 hosted `web_search` tool on the plan's usage (D21; `gpt-6-luna`, `gpt-6.1-sol`,
-`gpt-6-astra`, all at high effort). Other providers (API keys, custom endpoints) have no web research. One request
-stays
+`gpt-6-astra`, all at high effort). One request stays
 open until a terminal event arrives: progress updates reach the activity log, and the model
 receives only the final result, without polling turns. Abort closes the stream; a disconnect or
 30-minute timeout reports the known run ID without automatically creating a replacement run.
+BYOK and custom endpoints have no `web_research`: their agents get `exa_search` and `exa_fetch`
+instead, on Exa's official REST API with the user's own Exa key (D23). Searches default to
+Spanish administrations' domains (`userLocation: "ES"`); the agent can widen them. The key is
+in the vault (set in Settings → AI provider; the renderer only sees whether it is saved), and the
+host reads it over the bridge (`agent.exaKey`) on every call and sends it only to `api.exa.ai`.
+Without a key, or with a rejected one, the tools return a research blocker that names where to
+add it. The prompt describes only the research tools the agent has.
 After research completes, the agent refines and verifies the findings with `fetch_url`,
 `boe_search`, read-only browser navigation and `feedback_search` (community learnings).
 It resolves research uncertainties and formulates the plan before asking for missing user
@@ -534,7 +540,8 @@ Without a user key these are off: scan frame screening (frames go to the extract
 phone-call transcription (`phoneCall.transcriptionAvailable` is false), map lookups (no pins),
 and sharing and rating learnings (the agent gets neither `feedback_submit` nor
 `feedback_vote`; it can still search). Web research is separate: voucher users pay for it from
-the voucher, ChatGPT plans from their plan usage (D21).
+the voucher, ChatGPT plans from their plan usage (D21), BYOK and custom endpoints with their own
+Exa key (D23).
 
 ### Feature flags
 Main reads the flags once per launch from Unleash's frontend API (`remote/flags.ts`, with

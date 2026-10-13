@@ -8,7 +8,8 @@
  *    extensions/skills/context files, PI_OFFLINE / PI_TELEMETRY=0, and a CredentialStore that
  *    asks the app for credentials over the host bridge (nothing secret on disk or in env).
  *  - Tools (inline pi extension): bridge-backed (procedure, prompts, vault, browser, feedback) or
- *    local (fetch_url, BOE API). Web research: our key server for voucher users (Parallel).
+ *    local (fetch_url, BOE API). Web research: our key server for voucher users (Parallel),
+ *    OpenAI's web search on ChatGPT plans, the user's own Exa key for BYOK and custom endpoints.
  *  - `buildAgentLaunch()` / `PiRpcClient`: how the desktop main process runs and drives a host.
  *  - Provider helpers for main: Sign in with ChatGPT (own OAuth flow), refresh, model lists,
  *    BYOK catalogue, vouchers (LiteLLM gateway credit and models).

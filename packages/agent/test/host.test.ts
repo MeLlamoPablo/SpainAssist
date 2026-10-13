@@ -159,7 +159,7 @@ describe('community learnings prompt', () => {
   it('mentions the feedback tools only when they are available', () => {
     const on = buildSystemPrompt({
       language: 'en',
-      webResearch: true,
+      research: 'web_research',
       feedback: { submit: true, vote: true },
     });
     expect(on).toContain('Consult feedback_search');
@@ -167,20 +167,20 @@ describe('community learnings prompt', () => {
     expect(on).toContain('feedback_vote');
     const voteOnly = buildSystemPrompt({
       language: 'en',
-      webResearch: true,
+      research: 'web_research',
       feedback: { submit: false, vote: true },
     });
     expect(voteOnly).toContain('call feedback_vote');
     expect(voteOnly).not.toContain('feedback_submit');
     const readOnly = buildSystemPrompt({
       language: 'en',
-      webResearch: true,
+      research: 'web_research',
       feedback: { submit: false, vote: false },
     });
     expect(readOnly).toContain('Consult feedback_search');
     expect(readOnly).not.toContain('feedback_submit');
     expect(readOnly).not.toContain('feedback_vote');
-    const off = buildSystemPrompt({ language: 'en', webResearch: true });
+    const off = buildSystemPrompt({ language: 'en', research: 'web_research' });
     expect(off).not.toContain('feedback_search');
     expect(off).not.toContain('feedback_submit');
   });
@@ -188,12 +188,12 @@ describe('community learnings prompt', () => {
 
 describe('DNIe prompt', () => {
   it('offers the DNIe through the phone only with its feature flag', () => {
-    const on = buildSystemPrompt({ language: 'en', webResearch: true, dniePhone: true });
+    const on = buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: true });
     expect(on).toContain('DNIe logs in and signs through the phone.');
     expect(on).toContain('request_credential with credential dnie');
     for (const off of [
-      buildSystemPrompt({ language: 'en', webResearch: true }),
-      buildSystemPrompt({ language: 'en', webResearch: true, dniePhone: false }),
+      buildSystemPrompt({ language: 'en', research: 'web_research' }),
+      buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: false }),
     ]) {
       expect(off).not.toContain('DNIe');
       expect(off).toContain('Cl@ve Permanente and Cl@ve Móvil are different capabilities');
@@ -202,7 +202,7 @@ describe('DNIe prompt', () => {
   });
 
   it('tells TLS client-certificate logins apart from AutoFirma logins', () => {
-    const prompt = buildSystemPrompt({ language: 'en', webResearch: true, dniePhone: true });
+    const prompt = buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: true });
     expect(prompt).toContain('Signatures and AutoFirma logins are the app');
     expect(prompt).toContain('browser asks for a client certificate (TLS)');
   });
@@ -210,7 +210,7 @@ describe('DNIe prompt', () => {
 
 describe('identity prompt', () => {
   it('never acts as a third party and names whose identity confirm_action sends', () => {
-    const procedure = buildSystemPrompt({ language: 'es', webResearch: true });
+    const procedure = buildSystemPrompt({ language: 'es', research: 'web_research' });
     expect(procedure).toContain('Act only as the user.');
     expect(procedure).toContain(
       "Never type, register, log in or sign with a third party's identity",
@@ -224,7 +224,7 @@ describe('identity prompt', () => {
 
 describe('saved data and physical-place prompts', () => {
   it('reuses known locations and checks incomplete filtered reads on resumed runs', () => {
-    const procedure = buildSystemPrompt({ language: 'es', webResearch: true });
+    const procedure = buildSystemPrompt({ language: 'es', research: 'web_research' });
     expect(procedure).toContain('including on resumed runs');
     expect(procedure).toContain('addressProvince and addressMunicipality');
     expect(procedure).toContain('call vault_read without keys');
@@ -244,7 +244,7 @@ describe('saved data and physical-place prompts', () => {
   });
 
   it('lets the app locate public places while preserving ordinary select choices', () => {
-    const procedure = buildSystemPrompt({ language: 'en', webResearch: true });
+    const procedure = buildSystemPrompt({ language: 'en', research: 'web_research' });
     expect(procedure).toContain('type: "map-options"');
     expect(procedure).toContain('a provincial list may include other towns');
     expect(procedure).toContain('its street address with number and municipality (address)');
@@ -282,7 +282,7 @@ describe('session file', () => {
 
 describe('procedure research workflow', () => {
   it('requires web research, then refinement, then a clear plan before questions or execution', () => {
-    const prompt = buildSystemPrompt({ language: 'es', webResearch: true });
+    const prompt = buildSystemPrompt({ language: 'es', research: 'web_research' });
     expect(prompt).toContain('call web_research once');
     expect(prompt).toContain('refine it with fetch_url, boe_search');
     expect(prompt).toContain('call it once, without polling or duplicate runs');
@@ -308,6 +308,39 @@ describe('procedure research workflow', () => {
     expect(prompt).toContain('Web research is not available');
     expect(prompt).toContain('Do not ask the user for information or execute the procedure');
     expect(prompt).not.toContain('call web_research');
+    expect(prompt).not.toContain('exa_');
+  });
+
+  it('BYOK and custom endpoints: research first with the Exa tools, never web_research', () => {
+    const prompt = buildSystemPrompt({
+      language: 'es',
+      research: 'exa',
+      feedback: { submit: false, vote: false },
+    });
+    expect(prompt).not.toContain('web_research');
+    expect(prompt).not.toContain('Web research is not available');
+    expect(prompt).toContain('after vault_read, research the procedure with exa_search');
+    expect(prompt).toContain('or with exa_fetch when fetch_url can');
+    expect(prompt).toContain('official sources first');
+    expect(prompt).toContain('Only after this research is done may you refine it');
+    expect(prompt).toContain('Consult feedback_search for community learnings');
+    expect(prompt).toContain(
+      'Formulate the complete plan before collecting user information or executing any step',
+    );
+    // Queries leave the device: anonymized, no identifying data.
+    expect(prompt).toContain('Search queries leave the device');
+    expect(prompt).toContain(
+      'never put names, ID numbers, street addresses, contact details, birth dates',
+    );
+    // Without a working key: the blocker, and where the user adds it.
+    expect(prompt).toContain("web research needs the user's own Exa API key");
+    expect(prompt).toContain('Ajustes → Proveedor de IA');
+    expect(prompt).toContain(
+      'do not ask the user for information or execute the procedure until the research can be completed',
+    );
+    expect(buildSystemPrompt({ language: 'en', research: 'exa' })).toContain(
+      'Settings → AI provider',
+    );
   });
 });
 

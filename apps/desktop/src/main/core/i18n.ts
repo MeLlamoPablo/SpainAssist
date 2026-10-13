@@ -224,7 +224,7 @@ const STRINGS = {
   secretVoucher: { es: 'Clave del bono', en: 'Voucher key' },
   secretByok: { es: 'Clave de {name}', en: '{name} key' },
   secretCustom: { es: 'Clave del servidor propio', en: 'Custom server key' },
-  secretSearchToken: { es: 'Token de búsqueda', en: 'Search token' },
+  secretExa: { es: 'Clave de Exa', en: 'Exa key' },
   loginOpenBrowser: {
     es: 'Continúa en tu navegador para iniciar sesión con ChatGPT.',
     en: 'Continue in your browser to sign in with ChatGPT.',

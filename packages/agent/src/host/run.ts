@@ -6,7 +6,8 @@ import { parseHostConfig } from '../config';
 import { buildAssistantPrompt } from '../prompt/assistant';
 import { buildSystemPrompt } from '../prompt/system';
 import { parseLiteLLMSpendHeaders } from '../providers/services';
-import { CHATGPT_PLAN_PROVIDERS, createChatGPTResearchTool } from '../research/chatgpt-research';
+import { createChatGPTResearchTool } from '../research/chatgpt-research';
+import { createExaTools } from '../research/exa';
 import { createKeyServerResearchTool } from '../research/key-server-research';
 import { createAssistantTools, createTools } from '../tools/index';
 import { BridgeCredentialStore } from './credentials';
@@ -15,6 +16,7 @@ import { IDLE_COMPACTION_MIN_TOKENS, SessionRequests } from './idle-compaction';
 import { hostLog } from './log';
 import { configureModel, LITELLM_PROVIDER_ID, needsPromptCacheKey } from './model';
 import { redactsPages } from './redaction';
+import { promptResearch, researchBackend } from './research';
 import { prepareSessionFile } from './session';
 
 /**
@@ -71,17 +73,13 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         dniePhone: config.dniePhone,
         redactPages,
       });
-  // Web research: voucher users through our key server (Parallel, paid from the voucher);
-  // ChatGPT plans (Sign in with ChatGPT, Codex) with OpenAI's hosted web search, on the plan.
+  // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
+  // OpenAI's hosted web search, BYOK and custom endpoints with the user's own Exa key.
   const keyServerUrl = config.research.keyServerUrl;
-  const research = assistant
-    ? undefined
-    : config.model.provider === LITELLM_PROVIDER_ID && keyServerUrl
-      ? 'key server'
-      : CHATGPT_PLAN_PROVIDERS.includes(config.model.provider) &&
-          (await credentials.read(config.model.provider))?.type === 'oauth'
-        ? 'chatgpt'
-        : undefined;
+  const research = await researchBackend(
+    config,
+    async () => (await credentials.read(config.model.provider))?.type === 'oauth',
+  );
   if (research === 'key server' && keyServerUrl) {
     tools.push(
       createKeyServerResearchTool({
@@ -106,15 +104,22 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         language: config.language,
       }),
     );
+  } else if (research === 'exa') {
+    tools.push(
+      ...createExaTools({
+        apiKey: async () => (await bridge.call('agent.exaKey', {})).key ?? undefined,
+        language: config.language,
+        ...(config.research.exaBaseUrl ? { baseUrl: config.research.exaBaseUrl } : {}),
+      }),
+    );
   }
-  const webResearch = !!research;
   const systemPrompt = () =>
     assistant
       ? buildAssistantPrompt({ language: config.language, timeZone: config.timeZone })
       : buildSystemPrompt({
           language: config.language,
           timeZone: config.timeZone,
-          webResearch,
+          research: promptResearch(research),
           feedback: config.feedback,
           dniePhone: config.dniePhone,
         });

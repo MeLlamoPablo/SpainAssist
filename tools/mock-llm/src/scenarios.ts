@@ -3,8 +3,9 @@ import { parseScenario, type Scenario, type ScenarioInput } from './scenario';
 /**
  * "demo": plausibly handles "renovar el DNI" with SpainAssist's tools, so the desktop UI can be
  * demoed without a real model. The assistant (requests declaring procedure_start) starts a
- * "Renovar el DNI" procedure and later relays its report. The procedure's agent: Exa agent_run (or scripted offline feedback_search) → procedure_update (status researching)
- * → ask_user → procedure_update (status planned) → final report. Facts are worded as "to be
+ * "Renovar el DNI" procedure and later relays its report. The procedure's agent: feedback_search
+ * (scripted, offline) → procedure_update (status researching) → ask_user → procedure_update
+ * (status planned) → final report. Facts are worded as "to be
  * confirmed" on purpose: this is a mock.
  */
 const demo: ScenarioInput = {

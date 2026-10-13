@@ -17,6 +17,7 @@ import {
   ChatGptConnect,
   CodexDeviceConnect,
   CustomProviderForm,
+  ExaKeyForm,
   ModelPicker,
   ProviderStatusCard,
   VoucherRedeem,
@@ -38,6 +39,8 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
   const voucherConnected = kind === 'voucher';
   // A ChatGPT subscription needs nothing else: the card shows only its status.
   const chatGptConnected = kind === 'chatgpt' || kind === 'codex';
+  // Without a gateway key, web research needs the user's own Exa key (D23).
+  const needsExaKey = kind === 'byok' || kind === 'custom';
   const scrollRef = useRef<HTMLDivElement>(null);
   const providerRef = useRef<HTMLDivElement>(null);
   const generalRef = useRef<HTMLDivElement>(null);
@@ -76,6 +79,11 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
           <div ref={providerRef} className="scroll-mt-4">
             <SectionCard icon={Sparkles} title={t.provider.title}>
               <ProviderStatusCard />
+              {needsExaKey ? (
+                <div className="mt-5 border-t border-line pt-5">
+                  <ExaKeyForm />
+                </div>
+              ) : null}
               {chatGptConnected ? null : (
                 <>
                   <div

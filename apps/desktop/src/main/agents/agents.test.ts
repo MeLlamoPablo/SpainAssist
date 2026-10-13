@@ -738,6 +738,21 @@ describe('procedure agents', () => {
     expect(flagOff.agent!.launch.config.feedback).toEqual({ submit: false, vote: true });
   });
 
+  it('research with the user’s Exa key only on BYOK and custom endpoints (D23)', async () => {
+    await withProvider();
+    const custom = await app.startProcedure('Trámite A');
+    expect(custom.agent!.launch.config.research).toMatchObject({ exa: true });
+    // The key itself never goes into the config: the host asks for it over the bridge.
+    await app.invoke('providers.setExaKey', 'exa-secret-key-123');
+    expect(JSON.stringify(app.agentLib.launches)).not.toContain('exa-secret-key-123');
+    await app.close();
+
+    app = await createTestApp();
+    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
+    const voucher = await app.startProcedure('Trámite B');
+    expect(voucher.agent!.launch.config.research?.exa).toBeUndefined();
+  });
+
   it('all stop when the provider or the language changes', async () => {
     await withProvider();
     const a = await app.startProcedure('Trámite A');

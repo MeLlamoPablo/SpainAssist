@@ -35,13 +35,14 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
   Then `runRpcMode`.
 - Roles (`config.role`, D9): `assistant` gets `createAssistantTools()` (delegation, `ask_user`,
   vault) and `buildAssistantPrompt()`; `procedure` gets `createTools()` (everything else, plus
-  `web_research` for voucher users and ChatGPT plans) and `buildSystemPrompt()`, whose final message per run is a short
+  `web_research` for voucher users and ChatGPT plans, or `exa_search`/`exa_fetch` for BYOK and
+  custom endpoints, see `host/research.ts`) and `buildSystemPrompt()`, whose final message per run is a short
   report for the assistant.
 - `src/tools/` — tool definitions (TypeBox schemas, English model-facing text). Bridge-backed
   tools pass the tool's `AbortSignal` to the HTTP request, so aborting a run cancels a pending
   form/confirmation in the app (no abort deadlock).
 - `src/research/` — `fetch_url` core (Readability + linkedom → Turndown/GFM, unpdf, charset
-  handling, SSRF guard), BOE client.
+  handling, SSRF guard), BOE client, web research (key server, ChatGPT, Exa).
 - `src/rpc/` — `PiRpcClient`, JSONL framing, event normalization, pluggable transport.
 - `src/providers/` — ChatGPT OAuth, refresh, model lists/defaults, BYOK catalogue, key server,
   LiteLLM gateway credit and models (vouchers).
@@ -62,6 +63,7 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 | `browser_fill_from_user` | `browser.fillFromUser` | One-time codes typed by the app; the model never sees them |
 | `browser_tabs`, `browser_screenshot`, `browser_use_certificate`, `browser_close` | `browser.*` | Screenshot returns an image block (refused when the model has no vision) |
 | `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher (D13); `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan (D21); `mode` picks model and effort: `fast` → `gpt-6-luna`, `balanced` → `gpt-6.1-sol`, `deep` → `gpt-6-astra`, all at high effort | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
+| `exa_search`, `exa_fetch` | local (Exa REST API, `api.exa.ai`), with the user's own key from `agent.exaKey` | BYOK and custom endpoints only, instead of `web_research` (D23). `exa_search`: `POST /search`, `userLocation: "ES"`, `sources` `official` (default, `includeDomains` of Spanish administrations) or `any`, ≤ 10 results with 1,500 characters each. `exa_fetch`: `POST /contents`, ≤ 5 URLs, 12,000 (≤ 30,000) characters each, `fresh` asks for a new copy. No key, a rejected key or no credit: a research-blocker result that names where the user adds the key |
 | `feedback_search`, `feedback_submit`, `feedback_vote` | `feedback.*` | Submit text must be PII-free (the app scrubs again); votes rate a search result by id |
 | `fetch_url` | local | 20 s timeout, 6 MB (HTML) / 25 MB (PDF) cap, ≤ 5 redirects (each re-checked), private hosts blocked, `offset`/`maxChars` paging, `mode: full`, 10-minute cache |
 | `boe_search` | local (BOE open data) | `legislacion-consolidada` search, in-force by default |
@@ -134,7 +136,9 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 | `model.api`, `supportsImages`, `contextWindow`, `reasoning` | `custom` only (`openai-completions` uses `max_tokens`, `system` role, no `store`) |
 | `model.maxTokens` | Output cap (capped voucher keys) |
 | `model.thinkingLevel` | Default `medium`, clamped to the model |
-| `research.boeBaseUrl`, `research.allowPrivateHosts` | Tests / e2e (mock sede on localhost) |
+| `research.keyServerUrl` | Our key server: vouchers' `web_research` |
+| `research.exa` | BYOK and custom endpoints: `exa_search`/`exa_fetch` with the user's Exa key, no `web_research` (D23) |
+| `research.boeBaseUrl`, `research.exaBaseUrl`, `research.allowPrivateHosts` | Tests / e2e (mock sede on localhost) |
 | `extraTrustedHosts` | Dev/e2e hosts allowed for credentials |
 | `timeZone` | For "today" in the prompt; default `Europe/Madrid` |
 

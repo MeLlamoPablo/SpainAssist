@@ -58,5 +58,14 @@ export const ASSISTANT_TOOL_NAMES = [
 
 export type AssistantToolName = (typeof ASSISTANT_TOOL_NAMES)[number];
 
-/** Web research streams the run's events, so one call waits for the final result. */
+/**
+ * Web research of vouchers and ChatGPT plans: it streams the run's events, so one call waits for
+ * the final result.
+ */
 export const WEB_RESEARCH_TOOL_NAME = 'web_research';
+
+/**
+ * Web research of BYOK and custom endpoints, with the user's own Exa key (D23): search, and read
+ * pages. They replace `web_research`, which those agents don't have.
+ */
+export const EXA_TOOL_NAMES = ['exa_search', 'exa_fetch'] as const;

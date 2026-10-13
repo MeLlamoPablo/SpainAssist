@@ -176,6 +176,7 @@ export function providerPreset(kind: string | null): ProviderStatus {
         kind: 'byok',
         label: 'Anthropic (clave propia)',
         model: 'claude-sonnet-4-5',
+        exaKey: false,
       };
     default:
       return {

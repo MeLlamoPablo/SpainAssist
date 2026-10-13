@@ -104,6 +104,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
     s.providers.setModel(model),
   );
   router.register('providers.logout', S['providers.logout'], () => s.providers.logout());
+  router.register('providers.setExaKey', S['providers.setExaKey'], (apiKey) =>
+    s.providers.setExaKey(apiKey),
+  );
 
   router.register('procedures.list', S['procedures.list'], () => s.procedures.list());
   router.register('procedures.get', S['procedures.get'], (id) => s.procedures.get(id));

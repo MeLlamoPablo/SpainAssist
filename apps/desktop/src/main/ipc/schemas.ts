@@ -5,6 +5,7 @@ import {
   CustomProviderInput,
   DniAccessNumber,
   DniePin,
+  ExaApiKey,
   PersonalDataInput,
   PHONE_CALL_MAX_WAV_BYTES,
   PromptResponse,
@@ -52,6 +53,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'providers.listModels': none,
   'providers.setModel': z.tuple([z.string().trim().min(1).max(200)]),
   'providers.logout': none,
+  'providers.setExaKey': z.tuple([ExaApiKey.nullable()]),
 
   'procedures.list': none,
   'procedures.get': z.tuple([id]),

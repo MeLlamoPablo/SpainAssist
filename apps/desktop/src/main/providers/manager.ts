@@ -91,6 +91,14 @@ function isOAuth(p: ProviderConfig | undefined): p is Extract<ProviderConfig, { 
   return p?.kind === 'chatgpt' || p?.kind === 'codex';
 }
 
+/**
+ * BYOK and custom endpoints: no gateway key, so their web research uses the user's own Exa key
+ * (D23) instead of `web_research`.
+ */
+function researchesWithExa(p: ProviderConfig | undefined): boolean {
+  return p?.kind === 'byok' || p?.kind === 'custom';
+}
+
 /** Vault secret holding the provider's credential, if any. */
 function secretIdOf(p: ProviderConfig): string | undefined {
   return isOAuth(p) ? OAUTH_SECRET_IDS[p.kind] : p.secretId;
@@ -172,7 +180,15 @@ export class ProviderManager {
     if (isOAuth(p) && this.oauthAccount) status.account = this.oauthAccount;
     if (p.kind === 'voucher' && this.credit) status.credit = creditOf(this.credit.value);
     if (p.kind === 'voucher' && this.voucherExpiresAt) status.expiresAt = this.voucherExpiresAt;
+    if (researchesWithExa(p)) status.exaKey = this.hasExaKey();
     return status;
+  }
+
+  private hasExaKey(): boolean {
+    return this.deps
+      .vault()
+      .listSecrets()
+      .some((s) => s.id === SECRET_IDS.exa);
   }
 
   /** Status with a fresh voucher balance when possible (waits briefly, then returns). */
@@ -321,6 +337,12 @@ export class ProviderManager {
   // --- configuration -------------------------------------------------------------------------
 
   private async apply(config: ProviderConfig | undefined): Promise<void> {
+    // The Exa key belongs to BYOK and custom endpoints: no other setup uses it, and the user
+    // couldn't see or clear it from there.
+    if (!researchesWithExa(config) && this.hasExaKey()) {
+      await this.deps.vault().deleteSecret(SECRET_IDS.exa);
+      this.deps.events.emit({ type: 'vault.changed' });
+    }
     await this.deps.settings.setProvider(config);
     this.credit = undefined;
     this.voucherExpiresAt = undefined;
@@ -665,7 +687,44 @@ export class ProviderManager {
     return this.status();
   }
 
+  /**
+   * BYOK and custom endpoints: saves the user's Exa key for web research (D23), or deletes it
+   * with null. Agents read it on every Exa call, so running ones pick it up without a restart.
+   */
+  async setExaKey(apiKey: string | null): Promise<ProviderStatus> {
+    if (!researchesWithExa(this.config())) {
+      throw new UserError(t(this.lang(), 'invalidRequest'), 'bad_request');
+    }
+    const vault = this.deps.vault();
+    const key = apiKey?.trim();
+    if (key) {
+      this.deps.logger.addSecret(key);
+      await vault.setSecret(SECRET_IDS.exa, t(this.lang(), 'secretExa'), key);
+    } else {
+      await vault.deleteSecret(SECRET_IDS.exa);
+    }
+    this.deps.events.emit({ type: 'vault.changed' });
+    this.emitStatus();
+    return this.status();
+  }
+
   // --- for agent processes -----------------------------------------------------------------
+
+  /** Whether procedure agents research with the user's Exa key (`research.exa`, D23). */
+  researchesWithExa(): boolean {
+    return researchesWithExa(this.config());
+  }
+
+  /**
+   * `agent.exaKey`: the user's Exa key, only while a BYOK or custom endpoint is configured.
+   * The agent host sends it to Exa and nowhere else.
+   */
+  async exaKey(): Promise<string | undefined> {
+    if (!researchesWithExa(this.config())) return undefined;
+    const key = await this.deps.vault().getSecret(SECRET_IDS.exa);
+    if (key) this.deps.logger.addSecret(key);
+    return key || undefined;
+  }
 
   /**
    * Model section of the agent host config of a role (default: a procedure agent's, also used by

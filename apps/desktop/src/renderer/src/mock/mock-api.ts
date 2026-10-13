@@ -955,6 +955,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         kind: 'byok',
         label: `${name} (clave propia)`,
         model: input.model,
+        exaKey: !!state.provider.exaKey,
       };
       setProvider(status, {
         kind: 'byok',
@@ -971,6 +972,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         kind: 'custom',
         label: 'Servidor propio',
         model: input.model,
+        exaKey: !!state.provider.exaKey,
       };
       setProvider(status, {
         kind: 'custom',
@@ -998,6 +1000,17 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       }
       const status = { ...state.provider, model };
       setProvider(status, { ...p, model });
+      return status;
+    },
+    'providers.setExaKey': async (apiKey) => {
+      await sleep(400);
+      const kind = state.provider.kind;
+      // Only BYOK and custom endpoints research with the user's Exa key.
+      if (kind !== 'byok' && kind !== 'custom') {
+        throw new Error(tr('Solicitud no válida.', 'Invalid request.'));
+      }
+      const status = { ...state.provider, exaKey: !!apiKey?.trim() };
+      setProvider(status);
       return status;
     },
     'providers.logout': () => {

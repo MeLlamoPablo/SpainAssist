@@ -27,7 +27,7 @@ corepack pnpm dev:local
 | Directory | Purpose |
 | --- | --- |
 | `apps/desktop` | Electron main process, isolated preload bridge and React interface |
-| `packages/agent` | Agent host, tools, provider adapters and Exa research |
+| `packages/agent` | Agent host, tools, provider adapters and web research |
 | `packages/browser` | Browser contexts, element references, certificate login and downloads |
 | `packages/signer` | AutoScript shim and CAdES, XAdES, PAdES and triphase signing |
 | `packages/vault` | Encrypted data, documents and credentials with OS-backed key wrapping |

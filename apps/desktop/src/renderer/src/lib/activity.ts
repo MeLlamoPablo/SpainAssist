@@ -90,14 +90,18 @@ export function activityLabel(
 
   switch (name) {
     case 'web_search':
+    case 'exa_search':
     case 'search': {
       const lead = es ? 'Buscando en internet' : 'Searching the web';
       return { text: query ? `${lead}: ${q(lang, query)}` : lead, icon: Search };
     }
     case 'fetch_url':
+    case 'exa_fetch':
     case 'read_url':
     case 'web_fetch': {
-      const host = url ? hostOf(url) : undefined;
+      // exa_fetch reads several pages (`urls`): name the first one.
+      const page = url ?? (Array.isArray(args.urls) ? str(args.urls[0]) : undefined);
+      const host = page ? hostOf(page) : undefined;
       return {
         text: host
           ? es

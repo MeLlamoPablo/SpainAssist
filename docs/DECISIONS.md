@@ -102,6 +102,9 @@ There is no reliable keyless web search in 2026 (DuckDuckGo/Mojeek/SearXNG all c
 > no longer has `mcp__exa__*` web search or Exa's Agent API, and LiteLLM no longer registers an
 > `exa` search tool. Deep research is D13's voucher path and, for ChatGPT plans, D21; other
 > providers get the "research blocked" path. Refinement uses `fetch_url`, `boe_search` and the browser.
+>
+> 2026-10-13: Exa is back for BYOK and custom endpoints only, on its REST API with the user's own
+> key (D23). There is still no shared or development key.
 
 Simplify research to one provider.
 - **Exa only.** The agent host registers Exa's hosted MCP server (`https://mcp.exa.ai/mcp`,
@@ -390,8 +393,7 @@ Parallel keys have no processor lock or spending cap, so the **key server** runs
 - **App.** The agent host's `deep_research` tool calls the key server with the voucher key
   (read from the app's credential store at call time, never in the config or the model's
   context) when the model provider is the voucher gateway. ChatGPT plans research with
-  OpenAI's web search (D21); BYOK users get the "research blocked" path (Exa was removed on
-  2026-10-12, see D8). Research is refined with
+  OpenAI's web search (D21); BYOK users research with their own Exa key (D23). Research is refined with
   `fetch_url`, `boe_search` and the browser.
 - **Trade-offs.** The research input and output pass through our server (not stored or
   logged). The price is charged up front and refunded on failure, so a voucher with less than
@@ -760,3 +762,41 @@ the Cl@ve password; D20's "typed only on the desktop" and its refused-PIN protoc
 - **Trade-off.** As in D18: malware running as the user can read it from the unlocked vault, as
   it can the Cl@ve password. Without the card it's useless, and the phone's review and the card
   tap remain.
+
+## D23 — Web research for BYOK and custom endpoints: the user's own Exa key (2026-10-13)
+
+BYOK and custom-endpoint users had no web research (no gateway key, D8), so every procedure
+stopped at "research blocked": the app was unusable for them. They now bring an Exa key, as they
+bring their model's key.
+
+- **Tools, not `web_research`.** Their procedure agents get `exa_search` (`POST /search`) and
+  `exa_fetch` (`POST /contents`) on `api.exa.ai`, and no `web_research`. Vouchers (D13) and
+  ChatGPT plans (D21) keep `web_research` and their prompt, word for word. Main sets
+  `research.exa` in the host config for `byok` and `custom` (they share the "no gateway key"
+  path); `host/research.ts` picks the backend.
+- **REST, not Exa's hosted MCP.** The host has no MCP client wired (D8's was removed), and REST
+  keeps the key out of the host's environment, lets us set `userLocation` and domain hints per
+  call, shape compact results, and test with a mocked `fetch`. Exa's keyless MCP is rate-limited
+  and was never an option.
+- **Official sources first, not only.** `exa_search` sends `userLocation: "ES"` and, by default
+  (`sources: "official"`), `includeDomains` with Spanish administrations' domains (`host` and
+  `*.host`, a research list separate from the credential allowlist). `sources: "any"` drops the
+  filter for the long tail (small town councils); the prompt asks to check unofficial results
+  against official pages.
+- **The key.** In the vault (`research.exa`), set and cleared in Settings → AI provider
+  (`providers.setExaKey`, zod `ExaApiKey`, or null). The renderer sees only
+  `ProviderStatus.exaKey`. The host reads it over the bridge (`agent.exaKey`, procedure agents
+  only, null for other providers) on every call, so a key added mid-run works without a restart,
+  and sends it only in the `x-api-key` header to Exa, with redirects refused. It is redacted
+  from error text and the app's logs, and never in the config, prompt, session or transcript.
+  Choosing a voucher or ChatGPT, or disconnecting, deletes it.
+- **No key.** The tools answer with a research blocker that says the user needs an Exa key and
+  where to add it ("Ajustes → Proveedor de IA"); the prompt has the agent report it and stop
+  before questions or execution, as before.
+- **No key ships.** `apps/desktop/scripts/secrets.ts` fails packaging when the build has
+  `EXA_API_KEY`, a literal `x-api-key`, a key in an Exa URL, Exa's MCP host or a UUID next to an
+  Exa mention, or a `.env` file; its test runs the same rules on the repository's sources.
+- **Trade-offs.** Queries leave the device as the model wrote them (the prompt asks for
+  anonymized ones, as for `web_research`). Exa bills the user: $7 per 1,000 searches, $1 per
+  1,000 pages, with $10 of free credit a month. Exa offers zero data retention only on
+  Enterprise. A free account is one more setup step for non-technical users.

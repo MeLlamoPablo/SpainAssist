@@ -10,7 +10,7 @@ import {
   VOUCHER_BODY_LENGTH,
   VOUCHER_PREFIX,
 } from '@sa/shared';
-import { CircleAlert, Copy, ExternalLink, KeyRound, LogOut } from 'lucide-react';
+import { CircleAlert, Copy, ExternalLink, KeyRound, LogOut, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { OpenAiMark } from '../../components/brand';
 import { Button } from '../../components/ui/button';
@@ -529,6 +529,131 @@ export function ByokForm() {
         </Button>
       </div>
     </form>
+  );
+}
+
+/** Where people create an Exa API key. */
+const EXA_KEYS_URL = 'https://dashboard.exa.ai/api-keys';
+
+/**
+ * BYOK and custom endpoints: the user's own Exa key, which their web research needs (D23).
+ * Main keeps the key; the renderer only learns whether one is saved (`ProviderStatus.exaKey`).
+ */
+export function ExaKeyForm() {
+  const t = useT(settingsDict);
+  const tc = useT(chatDict);
+  const saved = useAppStore((s) => s.provider?.exaKey ?? false);
+  const [editing, setEditing] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const tx = t.provider.exa;
+
+  const submit = async (value: string | null) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const status = await api.invoke('providers.setExaKey', value);
+      useAppStore.setState({ provider: status });
+      toast.success(value ? tx.stored : tx.removed);
+      setApiKey('');
+      setEditing(false);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div data-testid="exa-key">
+      <p className="flex items-center gap-2 text-[14px] font-semibold text-fg">
+        <Search size={15} className="text-accent-text" aria-hidden />
+        {tx.title}
+      </p>
+      <p className="mt-0.5 mb-3 text-[13px] text-fg-muted">{tx.body}</p>
+      {saved && !editing ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2/60 px-3 py-2">
+          <p className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
+            <KeyRound size={15} className="text-st-done-fg" aria-hidden />
+            <span className="font-medium text-fg">{tx.label}</span>
+            {tx.saved}
+          </p>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              {tx.change}
+            </Button>
+            <Button variant="ghost" size="sm" loading={busy} onClick={() => void submit(null)}>
+              {tx.remove}
+            </Button>
+          </div>
+          {error ? (
+            <p className="w-full text-[13px] font-medium text-danger" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (apiKey.trim()) void submit(apiKey.trim());
+          }}
+        >
+          {saved ? null : (
+            <p className="flex items-center gap-2 rounded-lg bg-st-attention-bg px-3 py-2 text-[13px] font-medium text-st-attention-fg ring-1 ring-st-attention-line ring-inset">
+              <CircleAlert size={15} className="shrink-0" aria-hidden />
+              {tx.missing}
+            </p>
+          )}
+          <Field label={tx.label} error={error}>
+            {({ id, describedBy, invalid }) => (
+              <PasswordInput
+                id={id}
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setError(null);
+                }}
+                maxLength={200}
+                autoComplete="off"
+                aria-describedby={describedBy}
+                aria-invalid={invalid || undefined}
+                revealLabel={tc.prompt.reveal}
+                hideLabel={tc.prompt.hide}
+                data-testid="exa-key-input"
+              />
+            )}
+          </Field>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" variant="secondary" loading={busy} disabled={!apiKey.trim()}>
+              {tx.save}
+            </Button>
+            {editing ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setApiKey('');
+                  setError(null);
+                }}
+              >
+                {tx.cancel}
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                icon={ExternalLink}
+                onClick={() => void api.invoke('app.openExternal', EXA_KEYS_URL)}
+              >
+                {tx.getKey}
+              </Button>
+            )}
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 

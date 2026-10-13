@@ -11,7 +11,12 @@ import type { Procedure } from '@sa/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type AgentHostConfig, buildAgentLaunch, PiRpcClient } from '../src/index';
 import type { AgentEvent } from '../src/rpc/events';
-import { ASSISTANT_TOOL_NAMES, TOOL_NAMES, WEB_RESEARCH_TOOL_NAME } from '../src/tools/names';
+import {
+  ASSISTANT_TOOL_NAMES,
+  EXA_TOOL_NAMES,
+  TOOL_NAMES,
+  WEB_RESEARCH_TOOL_NAME,
+} from '../src/tools/names';
 import { createFakeBridge, type FakeBridge, hang } from './helpers/fake-bridge';
 import { createFakeSse, sseEvent } from './helpers/fake-sse';
 
@@ -661,6 +666,66 @@ describe('agent host over RPC (integration)', () => {
       );
     } finally {
       await keyServer.close();
+    }
+  });
+
+  it('BYOK and custom endpoints research with the Exa tools and the user key, not web_research', async () => {
+    const exa = await createFakeSse({
+      frames: [
+        JSON.stringify({
+          results: [
+            { title: 'Renovar el NIE', url: 'https://sede.gob.es/nie', text: 'Research complete' },
+          ],
+        }),
+      ],
+      contentType: 'application/json',
+    });
+    bridge.setHandler('agent.exaKey', () => ({ key: 'exa-user-key' }));
+    try {
+      llm.setScenario({
+        rules: [
+          {
+            when: { turn: 0 },
+            reply: { toolCalls: [{ name: 'exa_search', arguments: { query: 'renovar NIE' } }] },
+          },
+          {
+            when: { lastTool: 'exa_search', lastToolResult: 'Research complete' },
+            reply: { text: 'Hecho.' },
+          },
+        ],
+        fallback: { text: 'fallback' },
+      });
+      const { client, events } = await start(undefined, undefined, {
+        research: { exa: true, exaBaseUrl: new URL(exa.url).origin },
+      });
+      await client.prompt('Quiero renovar el NIE');
+      await waitFor(events, isRunEnd);
+      expect(events.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
+        text: 'Hecho.',
+      });
+      expect(exa.requests).toHaveLength(1);
+      expect(exa.requests[0]).toMatchObject({
+        url: '/search',
+        headers: { 'x-api-key': 'exa-user-key' },
+        body: { query: 'renovar NIE', userLocation: 'ES' },
+      });
+      const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
+      const body = requests[0]?.body as ChatRequest;
+      expect((body.tools ?? []).map((t) => t.function?.name).sort()).toEqual(
+        [...TOOL_NAMES, ...EXA_TOOL_NAMES].sort(),
+      );
+      const prompt = String(body.messages?.[0]?.content);
+      expect(prompt).toContain('research the procedure with exa_search');
+      expect(prompt).not.toContain('web_research');
+      // The Exa key reaches only Exa: never the model or the session file.
+      for (const request of requests) {
+        expect(JSON.stringify(request)).not.toContain('exa-user-key');
+      }
+      expect(readFileSync(join(workDir, 'sessions', 'p1.jsonl'), 'utf8')).not.toContain(
+        'exa-user-key',
+      );
+    } finally {
+      await exa.close();
     }
   });
 

@@ -1,3 +1,11 @@
+import { exaKeySettingsPath } from '../research/exa';
+
+/**
+ * How the agent researches the web: `web_research` (vouchers and ChatGPT plans) or the Exa tools
+ * with the user's own key (BYOK and custom endpoints, D23). See ResearchBackend.
+ */
+export type PromptResearch = 'web_research' | 'exa';
+
 /**
  * Spain Assist's system prompt. Sent verbatim on every turn (the host replaces pi's prompt via
  * `before_agent_start`, so nothing else — no cwd, no pi docs — reaches the model).
@@ -9,8 +17,8 @@ export interface SystemPromptOptions {
   now?: Date;
   /** IANA time zone for "today". Default Europe/Madrid. */
   timeZone?: string;
-  /** The web_research tool is available (voucher key server, or OpenAI web search on a ChatGPT plan). */
-  webResearch?: boolean;
+  /** The agent's web research tools. Undefined: none, so the agent reports a research blocker. */
+  research?: PromptResearch;
   /** feedback_search is available, plus feedback_submit / feedback_vote when on. */
   feedback?: { submit: boolean; vote: boolean };
   /** The DNIe through the phone app is available (feature flag). */
@@ -43,7 +51,6 @@ export function formatToday(now: Date, timeZone = 'Europe/Madrid'): string {
 export function buildSystemPrompt(options: SystemPromptOptions): string {
   const today = formatToday(options.now ?? new Date(), options.timeZone);
   const language = LANGUAGE_NAMES[options.language];
-  const webResearch = options.webResearch ?? false;
   const feedbackSearch = !!options.feedback;
   const feedbackSubmit = !!options.feedback?.submit;
   const feedbackVote = !!options.feedback?.vote;
@@ -80,8 +87,8 @@ Write for the user in ${language}.
 - Put the pages you relied on in procedure_update.sources.
 
 # How to work
-1. Initial research: ${webResearch ? `after vault_read, call web_research once to understand the procedure. Research eligibility, national/regional/local variations, requirements, documents, fees, deadlines, official entry points, authentication, signatures, online and in-person steps, exceptions and common blockers. Ask for official sources and identify gaps or conflicting information. The tool waits for the completed result and streams progress to the app; call it once, without polling or duplicate runs. Only after this research completes may you refine it with fetch_url, boe_search or read-only navigation of official sources with the browser.${feedbackSearch ? ' Consult feedback_search for community learnings after the initial research.' : ''}` : 'Web research is not available without a configured research provider. Report this research blocker to the coordinator and keep the card in researching status. Do not ask the user for information or execute the procedure until the required initial research can be completed.'}
-${webResearch ? `   - Pass it all relevant user context, anonymized: age, municipality, nationality or residence status, documents with their category and issue/expiry dates, family or work situation. Never names, ID numbers, street addresses, contact details, birth dates, credentials, documents or the raw user message.\n` : ''}   - Formulate the complete plan before collecting user information or executing any step. Every procedural insight must be clear and supported by official sources, with no unresolved research uncertainties. If applicability depends on a missing user detail (region, nationality, situation), first research the relevant branches and understand exactly how that detail changes the plan; only then ask for it. Do not claim certainty when evidence is missing: continue researching or report the blocker and stop before questions or execution.
+1. Initial research: ${initialResearch(options.research, options.language, feedbackSearch)}
+   - Formulate the complete plan before collecting user information or executing any step. Every procedural insight must be clear and supported by official sources, with no unresolved research uncertainties. If applicability depends on a missing user detail (region, nationality, situation), first research the relevant branches and understand exactly how that detail changes the plan; only then ask for it. Do not claim certainty when evidence is missing: continue researching or report the blocker and stop before questions or execution.
 2. Keep the card current with procedure_update: early (title, status, first steps) and after every meaningful change (a new fact, a step done, a blocker).
    - Steps are the user's to-do list, a bird's-eye view from start to finish: milestones named as the user would ("Pedir cita previa", "Ir a la comisaría", "Recoger el DNI"). Never your own work ("Investigar requisitos", "Pedir los datos"). Owner: agent for online steps, user only for in-person ones, administration for theirs.
    - Requirements: what the user needs and whether they have it. Facts: 2 to 4 key facts about the procedure, each a short phrase that adds something new (Coste: "Gratis"; Plazo: "3 meses desde el cambio"). The user's own dates and progress go in the summary, steps or nextAction; no branches for other situations, no internal codes. nextAction: what the user or the administration must do next (see above).
@@ -105,4 +112,26 @@ ${feedbackSubmit ? `5. At the end, or after notable friction, call feedback_subm
 - Type credentials and personal data only on official sites that belong to this procedure.
 - Never do things the user did not ask for. If they only want information, don't start the procedure. If they want it done ("quiero renovar el DNI"), that covers every online step: do them, with confirm_action before anything binding.
 - If a tool says the user declined, stop that action and say so in your report.`;
+}
+
+/** Step 1 of "How to work": the initial research, by research tools. */
+function initialResearch(
+  research: PromptResearch | undefined,
+  language: SystemPromptOptions['language'],
+  feedbackSearch: boolean,
+): string {
+  const feedback = feedbackSearch
+    ? ' Consult feedback_search for community learnings after the initial research.'
+    : '';
+  switch (research) {
+    case 'web_research':
+      return `after vault_read, call web_research once to understand the procedure. Research eligibility, national/regional/local variations, requirements, documents, fees, deadlines, official entry points, authentication, signatures, online and in-person steps, exceptions and common blockers. Ask for official sources and identify gaps or conflicting information. The tool waits for the completed result and streams progress to the app; call it once, without polling or duplicate runs. Only after this research completes may you refine it with fetch_url, boe_search or read-only navigation of official sources with the browser.${feedback}
+   - Pass it all relevant user context, anonymized: age, municipality, nationality or residence status, documents with their category and issue/expiry dates, family or work situation. Never names, ID numbers, street addresses, contact details, birth dates, credentials, documents or the raw user message.`;
+    case 'exa':
+      return `after vault_read, research the procedure with exa_search before anything else. Research eligibility, national/regional/local variations, requirements, documents, fees, deadlines, official entry points, authentication, signatures, online and in-person steps, exceptions and common blockers: one focused search per question or branch, official sources first (the default); use sources "any" only for what they don't cover, and check unofficial results against the administration's own pages. Read the key official pages in full with fetch_url, or with exa_fetch when fetch_url can't read them. Identify gaps or conflicting information. Each Exa call spends the user's own Exa credit: don't repeat searches or read the same page twice. Only after this research is done may you refine it with boe_search or read-only navigation of official sources with the browser.${feedback}
+   - Search queries leave the device: keep them generic and anonymized. Use the user's context (age, municipality, nationality or residence status, documents with their category and issue/expiry dates, family or work situation) to choose what to search, but never put names, ID numbers, street addresses, contact details, birth dates, credentials, documents or the raw user message in a query.
+   - If an Exa tool says web research is blocked (no Exa key saved, the key was rejected, or no credit left), stop: report this research blocker to the coordinator in plain words (web research needs the user's own Exa API key, which they add in ${exaKeySettingsPath(language)}), keep the card in researching status with that as nextAction, and do not ask the user for information or execute the procedure until the research can be completed.`;
+    case undefined:
+      return 'Web research is not available without a configured research provider. Report this research blocker to the coordinator and keep the card in researching status. Do not ask the user for information or execute the procedure until the required initial research can be completed.';
+  }
 }

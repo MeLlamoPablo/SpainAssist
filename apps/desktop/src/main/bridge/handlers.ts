@@ -49,7 +49,10 @@ export interface BridgeHandlerDeps {
   browser: BrowserHolder;
   media: MediaStore;
   events: EventBus;
-  providers: Pick<ProviderManager, 'credentialFor' | 'refreshCredential' | 'voucherSpend'>;
+  providers: Pick<
+    ProviderManager,
+    'credentialFor' | 'refreshCredential' | 'exaKey' | 'voucherSpend'
+  >;
   feedback: Pick<FeedbackService, 'search' | 'submit' | 'vote' | 'describeShared'>;
   biometric: Biometric;
   /** Origins that commonly ask for a TLS client certificate (from @sa/browser). */
@@ -773,6 +776,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         );
       }
     },
+    'agent.exaKey': async () => ({ key: (await deps.providers.exaKey()) ?? null }),
     'agent.voucherSpend': async (params) => {
       deps.providers.voucherSpend(params);
       return {};

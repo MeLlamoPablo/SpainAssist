@@ -143,6 +143,11 @@ export interface SaMethods {
   'providers.listModels': [[], ModelOption[]];
   'providers.setModel': [[model: string], ProviderStatus];
   'providers.logout': [[], ProviderStatus];
+  /**
+   * BYOK and custom endpoints: saves the user's Exa API key for web research (D23), or deletes it
+   * with null. The renderer only ever learns whether one is saved (`ProviderStatus.exaKey`).
+   */
+  'providers.setExaKey': [[apiKey: string | null], ProviderStatus];
 
   /** Procedures are created by the assistant (from the conversation), never directly. */
   'procedures.list': [[], ProcedureListItem[]];

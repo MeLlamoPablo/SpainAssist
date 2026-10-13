@@ -305,6 +305,45 @@ describe('ProviderManager', () => {
     );
   });
 
+  it('keeps the Exa key of BYOK and custom endpoints in the vault, and only says whether it is saved', async () => {
+    app = await createTestApp();
+    // Nothing to research with yet: only BYOK and custom endpoints take one.
+    await expect(app.invoke('providers.setExaKey', 'exa-secret-key-123')).rejects.toThrow(
+      t('es', 'invalidRequest'),
+    );
+    const byok = await app.invoke('providers.setByok', {
+      provider: 'anthropic',
+      apiKey: 'sk-ant-1',
+      model: 'claude-x',
+    });
+    expect(byok).toMatchObject({ ok: true, status: { kind: 'byok', exaKey: false } });
+    // zod: an empty key is refused, null deletes.
+    await expect(app.invoke('providers.setExaKey', '  ')).rejects.toThrow();
+    const saved = await app.invoke('providers.setExaKey', ' exa-secret-key-123 ');
+    expect(saved).toMatchObject({ kind: 'byok', exaKey: true });
+    expect(JSON.stringify(saved)).not.toContain('exa-secret-key-123');
+    expect(await app.vault.getSecret(SECRET_IDS.exa)).toBe('exa-secret-key-123');
+    expect(app.events.at(-1)).toEqual({ type: 'providers.status', status: saved });
+    expect(await app.services.providers.exaKey()).toBe('exa-secret-key-123');
+    expect(app.logLines.join('\n')).not.toContain('exa-secret-key-123');
+
+    // Switching between BYOK and a custom endpoint keeps it.
+    const custom = await app.invoke('providers.setCustom', {
+      baseUrl: 'http://localhost:11434/v1',
+      api: 'openai-completions',
+      model: 'llama',
+    });
+    expect(custom).toMatchObject({ ok: true, status: { kind: 'custom', exaKey: true } });
+    expect(await app.invoke('providers.setExaKey', null)).toMatchObject({ exaKey: false });
+    expect(await app.vault.getSecret(SECRET_IDS.exa)).toBeUndefined();
+
+    // Disconnecting deletes it: no other setup uses it.
+    await app.invoke('providers.setExaKey', 'exa-secret-key-456');
+    expect(await app.invoke('providers.logout')).toEqual({ configured: false });
+    expect(await app.vault.getSecret(SECRET_IDS.exa)).toBeUndefined();
+    expect(await app.services.providers.exaKey()).toBeUndefined();
+  });
+
   it('signs in with ChatGPT: stable device id, browser opened, progress events, account shown', async () => {
     const deviceIds: string[] = [];
     app = await createTestApp({

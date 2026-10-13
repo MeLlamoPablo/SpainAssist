@@ -49,6 +49,14 @@ export const AgentHostConfigSchema = z.object({
        * POST {keyServerUrl}/v1/research with the voucher key (Parallel, charged to the voucher).
        */
       keyServerUrl: z.string().url().optional(),
+      /**
+       * BYOK and custom endpoints: web research with the user's own Exa key (exa_search,
+       * exa_fetch, D23) instead of `web_research`. The key comes from the app at call time
+       * (bridge `agent.exaKey`), never through this config.
+       */
+      exa: z.boolean().optional(),
+      /** Exa API base URL override (tests). Default https://api.exa.ai. */
+      exaBaseUrl: z.string().url().optional(),
       /** BOE open-data API base URL override (tests). */
       boeBaseUrl: z.string().url().optional(),
       /** Dev/e2e only: let fetch_url reach localhost / private networks (mock sede). */

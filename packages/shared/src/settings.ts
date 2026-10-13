@@ -72,6 +72,11 @@ export const ProviderStatus = z.object({
     .optional(),
   /** ISO 8601, when the voucher key expires (voucher only, when known). */
   expiresAt: z.string().optional(),
+  /**
+   * BYOK and custom endpoints only: whether the user's Exa API key, which their web research
+   * needs, is saved. The key itself never leaves the main process except to Exa.
+   */
+  exaKey: z.boolean().optional(),
   error: z.string().optional(),
 });
 export type ProviderStatus = z.infer<typeof ProviderStatus>;
@@ -90,6 +95,9 @@ export const CustomProviderInput = z.object({
   apiKey: z.string().optional(),
 });
 export type CustomProviderInput = z.infer<typeof CustomProviderInput>;
+
+/** The user's own Exa API key (web research for BYOK and custom endpoints, D23). */
+export const ExaApiKey = z.string().trim().min(1).max(200);
 
 /** For BYOK pickers. Built from pi-ai's model registry. */
 export const ModelOption = z.object({
