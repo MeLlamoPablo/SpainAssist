@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatVoucherCode, maskVoucherBody, normalizeVoucherCode } from '../src/voucher-code';
+import {
+  CROCKFORD_ALPHABET,
+  formatVoucherCode,
+  maskVoucherBody,
+  normalizeVoucherCode,
+} from '../src/voucher-code';
 
 describe('normalizeVoucherCode', () => {
   it('normalizes case, separators, prefix and ambiguous letters', () => {
@@ -18,6 +23,19 @@ describe('normalizeVoucherCode', () => {
     expect(normalizeVoucherCode('SA-7KIQLX')).toBe('7K1Q1X'); // I and L read as 1
     expect(normalizeVoucherCode('SA-DEMO42')).toBe('DEM042'); // O read as 0
     expect(normalizeVoucherCode('SAK3Q9')).toBe('SAK3Q9'); // a body may start with SA
+  });
+
+  it('keeps every code distinct: lookalikes only map onto letters codes never contain', () => {
+    // Codes are generated from the alphabet only, so reading O as 0 and I/L as 1 can't make two
+    // issued codes collide: every alphabet character normalizes to itself…
+    for (const ch of CROCKFORD_ALPHABET) {
+      expect(normalizeVoucherCode(`SA-${ch.repeat(6)}`), ch).toBe(ch.repeat(6));
+    }
+    // …and the lookalikes are not in it.
+    for (const ch of 'OIL') expect(CROCKFORD_ALPHABET).not.toContain(ch);
+    expect(normalizeVoucherCode('SA-A03C8Z')).toBe('A03C8Z');
+    expect(normalizeVoucherCode('SA-AO3C8Z')).toBe('A03C8Z'); // O typed for the zero
+    expect(normalizeVoucherCode('sa-oyjawa')).toBe('0YJAWA');
   });
 
   it('rejects inputs that cannot be voucher codes', () => {

@@ -58,13 +58,17 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 .login { max-width: 460px; margin: 48px auto 0; width: 100%; }
 .login form { display: grid; gap: 12px; }
 .codes { border: 1px solid var(--accent-line); background: var(--accent-soft); }
-.warning { font-weight: 600; color: var(--accent-hover); margin: 0 0 12px; }
+.warning { font-weight: 600; color: var(--accent-hover); margin: 0 0 4px; }
 .codes ul { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 6px;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 .codes li { display: flex; align-items: center; gap: 8px; background: var(--surface);
   border: 1px solid var(--line); border-radius: 8px; padding: 6px 6px 6px 12px; }
-.codes code { flex: 1; font: 600 14px/1 ui-monospace, "SF Mono", Menlo, monospace;
-  letter-spacing: 0.04em; }
+.codes code { flex: 1; letter-spacing: 0.04em;
+  /* Codes have no O, but people copy them by eye, so the zero must not look like one. These
+     fonts slash or dot it, by default or with slashed-zero (which must follow the shorthand). */
+  font: 600 16px/1 ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono",
+    monospace;
+  font-variant-numeric: slashed-zero; }
 .list-head { display: flex; justify-content: space-between; align-items: end; gap: 12px;
   flex-wrap: wrap; margin-bottom: 16px; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
@@ -106,6 +110,7 @@ const T = {
     creating: 'Creando…',
     codesTitle: (n, b) => (n === 1 ? '1 vale nuevo' : n + ' vales nuevos') + ' · lote ' + b,
     codesWarning: 'Copia los códigos ahora. No se volverán a mostrar.',
+    codesAlphabet: 'No llevan O, I, L ni U: lo que se les parezca es un 0 o un 1.',
     copy: 'Copiar', copyAll: 'Copiar todos', copied: 'Copiado', done: 'Ya los he copiado',
     listTitle: 'Vales creados', status: 'Estado', all: 'Todos', refresh: 'Actualizar',
     s_active: 'Activo', s_redeemed: 'Canjeado', s_revoked: 'Revocado', s_expired: 'Caducado',
@@ -129,6 +134,7 @@ const T = {
     creating: 'Creating…',
     codesTitle: (n, b) => (n === 1 ? '1 new voucher' : n + ' new vouchers') + ' · batch ' + b,
     codesWarning: 'Copy the codes now. They will not be shown again.',
+    codesAlphabet: 'They have no O, I, L or U: anything that looks like one is a 0 or a 1.',
     copy: 'Copy', copyAll: 'Copy all', copied: 'Copied', done: 'I have copied them',
     listTitle: 'Vouchers', status: 'Status', all: 'All', refresh: 'Refresh',
     s_active: 'Active', s_redeemed: 'Redeemed', s_revoked: 'Revoked', s_expired: 'Expired',
@@ -463,6 +469,7 @@ const BODY = `
     <section class="card codes" id="codes" hidden aria-live="polite">
       <h2 id="codes-title"></h2>
       <p class="warning" data-t="codesWarning"></p>
+      <p class="hint" data-t="codesAlphabet"></p>
       <ul id="codes-list"></ul>
       <div class="row">
         <button type="button" class="primary" id="copy-all" data-t="copyAll"></button>

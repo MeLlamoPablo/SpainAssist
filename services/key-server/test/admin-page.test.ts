@@ -63,6 +63,18 @@ describe('GET /admin', () => {
     expect(html).not.toContain('secret-note-xyz');
   });
 
+  it('draws new codes with a zero that does not look like an O', async () => {
+    h = await setup();
+    const html = await (await h.request('GET', '/admin')).text();
+    const rule = /\.codes code \{([^}]*)\}/.exec(html)?.[1] ?? '';
+    // The font shorthand resets font-variant-numeric, so slashed-zero has to come after it.
+    expect(rule.indexOf('font-variant-numeric: slashed-zero')).toBeGreaterThan(
+      rule.indexOf('font:'),
+    );
+    expect(rule).toMatch(/font:[^;]*Menlo, Consolas/);
+    expect(html).toContain('No llevan O, I, L ni U');
+  });
+
   it('does not exist when ADMIN_TOKEN is not configured', async () => {
     h = await setup({ config: { adminToken: undefined } });
     const res = await h.request('GET', '/admin');
