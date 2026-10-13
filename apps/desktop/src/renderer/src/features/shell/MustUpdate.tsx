@@ -7,8 +7,8 @@ import { defineDict, useT } from '../../i18n';
 import { api } from '../../lib/api';
 import { useAppStore } from '../../store/app';
 
-/** The latest release's page: installers for every platform. */
-const RELEASES_URL = 'https://github.com/MeLlamoPablo/SpainAssist/releases/latest';
+/** The website, which links the installers for every platform. */
+const WEBSITE_URL = 'https://spainassist.es';
 
 const dict = defineDict({
   es: {
@@ -38,7 +38,7 @@ const dict = defineDict({
 /**
  * Replaces the whole app when this version may no longer be used (the `must-update` flag). Where
  * the app updates itself (Windows, the Linux .deb), main downloads the update and restarts into
- * it; elsewhere, or when that fails, the user downloads it from the releases page.
+ * it; elsewhere, or when that fails, the user downloads it from the website.
  */
 export function MustUpdate() {
   const t = useT(dict);
@@ -75,7 +75,7 @@ export function MustUpdate() {
               variant="primary"
               icon={Download}
               className="mt-6"
-              onClick={() => void api.invoke('app.openExternal', RELEASES_URL)}
+              onClick={() => void api.invoke('app.openExternal', WEBSITE_URL)}
             >
               {t.download}
             </Button>
