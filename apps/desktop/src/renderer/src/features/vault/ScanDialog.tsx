@@ -1,6 +1,6 @@
 import { type PersonalDataInput, type PersonalSaveIssue, personalFieldDef } from '@sa/shared';
 import { ArrowLeft, Camera, ImageUp, RefreshCw } from 'lucide-react';
-import { type DragEvent, useEffect, useRef, useState } from 'react';
+import { type DragEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   identityDocumentPersonalInputs,
   licenceIdentityNumber,
@@ -8,6 +8,7 @@ import {
 import type { ScanGuidance, ScannerStatus } from '../../../../scanner';
 import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
+import { Select } from '../../components/ui/field';
 import { Spinner } from '../../components/ui/misc';
 import { useLang, useT } from '../../i18n';
 import { common } from '../../i18n/common';
@@ -24,6 +25,7 @@ import { useAppStore } from '../../store/app';
 import { reloadVault } from '../../store/sync';
 import { toast } from '../../store/toast';
 import { useVaultStore } from '../../store/vault';
+import { type CameraOption, cameraOptions, keptCamera } from './cameras';
 import { ScanGuidancePill } from './ScanGuidancePill';
 import { scanDict } from './scanI18n';
 
@@ -292,12 +294,42 @@ function CameraStep({
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [settingsAvailable, setSettingsAvailable] = useState(false);
+  // `null` opens the system default. Not saved: every scan starts with the default camera.
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<CameraOption[]>([]);
+  const cameraSelectId = useId();
+  // Device labels stay empty until the camera permission is granted: list them only after.
+  const permitted = useRef(false);
+  const unnamedCamera = useRef(t.unnamedCamera);
+  unnamedCamera.current = t.unnamedCamera;
+  const refreshCameras = useCallback(async () => {
+    if (!permitted.current || !navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const next = cameraOptions(
+        await navigator.mediaDevices.enumerateDevices(),
+        unnamedCamera.current,
+      );
+      setCameras(next);
+      // A chosen camera that was unplugged falls back to the default.
+      setDeviceId((selected) => keptCamera(selected, next));
+    } catch (err) {
+      console.warn('[scanner] camera list failed', errorMessage(err));
+    }
+  }, []);
+  useEffect(() => {
+    const devices = navigator.mediaDevices;
+    if (!devices?.addEventListener) return;
+    const onChange = () => void refreshCameras();
+    devices.addEventListener('devicechange', onChange);
+    return () => devices.removeEventListener('devicechange', onChange);
+  }, [refreshCameras]);
   const report = (stage: 'starting' | 'ready' | 'failed' | 'timeout', errorName?: string) => {
     const event = { stage, ...(errorName ? { errorName } : {}) };
     console.info('[scanner] camera capture', event);
     void window.saScanner?.cameraEvent(event).catch(() => {});
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry deliberately restarts camera acquisition.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry and a new camera deliberately restart camera acquisition.
   useEffect(() => {
     let disposed = false;
     let timedOut = false;
@@ -340,12 +372,19 @@ function CameraStep({
         if (!navigator.mediaDevices?.getUserMedia) throw new DOMException('', 'NotFoundError');
         stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
-          video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          },
         });
         if (disposed || timedOut) {
           for (const track of stream.getTracks()) track.stop();
           return;
         }
+        permitted.current = true;
+        setActiveDeviceId(stream.getVideoTracks()[0]?.getSettings().deviceId ?? null);
+        void refreshCameras();
         const video = videoRef.current;
         if (!video) throw new Error('Video missing');
         video.srcObject = stream;
@@ -379,7 +418,7 @@ function CameraStep({
       window.clearTimeout(timeout);
       for (const track of stream?.getTracks() ?? []) track.stop();
     };
-  }, [retry, t]);
+  }, [retry, deviceId, t]);
   const lang = useLang();
   const [guidance, setGuidance] = useState<ScanGuidance>({ state: 'positioning' });
   const resultRef = useRef(onResult);
@@ -416,9 +455,38 @@ function CameraStep({
   }, [ready, lang, t.readFailed]);
   return (
     <div className="flex flex-col gap-4 pt-1">
-      <Button variant="ghost" size="sm" icon={ArrowLeft} className="self-start" onClick={onBack}>
-        {t.back}
-      </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={onBack}>
+          {t.back}
+        </Button>
+        {cameras.length > 1 ? (
+          <div className="flex min-w-0 items-center gap-2">
+            <label htmlFor={cameraSelectId} className="text-[13px] font-medium text-fg">
+              {t.cameraSource}
+            </label>
+            <div className="w-60 min-w-0">
+              <Select
+                id={cameraSelectId}
+                className="h-9 truncate"
+                value={deviceId ?? activeDeviceId ?? ''}
+                onChange={(e) => setDeviceId(e.target.value || null)}
+                data-testid="scan-camera-select"
+              >
+                {cameras.some(
+                  (camera) => camera.deviceId === (deviceId ?? activeDeviceId),
+                ) ? null : (
+                  <option value="">{t.defaultCamera}</option>
+                )}
+                {cameras.map((camera) => (
+                  <option key={camera.deviceId} value={camera.deviceId}>
+                    {camera.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        ) : null}
+      </div>
       <div
         className="relative aspect-video overflow-hidden rounded-xl bg-(--sa-black)"
         data-testid="scan-camera-view"

@@ -40,6 +40,9 @@ export const scanDict = defineDict({
     cameraWindowBlocked:
       'No he podido acceder a la cámara. Cierra y vuelve a abrir la app, o sube una foto.',
     cameraError: 'No he podido abrir la cámara.',
+    cameraSource: 'Cámara',
+    defaultCamera: 'La cámara del sistema',
+    unnamedCamera: (n: number) => `Cámara ${n}`,
     back: 'Volver',
     dropHere: 'Suelta la foto aquí',
     cropHint: 'Ajusta el recuadro a las líneas de letras y números de abajo.',
@@ -92,6 +95,9 @@ export const scanDict = defineDict({
     cameraWindowBlocked:
       'I couldn’t access the camera. Close and reopen the app, or upload a photo.',
     cameraError: 'I couldn’t open the camera.',
+    cameraSource: 'Camera',
+    defaultCamera: 'System camera',
+    unnamedCamera: (n: number) => `Camera ${n}`,
     back: 'Back',
     dropHere: 'Drop the photo here',
     cropHint: 'Fit the box around the lines of letters and numbers at the bottom.',
