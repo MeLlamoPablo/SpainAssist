@@ -3,6 +3,7 @@ import { isValidIban, isValidNuss } from '@sa/pii';
 import {
   DniAccessNumber,
   LicenceCategories,
+  matchPersonalOption,
   PERSONAL_FIELDS,
   type PersonalDataItem,
   PersonalFieldKey,
@@ -124,9 +125,7 @@ export function normalizePersonalInput(
         throw invalid('"birthDate" is too early', 'implausible_date', key);
       break;
     case 'select': {
-      const option = def.options?.find((o) =>
-        [o.value, o.label.es, o.label.en].some((v) => v.toLowerCase() === value.toLowerCase()),
-      );
+      const option = matchPersonalOption(def, value);
       if (!option) {
         throw invalid(
           `"${key}" must be one of: ${def.options?.map((o) => o.value).join(', ')}`,
@@ -205,6 +204,28 @@ export function checkPersonalChanges(changes: PersonalChange[]): void {
       'addressPostalCode',
     );
   }
+}
+
+/**
+ * Fields that used to be free text and are now a `select`: values saved before are mapped to
+ * their option when one matches (case, accents and known synonyms aside), otherwise dropped.
+ */
+const FORMERLY_FREE_TEXT = ['maritalStatus'] as const;
+
+/** Normalizes old stored values in place when the vault loads. Returns whether any changed. */
+export function migratePersonal(entries: Map<string, PersonalEntry>): boolean {
+  let changed = false;
+  for (const key of FORMERLY_FREE_TEXT) {
+    const entry = entries.get(key);
+    const def = personalFieldDef(key);
+    if (!entry || !def) continue;
+    const option = matchPersonalOption(def, entry.value);
+    if (option?.value === entry.value) continue;
+    if (option) entries.set(key, { ...entry, value: option.value });
+    else entries.delete(key);
+    changed = true;
+  }
+  return changed;
 }
 
 const FIELD_ORDER = new Map(PERSONAL_FIELDS.map((f, i) => [f.key, i]));

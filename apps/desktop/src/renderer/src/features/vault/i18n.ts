@@ -51,6 +51,7 @@ export const vaultDict = defineDict({
       deleteBody:
         'El asistente ya no podrá usarlo para rellenar formularios. Te lo preguntará si lo necesita.',
       updated: 'Dato guardado',
+      chooseOption: 'Elegir…',
       deleted: 'Dato borrado',
       expiresIn: (days: number) =>
         days < 0 ? 'Caducado' : days === 0 ? 'Caduca hoy' : `Caduca en ${days} días`,
@@ -237,6 +238,7 @@ export const vaultDict = defineDict({
       deleteBody:
         'The assistant won’t be able to use it to fill in forms. It will ask you if it needs it.',
       updated: 'Saved',
+      chooseOption: 'Choose…',
       deleted: 'Deleted',
       expiresIn: (days: number) =>
         days < 0 ? 'Expired' : days === 0 ? 'Expires today' : `Expires in ${days} days`,

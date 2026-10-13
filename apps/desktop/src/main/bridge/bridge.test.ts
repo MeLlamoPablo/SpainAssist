@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createTestKeyProvider, Vault } from '@sa/vault';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, type TestApp } from '../testing/harness';
+import { withPersonalOptions } from './handlers';
 
 let app: TestApp;
 let procedureId: string;
@@ -1055,5 +1056,40 @@ describe('bridge: Touch ID', () => {
     // No paired phone here: the login stops after the consent, never at Touch ID.
     expect((await call).body.error?.code).not.toBe('user_rejected');
     expect(prompts).toBe(0);
+  });
+});
+
+describe('bridge: personal select fields in forms', () => {
+  it('shows marital status as a select of the vault options', () => {
+    const [status, since] = withPersonalOptions(
+      [
+        {
+          key: 'estado',
+          label: 'Estado civil',
+          type: 'text',
+          required: true,
+          vaultKey: 'maritalStatus',
+          defaultValue: 'Casada',
+        },
+        {
+          key: 'boda',
+          label: 'Fecha de la boda',
+          type: 'date',
+          required: true,
+          visibleWhen: { field: 'estado', values: ['casado'] },
+        },
+      ],
+      'es',
+    );
+    expect(status).toMatchObject({ type: 'select', defaultValue: 'married' });
+    expect(status?.options?.map((o) => o.value)).toEqual([
+      'single',
+      'married',
+      'separated',
+      'divorced',
+      'widowed',
+    ]);
+    expect(status?.options?.[0]?.label).toBe('Soltero/a');
+    expect(since?.visibleWhen?.values).toEqual(['married']);
   });
 });

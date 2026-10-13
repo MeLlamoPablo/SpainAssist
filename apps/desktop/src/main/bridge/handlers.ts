@@ -6,8 +6,10 @@ import {
   type CredentialPrompt,
   type CredentialSummary,
   credentialAllowedOn,
+  type FormField,
   type FormPrompt,
   type Language,
+  matchPersonalOption,
   type PersonalDataInput,
   PersonalFieldKey,
   type PersonalSaveIssue,
@@ -92,6 +94,38 @@ function refuseHiddenKey(key: string | undefined): void {
       ? 'PINs are secrets, not personal data: agents never ask for, save or type them. A one-time PIN goes through browser_fill_from_user. The user saves the DNIe PIN in Mis datos (DNIe con el móvil), and only the paired phone gets it.'
       : `"${key}" is not available to agents.`,
   );
+}
+
+/**
+ * Fields saved under a personal `select` key (sex, marital status) become a select with that
+ * key's own options, so the answer is always a value the vault accepts. Lists too long for a
+ * form (nationality) stay as the agent wrote them; the vault still matches labels on save.
+ */
+export function withPersonalOptions(fields: FormField[], lang: Language): FormField[] {
+  const converted = new Map<string, NonNullable<ReturnType<typeof personalFieldDef>>>();
+  const mapped = fields.map((field) => {
+    const def = field.vaultKey ? personalFieldDef(field.vaultKey) : undefined;
+    if (def?.input !== 'select' || !def.options || def.options.length > 50) return field;
+    if (field.type !== 'text' && field.type !== 'select') return field;
+    converted.set(field.key, def);
+    const defaultValue = field.defaultValue && matchPersonalOption(def, field.defaultValue)?.value;
+    const { defaultValue: _, ...rest } = field;
+    return {
+      ...rest,
+      type: 'select' as const,
+      options: def.options.map((o) => ({ value: o.value, label: o.label[lang] })),
+      ...(defaultValue ? { defaultValue } : {}),
+    };
+  });
+  return mapped.map((field) => {
+    const def = field.visibleWhen && converted.get(field.visibleWhen.field);
+    if (!def || !field.visibleWhen) return field;
+    const values = field.visibleWhen.values.flatMap((v) => {
+      const option = matchPersonalOption(def, v);
+      return option ? [option.value] : [];
+    });
+    return values.length ? { ...field, visibleWhen: { ...field.visibleWhen, values } } : field;
+  });
 }
 
 /**
@@ -390,7 +424,11 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         refuseHiddenKey(field.key);
         refuseHiddenKey(field.vaultKey);
       }
-      const prompt: FormPrompt = { kind: 'form', ...params };
+      const prompt: FormPrompt = {
+        kind: 'form',
+        ...params,
+        fields: withPersonalOptions(params.fields, lang()),
+      };
       const retry = retryPlaces.get(ctx.procedureId);
       retryPlaces.delete(ctx.procedureId);
       const places: PlaceResults = retry && retry.until > Date.now() ? retry.places : new Map();

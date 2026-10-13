@@ -24,13 +24,98 @@ export const PersonalFieldGroup = z.enum([
 ]);
 export type PersonalFieldGroup = z.infer<typeof PersonalFieldGroup>;
 
+/**
+ * One choice of a `select` personal field. `value` is the stable key the vault stores; `aliases`
+ * are other written forms (lowercase, without accents) that saves and old data map to it.
+ */
+export const PersonalFieldOption = z
+  .object({
+    value: z.string().min(1).max(40),
+    label: z.object({ es: z.string().min(1).max(80), en: z.string().min(1).max(80) }),
+    aliases: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(40)
+          .regex(/^[a-z0-9 ]+$/),
+      )
+      .max(20)
+      .optional(),
+  })
+  .strict();
+export type PersonalFieldOption = z.infer<typeof PersonalFieldOption>;
+
 export interface PersonalFieldDef {
   key: string;
   group: PersonalFieldGroup;
   input: 'text' | 'date' | 'email' | 'phone' | 'select' | 'licenceCategories';
   label: { es: string; en: string };
-  options?: { value: string; label: { es: string; en: string } }[];
+  /** Required for `select`: the only values the vault accepts. */
+  options?: readonly PersonalFieldOption[];
 }
+
+/** Lowercase, trimmed, without accents or extra spaces: how option matching compares text. */
+function foldOptionText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The option of a `select` field that `text` names: its stored value, either label or an alias,
+ * ignoring case, accents and extra spaces. No fuzzy matching.
+ */
+export function matchPersonalOption(
+  def: PersonalFieldDef,
+  text: string,
+): PersonalFieldOption | undefined {
+  const folded = foldOptionText(text);
+  if (!folded) return undefined;
+  return def.options?.find((option) =>
+    [option.value, option.label.es, option.label.en, ...(option.aliases ?? [])].some(
+      (candidate) => foldOptionText(candidate) === folded,
+    ),
+  );
+}
+
+/**
+ * Civil statuses as the Civil Registry records them and administration forms list them (Código
+ * Civil; Ley 20/2011 del Registro Civil): single, married, legally separated, divorced, widowed.
+ * A registered partnership (pareja de hecho) is not a civil status: it lives in regional
+ * registries and sits alongside one of these (a partner is still single, divorced or widowed),
+ * so forms that ask for it need their own field.
+ */
+export const MARITAL_STATUS_OPTIONS: readonly PersonalFieldOption[] = [
+  {
+    value: 'single',
+    label: { es: 'Soltero/a', en: 'Single' },
+    aliases: ['soltero', 'soltera', 'unmarried'],
+  },
+  {
+    value: 'married',
+    label: { es: 'Casado/a', en: 'Married' },
+    aliases: ['casado', 'casada'],
+  },
+  {
+    value: 'separated',
+    label: { es: 'Separado/a', en: 'Legally separated' },
+    aliases: ['separado', 'separada', 'separated', 'separado legalmente', 'separada legalmente'],
+  },
+  {
+    value: 'divorced',
+    label: { es: 'Divorciado/a', en: 'Divorced' },
+    aliases: ['divorciado', 'divorciada'],
+  },
+  {
+    value: 'widowed',
+    label: { es: 'Viudo/a', en: 'Widowed' },
+    aliases: ['viudo', 'viuda', 'widow', 'widower'],
+  },
+];
 
 /** Document-specific keys allow several documents to coexist without overwriting each other. */
 export const DOCUMENT_FIELD_GROUPS = ['dni', 'tie', 'passport', 'drivingLicence'] as const;
@@ -209,8 +294,9 @@ export const PERSONAL_FIELDS: readonly PersonalFieldDef[] = [
   {
     key: 'maritalStatus',
     group: 'identity',
-    input: 'text',
+    input: 'select',
     label: { es: 'Estado civil', en: 'Marital status' },
+    options: MARITAL_STATUS_OPTIONS,
   },
   ...DOCUMENT_PERSONAL_FIELDS,
   {

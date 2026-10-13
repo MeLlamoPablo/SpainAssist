@@ -41,7 +41,12 @@ import {
 } from './files';
 import { compactId, isSpanishId } from './ids';
 import type { KeyProvider } from './keys';
-import { checkPersonalChanges, normalizePersonalInput, personalItems } from './personal';
+import {
+  checkPersonalChanges,
+  migratePersonal,
+  normalizePersonalInput,
+  personalItems,
+} from './personal';
 import { sensitiveValues } from './sensitive';
 import {
   cloneState,
@@ -246,6 +251,7 @@ export class Vault {
       if (stateFile) {
         const state = parseState(unseal(derived, PURPOSE.state, STATE_CONTEXT, stateFile));
         vault = new Vault(dir, keys, derived, state, now);
+        if (migratePersonal(state.personal)) await vault.persist(state);
       } else {
         // Only a crash right after creating key.bin can leave no vault.bin. If documents
         // exist, something else deleted vault.bin: refuse rather than drop them.

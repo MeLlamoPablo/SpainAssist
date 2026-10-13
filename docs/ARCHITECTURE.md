@@ -210,7 +210,10 @@ provides the answer. When the user changes plans, resume cancels obsolete forms,
 and manual-action requests without answering them; late responses to cancelled prompts are rejected.
 Stopping a procedure cancels its questions; a chat message cancels the assistant's. Form answers
 for fields with a `vaultKey`
-(except secrets and documents) are always written to the vault.
+(except secrets and documents) are always written to the vault. A field whose `vaultKey` is a
+personal `select` with a short option list (sex, marital status) is shown as a select of that
+key's options, so its answer is a stored key such as `married`. The vault matches select values
+by key, either label or a listed alias, ignoring case and accents (`matchPersonalOption`).
 
 Place choices use the `map-options` form type: the agent gives several places (a value, a name
 and a street address with its town each, researched from official sources) and gets back one

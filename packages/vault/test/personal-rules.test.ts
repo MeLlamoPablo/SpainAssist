@@ -1,10 +1,12 @@
 import { assert, describe, expect, it } from 'vitest';
 import {
   checkPersonalChanges,
+  migratePersonal,
   normalizePersonalInput,
   type PersonalChange,
   PersonalDataValidationError,
 } from '../src/personal';
+import type { PersonalEntry } from '../src/state';
 
 /** The fixed reason the vault gives for refusing a value, or undefined when it accepts it. */
 function rejection(key: string, value: string): string | undefined {
@@ -130,5 +132,44 @@ describe('personal cross-field rules', () => {
     );
     // Saved alone, a new postal code is not compared with the stored province.
     expect(crossFieldRejection({ addressPostalCode: '08001' })).toBeUndefined();
+  });
+});
+
+describe('marital status', () => {
+  it('stores the option key given a key, label or synonym', () => {
+    const save = (value: string) =>
+      normalizePersonalInput({ key: 'maritalStatus', value }, undefined);
+    expect(save('Casada').value).toBe('married');
+    expect(save(' VIUDA ').value).toBe('widowed');
+    expect(save('Separado/a').value).toBe('separated');
+    expect(save('single').value).toBe('single');
+    expect(rejection('maritalStatus', 'pareja de hecho')).toBe('invalid_option');
+  });
+
+  it('maps old free-text values to their key when the vault loads, and drops the rest', () => {
+    const entry = (value: string): PersonalEntry => ({
+      value,
+      source: 'manual',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const cases: [string, string | undefined][] = [
+      ['Soltera', 'single'],
+      ['casado', 'married'],
+      ['  Divorciada', 'divorced'],
+      ['viúda', 'widowed'],
+      ['Widowed', 'widowed'],
+      ['separada', 'separated'],
+      ['married', 'married'],
+      ['es complicado', undefined],
+    ];
+    for (const [old, expected] of cases) {
+      const entries = new Map([
+        ['maritalStatus', entry(old)],
+        ['givenName', entry('Ana')],
+      ]);
+      expect(migratePersonal(entries), old).toBe(old !== expected);
+      expect(entries.get('maritalStatus')?.value, old).toBe(expected);
+      expect(entries.get('givenName')?.value).toBe('Ana');
+    }
   });
 });

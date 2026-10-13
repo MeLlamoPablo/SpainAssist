@@ -343,7 +343,9 @@ function PersonalRow({
               className="h-9"
               autoFocus
             >
-              <option value="" />
+              <option value="" disabled>
+                {t.personal.chooseOption}
+              </option>
               {def.options?.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label[lang]}

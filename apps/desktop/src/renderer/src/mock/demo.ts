@@ -208,6 +208,7 @@ export function demoPersonal(now: number, lang: Lang): PersonalDataItem[] {
     ['birthDate', '1991-03-08', 'scan', 30],
     ['sex', 'F', 'scan', 30],
     ['nationality', 'ESP', 'scan', 30],
+    ['maritalStatus', 'single', 'form', 25],
     ['email', 'lucia.martin@example.com', 'form', 3],
     ['addressStreet', 'Calle de Alcalá 123, 4º B', 'agent', 3],
     ['addressPostalCode', '28009', 'agent', 3],

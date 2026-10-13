@@ -1,7 +1,18 @@
-import type { VaultReadResult } from '@sa/shared';
+import { AGENT_PERSONAL_FIELD_KEYS, PERSONAL_FIELDS, type VaultReadResult } from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
 import { callBridge, compact, defineSaTool, errorResult, textResult } from './common';
+
+/** Well-known keys with a short fixed list of values, e.g. "maritalStatus: single | married…". */
+export const PERSONAL_CHOICES = PERSONAL_FIELDS.filter(
+  (f) =>
+    f.input === 'select' &&
+    f.options &&
+    f.options.length <= 10 &&
+    AGENT_PERSONAL_FIELD_KEYS.includes(f.key),
+)
+  .map((f) => `${f.key}: ${f.options?.map((o) => o.value).join(' | ')}`)
+  .join('; ');
 
 const KEY_PATTERN = '^([a-zA-Z][a-zA-Z0-9]*|custom\\.[a-z0-9][a-z0-9_-]{0,48})$';
 
@@ -21,7 +32,10 @@ export const VaultSaveParams = Type.Object({
         pattern: KEY_PATTERN,
         description: 'A well-known key (the same list as ask_user vaultKey) or custom.<slug>',
       }),
-      value: Type.String({ maxLength: 2000 }),
+      value: Type.String({
+        maxLength: 2000,
+        description: `These keys take exactly one of their values: ${PERSONAL_CHOICES}`,
+      }),
       label: Type.Optional(
         Type.String({ maxLength: 160, description: 'Required for custom.<slug> keys' }),
       ),

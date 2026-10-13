@@ -25,7 +25,12 @@ function setup(placeLookup: PlaceLookup) {
     savedToVault: [],
   });
   const logger = { info: vi.fn() };
-  const deps = { placeLookup, prompts: { ask }, logger } as unknown as BridgeHandlerDeps;
+  const deps = {
+    placeLookup,
+    prompts: { ask },
+    logger,
+    lang: () => 'es',
+  } as unknown as BridgeHandlerDeps;
   return { ask, handler: createBridgeHandlers(deps)['prompt.form'] };
 }
 

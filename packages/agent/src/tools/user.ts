@@ -2,6 +2,7 @@ import { AGENT_PERSONAL_FIELD_KEYS, FormPrompt, PhoneCallPrompt } from '@sa/shar
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
 import { callBridge, compact, defineSaTool, errorResult, StringEnum, textResult } from './common';
+import { PERSONAL_CHOICES } from './vault';
 
 const FIELD_TYPES = [
   'text',
@@ -62,7 +63,7 @@ const FormField = Type.Object({
   vaultKey: Type.Optional(
     Type.String({
       maxLength: 80,
-      description: `Offer to save the answer in the user's data under this key: ${AGENT_PERSONAL_FIELD_KEYS.join(', ')}, or custom.<slug>. Use the exact canonical key for identity/document fields (drivingLicence* is the Spanish driving licence; its number is the holder's DNI/NIE, so use dniNumber or tieNumber for it): this enables document scanning and prefilling.`,
+      description: `Offer to save the answer in the user's data under this key: ${AGENT_PERSONAL_FIELD_KEYS.join(', ')}, or custom.<slug>. Use the exact canonical key for identity/document fields (drivingLicence* is the Spanish driving licence; its number is the holder's DNI/NIE, so use dniNumber or tieNumber for it): this enables document scanning and prefilling. Keys with fixed values (${PERSONAL_CHOICES}) are shown as a dropdown of those values, and the answer is one of them.`,
     }),
   ),
 });
