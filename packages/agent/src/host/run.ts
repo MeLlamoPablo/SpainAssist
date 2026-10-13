@@ -73,6 +73,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         dniePhone: config.dniePhone,
         redactPages,
         timeZone: config.timeZone,
+        language: config.language,
       });
   // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
   // OpenAI's hosted web search, BYOK and custom endpoints on Exa's keyless tier.

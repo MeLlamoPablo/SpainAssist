@@ -2,8 +2,9 @@ import type { AdministrationLevel } from './procedure';
 import type { CredentialKind } from './vault';
 
 /**
- * Domains of Spanish public administrations. Only used as an anti-phishing allowlist: where
- * certificates may be presented and credentials typed (see `credentialAllowedOn`). Matching is
+ * Domains of Spanish public administrations. Used as an anti-phishing allowlist (where
+ * certificates may be presented and credentials typed, see `credentialAllowedOn`) and as the
+ * hosts the agent may read without asking the user (`isOfficialHost`). Matching is
  * by host suffix on label boundaries ("sede.agenciatributaria.gob.es" matches "gob.es";
  * "evilgob.es" does not).
  */
@@ -275,6 +276,14 @@ export function hostMatchesSuffix(host: string, suffix: string): boolean {
   const h = host.toLowerCase().replace(/\.$/, '');
   const s = suffix.toLowerCase();
   return h === s || h.endsWith(`.${s}`);
+}
+
+/** True if `host` is an official domain (or a dev/e2e extra trusted host). */
+export function isOfficialHost(host: string): boolean {
+  return (
+    extraTrustedSuffixes.some((s) => hostMatchesSuffix(host, s)) ||
+    OFFICIAL_DOMAINS.some((d) => hostMatchesSuffix(host, d.suffix))
+  );
 }
 
 /** True if a credential of `kind` may be used on the page at `url` (https only). */

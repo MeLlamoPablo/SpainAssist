@@ -1,16 +1,18 @@
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 /**
  * fetch_url core: download a page or PDF and turn it into compact Markdown/text for the model.
  * - http(s) only, private/local hosts blocked (unless allowed for dev/e2e), manual redirects
- *   (each hop re-checked), timeouts and byte caps. run_script's fetch shares the host checks
- *   (`fetchPublic`).
+ *   (each hop re-checked), timeouts and byte caps. Connections go to the addresses that were
+ *   checked (DNS pinning, see `publicLookup`). run_script's fetch shares all of it
+ *   (`fetchPublic`), including the caller's host approval (see tools/hosts.ts).
  * - Explicit charset decoding (header, BOM, <meta>, XML declaration; heuristic fallback to
  *   windows-1252, which many Spanish government sites still serve as ISO-8859-1).
  * - HTML: main content via Readability (linkedom DOM), fallback to <main>/body; tables keep
@@ -20,6 +22,7 @@ import { extractText, getDocumentProxy } from 'unpdf';
 export type FetchErrorCode =
   | 'invalid_url'
   | 'blocked'
+  | 'declined'
   | 'network'
   | 'timeout'
   | 'http'
@@ -50,6 +53,8 @@ export interface FetchOptions {
   maxRedirects?: number;
   /** Dev/e2e only: allow localhost and private networks. */
   allowPrivateHosts?: boolean;
+  /** Asked before each host is contacted (see `PublicFetchOptions.approveHost`). */
+  approveHost?: (url: URL) => Promise<boolean>;
   /** "auto": main content (Readability, with fallback). "full": the whole page body. */
   mode?: 'auto' | 'full';
   fetchImpl?: typeof fetch;
@@ -110,8 +115,8 @@ export function isPrivateAddress(ip: string): boolean {
   return false;
 }
 
-async function assertPublicHost(hostname: string): Promise<void> {
-  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+/** Local names and private IP literals: checked without the network. */
+function assertNotLocalHost(host: string): void {
   if (
     host === 'localhost' ||
     host.endsWith('.localhost') ||
@@ -120,21 +125,50 @@ async function assertPublicHost(hostname: string): Promise<void> {
   ) {
     throw new FetchError('blocked', `Blocked: ${host} is a local address`);
   }
-  if (isIP(host)) {
-    if (isPrivateAddress(host))
-      throw new FetchError('blocked', `Blocked: ${host} is a private address`);
-    return;
-  }
-  let addresses: { address: string }[];
+  if (isPrivateAddress(host))
+    throw new FetchError('blocked', `Blocked: ${host} is a private address`);
+}
+
+/** Every address `host` resolves to, or an error if any of them is private. */
+async function resolvePublic(host: string, family?: number) {
+  let addresses: { address: string; family: number }[];
   try {
-    addresses = await lookup(host, { all: true, verbatim: true });
+    addresses = await lookup(host, { all: true, verbatim: true, family: family ?? 0 });
   } catch {
     throw new FetchError('network', `Could not resolve ${host}`);
   }
+  if (addresses.length === 0) throw new FetchError('network', `Could not resolve ${host}`);
   if (addresses.some((a) => isPrivateAddress(a.address))) {
     throw new FetchError('blocked', `Blocked: ${host} resolves to a private address`);
   }
+  return addresses;
 }
+
+/**
+ * DNS lookup for the connections of `fetchPublic`: resolves once, refuses private addresses and
+ * hands exactly the checked addresses to the socket. A name that resolved to a public address
+ * for the pre-check and to a private one now (DNS rebinding) is refused here. TLS still uses the
+ * hostname for SNI and certificate checks.
+ */
+export const publicLookup = ((hostname, options, callback) => {
+  resolvePublic(hostname, typeof options.family === 'number' ? options.family : undefined).then(
+    (addresses) => {
+      if (options.all) callback(null, addresses);
+      else callback(null, addresses[0]?.address ?? '', addresses[0]?.family);
+    },
+    (error: Error) => callback(error as NodeJS.ErrnoException, ''),
+  );
+}) as LookupFunction;
+
+let pinnedAgent: Agent | undefined;
+/** fetch whose connections only reach addresses checked by `publicLookup`. */
+const pinnedFetch = ((input: URL, init: RequestInit) => {
+  pinnedAgent ??= new Agent({ connect: { lookup: publicLookup } });
+  return undiciFetch(input, {
+    ...(init as Parameters<typeof undiciFetch>[1]),
+    dispatcher: pinnedAgent,
+  });
+}) as unknown as typeof fetch;
 
 // ---------------------------------------------------------------------------------------------
 // Charset
@@ -456,18 +490,25 @@ export interface PublicFetchOptions {
   maxRedirects?: number;
   /** Dev/e2e only: allow localhost and private networks. */
   allowPrivateHosts?: boolean;
+  /**
+   * Asked before each hop's host is contacted (before any DNS lookup, so a declined host gets no
+   * traffic at all). false fails the request with a `declined` FetchError.
+   */
+  approveHost?: (url: URL) => Promise<boolean>;
+  /** Tests: replaces the pinned fetch (and so DNS pinning). */
   fetchImpl?: typeof fetch;
 }
 
 /**
  * A body-less request to a public http(s) host. Redirects are followed by hand, so every hop's
- * host is checked again. Returns the response of the last hop (any status) and its URL.
+ * host is checked (and approved) again. Returns the response of the last hop (any status) and
+ * its URL.
  */
 export async function fetchPublic(
   start: URL,
   options: PublicFetchOptions,
 ): Promise<{ res: Response; url: URL; redirects: number }> {
-  const doFetch = options.fetchImpl ?? fetch;
+  const doFetch = options.fetchImpl ?? (options.allowPrivateHosts ? fetch : pinnedFetch);
   const maxRedirects = options.maxRedirects ?? 5;
   let url = start;
   for (let hop = 0; ; hop++) {
@@ -477,7 +518,16 @@ export async function fetchPublic(
     if (url.username || url.password) {
       throw new FetchError('invalid_url', 'URLs with embedded credentials are not allowed');
     }
-    if (!options.allowPrivateHosts) await assertPublicHost(url.hostname);
+    const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    if (!options.allowPrivateHosts) assertNotLocalHost(host);
+    if (options.approveHost && !(await options.approveHost(url))) {
+      throw new FetchError(
+        'declined',
+        `The user did not allow reading ${host}. Don't try it again: use an official source or ask the user.`,
+      );
+    }
+    // Early, readable error; the connection itself is checked again by publicLookup.
+    if (!options.allowPrivateHosts && !isIP(host)) await resolvePublic(host);
     let res: Response;
     try {
       res = await doFetch(url, {
@@ -489,6 +539,8 @@ export async function fetchPublic(
     } catch (error) {
       if (options.signal.aborted) throw error;
       const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+      // publicLookup refused the address the connection was about to use.
+      if (cause instanceof FetchError) throw cause;
       throw new FetchError(
         'network',
         `Could not fetch ${url.host}: ${cause?.code ?? cause?.message ?? (error as Error).message}`,
@@ -519,10 +571,37 @@ export async function fetchDocument(
     throw new FetchError('invalid_url', `Invalid URL: ${rawUrl}`);
   }
   const timeoutMs = options.timeoutMs ?? 20_000;
+  // The time budget restarts after the user answers an approval.
+  const timeout = new AbortController();
+  let timer = setTimeout(() => timeout.abort(), timeoutMs);
   const signal = AbortSignal.any(
-    [options.signal, AbortSignal.timeout(timeoutMs)].filter((s): s is AbortSignal => !!s),
+    [options.signal, timeout.signal].filter((s): s is AbortSignal => !!s),
   );
+  const approve = options.approveHost;
+  const approveHost =
+    approve &&
+    (async (url: URL) => {
+      clearTimeout(timer);
+      try {
+        return await approve(url);
+      } finally {
+        timer = setTimeout(() => timeout.abort(), timeoutMs);
+      }
+    });
+  try {
+    return await readDocument(rawUrl, start, timeoutMs, signal, { ...options, approveHost });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
+async function readDocument(
+  rawUrl: string,
+  start: URL,
+  timeoutMs: number,
+  signal: AbortSignal,
+  options: FetchOptions,
+): Promise<FetchedDocument> {
   let res: Response;
   let url: URL;
   try {
@@ -530,6 +609,7 @@ export async function fetchDocument(
       signal,
       maxRedirects: options.maxRedirects,
       allowPrivateHosts: options.allowPrivateHosts,
+      approveHost: options.approveHost,
       fetchImpl: options.fetchImpl,
       headers: {
         'user-agent': USER_AGENT,

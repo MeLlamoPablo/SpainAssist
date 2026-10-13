@@ -1,3 +1,4 @@
+import type { Language } from '@sa/shared';
 import type { BridgeTransport } from '../bridge/client';
 import { assistantTools } from './assistant';
 import { browserTools } from './browser';
@@ -5,6 +6,7 @@ import type { AnyToolDefinition } from './common';
 import { documentTools } from './documents';
 import { downloadTools } from './downloads';
 import { fetchUrlTool } from './fetch-url';
+import { createHostPolicy } from './hosts';
 import { ASSISTANT_TOOL_NAMES, TOOL_NAMES } from './names';
 import { procedureTools } from './procedure';
 import { researchTools } from './research';
@@ -38,6 +40,8 @@ export interface ToolDeps {
   redactPages?: boolean;
   /** The user's IANA time zone, for times in tool results (default Europe/Madrid). */
   timeZone?: string;
+  /** Language of the app's prompts raised by tools (host approvals). Default es. */
+  language?: Language;
 }
 
 /** The tools of a procedure's agent. */
@@ -50,6 +54,8 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
         : name === 'feedback_vote'
           ? !!deps.feedback?.vote
           : true;
+  // One per agent run: an approved host stays approved for both fetch_url and run_script.
+  const hosts = createHostPolicy({ bridge: deps.bridge, language: deps.language });
   return finish(
     TOOL_NAMES.filter(active),
     [
@@ -64,8 +70,12 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
       }),
       ...downloadTools(deps.bridge),
       ...researchTools(deps.bridge, { baseUrl: deps.boeBaseUrl, fetchImpl: deps.fetchImpl }),
-      fetchUrlTool({ allowPrivateHosts: deps.allowPrivateHosts, fetchImpl: deps.fetchImpl }),
-      runScriptTool({ allowPrivateHosts: deps.allowPrivateHosts, fetchImpl: deps.fetchImpl }),
+      fetchUrlTool({ hosts, allowPrivateHosts: deps.allowPrivateHosts, fetchImpl: deps.fetchImpl }),
+      runScriptTool({
+        hosts,
+        allowPrivateHosts: deps.allowPrivateHosts,
+        fetchImpl: deps.fetchImpl,
+      }),
     ].filter((tool) => active(tool.name)),
   );
 }

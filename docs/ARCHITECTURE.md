@@ -617,9 +617,15 @@ the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
   impact (no shell/file tools, domain checks, confirmations for irreversible actions).
   `run_script` runs model-written JavaScript in QuickJS (WebAssembly, fresh per call, CPU and
   memory capped) with no Node APIs or secrets; its only I/O is a read-only `fetch` (GET/HEAD, no
-  body, only `accept`/`accept-language` headers) with `fetch_url`'s host checks (no localhost or
-  private networks, every redirect hop re-checked). Data can still leave in a public URL's
-  query string, as with `fetch_url`.
+  body, only `accept`/`accept-language` headers) with `fetch_url`'s host checks.
+- `fetch_url` and `run_script` share one host policy (`packages/agent/src/tools/hosts.ts`):
+  official domains (`isOfficialHost`, @sa/shared `OFFICIAL_DOMAINS`) are read freely; any
+  other host needs the user's approval through `prompt.confirm` (the prompt shows the host and
+  the full address), asked before any DNS lookup or connection, once per host per agent run,
+  and checked again on every redirect hop. Localhost and private networks are always blocked
+  (unless `allowPrivateHosts`, dev/e2e), and connections are DNS-pinned: the socket only gets
+  addresses that passed the check (`publicLookup`), so DNS rebinding can't reach the LAN. An
+  approved non-official host can still receive data in its URLs.
 - Known MVP gaps: procedure metadata, transcripts, screenshots and pi session files are private
   local files without encryption. ChatGPT OAuth tokens are stored in the encrypted vault and
   supplied to pi in memory through the authenticated bridge.

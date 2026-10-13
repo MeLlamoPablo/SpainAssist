@@ -12,6 +12,7 @@ import {
   sliceText,
 } from '../src/research/fetch';
 import { fetchUrlTool } from '../src/tools/fetch-url';
+import type { HostPolicy } from '../src/tools/hosts';
 import { FIXTURES, textOf } from './helpers/tools';
 
 const article = readFileSync(join(FIXTURES, 'html', 'article.html'), 'utf8');
@@ -75,6 +76,7 @@ afterAll(async () => {
 });
 
 const local = { allowPrivateHosts: true };
+const allHosts: HostPolicy = { approve: async () => true };
 
 describe('fetchDocument (HTML)', () => {
   it('extracts the main content as Markdown with GFM tables and absolute links', async () => {
@@ -208,7 +210,7 @@ describe('helpers', () => {
 
 describe('fetch_url tool', () => {
   it('renders a page header, the untrusted marker and paging hints', async () => {
-    const tool = fetchUrlTool({ allowPrivateHosts: true });
+    const tool = fetchUrlTool({ hosts: allHosts, allowPrivateHosts: true });
     const result = await tool.execute(
       'c1',
       { url: `${base}/article.html`, maxChars: 300 },
@@ -223,7 +225,7 @@ describe('fetch_url tool', () => {
   });
 
   it('serves pages from a short cache when paging', async () => {
-    const tool = fetchUrlTool({ allowPrivateHosts: true });
+    const tool = fetchUrlTool({ hosts: allHosts, allowPrivateHosts: true });
     hits = {};
     await tool.execute('c1', { url: `${base}/doc.pdf` }, undefined, undefined, {} as never);
     await tool.execute(
@@ -237,7 +239,7 @@ describe('fetch_url tool', () => {
   });
 
   it('returns tool errors instead of throwing', async () => {
-    const tool = fetchUrlTool();
+    const tool = fetchUrlTool({ hosts: allHosts });
     const result = (await tool.execute(
       'c1',
       { url: `${base}/article.html` },
@@ -248,5 +250,40 @@ describe('fetch_url tool', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result as never)).toContain('Blocked');
     expect(FetchError).toBeDefined();
+  });
+
+  it('asks before reading a non-official host and reports a refusal', async () => {
+    const asked: string[] = [];
+    const hosts: HostPolicy = {
+      approve: async (url) => {
+        asked.push(url.host);
+        return false;
+      },
+    };
+    hits = {};
+    const tool = fetchUrlTool({ hosts, allowPrivateHosts: true });
+    const result = (await tool.execute(
+      'c1',
+      { url: `${base}/article.html` },
+      undefined,
+      undefined,
+      {} as never,
+    )) as { isError?: boolean };
+    expect(result.isError).toBe(true);
+    expect(textOf(result as never)).toContain('The user did not allow reading 127.0.0.1');
+    expect(asked).toEqual([new URL(base).host]);
+    expect(hits['/article.html']).toBeUndefined();
+  });
+
+  it('restarts its time budget after the user answers', async () => {
+    const hosts: HostPolicy = {
+      approve: () => new Promise((resolve) => setTimeout(() => resolve(true), 300)),
+    };
+    const doc = await fetchDocument(`${base}/article.html`, {
+      ...local,
+      timeoutMs: 200,
+      approveHost: (url) => hosts.approve(url),
+    });
+    expect(doc.status).toBe(200);
   });
 });

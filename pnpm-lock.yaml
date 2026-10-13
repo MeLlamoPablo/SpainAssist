@@ -412,6 +412,9 @@ importers:
       typebox:
         specifier: 1.3.27
         version: 1.3.27
+      undici:
+        specifier: ^8.10.2
+        version: 8.10.2
       unpdf:
         specifier: ^1.8.1
         version: 1.8.1(@napi-rs/canvas@1.0.10)
@@ -5981,6 +5984,7 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@4.6.5)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   '@modelcontextprotocol/sdk@1.32.0(zod@4.6.5)':
     dependencies:
@@ -7450,6 +7454,7 @@ snapshots:
       type-is: 2.1.0
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   boolbase@2.0.0: {}
 
@@ -8006,6 +8011,7 @@ snapshots:
       ip-address: 10.7.3
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   express-rate-limit@8.7.0(express@5.2.1):
     dependencies:
@@ -8080,6 +8086,7 @@ snapshots:
       vary: 1.1.2
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   extend@3.0.2: {}
 
@@ -8123,6 +8130,7 @@ snapshots:
       statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   form-data@4.0.6:
     dependencies:
@@ -9598,6 +9606,7 @@ snapshots:
       path-to-regexp: 8.4.2
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   safe-buffer@5.1.2: {}
 
@@ -9655,6 +9664,7 @@ snapshots:
       statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   serialize-error@7.0.1:
     dependencies:
@@ -9678,6 +9688,7 @@ snapshots:
       send: 1.2.1(supports-color@7.2.0)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   setprototypeof@1.2.0: {}
 
