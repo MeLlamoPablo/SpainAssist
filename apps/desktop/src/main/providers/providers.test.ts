@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../core/i18n';
 import { SECRET_IDS } from '../core/secrets';
 import { createFakeProviderLib, FAKE_ID_TOKEN } from '../testing/fakes';
-import { createTestApp, type TestApp } from '../testing/harness';
+import { createFakeFetch, createTestApp, type TestApp } from '../testing/harness';
 
 let app: TestApp;
 afterEach(async () => {
@@ -706,6 +706,151 @@ describe('ProviderManager', () => {
       configured: true,
       kind: 'custom',
       model: 'mock-model',
+    });
+  });
+});
+
+describe('custom endpoint capabilities', () => {
+  /** An Ollama server: `extra` answers more paths. */
+  const ollama = (extra: Record<string, unknown> = {}) =>
+    createFakeFetch(({ url }) => {
+      const routes: Record<string, unknown> = {
+        '/v1/models': { data: [{ id: 'qwen2.5vl:7b' }, { id: 'qwen3:14b' }] },
+        '/api/ps': { models: [] },
+        ...extra,
+      };
+      const body = routes[url.pathname];
+      return body === undefined ? new Response('', { status: 404 }) : Response.json(body);
+    });
+
+  it('passes the capabilities to every agent role and reasons at the normal level', async () => {
+    app = await createTestApp();
+    const capabilities = {
+      supportsImages: true,
+      reasoning: true,
+      contextWindow: 40_960,
+      maxTokens: 8192,
+    };
+    const res = await app.invoke('providers.setCustom', {
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      model: 'qwen3:14b',
+      ...capabilities,
+    });
+    expect(res.ok).toBe(true);
+    expect((await app.invoke('settings.get')).provider).toEqual({
+      kind: 'custom',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      model: 'qwen3:14b',
+      ...capabilities,
+    });
+    const expected = {
+      provider: 'custom',
+      id: 'qwen3:14b',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      ...capabilities,
+    };
+    expect(await app.services.providers.agentModel()).toEqual(expected);
+    expect(await app.services.providers.agentModel('assistant')).toEqual(expected);
+    // A reasoning model runs at the default thinking level, not "off".
+    expect(await app.services.providers.agentAuthor()).toBe('qwen3:14b · medium');
+  });
+
+  it('probes an endpoint for the form with the typed key, which is never logged', async () => {
+    const fetch = ollama({
+      '/api/show': {
+        capabilities: ['completion', 'vision'],
+        model_info: { 'x.context_length': 32_768 },
+      },
+    });
+    app = await createTestApp({ fetch });
+    const result = await app.invoke('providers.probeCustom', {
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      model: 'qwen2.5vl:7b',
+      apiKey: 'sk-local-probe-key',
+    });
+    expect(result).toEqual({
+      reachable: true,
+      server: 'ollama',
+      models: ['qwen2.5vl:7b', 'qwen3:14b'],
+      detected: { supportsImages: true, reasoning: false, contextWindow: 32_768 },
+    });
+    expect(fetch.requests.every((r) => r.url.host === '127.0.0.1:11434')).toBe(true);
+    expect(fetch.requests[0]?.headers.get('authorization')).toBe('Bearer sk-local-probe-key');
+    expect(app.logLines.join('\n')).not.toContain('sk-local-probe-key');
+  });
+
+  it('lists the served models, and detects again when the model changes', async () => {
+    const fetch = ollama({
+      '/api/show': { capabilities: ['completion', 'thinking'], parameters: 'num_ctx 16384' },
+    });
+    app = await createTestApp({ fetch });
+    await app.invoke('providers.setCustom', {
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      model: 'qwen2.5vl:7b',
+      apiKey: 'sk-local-saved-key',
+      supportsImages: true,
+      maxTokens: 4096,
+    });
+    expect((await app.invoke('providers.listModels')).map((m) => m.id)).toEqual([
+      'qwen2.5vl:7b',
+      'qwen3:14b',
+    ]);
+    // The saved key goes to the endpoint.
+    expect(fetch.requests.at(-1)?.headers.get('authorization')).toBe('Bearer sk-local-saved-key');
+
+    await app.invoke('providers.setModel', 'qwen3:14b');
+    // What the user set for the old model doesn't carry over.
+    expect((await app.invoke('settings.get')).provider).toEqual({
+      kind: 'custom',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      model: 'qwen3:14b',
+      secretId: SECRET_IDS.custom,
+      supportsImages: false,
+      reasoning: true,
+      contextWindow: 16_384,
+    });
+  });
+
+  it('falls back to the defaults when the server cannot be reached', async () => {
+    app = await createTestApp();
+    await app.invoke('providers.setCustom', {
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+      model: 'a',
+      supportsImages: true,
+    });
+    await app.invoke('providers.setModel', 'b');
+    expect(await app.services.providers.agentModel()).toEqual({
+      provider: 'custom',
+      id: 'b',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      api: 'openai-completions',
+    });
+    expect(await app.services.providers.agentAuthor()).toBe('b · off');
+  });
+
+  it('preconfigures SA_PROVIDER capabilities', async () => {
+    app = await createTestApp({
+      env: {
+        provider: {
+          kind: 'custom',
+          baseUrl: 'http://127.0.0.1:8789/v1',
+          model: 'mock-model',
+          api: 'openai-completions',
+          supportsImages: true,
+          contextWindow: 32_768,
+        },
+      },
+    });
+    expect(await app.services.providers.agentModel()).toMatchObject({
+      supportsImages: true,
+      contextWindow: 32_768,
     });
   });
 });

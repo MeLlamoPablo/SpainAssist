@@ -11,7 +11,7 @@ import {
   VOUCHER_PREFIX,
 } from '@sa/shared';
 import { CircleAlert, Copy, ExternalLink, KeyRound, LogOut, Search } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { OpenAiMark } from '../../components/brand';
 import { Button } from '../../components/ui/button';
 import { Field, Input, PasswordInput, PrefixedInput, Select } from '../../components/ui/field';
@@ -24,6 +24,7 @@ import { formatCreditCount, formatCredits, formatDate } from '../../lib/format';
 import { useAppStore } from '../../store/app';
 import { toast } from '../../store/toast';
 import { chatDict } from '../chat/i18n';
+import { CustomCapabilities, useCustomCapabilities } from './custom-model';
 import { settingsDict } from './i18n';
 
 function applyResult(result: LoginResult): ProviderStatus | null {
@@ -670,6 +671,8 @@ export function CustomProviderForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const modelsId = useId();
+
   const validUrl = useMemo(() => {
     try {
       return ['http:', 'https:'].includes(new URL(baseUrl).protocol);
@@ -677,6 +680,9 @@ export function CustomProviderForm() {
       return false;
     }
   }, [baseUrl]);
+  const capabilities = useCustomCapabilities(
+    validUrl ? { baseUrl, api: apiKind, model: model.trim(), ...(apiKey ? { apiKey } : {}) } : null,
+  );
 
   const save = async () => {
     setBusy(true);
@@ -687,6 +693,7 @@ export function CustomProviderForm() {
         api: apiKind,
         model,
         apiKey: apiKey || undefined,
+        ...capabilities.value,
       });
       if (applyResult(result)) toast.success(t.provider.advanced.saved);
       else if (!result.ok) setError(result.error);
@@ -734,13 +741,17 @@ export function CustomProviderForm() {
       </Field>
       <Field label={t.provider.advanced.model}>
         {({ id }) => (
-          <Input
-            id={id}
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="llama3.1:8b"
-            spellCheck={false}
-          />
+          <>
+            <Input
+              id={id}
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="llama3.1:8b"
+              spellCheck={false}
+              list={capabilities.models.length ? modelsId : undefined}
+            />
+            <ModelSuggestions id={modelsId} models={capabilities.models} />
+          </>
         )}
       </Field>
       <Field
@@ -761,7 +772,15 @@ export function CustomProviderForm() {
         )}
       </Field>
       <div className="@min-[640px]:col-span-2">
-        <Button type="submit" variant="secondary" loading={busy} disabled={!validUrl || !model}>
+        <CustomCapabilities state={capabilities} />
+      </div>
+      <div className="@min-[640px]:col-span-2">
+        <Button
+          type="submit"
+          variant="secondary"
+          loading={busy}
+          disabled={!validUrl || !model || !capabilities.valid}
+        >
           {t.provider.advanced.save}
         </Button>
       </div>
@@ -769,9 +788,22 @@ export function CustomProviderForm() {
   );
 }
 
+/** Model ids a custom server lists, as suggestions for a free-text model field. */
+function ModelSuggestions({ id, models }: { id: string; models: readonly string[] }) {
+  if (models.length === 0) return null;
+  return (
+    <datalist id={id}>
+      {models.map((m) => (
+        <option key={m} value={m} />
+      ))}
+    </datalist>
+  );
+}
+
 /**
  * Change the model of a BYOK or custom provider: a list of the models it offers, or free text for
- * custom servers (their models can't be listed). ChatGPT and vouchers use the app's model.
+ * custom servers (they may serve models they don't list), with the listed ones as suggestions.
+ * A custom model's capabilities are detected again. ChatGPT and vouchers use the app's model.
  */
 export function ModelPicker() {
   const t = useT(settingsDict);
@@ -779,6 +811,7 @@ export function ModelPicker() {
   const [models, setModels] = useState<ModelOption[] | null>(null);
   const [model, setModel] = useState(provider?.model ?? '');
   const [busy, setBusy] = useState(false);
+  const modelsId = useId();
   const configured = provider?.kind === 'byok' || provider?.kind === 'custom';
   const source = `${provider?.kind}|${provider?.label}`;
 
@@ -823,12 +856,16 @@ export function ModelPicker() {
       <Field label={t.provider.advanced.changeModel} className="min-w-64 flex-1">
         {({ id }) =>
           freeText ? (
-            <Input
-              id={id}
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              spellCheck={false}
-            />
+            <>
+              <Input
+                id={id}
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                spellCheck={false}
+                list={models?.length ? modelsId : undefined}
+              />
+              <ModelSuggestions id={modelsId} models={(models ?? []).map((m) => m.id)} />
+            </>
           ) : (
             <Select
               id={id}

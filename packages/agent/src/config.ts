@@ -31,11 +31,14 @@ export const AgentHostConfigSchema = z.object({
     baseUrl: z.string().url().optional(),
     /** Only for "custom" (default "openai-completions"). */
     api: CustomApi.optional(),
-    /** Cap output tokens (important for credit-capped voucher keys). */
+    /**
+     * Cap output tokens (important for credit-capped voucher keys). For "custom", the model's
+     * output limit (default CUSTOM_MODEL_DEFAULTS).
+     */
     maxTokens: z.number().int().positive().optional(),
     /** "custom" only: whether the model accepts images (screenshots). Default false. */
     supportsImages: z.boolean().optional(),
-    /** "custom" only: context window in tokens. Default 128000. */
+    /** "custom" only: context window in tokens. Default CUSTOM_MODEL_DEFAULTS. */
     contextWindow: z.number().int().positive().optional(),
     /** "custom" only: whether the model reasons (thinking). Default false. */
     reasoning: z.boolean().optional(),

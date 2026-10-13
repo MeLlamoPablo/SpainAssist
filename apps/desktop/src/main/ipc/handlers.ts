@@ -96,6 +96,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('providers.setCustom', S['providers.setCustom'], (input) =>
     s.providers.setCustom(input),
   );
+  router.register('providers.probeCustom', S['providers.probeCustom'], (input) =>
+    s.providers.probeCustom(input),
+  );
   router.register('providers.listByok', S['providers.listByok'], () => s.providers.listByok());
   router.register('providers.listModels', S['providers.listModels'], () =>
     s.providers.listModels(),

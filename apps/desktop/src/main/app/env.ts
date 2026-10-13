@@ -1,4 +1,9 @@
-import { CustomApi, PRODUCTION_SERVICES } from '@sa/shared';
+import {
+  CustomApi,
+  CustomModelCapabilities,
+  type CustomProviderInput,
+  PRODUCTION_SERVICES,
+} from '@sa/shared';
 import type { UserKey } from '../providers/manager';
 
 /**
@@ -29,8 +34,10 @@ import type { UserKey } from '../providers/manager';
  *                            key, D12). Dev builds read it from apps/desktop/.env; e2e
  *                            requires a loopback endpoint.
  *   SA_DECIDER_URL          dev-only Decisions endpoint override; e2e requires loopback.
- *   SA_PROVIDER              "custom|<baseUrl>|<model>[|<api>]": preconfigure a custom
- *                            OpenAI-compatible provider (e.g. tools/mock-llm)
+ *   SA_PROVIDER              "custom|<baseUrl>|<model>[|<api>[|<capabilities>]]": preconfigure a
+ *                            custom OpenAI-compatible provider (e.g. tools/mock-llm).
+ *                            Capabilities, comma-separated: images, reasoning, context=<tokens>,
+ *                            max=<tokens> (default: CUSTOM_MODEL_DEFAULTS)
  *   SA_PROVIDER_API_KEY      optional API key for SA_PROVIDER
  *   SA_DEV_USER_KEY          development only: "<gateway baseUrl>|<sk-key>", the user key of a
  *                            Codex session (Codex has none of its own), e.g. the key from
@@ -58,12 +65,30 @@ export interface SaEnv {
   relayServerUrl?: string;
   deciderApiKey?: string;
   deciderUrl?: string;
-  provider?: { kind: 'custom'; baseUrl: string; model: string; api: CustomApi; apiKey?: string };
+  provider?: { kind: 'custom' } & CustomProviderInput;
   /** The user key of a Codex session (development builds only). */
   devUserKey?: UserKey;
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Problems found while parsing (logged at startup). */
   warnings: string[];
+}
+
+/** "images,reasoning,context=32768,max=4096" (any subset); undefined when malformed. */
+function parseCapabilities(value: string | undefined): CustomModelCapabilities | undefined {
+  const out: Record<string, unknown> = {};
+  for (const token of (value ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    const [name, n] = token.split('=');
+    if (name === 'images' && n === undefined) out.supportsImages = true;
+    else if (name === 'reasoning' && n === undefined) out.reasoning = true;
+    else if (name === 'context' && n) out.contextWindow = Number(n);
+    else if (name === 'max' && n) out.maxTokens = Number(n);
+    else return undefined;
+  }
+  const parsed = CustomModelCapabilities.safeParse(out);
+  return parsed.success ? parsed.data : undefined;
 }
 
 function nonEmpty(value: string | undefined): string | undefined {
@@ -171,19 +196,23 @@ export function parseEnv(input: NodeJS.ProcessEnv, opts: { packaged?: boolean } 
 
   const provider = nonEmpty(env.SA_PROVIDER);
   if (provider) {
-    const [kind, baseUrl, model, api] = provider.split('|').map((s) => s.trim());
+    const [kind, baseUrl, model, api, caps] = provider.split('|').map((s) => s.trim());
     const parsedApi = CustomApi.safeParse(api || 'openai-completions');
     const url = parseUrl('SA_PROVIDER baseUrl', baseUrl, warnings);
-    if (kind === 'custom' && url && model && parsedApi.success) {
+    const capabilities = parseCapabilities(caps);
+    if (kind === 'custom' && url && model && parsedApi.success && capabilities) {
       out.provider = {
         kind: 'custom',
         baseUrl: url,
         model,
         api: parsedApi.data,
         apiKey: nonEmpty(env.SA_PROVIDER_API_KEY),
+        ...capabilities,
       };
     } else {
-      warnings.push('SA_PROVIDER must be "custom|<baseUrl>|<model>[|<api>]"; ignored');
+      warnings.push(
+        'SA_PROVIDER must be "custom|<baseUrl>|<model>[|<api>[|images,reasoning,context=<n>,max=<n>]]"; ignored',
+      );
     }
   }
 

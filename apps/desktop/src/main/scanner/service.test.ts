@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import type { AgentHostConfig } from '@sa/agent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ScannerEvent } from '../../scanner';
 import type { ProviderManager } from '../providers/manager';
@@ -34,9 +35,15 @@ const gate = () => ({
 function provider(baseUrl = 'http://127.0.0.1:1', configured = true) {
   return {
     status: () => ({ configured, label: 'Mock vision' }),
-    agentModel: vi.fn(async () => {
+    agentModel: vi.fn(async (): Promise<AgentHostConfig['model']> => {
       if (!configured) throw new Error('no_provider');
-      return { provider: 'custom', id: 'mock-vision', baseUrl, api: 'openai-completions' };
+      return {
+        provider: 'custom',
+        id: 'mock-vision',
+        baseUrl,
+        api: 'openai-completions',
+        supportsImages: true,
+      };
     }),
     refreshCredential: vi.fn(async () => ({ type: 'api_key', key: 'test-only' })),
     creditSpent: vi.fn(),
@@ -69,6 +76,15 @@ describe('document vision scanner', () => {
     const scanner = new DocumentScanner(p as unknown as ProviderManager, () => 'en');
     expect(await scanner.status()).toMatchObject({ available: false, reason: 'no_vision' });
     await expect(scanner.read(image)).rejects.toThrow('Check your AI connection');
+  });
+  it('reads with a custom model only when its settings say it sees images', async () => {
+    const p = provider();
+    const { supportsImages: _, ...textOnly } = await p.agentModel();
+    p.agentModel = vi.fn(async () => textOnly);
+    const scanner = new DocumentScanner(p as unknown as ProviderManager, () => 'en');
+    expect(await scanner.status()).toMatchObject({ available: false, reason: 'no_vision' });
+    p.agentModel = vi.fn(async () => ({ ...textOnly, supportsImages: true }));
+    expect(await scanner.status()).toMatchObject({ available: true, model: 'mock-vision' });
   });
   it('uses a dedicated vision model for OpenAI without changing the chat model', async () => {
     const p = provider();

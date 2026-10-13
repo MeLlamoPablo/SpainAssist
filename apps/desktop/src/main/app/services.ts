@@ -1,6 +1,6 @@
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type AppInfo, ASSISTANT_AGENT_ID, type CustomProviderInput } from '@sa/shared';
+import { type AppInfo, ASSISTANT_AGENT_ID } from '@sa/shared';
 import type { Sidecar } from '@sa/sidecar';
 import type { KeyProvider } from '@sa/vault';
 import { AgentManager } from '../agents/manager';
@@ -254,6 +254,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     state,
     vault: vaultFn,
     lib: deps.providerLib,
+    fetch: deps.fetch,
     events,
     openExternal: deps.openExternal,
     onChanged: () => agents.stopAll(),
@@ -263,12 +264,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   });
   await providers.init();
   if (env.provider) {
-    const input: CustomProviderInput = {
-      baseUrl: env.provider.baseUrl,
-      api: env.provider.api,
-      model: env.provider.model,
-      ...(env.provider.apiKey ? { apiKey: env.provider.apiKey } : {}),
-    };
+    const { kind: _, ...input } = env.provider;
     await providers.preconfigure(input);
   }
 

@@ -1,4 +1,4 @@
-import type { CustomApi } from '@sa/shared';
+import type { CustomApi, CustomServer } from '@sa/shared';
 import { defineDict } from '../../i18n';
 
 export const settingsDict = defineDict({
@@ -82,6 +82,37 @@ export const settingsDict = defineDict({
           'openai-responses': 'OpenAI Responses',
           'anthropic-messages': 'Anthropic Messages',
         } satisfies Record<CustomApi, string>,
+      },
+      /** What a custom endpoint's model can do (custom-provider form). */
+      capabilities: {
+        title: 'Qué puede hacer el modelo',
+        summary: (images: boolean, reasoning: boolean, context: string) =>
+          `${images ? 'Ve imágenes' : 'Sin imágenes'} · ${reasoning ? 'Razona' : 'No razona'} · ${context} tokens de contexto`,
+        checking: 'Consultando el servidor…',
+        detected: (server: string) =>
+          `He consultado el servidor (${server}). Marco lo que he detectado; el resto son valores por defecto.`,
+        notReachable:
+          'No he podido consultar el servidor. Uso valores por defecto: cámbialos si sabes lo que puede hacer tu modelo.',
+        servers: {
+          ollama: 'Ollama',
+          lmstudio: 'LM Studio',
+          llamacpp: 'llama.cpp',
+          openai: 'compatible con OpenAI',
+        } satisfies Record<CustomServer, string>,
+        source: { detected: 'Detectado', assumed: 'Por defecto', edited: 'Cambiado por ti' },
+        images: 'Ve imágenes',
+        imagesBody: 'Capturas de las webs y fotos de tus documentos.',
+        noImagesTitle: 'Este modelo no ve imágenes',
+        noImages:
+          'No podré mirar capturas de las webs ni fotos de tus documentos, ni escanearlos con la cámara. Trabajaré solo con el texto de las páginas, y algunas webs no se dejan usar así. Si tu modelo sí ve imágenes, actívalo abajo.',
+        reasoning: 'Razona antes de responder',
+        reasoningBody: 'Si el modelo piensa paso a paso. Hace mejor los trámites, pero tarda más.',
+        contextWindow: 'Contexto (tokens)',
+        contextWindowHelp:
+          'Cuánto texto cabe en una conversación. En Ollama, el num_ctx con el que sirves el modelo.',
+        maxTokens: 'Respuesta máxima (tokens)',
+        maxTokensHelp: 'Lo más largo que puede escribir de una vez.',
+        invalidNumber: (min: string) => `Escribe un número entero a partir de ${min}.`,
       },
     },
     language: {
@@ -186,6 +217,37 @@ export const settingsDict = defineDict({
           'openai-responses': 'OpenAI Responses',
           'anthropic-messages': 'Anthropic Messages',
         },
+      },
+      capabilities: {
+        title: 'What the model can do',
+        summary: (images: boolean, reasoning: boolean, context: string) =>
+          `${images ? 'Sees images' : 'No images'} · ${reasoning ? 'Reasons' : 'Doesn’t reason'} · ${context} tokens of context`,
+        checking: 'Checking the server…',
+        detected: (server: string) =>
+          `I checked the server (${server}). I mark what I detected; the rest are defaults.`,
+        notReachable:
+          'I couldn’t check the server. I’m using defaults: change them if you know what your model can do.',
+        servers: {
+          ollama: 'Ollama',
+          lmstudio: 'LM Studio',
+          llamacpp: 'llama.cpp',
+          openai: 'OpenAI-compatible',
+        },
+        source: { detected: 'Detected', assumed: 'Default', edited: 'Changed by you' },
+        images: 'Sees images',
+        imagesBody: 'Screenshots of websites and photos of your documents.',
+        noImagesTitle: 'This model can’t see images',
+        noImages:
+          'I won’t be able to look at screenshots of websites or photos of your documents, or scan them with the camera. I’ll work only with the text of pages, and some websites can’t be used that way. If your model does see images, turn it on below.',
+        reasoning: 'Reasons before answering',
+        reasoningBody:
+          'If the model thinks step by step. It handles procedures better, but is slower.',
+        contextWindow: 'Context (tokens)',
+        contextWindowHelp:
+          'How much text fits in a conversation. With Ollama, the num_ctx you serve the model with.',
+        maxTokens: 'Longest answer (tokens)',
+        maxTokensHelp: 'The most it can write in one go.',
+        invalidNumber: (min: string) => `Type a whole number of at least ${min}.`,
       },
     },
     language: {

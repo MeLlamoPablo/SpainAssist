@@ -2,6 +2,8 @@ import type { Attachment, ChatItem, ConversationState, PromptResponse } from './
 import type { ProcedureListItem } from './procedure';
 import type {
   ByokInput,
+  CustomProbeInput,
+  CustomProbeResult,
   CustomProviderInput,
   FeatureFlags,
   ModelOption,
@@ -138,6 +140,11 @@ export interface SaMethods {
   'providers.redeemVoucher': [[code: string], RedeemVoucherResult];
   'providers.setByok': [[input: ByokInput], LoginResult];
   'providers.setCustom': [[input: CustomProviderInput], LoginResult];
+  /**
+   * Asks a custom endpoint, from main and with the given key, which models it serves and what
+   * the model can do. Best effort, a few seconds at most; never fails.
+   */
+  'providers.probeCustom': [[input: CustomProbeInput], CustomProbeResult];
   'providers.listByok': [[], ProviderOption[]];
   /** Models the connected provider can use (current model first if the list lacks it). */
   'providers.listModels': [[], ModelOption[]];

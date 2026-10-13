@@ -132,10 +132,8 @@ export class DocumentScanner {
         delete: async () => {},
       },
     });
-    const model = configureModel(runtime, {
-      ...cfg,
-      ...(cfg.provider === 'custom' ? { supportsImages: true } : {}),
-    });
+    // Custom endpoints read images only when the user's settings say the model accepts them.
+    const model = configureModel(runtime, cfg);
     return { runtime, model };
   }
 

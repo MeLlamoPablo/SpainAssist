@@ -1,5 +1,6 @@
 import type { Api, Model, ModelPromptCache } from '@earendil-works/pi-ai';
 import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
+import { CUSTOM_MODEL_DEFAULTS } from '@sa/shared';
 import type { ResolvedHostConfig } from '../config';
 import { TEMPLATE_MODEL_BY_PROVIDER } from '../providers/defaults';
 
@@ -160,11 +161,14 @@ export function configureModel(runtime: ModelRuntime, cfg: ModelConfig): Model<A
           id: cfg.id,
           name: cfg.id,
           api,
-          reasoning: cfg.reasoning ?? false,
-          input: cfg.supportsImages ? ['text', 'image'] : ['text'],
+          reasoning: cfg.reasoning ?? CUSTOM_MODEL_DEFAULTS.reasoning,
+          input:
+            (cfg.supportsImages ?? CUSTOM_MODEL_DEFAULTS.supportsImages)
+              ? ['text', 'image']
+              : ['text'],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: cfg.contextWindow ?? 128_000,
-          maxTokens: cfg.maxTokens ?? 16_384,
+          contextWindow: cfg.contextWindow ?? CUSTOM_MODEL_DEFAULTS.contextWindow,
+          maxTokens: cfg.maxTokens ?? CUSTOM_MODEL_DEFAULTS.maxTokens,
           ...(api === 'openai-completions'
             ? {
                 // Widest compatibility with local servers (Ollama, LM Studio, llama.cpp, vLLM).

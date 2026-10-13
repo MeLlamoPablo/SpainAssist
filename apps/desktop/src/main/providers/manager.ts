@@ -1,6 +1,9 @@
 import type { AgentHostConfig, PiCredential } from '@sa/agent';
 import type {
   ByokInput,
+  CustomModelCapabilities,
+  CustomProbeInput,
+  CustomProbeResult,
   CustomProviderInput,
   Language,
   LoginResult,
@@ -19,8 +22,10 @@ import type { Logger } from '../core/logger';
 import { SECRET_IDS } from '../core/secrets';
 import { type Clock, errorMessage, hostOf, Mutex } from '../core/util';
 import type { ProviderLib, VaultPort } from '../ports';
+import type { FetchFn } from '../remote/http';
 import type { AppStateStore, SettingsStore } from '../settings/store';
 import { chatgptLoginPages } from './login-pages';
+import { probeCustomEndpoint } from './probe';
 
 /** pi provider of voucher keys: our LiteLLM gateway at the voucher's base URL (D10). */
 const VOUCHER_PROVIDER = 'litellm';
@@ -57,6 +62,26 @@ export interface UserKey {
 export interface ScanGateAccess {
   endpoint: string;
   apiKey: string;
+}
+
+/** The capability fields of a custom endpoint's config or input, without unset ones. */
+function capabilitiesOf(source: CustomModelCapabilities): CustomModelCapabilities {
+  const { supportsImages, reasoning, contextWindow, maxTokens } = source;
+  return {
+    ...(supportsImages !== undefined ? { supportsImages } : {}),
+    ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+  };
+}
+
+function sameCapabilities(a: CustomModelCapabilities, b: CustomModelCapabilities): boolean {
+  return (
+    a.supportsImages === b.supportsImages &&
+    a.reasoning === b.reasoning &&
+    a.contextWindow === b.contextWindow &&
+    a.maxTokens === b.maxTokens
+  );
 }
 
 /** Vault JSON of an OAuth provider (ChatGPT, and Codex in development builds). */
@@ -112,6 +137,8 @@ export interface ProviderManagerDeps {
   state: AppStateStore;
   vault: () => VaultPort;
   lib: ProviderLib;
+  /** For probing custom endpoints. */
+  fetch: FetchFn;
   events: EventBus;
   /** Opens the ChatGPT authorization URL in the system browser. */
   openExternal(url: string): Promise<void>;
@@ -318,7 +345,10 @@ export class ProviderManager {
     const p = this.config();
     if (p?.kind !== 'byok' && p?.kind !== 'custom') return [];
     const provider = this.piProviderId(p);
-    const models = p.kind === 'byok' ? this.catalog(provider) : [];
+    const models =
+      p.kind === 'byok'
+        ? this.catalog(provider)
+        : (await this.probeSaved(p)).models.map((id) => ({ provider, id, name: id }));
     if (!models.some((m) => m.id === p.model)) {
       models.unshift({ provider, id: p.model, name: p.model });
     }
@@ -638,6 +668,7 @@ export class ProviderManager {
         api: input.api,
         model: input.model,
         ...(apiKey ? { secretId: SECRET_IDS.custom } : {}),
+        ...capabilitiesOf(input),
       });
       return { ok: true, status: this.status() };
     } catch (err) {
@@ -656,7 +687,8 @@ export class ProviderManager {
       current.baseUrl === input.baseUrl.replace(/\/+$/, '') &&
       current.model === input.model &&
       current.api === input.api &&
-      !!current.secretId === !!input.apiKey
+      !!current.secretId === !!input.apiKey &&
+      sameCapabilities(current, input)
     )
       return;
     const result = await this.setCustom(input);
@@ -670,8 +702,42 @@ export class ProviderManager {
     if (p.kind !== 'byok' && p.kind !== 'custom') {
       throw new UserError(t(this.lang(), 'invalidRequest'), 'bad_request');
     }
-    await this.apply({ ...p, model });
+    if (p.kind === 'byok') {
+      await this.apply({ ...p, model });
+      return this.status();
+    }
+    // Another model can do other things: what the server reports about it replaces what the
+    // user set for the previous one.
+    const { detected } = await this.probeSaved({ ...p, model });
+    await this.apply({
+      kind: 'custom',
+      baseUrl: p.baseUrl,
+      api: p.api,
+      model,
+      ...(p.secretId ? { secretId: p.secretId } : {}),
+      ...detected,
+    });
     return this.status();
+  }
+
+  /** `providers.probeCustom`: asks an endpoint the user is setting up (see probe.ts). */
+  async probeCustom(input: CustomProbeInput): Promise<CustomProbeResult> {
+    const apiKey = input.apiKey?.trim();
+    if (apiKey) this.deps.logger.addSecret(apiKey);
+    return probeCustomEndpoint(input, this.deps.fetch);
+  }
+
+  /** Probes the saved custom endpoint with its stored key. */
+  private async probeSaved(
+    p: Extract<ProviderConfig, { kind: 'custom' }>,
+  ): Promise<CustomProbeResult> {
+    const apiKey = p.secretId ? await this.deps.vault().getSecret(p.secretId) : undefined;
+    return this.probeCustom({
+      baseUrl: p.baseUrl,
+      api: p.api,
+      model: p.model,
+      ...(apiKey ? { apiKey } : {}),
+    });
   }
 
   async logout(): Promise<ProviderStatus> {
@@ -755,7 +821,13 @@ export class ProviderManager {
       case 'byok':
         return { provider: p.provider, id: p.model };
       case 'custom':
-        return { provider: 'custom', id: p.model, baseUrl: p.baseUrl, api: p.api };
+        return {
+          provider: 'custom',
+          id: p.model,
+          baseUrl: p.baseUrl,
+          api: p.api,
+          ...capabilitiesOf(p),
+        };
     }
   }
 

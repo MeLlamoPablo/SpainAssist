@@ -264,6 +264,30 @@ describe('env', () => {
     const env = parseEnv({ SA_PROVIDER: 'openai|x' });
     expect(env.provider).toBeUndefined();
     expect(env.warnings[0]).toMatch(/SA_PROVIDER/);
+    expect(
+      parseEnv({ SA_PROVIDER: 'custom|http://127.0.0.1:8789/v1|m||images,eyes' }).provider,
+    ).toBeUndefined();
+    expect(
+      parseEnv({ SA_PROVIDER: 'custom|http://127.0.0.1:8789/v1|m||context=12' }).provider,
+    ).toBeUndefined();
+  });
+
+  it('reads SA_PROVIDER capabilities', () => {
+    expect(
+      parseEnv({
+        SA_PROVIDER:
+          'custom|http://127.0.0.1:8789/v1|mock-vision|openai-completions|images, reasoning,context=32768,max=4096',
+      }).provider,
+    ).toEqual({
+      kind: 'custom',
+      baseUrl: 'http://127.0.0.1:8789/v1',
+      model: 'mock-vision',
+      api: 'openai-completions',
+      supportsImages: true,
+      reasoning: true,
+      contextWindow: 32_768,
+      maxTokens: 4096,
+    });
   });
 
   it('keeps the global decider key separate and disables paid endpoint fallback in e2e', () => {

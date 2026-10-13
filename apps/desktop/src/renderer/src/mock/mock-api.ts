@@ -974,13 +974,30 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         model: input.model,
         exaKey: !!state.provider.exaKey,
       };
-      setProvider(status, {
-        kind: 'custom',
-        baseUrl: input.baseUrl,
-        api: input.api,
-        model: input.model,
-      });
+      const { apiKey: _, ...config } = input;
+      setProvider(status, { kind: 'custom', ...config });
       return { ok: true, status };
+    },
+    // A local Ollama-like server: vision models have "vl" or "llava" in their name.
+    'providers.probeCustom': async (input) => {
+      await sleep(500);
+      if (!/^https?:\/\/(127\.0\.0\.1|localhost)/.test(input.baseUrl)) {
+        return { reachable: false, models: [], detected: {} };
+      }
+      const models = ['llama3.1:8b', 'qwen2.5vl:7b', 'qwen3:14b'];
+      const model = input.model.trim();
+      return {
+        reachable: true,
+        server: 'ollama',
+        models,
+        detected: models.includes(model)
+          ? {
+              supportsImages: /vl|llava/.test(model),
+              reasoning: model.startsWith('qwen3'),
+              contextWindow: 32_768,
+            }
+          : {},
+      };
     },
     'providers.listByok': () => BYOK_PROVIDERS,
     'providers.listModels': () => {

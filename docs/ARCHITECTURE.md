@@ -90,6 +90,14 @@
   and the last message). `openai/*` models cache on their own; the extension sends the session
   id as `prompt_cache_key` so a session's requests reach the same cache. Both get a
   `promptCache` lifetime, which turns idle compaction on for them.
+  **Custom endpoints** have no catalog entry: their settings say whether the model sees images
+  and reasons, its context window and its output limit (`CustomModelCapabilities`, safe defaults
+  in `CUSTOM_MODEL_DEFAULTS`: text only, no reasoning, 128k/16k). Settings prefills them from
+  `providers.probeCustom` (`apps/desktop/src/main/providers/probe.ts`): main asks the endpoint
+  with the user's key, a few seconds at most, on its own origin only, through `GET /models`,
+  Ollama's `/api/show` and `/api/ps`, LM Studio's `/api/v0/models` and llama.cpp's `/props`.
+  Without images the browser agent works from snapshots only; with reasoning it runs at the
+  normal thinking level. Changing the model probes again.
   Idle agents are stopped; pi session files keep the context, so any agent resumes transparently.
   pi's built-in coding tools are disabled; only SpainAssist tools exist.
 - **Browser**: a single Playwright-managed Chromium with one isolated context (cookies,
@@ -368,7 +376,7 @@ phone.
 ### Document scanning
 The desktop scanner has its own `sa:scanner` preload API, restricted to the app's main frame.
 Camera and photo reading require a connected provider; catalog models must support image input.
-Custom endpoints are tried with image input because their capabilities are not catalogued.
+Custom endpoints read images only when their settings say the model sees them.
 The scanner explicitly requests macOS camera permission before device acquisition and offers a
 camera-settings shortcut when access is denied. Concurrent requests share one native prompt.
 On macOS, dev/preview use Launch Services so camera access belongs to Electron rather than the

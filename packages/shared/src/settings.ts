@@ -24,6 +24,31 @@ export type ThinkingLevel = z.infer<typeof ThinkingLevel>;
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'medium';
 
 /**
+ * What a custom endpoint's model can do. pi has no catalog entry for these models, so the user
+ * says (the app prefills what the server reports). Each field is optional: missing means the
+ * safe default in CUSTOM_MODEL_DEFAULTS.
+ */
+export const CustomModelCapabilities = z.object({
+  /** Accepts images: screenshots of web pages and photos of documents. */
+  supportsImages: z.boolean().optional(),
+  /** Reasons before answering (thinking): the agent then runs at its normal thinking level. */
+  reasoning: z.boolean().optional(),
+  /** Context window in tokens (what the server serves, e.g. Ollama's num_ctx). */
+  contextWindow: z.number().int().min(1024).max(100_000_000).optional(),
+  /** Most output tokens per answer. */
+  maxTokens: z.number().int().min(256).max(10_000_000).optional(),
+});
+export type CustomModelCapabilities = z.infer<typeof CustomModelCapabilities>;
+
+/** Capabilities assumed when neither the user nor the server says. */
+export const CUSTOM_MODEL_DEFAULTS: Required<CustomModelCapabilities> = {
+  supportsImages: false,
+  reasoning: false,
+  contextWindow: 128_000,
+  maxTokens: 16_384,
+};
+
+/**
  * Non-secret provider configuration persisted in settings. Secrets live in the vault.
  * Only `byok` and `custom` store a model: ChatGPT, voucher and Codex use the model this app
  * version ships with (resolved when an agent starts), so an update changes it for every install.
@@ -49,6 +74,7 @@ export const ProviderConfig = z.discriminatedUnion('kind', [
     api: CustomApi,
     model: z.string(),
     secretId: z.string().optional(),
+    ...CustomModelCapabilities.shape,
   }),
   /** Development builds only; the credential lives in the vault. */
   z.object({ kind: z.literal('codex') }),
@@ -93,11 +119,38 @@ export const CustomProviderInput = z.object({
   api: CustomApi,
   model: z.string().min(1),
   apiKey: z.string().optional(),
+  ...CustomModelCapabilities.shape,
 });
 export type CustomProviderInput = z.infer<typeof CustomProviderInput>;
 
 /** The user's own Exa API key (web research for BYOK and custom endpoints, D23). */
 export const ExaApiKey = z.string().trim().min(1).max(200);
+
+/** What to ask a custom endpoint about, before it is saved. `model` may still be empty. */
+export const CustomProbeInput = z.object({
+  baseUrl: z.string().url(),
+  api: CustomApi,
+  model: z.string().max(200),
+  apiKey: z.string().optional(),
+});
+export type CustomProbeInput = z.infer<typeof CustomProbeInput>;
+
+/** Server software a probe recognized from its native API. */
+export const CustomServer = z.enum(['ollama', 'lmstudio', 'llamacpp', 'openai']);
+export type CustomServer = z.infer<typeof CustomServer>;
+
+/** What a custom endpoint said about itself (best effort: everything may be missing). */
+export const CustomProbeResult = z.object({
+  /** Whether any probe got a valid answer. */
+  reachable: z.boolean(),
+  /** Which server answered, when its native API did ("openai": only `GET /models`). */
+  server: CustomServer.optional(),
+  /** Model ids the server lists. */
+  models: z.array(z.string()),
+  /** What the server reported about the model; missing fields were not detected. */
+  detected: CustomModelCapabilities,
+});
+export type CustomProbeResult = z.infer<typeof CustomProbeResult>;
 
 /** For BYOK pickers. Built from pi-ai's model registry. */
 export const ModelOption = z.object({
