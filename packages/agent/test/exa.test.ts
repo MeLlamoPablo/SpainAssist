@@ -81,6 +81,7 @@ describe('Exa tools', () => {
       contents: { text: { maxCharacters: 1500 } },
     });
     expect(EXA_OFFICIAL_DOMAINS).toEqual(expect.arrayContaining(['gob.es', '*.gob.es', 'boe.es']));
+    expect(EXA_OFFICIAL_DOMAINS.length).toBeLessThanOrEqual(1200); // Exa's includeDomains cap
     expect(result.isError).toBeUndefined();
     expect(text(result)).toContain('1. Renovación del DNI');
     expect(text(result)).toContain('https://www.dnielectronico.es/renovacion');

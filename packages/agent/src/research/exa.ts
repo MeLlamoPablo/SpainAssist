@@ -1,3 +1,4 @@
+import { OFFICIAL_DOMAINS } from '@sa/shared';
 import { Type } from 'typebox';
 import {
   type AnyToolDefinition,
@@ -20,65 +21,13 @@ const RESULT_TEXT_CHARS = 1_500;
 const PAGE_TEXT_CHARS = { default: 12_000, max: 30_000 } as const;
 
 /**
- * Domains of Spanish public administrations, for `sources: "official"` (Exa's `includeDomains`,
- * which takes `host` and `*.host`). Research hints only, not the credential allowlist
- * (`OFFICIAL_DOMAINS` in @sa/shared): municipalities and other bodies are a long tail, so the
- * model can always search with `sources: "any"`.
+ * Domains of Spanish public administrations for `sources: "official"`: the credential allowlist,
+ * as Exa's `includeDomains` (`host` and `*.host`; at most 1,200 entries). Municipalities are a
+ * long tail, so the model can always search with `sources: "any"`.
  */
-const OFFICIAL_SEARCH_DOMAINS = [
-  // State, its agencies and its e-government portals (most are under gob.es)
-  'gob.es',
-  'boe.es',
-  'agenciatributaria.es',
-  'seg-social.es',
-  'sepe.es',
-  'dgt.es',
-  'policia.es',
-  'dnielectronico.es',
-  'guardiacivil.es',
-  'mjusticia.es',
-  'justicia.es',
-  'fnmt.es',
-  'ine.es',
-  'imserso.es',
-  'redsara.es',
-  // Autonomous communities
-  'juntadeandalucia.es',
-  'aragon.es',
-  'asturias.es',
-  'caib.es',
-  'gobiernodecanarias.org',
-  'cantabria.es',
-  'jcyl.es',
-  'castillalamancha.es',
-  'gencat.cat',
-  'gva.es',
-  'juntaex.es',
-  'xunta.gal',
-  'madrid.org',
-  'comunidad.madrid',
-  'carm.es',
-  'navarra.es',
-  'euskadi.eus',
-  'larioja.org',
-  'ceuta.es',
-  'melilla.es',
-  // Largest city councils
-  'madrid.es',
-  'barcelona.cat',
-  'bcn.cat',
-  'valencia.es',
-  'sevilla.org',
-  'zaragoza.es',
-  'malaga.eu',
-  'bilbao.eus',
-  // EU
-  'europa.eu',
-];
-
-export const EXA_OFFICIAL_DOMAINS: readonly string[] = OFFICIAL_SEARCH_DOMAINS.flatMap((d) => [
-  d,
-  `*.${d}`,
+export const EXA_OFFICIAL_DOMAINS: readonly string[] = OFFICIAL_DOMAINS.flatMap(({ suffix }) => [
+  suffix,
+  `*.${suffix}`,
 ]);
 
 export interface ExaToolsOptions {
