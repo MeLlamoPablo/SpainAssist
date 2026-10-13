@@ -1,7 +1,15 @@
 import { AGENT_PERSONAL_FIELD_KEYS, FormPrompt, PhoneCallPrompt } from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
-import { callBridge, compact, defineSaTool, errorResult, StringEnum, textResult } from './common';
+import {
+  callBridge,
+  compact,
+  defineSaTool,
+  errorResult,
+  isWebUrl,
+  StringEnum,
+  textResult,
+} from './common';
 import { PERSONAL_CHOICES } from './vault';
 
 const FIELD_TYPES = [
@@ -78,8 +86,9 @@ export const AskUserParams = Type.Object({
 });
 
 export const ConfirmActionParams = Type.Object({
-  confirmKind: StringEnum(['action', 'submission', 'payment'], {
-    description: 'submission = sending an official form/application; payment = paying a fee',
+  confirmKind: StringEnum(['action', 'submission', 'payment', 'certificate_site'], {
+    description:
+      'submission = sending an official form/application; payment = paying a fee; certificate_site = allowing certificate logins on a site outside the official list, only when browser_use_certificate tells you to (needs site and sources)',
   }),
   title: Type.String({ minLength: 1, maxLength: 160 }),
   message: Type.String({
@@ -102,6 +111,17 @@ export const ConfirmActionParams = Type.Object({
   confirmLabel: Type.Optional(Type.String({ maxLength: 40 })),
   rejectLabel: Type.Optional(Type.String({ maxLength: 40 })),
   danger: Type.Optional(Type.Boolean({ description: 'true for irreversible actions' })),
+  site: Type.Optional(
+    Type.String({ maxLength: 300, description: 'certificate_site only: the https origin' }),
+  ),
+  sources: Type.Optional(
+    Type.Array(Type.String({ maxLength: 500 }), {
+      minItems: 3,
+      maxItems: 10,
+      description:
+        'certificate_site only: the URLs of at least 3 independent official sources that link to this site',
+    }),
+  ),
 });
 
 export const RequestUserActionParams = Type.Object({
@@ -277,11 +297,25 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
         'Ask the user to approve an irreversible or binding action BEFORE doing it: submitting a form or application, booking or cancelling an appointment, paying, signing. Summarize exactly what will be sent, to whom and any cost. For identity data, name whose it is and what it triggers for that person (SMS, account in their name). Returns whether the user approved; never proceed without approval.',
       parameters: ConfirmActionParams,
       async execute(_id, params, signal) {
+        const siteConsent = params.confirmKind === 'certificate_site';
+        if (siteConsent && (!params.site || (params.sources?.length ?? 0) < 3))
+          return errorResult('certificate_site needs the site and at least 3 sources.');
+        if (!siteConsent && (params.site || params.sources))
+          return errorResult('site and sources are only for certificate_site.');
+        const bad = [params.site, ...(params.sources ?? [])].find((u) => u && !isWebUrl(u));
+        if (bad) return errorResult(`Invalid URL "${bad}": use https://….`);
         return callBridge(bridge, 'prompt.confirm', compact({ ...params }), signal, (response) =>
           response.approved
-            ? textResult('The user approved. Go ahead.', { approved: true })
+            ? textResult(
+                siteConsent
+                  ? `The user allowed certificate logins on ${params.site} for this procedure. Call browser_use_certificate again with that origin.`
+                  : 'The user approved. Go ahead.',
+                { approved: true },
+              )
             : textResult(
-                'The user did NOT approve. Do not do it; ask what they want to change or how to continue.',
+                siteConsent
+                  ? 'The user did NOT allow the certificate on that site. Do not use it there; tell the user how else the procedure can be done (another login method, another channel).'
+                  : 'The user did NOT approve. Do not do it; ask what they want to change or how to continue.',
                 { approved: false },
               ),
         );

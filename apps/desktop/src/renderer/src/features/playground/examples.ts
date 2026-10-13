@@ -316,6 +316,32 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       biometric: confirmKind === 'credential' || confirmKind === 'signature',
     });
   addPrompt(
+    'confirm-certificate_site',
+    'confirmations',
+    t('Web nueva para el certificado', 'New website for the certificate'),
+    'certificate_site',
+    {
+      kind: 'confirm',
+      confirmKind: 'certificate_site',
+      title: t(
+        '¿Permitir tu certificado en sede.ejemplo.es?',
+        'Allow your certificate on sede.ejemplo.es?',
+      ),
+      message: t(
+        'sede.ejemplo.es no está en la lista de webs oficiales de la app. Permítelo solo si reconoces la web.\n\n**Lo que ha comprobado:** la web del ayuntamiento enlaza a esta sede.',
+        "sede.ejemplo.es is not on the app's list of official websites. Only allow it if you recognise the website.\n\n**What it checked:** the town hall's website links to this site.",
+      ),
+      details: [
+        { label: t('Web', 'Website'), value: 'https://sede.ejemplo.es' },
+        { label: t('Fuente 1', 'Source 1'), value: 'https://www.ejemplo.es/sede' },
+        { label: t('Fuente 2', 'Source 2'), value: 'https://www.diputacion.ejemplo.es/sedes' },
+        { label: t('Fuente 3', 'Source 3'), value: 'https://administracion.gob.es/ejemplo' },
+      ],
+      confirmLabel: t('Permitir', 'Allow'),
+      rejectLabel: t('No permitir', "Don't allow"),
+    },
+  );
+  addPrompt(
     'confirm-danger',
     'confirmations',
     t('Acción irreversible', 'Irreversible action'),

@@ -198,12 +198,32 @@ function isExpired(c: CredentialSummary): boolean {
 }
 
 /**
+ * Why `origin` can never be offered as a certificate site, or null when the user may be asked.
+ * Real sedes are public https hosts with a domain name.
+ */
+function certificateSiteBlock(origin: URL): string | null {
+  if (origin.protocol !== 'https:') return 'it is not https';
+  const host = origin.hostname.toLowerCase();
+  if (host.startsWith('[') || /^[\d.]+$/.test(host)) return 'it is an IP address';
+  if (
+    !host.includes('.') ||
+    host === 'localhost' ||
+    /\.(localhost|local|internal|test)$/.test(host)
+  )
+    return 'it is not a public host';
+  if (host.startsWith('xn--') || host.includes('.xn--')) return 'it has non-Latin characters';
+  return null;
+}
+
+/**
  * Implementations of every host-bridge method (see @sa/shared bridge.ts). Each runs for the
  * procedure identified by the caller's token. Secrets never travel back to the agent.
  */
 export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
   const lang = () => deps.lang();
   const approvals = new Map<string, number>();
+  /** Per procedure: origins outside the official list where the user allowed certificate logins. */
+  const certificateSites = new Map<string, Set<string>>();
   /**
    * Lookup results of each procedure's last map form that was not shown (an address not found,
    * the service down), so the retry only looks up the addresses that changed. Memory only, and
@@ -295,6 +315,60 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     if (touchIdReason !== undefined && !(await deps.biometric.prompt(touchIdReason)))
       throw new BridgeError('user_rejected', 'The user did not confirm with Touch ID.');
     approvals.set(cacheKey, Date.now() + (deps.approvalTtlMs ?? 120_000));
+  }
+
+  /**
+   * Asks the user to allow certificate logins on a site outside the official list, for this
+   * procedure only. The copy is the app's: the agent's text only appears as its summary.
+   */
+  async function confirmCertificateSite(
+    ctx: BridgeContext,
+    params: { message: string; site?: string; sources?: string[] },
+  ): Promise<Extract<PromptResponse, { kind: 'confirm' }>> {
+    const pid = ctx.procedureId;
+    const url = new URL(params.site ?? '');
+    const block = certificateSiteBlock(url);
+    if (block)
+      throw new BridgeError(
+        'policy_denied',
+        `The certificate can't be presented to ${url.host} (${block})`,
+      );
+    if (
+      credentialAllowedOn('certificate', url.origin) ||
+      certificateSites.get(pid)?.has(url.origin)
+    )
+      return { kind: 'confirm', approved: true };
+    const response = await deps.prompts.ask(
+      pid,
+      {
+        kind: 'confirm',
+        confirmKind: 'certificate_site',
+        title: t(lang(), 'certificateSiteTitle', { host: url.host }).slice(0, 160),
+        message: [
+          t(lang(), 'certificateSiteMessage', { host: url.host }),
+          `**${t(lang(), 'certificateSiteChecked')}** ${params.message}`,
+        ]
+          .join('\n\n')
+          .slice(0, 2000),
+        details: [
+          { label: t(lang(), 'detailWebsite'), value: url.origin.slice(0, 500) },
+          ...(params.sources ?? []).map((source, i) => ({
+            label: `${t(lang(), 'detailSource')} ${i + 1}`,
+            value: source.slice(0, 500),
+          })),
+        ],
+        confirmLabel: t(lang(), 'allowLabel'),
+        rejectLabel: t(lang(), 'dontAllowLabel'),
+      },
+      { signal: ctx.signal },
+    );
+    if (response.kind !== 'confirm') throw new BridgeError('internal', 'Unexpected response.');
+    if (response.approved) {
+      const sites = certificateSites.get(pid) ?? new Set<string>();
+      sites.add(url.origin);
+      certificateSites.set(pid, sites);
+    }
+    return response;
   }
 
   async function fillCredential(
@@ -454,7 +528,9 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     },
 
     'prompt.confirm': async (params, ctx) => {
-      const prompt: ConfirmPrompt = { kind: 'confirm', ...params };
+      const { site, sources, ...rest } = params;
+      if (rest.confirmKind === 'certificate_site') return confirmCertificateSite(ctx, params);
+      const prompt: ConfirmPrompt = { kind: 'confirm', ...rest };
       const response = await deps.prompts.ask(ctx.procedureId, prompt, { signal: ctx.signal });
       if (response.kind !== 'confirm') throw new BridgeError('internal', 'Unexpected response.');
       return response;
@@ -729,11 +805,18 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       const requested: string[] = [];
       for (const raw of params.origins ?? []) {
         const url = new URL(raw);
-        if (url.protocol !== 'https:' || !credentialAllowedOn('certificate', url.origin))
+        const allowed =
+          credentialAllowedOn('certificate', url.origin) ||
+          certificateSites.get(pid)?.has(url.origin);
+        if (!allowed) {
+          const block = certificateSiteBlock(url);
           throw new BridgeError(
             'policy_denied',
-            `The certificate can only be presented to official sites over https (not ${url.host}).`,
+            block
+              ? `The certificate can only be presented to official sites over https, and ${url.host} can't be one (${block})`
+              : `${url.host} is not on the app's list of official sites. The user can allow it, but first triple-check that it really is the official sede of the administration this procedure needs: with your research tools, find at least 3 independent official sources (e.g. the administration's own website, its diputación or the administration directory at administracion.gob.es) that link to this exact host for this procedure. Watch for look-alike addresses. If it checks out, call confirm_action with confirmKind "certificate_site", site "${url.origin}", sources (those URLs) and a message summarising what you checked, then call browser_use_certificate again. If it doesn't check out, don't ask the user to allow it: tell them what you found`,
           );
+        }
         requested.push(url.origin);
       }
       const origins = [...new Set([...deps.certificateOrigins, ...requested])];

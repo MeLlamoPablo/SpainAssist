@@ -164,6 +164,7 @@ export const ConfirmKind = z.enum([
   'payment', // paying a fee
   'credential', // using a credential set to "ask before use" (raised by the app, not the agent)
   'signature', // signing a document with the digital certificate (raised by the app)
+  'certificate_site', // allowing certificate logins on a site outside the official list
 ]);
 export type ConfirmKind = z.infer<typeof ConfirmKind>;
 

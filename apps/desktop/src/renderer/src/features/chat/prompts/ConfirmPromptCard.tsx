@@ -7,6 +7,7 @@ import {
   KeyRound,
   type LucideIcon,
   Send,
+  ShieldQuestionMark,
   Signature,
   TriangleAlert,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ const ICON: Record<ConfirmKind, LucideIcon> = {
   payment: CreditCard,
   credential: KeyRound,
   signature: Signature,
+  certificate_site: ShieldQuestionMark,
 };
 
 export function ConfirmPromptCard({

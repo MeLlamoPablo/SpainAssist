@@ -999,6 +999,122 @@ describe('bridge: client certificates', () => {
     expect(wrong.body.error?.code).toBe('bad_request');
     expect(app.browser.certificates).toEqual([]);
   });
+
+  const SEDE = 'https://rocafort.sede.dival.example';
+  const SOURCES = [
+    'https://www.rocafort.es/sede',
+    'https://www.dival.es/sedes',
+    'https://administracion.gob.es/rocafort',
+  ];
+
+  it('tells the agent how to ask the user about an unlisted site, but never for a host no sede uses', async () => {
+    const unlisted = await app.rpc(
+      'browser.useCertificate',
+      { credentialId: certId, origins: [SEDE] },
+      token,
+    );
+    expect(unlisted.body.error?.code).toBe('policy_denied');
+    expect(unlisted.body.error?.message).toContain('certificate_site');
+    expect(unlisted.body.error?.message).toContain(SEDE);
+    for (const origin of ['https://10.0.0.1', 'https://intranet', 'https://xn--sede-9qa.es']) {
+      const blocked = await app.rpc(
+        'browser.useCertificate',
+        { credentialId: certId, origins: [origin] },
+        token,
+      );
+      expect(blocked.body.error?.code, origin).toBe('policy_denied');
+      expect(blocked.body.error?.message, origin).not.toContain('certificate_site');
+    }
+    const ask = await app.rpc(
+      'prompt.confirm',
+      {
+        confirmKind: 'certificate_site',
+        title: 't',
+        message: 'm',
+        site: 'https://10.0.0.1',
+        sources: SOURCES,
+      },
+      token,
+    );
+    expect(ask.body.error?.code).toBe('policy_denied');
+    const fewSources = await app.rpc(
+      'prompt.confirm',
+      {
+        confirmKind: 'certificate_site',
+        title: 't',
+        message: 'm',
+        site: SEDE,
+        sources: SOURCES.slice(1),
+      },
+      token,
+    );
+    expect(fewSources.body.error?.code).toBe('bad_request');
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
+  });
+
+  it('allows an unlisted site for this procedure only once the user approves it', async () => {
+    const ask = app.rpc(
+      'prompt.confirm',
+      {
+        confirmKind: 'certificate_site',
+        title: 'Agent title',
+        message: 'The town hall website links to it.',
+        site: `${SEDE}/login`,
+        sources: SOURCES,
+      },
+      token,
+    );
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const prompt = app.pendingPrompt(procedureId)!;
+    expect(prompt.prompt).toMatchObject({ kind: 'confirm', confirmKind: 'certificate_site' });
+    if (prompt.prompt.kind !== 'confirm') throw new Error('expected a confirm prompt');
+    expect(prompt.prompt.title).toContain('rocafort.sede.dival.example');
+    expect(prompt.prompt.title).not.toContain('Agent title');
+    expect(prompt.prompt.message).toContain('The town hall website links to it.');
+    expect(prompt.prompt.details?.map((d) => d.value)).toEqual([SEDE, ...SOURCES]);
+    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
+    expect((await ask).body.result).toMatchObject({ approved: true });
+
+    const call = app.rpc(
+      'browser.useCertificate',
+      { credentialId: certId, origins: [SEDE] },
+      token,
+    );
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const credentialPrompt = app.pendingPrompt(procedureId)!;
+    expect(credentialPrompt.prompt).toMatchObject({ confirmKind: 'credential' });
+    await app.invoke('chat.respond', credentialPrompt.id, { kind: 'confirm', approved: true });
+    expect((await call).body.result).toMatchObject({ enabled: true });
+    expect(app.browser.certificates.map((c) => c.origin)).toContain(SEDE);
+
+    const other = await app.procedureWithToken();
+    const elsewhere = await app.rpc(
+      'browser.useCertificate',
+      { credentialId: certId, origins: [SEDE] },
+      other.token,
+    );
+    expect(elsewhere.body.error?.code).toBe('policy_denied');
+  });
+
+  it('keeps refusing a site the user did not allow', async () => {
+    const ask = app.rpc(
+      'prompt.confirm',
+      { confirmKind: 'certificate_site', title: 't', message: 'm', site: SEDE, sources: SOURCES },
+      token,
+    );
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
+      kind: 'confirm',
+      approved: false,
+    });
+    expect((await ask).body.result).toMatchObject({ approved: false });
+    const res = await app.rpc(
+      'browser.useCertificate',
+      { credentialId: certId, origins: [SEDE] },
+      token,
+    );
+    expect(res.body.error?.code).toBe('policy_denied');
+  });
 });
 
 describe('bridge: Touch ID', () => {

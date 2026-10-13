@@ -50,7 +50,7 @@ export function bridgeErrorText(error: unknown): string {
     case 'user_rejected':
       return `The user declined${message && message !== 'Cancelled' ? ` (${message})` : ''}. Do not retry the same action; ask the user how they want to continue.`;
     case 'policy_denied':
-      return `Blocked by the app's safety policy: ${message}. Do not try to work around it (credentials and certificates only work on the sites allowed for them). If this blocks the procedure, tell the user.`;
+      return `Blocked by the app's safety policy: ${message}. Do not try to work around it (credentials and certificates only work on the sites allowed for them): only follow the steps this message gives, if any. If this blocks the procedure, tell the user.`;
     case 'not_found':
       return `Not found: ${message}.`;
     case 'browser_error':
@@ -105,4 +105,14 @@ export function clip(text: string | undefined, max: number): string {
 /** Remove keys whose value is undefined (zod `.optional()` rejects explicit nulls elsewhere). */
 export function compact<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
+}
+
+/** True for an absolute http(s) URL. */
+export function isWebUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
 }

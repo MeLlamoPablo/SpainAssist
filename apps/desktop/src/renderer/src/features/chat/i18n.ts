@@ -105,6 +105,7 @@ export const chatDict = defineDict({
         payment: 'Pago',
         credential: 'Uso de credencial',
         signature: 'Firma digital',
+        certificate_site: 'Web nueva para tu certificado',
       } satisfies Record<ConfirmKind, string>,
       actionKind: {
         captcha: 'Resuelve el captcha',
@@ -238,6 +239,7 @@ export const chatDict = defineDict({
         payment: 'Payment',
         credential: 'Credential use',
         signature: 'Digital signature',
+        certificate_site: 'New website for your certificate',
       },
       actionKind: {
         captcha: 'Solve the captcha',

@@ -288,6 +288,14 @@ trusts only the helper's ephemeral key. Updating the identity preserves cookies 
 The main process starts the helper and closes it on quit; a missing binary disables certificate
 logins with a clear tool error. See D15 and the production packaging checklist.
 
+Sites outside `OFFICIAL_DOMAINS` (most municipal sedes): `browser_use_certificate` returns
+`policy_denied` telling the agent to check the host in at least 3 independent official sources,
+then call `confirm_action` with `confirmKind: 'certificate_site'`, the site and those sources.
+Main writes that prompt's copy itself (the agent's text is only shown as its summary) and, if
+the user allows it, remembers the origin in memory for that procedure only. IP addresses, local
+hosts, punycode and non-https sites are refused without asking. Cl@ve passwords stay limited to
+the list.
+
 ### 3.5 Signing (AutoFirma replacement)
 Every page gets the AutoScript shim (`@sa/signer`) injected before site scripts. When the site
 calls `AutoScript.sign(...)`, the shim forwards the call to the `__saAfirma` binding → main shows

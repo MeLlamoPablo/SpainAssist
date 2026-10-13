@@ -87,6 +87,18 @@ const STRINGS = {
   detailWebsite: { es: 'Web', en: 'Website' },
   detailWebsites: { es: 'Webs', en: 'Websites' },
   detailCertificate: { es: 'Certificado', en: 'Certificate' },
+  certificateSiteTitle: {
+    es: '¿Permitir tu certificado en {host}?',
+    en: 'Allow your certificate on {host}?',
+  },
+  certificateSiteMessage: {
+    es: '{host} no está en la lista de webs oficiales de la app. El asistente cree que es la sede de la administración de este trámite y quiere poder identificarte ahí con tu certificado. Permítelo solo si reconoces la web. Vale para este trámite.',
+    en: "{host} is not on the app's list of official websites. The assistant thinks it is the official site of the administration for this procedure and wants to identify you there with your certificate. Only allow it if you recognise the website. It applies to this procedure.",
+  },
+  certificateSiteChecked: { es: 'Lo que ha comprobado:', en: 'What it checked:' },
+  detailSource: { es: 'Fuente', en: 'Source' },
+  allowLabel: { es: 'Permitir', en: 'Allow' },
+  dontAllowLabel: { es: 'No permitir', en: "Don't allow" },
   useLabel: { es: 'Usar', en: 'Use' },
   dontUseLabel: { es: 'No usar', en: "Don't use" },
   signatureTitle: { es: '¿Firmar este documento?', en: 'Sign this document?' },

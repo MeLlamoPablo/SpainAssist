@@ -156,9 +156,23 @@ export const BridgeParams = {
 
   // --- prompts (block until the user answers) ------------------------------------------------
   'prompt.form': FormPrompt.omit({ kind: true }),
-  'prompt.confirm': ConfirmPrompt.omit({ kind: true, biometric: true }).extend({
-    confirmKind: z.enum(['action', 'submission', 'payment']),
-  }),
+  /**
+   * `certificate_site` asks the user to allow certificate logins on `site`, an https origin
+   * outside the official list, after the agent checked it in `sources`. The app writes that
+   * prompt's copy; `message` is shown as the agent's summary of what it checked.
+   */
+  'prompt.confirm': ConfirmPrompt.omit({ kind: true, biometric: true })
+    .extend({
+      confirmKind: z.enum(['action', 'submission', 'payment', 'certificate_site']),
+      site: z.string().url().max(300).optional(),
+      sources: z.array(z.string().url().max(500)).max(10).optional(),
+    })
+    .refine(
+      (p) => p.confirmKind !== 'certificate_site' || (p.site && (p.sources?.length ?? 0) >= 3),
+      {
+        message: 'certificate_site needs the site and at least 3 sources.',
+      },
+    ),
   'prompt.userAction': UserActionPrompt.omit({ kind: true, imageId: true }).extend({
     /** Attach a screenshot of the current page (e.g. to show a QR inside the app). */
     attachScreenshot: z.boolean().default(false),

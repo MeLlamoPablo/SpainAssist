@@ -7,6 +7,7 @@ import {
   compact,
   defineSaTool,
   errorResult,
+  isWebUrl,
   StringEnum,
   type ToolResult,
   textResult,
@@ -88,15 +89,6 @@ function pageResult(obs: BrowserObservation, redacted: boolean): ToolResult {
     downloads: (obs.downloads ?? []).map((d) => d.downloadId),
     signatures: (obs.signatures ?? []).map((s) => s.status),
   });
-}
-
-function isWebUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
-  } catch {
-    return false;
-  }
 }
 
 export interface BrowserToolOptions {
