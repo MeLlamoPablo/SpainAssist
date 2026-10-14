@@ -9,7 +9,8 @@ import { extractText, getDocumentProxy } from 'unpdf';
 /**
  * fetch_url core: download a page or PDF and turn it into compact Markdown/text for the model.
  * - http(s) only, private/local hosts blocked (unless allowed for dev/e2e), manual redirects
- *   (each hop re-checked), timeouts and byte caps.
+ *   (each hop re-checked), timeouts and byte caps. run_script's fetch shares the host checks and
+ *   redirects (`fetchPublic`).
  * - Explicit charset decoding (header, BOM, <meta>, XML declaration; heuristic fallback to
  *   windows-1252, which many Spanish government sites still serve as ISO-8859-1).
  * - HTML: main content via Readability (linkedom DOM), fallback to <main>/body; tables keep
@@ -446,24 +447,44 @@ function looksLikePdf(bytes: Uint8Array): boolean {
   return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46; // %PDF
 }
 
-export async function fetchDocument(
-  rawUrl: string,
-  options: FetchOptions = {},
-): Promise<FetchedDocument> {
-  let url: URL;
-  try {
-    url = new URL(rawUrl.trim());
-  } catch {
-    throw new FetchError('invalid_url', `Invalid URL: ${rawUrl}`);
-  }
-  const timeoutMs = options.timeoutMs ?? 20_000;
-  const signal = AbortSignal.any(
-    [options.signal, AbortSignal.timeout(timeoutMs)].filter((s): s is AbortSignal => !!s),
-  );
+export interface PublicFetchOptions {
+  signal: AbortSignal;
+  headers: Headers | Record<string, string>;
+  /** Default GET. */
+  method?: string;
+  body?: string | Uint8Array;
+  /** Default 5. */
+  maxRedirects?: number;
+  /** Dev/e2e only: allow localhost and private networks. */
+  allowPrivateHosts?: boolean;
+  fetchImpl?: typeof fetch;
+}
+
+/** Headers that describe the request body: dropped with it when a redirect turns into a GET. */
+const BODY_HEADERS = [
+  'content-type',
+  'content-length',
+  'content-encoding',
+  'content-language',
+  'content-location',
+];
+
+/**
+ * A request to a public http(s) host. Redirects are followed by hand, so every hop's host is
+ * checked again. As in the platform's fetch, a 303 (or a 301/302 after a POST) goes on as a GET
+ * without the body, and a hop to another origin drops the authorization header. Returns the
+ * response of the last hop (any status) and its URL.
+ */
+export async function fetchPublic(
+  start: URL,
+  options: PublicFetchOptions,
+): Promise<{ res: Response; url: URL; redirects: number }> {
   const doFetch = options.fetchImpl ?? fetch;
   const maxRedirects = options.maxRedirects ?? 5;
-
-  let res: Response | undefined;
+  const headers = new Headers(options.headers);
+  let method = options.method ?? 'GET';
+  let body = options.body;
+  let url = start;
   for (let hop = 0; ; hop++) {
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
       throw new FetchError('invalid_url', `Only http(s) URLs are supported: ${url.href}`);
@@ -472,41 +493,82 @@ export async function fetchDocument(
       throw new FetchError('invalid_url', 'URLs with embedded credentials are not allowed');
     }
     if (!options.allowPrivateHosts) await assertPublicHost(url.hostname);
+    let res: Response;
     try {
       res = await doFetch(url, {
+        method,
         redirect: 'manual',
-        signal,
-        headers: {
-          'user-agent': USER_AGENT,
-          accept:
-            'text/html,application/xhtml+xml,application/pdf;q=0.9,text/plain;q=0.8,*/*;q=0.5',
-          'accept-language': 'es-ES,es;q=0.9,en;q=0.5',
-        },
+        signal: options.signal,
+        headers,
+        body,
       });
     } catch (error) {
-      if (options.signal?.aborted) throw error;
-      if (signal.aborted) {
-        throw new FetchError('timeout', `Timed out after ${Math.round(timeoutMs / 1000)} s`);
-      }
+      if (options.signal.aborted) throw error;
       const cause = (error as { cause?: { code?: string; message?: string } }).cause;
       throw new FetchError(
         'network',
         `Could not fetch ${url.host}: ${cause?.code ?? cause?.message ?? (error as Error).message}`,
       );
     }
-    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
-      if (hop >= maxRedirects)
-        throw new FetchError('redirects', `Too many redirects (>${maxRedirects})`);
-      const location = res.headers.get('location') ?? '';
-      await res.body?.cancel().catch(() => {});
-      try {
-        url = new URL(location, url);
-      } catch {
-        throw new FetchError('invalid_url', `Invalid redirect target: ${location}`);
-      }
-      continue;
+    const location = res.headers.get('location');
+    if (res.status < 300 || res.status >= 400 || !location) return { res, url, redirects: hop };
+    if (hop >= maxRedirects) {
+      throw new FetchError('redirects', `Too many redirects (>${maxRedirects})`);
     }
-    break;
+    await res.body?.cancel().catch(() => {});
+    const from = url;
+    try {
+      url = new URL(location, url);
+    } catch {
+      throw new FetchError('invalid_url', `Invalid redirect target: ${location}`);
+    }
+    const verb = method.toUpperCase();
+    if (
+      (res.status === 303 && verb !== 'GET' && verb !== 'HEAD') ||
+      ((res.status === 301 || res.status === 302) && verb === 'POST')
+    ) {
+      method = 'GET';
+      body = undefined;
+      for (const name of BODY_HEADERS) headers.delete(name);
+    }
+    if (url.origin !== from.origin) headers.delete('authorization');
+  }
+}
+
+export async function fetchDocument(
+  rawUrl: string,
+  options: FetchOptions = {},
+): Promise<FetchedDocument> {
+  let start: URL;
+  try {
+    start = new URL(rawUrl.trim());
+  } catch {
+    throw new FetchError('invalid_url', `Invalid URL: ${rawUrl}`);
+  }
+  const timeoutMs = options.timeoutMs ?? 20_000;
+  const signal = AbortSignal.any(
+    [options.signal, AbortSignal.timeout(timeoutMs)].filter((s): s is AbortSignal => !!s),
+  );
+
+  let res: Response;
+  let url: URL;
+  try {
+    ({ res, url } = await fetchPublic(start, {
+      signal,
+      maxRedirects: options.maxRedirects,
+      allowPrivateHosts: options.allowPrivateHosts,
+      fetchImpl: options.fetchImpl,
+      headers: {
+        'user-agent': USER_AGENT,
+        accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9,text/plain;q=0.8,*/*;q=0.5',
+        'accept-language': 'es-ES,es;q=0.9,en;q=0.5',
+      },
+    }));
+  } catch (error) {
+    if (!options.signal?.aborted && signal.aborted) {
+      throw new FetchError('timeout', `Timed out after ${Math.round(timeoutMs / 1000)} s`);
+    }
+    throw error;
   }
 
   if (!res.ok) {

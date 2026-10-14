@@ -62,7 +62,7 @@ export const AgentHostConfigSchema = z.object({
       exaBaseUrl: z.string().url().optional(),
       /** BOE open-data API base URL override (tests). */
       boeBaseUrl: z.string().url().optional(),
-      /** Dev/e2e only: let fetch_url reach localhost / private networks (mock sede). */
+      /** Dev/e2e only: fetch_url and run_script may reach localhost / private nets (mock sede). */
       allowPrivateHosts: z.boolean().optional(),
     })
     .default({}),
