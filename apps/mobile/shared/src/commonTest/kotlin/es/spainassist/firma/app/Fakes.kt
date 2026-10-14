@@ -110,9 +110,9 @@ class FakeLink(val pairing: PairingLink, val listener: LinkListener) : Companion
         return true
     }
 
-    fun connect(expiresAt: String = "2026-10-11T22:00:00.000Z") {
+    fun connect(expiresAt: String = "2026-10-11T22:00:00.000Z", session: String? = null) {
         connected = true
-        listener.onStatus(LinkStatus.Connected(Welcome("welcome", 1, "0.1.0", expiresAt)))
+        listener.onStatus(LinkStatus.Connected(Welcome("welcome", 1, "0.1.0", expiresAt, session)))
         listener.onSession()
     }
 

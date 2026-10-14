@@ -8,10 +8,11 @@
  *   RECORD     0x10 | seq (8) | sealed                                       both ways
  *
  * Keys: Z = ECDH-P256(phone key, desktop key from the pairing link);
- *   HKDF-SHA256(ikm Z, salt = link secret, info = "sa-companion v1" | desktop key | phone key |
+ *   HKDF-SHA256(ikm Z, salt = pairing secret, info = "sa-companion v1" | desktop key | phone key |
  *   desktop nonce | phone nonce) → 64 bytes: desktop→phone key, then phone→desktop key.
- * Only a phone that scanned the link knows the secret, and only the desktop holds its private
- * key; the fresh nonces on both sides make every connection's keys new (no replays).
+ * The pairing secret is the link's for the first handshake, then the one its WELCOME carries
+ * (`session`): only the phone that paired knows it, and only the desktop holds its private key.
+ * The fresh nonces on both sides make every connection's keys new (no replays).
  *
  * Sealed = AES-256-GCM(key, nonce = direction (4) | seq (8), AAD = the frame's header, i.e.
  * every byte before the ciphertext). Each direction counts from 0 (HELLO and WELCOME) and the

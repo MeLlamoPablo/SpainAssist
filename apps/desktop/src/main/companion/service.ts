@@ -183,6 +183,20 @@ export class CompanionService {
     return this.status();
   }
 
+  /**
+   * A new pairing (a new QR) in place of the current one, e.g. for another phone. Unlike
+   * `unpair`, a signature in progress goes on: it is sent again to the phone that pairs.
+   */
+  pairAnother(): CompanionStatus {
+    if (!this.relayUrl) return { state: 'unavailable' };
+    this.endLogin?.();
+    const previous = this.pairing;
+    this.pairing = undefined;
+    previous?.unpair();
+    this.start(this.relayUrl);
+    return this.status();
+  }
+
   unpair(): CompanionStatus {
     this.endLogin?.();
     const pairing = this.pairing;
@@ -743,14 +757,15 @@ export class CompanionService {
     switch (status.state) {
       case 'connected':
         return { state: 'connected', device: status.phone.device, expiresAt };
+      // The QR works only until a phone pairs (D26): a paired phone reconnects on its own.
       case 'away':
-        return { state: 'away', device: status.phone.device, link: pairing.link, expiresAt };
+        return { state: 'away', device: status.phone.device, expiresAt };
       case 'waiting':
-        return { state: 'waiting', link: pairing.link, expiresAt };
+        return { state: 'waiting', ...link(pairing), expiresAt };
       case 'connecting':
         return {
           state: 'connecting',
-          link: pairing.link,
+          ...link(pairing),
           expiresAt,
           ...(status.phone ? { device: status.phone.device } : {}),
         };
@@ -762,4 +777,8 @@ export class CompanionService {
   private emit(): void {
     this.deps.events.emit({ type: 'companion.changed', status: this.status() });
   }
+}
+
+function link(pairing: DesktopPairing): { link?: string } {
+  return pairing.link ? { link: pairing.link } : {};
 }

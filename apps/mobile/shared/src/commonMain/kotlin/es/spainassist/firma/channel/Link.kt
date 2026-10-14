@@ -8,6 +8,9 @@ package es.spainassist.firma.channel
  * Payload: version (1) = 1 | room id (16) | secret (32) | desktop public key (65, P-256
  * uncompressed) | relay base URL (UTF-8, ws:// or wss://). The app also accepts the landing
  * page's `sa-firma://pair?d=<payload>`.
+ *
+ * The QR's secret works for one handshake (D26): its WELCOME carries the pairing's own secret,
+ * which replaces it ([withSession]) in the stored pairing and in every later handshake.
  */
 data class PairingLink(
     val relayUrl: String,
@@ -22,6 +25,17 @@ data class PairingLink(
     fun encode(): String {
         val payload = byteArrayOf(LINK_VERSION) + room + secret + desktopKey + relayUrl.encodeToByteArray()
         return Base64Url.encode(payload).trimEnd('=')
+    }
+
+    /** The same desktop pairing, whichever secret each copy holds. */
+    fun samePairing(other: PairingLink): Boolean =
+        room.contentEquals(other.room) && desktopKey.contentEquals(other.desktopKey)
+
+    /** This pairing with the secret a WELCOME sent (`session`, Base64 of 32 bytes). */
+    fun withSession(session: String): PairingLink {
+        val bytes = runCatching { Base64Std.decode(session) }.getOrNull()
+        if (bytes == null || bytes.size != SECRET_BYTES) throw ChannelException("Bad session secret")
+        return copy(secret = bytes)
     }
 
     override fun equals(other: Any?): Boolean = other is PairingLink && encode() == other.encode()

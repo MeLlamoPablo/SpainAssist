@@ -3,6 +3,10 @@
  * phone's handshake and carries messages. One pairing lasts until `unpair()`, the phone says
  * `bye`, or its lifetime (72 h) ends; a new QR means a new pairing.
  *
+ * The QR's secret works for one handshake (D26). Its WELCOME gives the phone the pairing's own
+ * secret, which every later handshake uses; from then on the QR is useless, so a screenshot or
+ * a shared screen can't let anyone take the phone's place.
+ *
  * Every time either side (re)connects, the relay reports the phone as present and the desktop
  * sends a fresh CHALLENGE: the phone must handshake again, so a session never outlives a
  * connection. Requests in flight are re-sent by `PhoneSigner` when the new session starts.
@@ -71,10 +75,11 @@ interface Session {
 }
 
 export class DesktopPairing {
-  readonly link: string;
   readonly expiresAt: number;
   private readonly keys: KeyPair;
-  private readonly secret: Buffer;
+  /** The QR's secret until a phone pairs, then the one sent in that WELCOME. */
+  private secret: Buffer;
+  private qr?: string;
   private readonly socket: RelaySocket;
   private readonly expiryTimer: ReturnType<typeof setTimeout>;
   private challenge?: { nonce: Buffer; at: number };
@@ -88,7 +93,7 @@ export class DesktopPairing {
     this.keys = generateKeyPair();
     this.secret = crypto.randomBytes(SECRET_BYTES);
     const room = crypto.randomBytes(ROOM_BYTES);
-    this.link = encodePairingLink({
+    this.qr = encodePairingLink({
       relayUrl: opts.relayUrl,
       room,
       secret: this.secret,
@@ -119,6 +124,11 @@ export class DesktopPairing {
     return this.session
       ? { state: 'connected', phone: this.phone }
       : { state: 'away', phone: this.phone };
+  }
+
+  /** The pairing link for the QR code, until a phone pairs with it. */
+  get link(): string | undefined {
+    return this.qr;
   }
 
   /** A phone has paired at least once. */
@@ -235,19 +245,27 @@ export class DesktopPairing {
     // One challenge, one session.
     this.challenge = undefined;
     const sealer = new Sealer(keys.desktopToPhone, 'desktopToPhone');
+    const compatible = hello.data.protocol === COMPANION_PROTOCOL;
+    // The first phone to pair gets the pairing's own secret; the QR's stops working.
+    const session = compatible && this.qr ? crypto.randomBytes(SECRET_BYTES) : undefined;
     const welcome: CompanionWelcome = {
       type: 'welcome',
       protocol: COMPANION_PROTOCOL,
       app: this.opts.appVersion,
       expiresAt: new Date(this.expiresAt).toISOString(),
+      ...(session ? { session: session.toString('base64') } : {}),
     };
     if (!this.socket.send(sealer.seal(Buffer.from([FRAME.welcome]), singleRecord(welcome)))) {
       return;
     }
-    if (hello.data.protocol !== COMPANION_PROTOCOL) {
+    if (!compatible) {
       // The WELCOME tells the phone our version; it shows "update the app" and stops.
       this.opts.log?.('companion protocol mismatch', { phone: hello.data.protocol });
       return;
+    }
+    if (session) {
+      this.secret = session;
+      this.qr = undefined;
     }
     this.session = { sealer, opener, assembler: new MessageAssembler() };
     this.phone = hello.data;

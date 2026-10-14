@@ -325,15 +325,16 @@ the CAN and the PIN when the desktop doesn't have them (below), and the consent 
 phone.
 
 - **Pairing.** `CompanionService` starts a `DesktopPairing` (`@sa/companion`) on demand. The
-  procedure card shows a `dnie_signature` prompt: the QR code while no phone is connected, then
-  the phone's progress (`stage`: reviewing → card → reading → signing). The QR link (with the
-  pairing secret) never goes into the prompt or the transcript; the renderer reads it from
-  `companion.status` and `companion.changed`. Mis datos can pair and unpair too. A pairing lasts
-  72 hours or until the app quits.
+  procedure card shows a `dnie_signature` prompt: the QR code until a phone pairs, then the
+  phone's progress (`stage`: reviewing → card → reading → signing). The QR works once (D26): its
+  handshake gives the phone the pairing's own secret, and a paired phone that is away reconnects
+  on its own ("Vincular otro móvil" makes a new pairing). The QR link never goes into the prompt
+  or the transcript; the renderer reads it from `companion.status` and `companion.changed`. Mis
+  datos can pair and unpair too. A pairing lasts 72 hours or until the app quits.
 - **Transport.** Frames go through `services/relay-server` (`PRODUCTION_SERVICES.relayServerUrl`;
   dev `SA_RELAY_SERVER_URL`, whose loopback host is replaced by the LAN address in the QR so a
   phone can reach it; e2e runs have none). They are end-to-end encrypted with keys derived from
-  the QR (ECDH P-256 + HKDF + AES-GCM, new keys on every connection). The relay sees room ids
+  the pairing's secret (ECDH P-256 + HKDF + AES-GCM, new keys on every connection). The relay sees room ids
   and ciphertext only. See `packages/companion/README.md`.
 - **Signing.** `@sa/signer` signs through a `KeySigner` port. A `.p12` signs in memory; the DNIe
   is an `ExternalSigningKey` whose `sign()` is a `sign.toBeSigned` → `sign.signature` round trip

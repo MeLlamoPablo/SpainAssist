@@ -219,18 +219,20 @@ describe('DNIe signatures with the phone', () => {
 
   it('uses the CAN from Mis datos when valid, and asks only for what it lacks', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
-    /** A phone that declines the next request (connected once the QR shows again). */
+    /** One phone that declines every request: it pairs with the QR once and stays (D26). */
+    const requests: { m: DesktopToPhone; send: PhoneClient['send'] }[] = [];
     const refuseNext = async () => {
-      await a.waitFor(() => !!a.services.companion!.status().link);
-      const request = await new Promise<DesktopToPhone>((resolve) => {
+      if (phones.length === 0) {
+        await a.waitFor(() => !!a.services.companion!.status().link);
         phone(relay, a.services.companion!.status().link as string, (m, send) => {
-          if (m.type !== 'sign.request') return;
-          resolve(m);
-          send({ type: 'sign.error', requestId: m.requestId, code: 'rejected' });
+          if (m.type === 'sign.request') requests.push({ m, send });
         });
-      });
-      for (const p of phones.splice(0)) p.close();
-      return request;
+      }
+      await a.waitFor(() => requests.length > 0);
+      const { m, send } = requests.shift()!;
+      if (m.type === 'sign.request')
+        send({ type: 'sign.error', requestId: m.requestId, code: 'rejected' });
+      return m;
     };
     const sign = async (values?: { can?: string; pin?: string }) => {
       const approval = a.services.browser.approveSignature(procedureId, summary);
@@ -258,7 +260,7 @@ describe('DNIe signatures with the phone', () => {
     const saved = await sign();
     expect(saved.shown).toMatchObject({ stage: 'phone' });
     expect(saved.request).toMatchObject({ can: '654321', pin: 'Nuevo5678' });
-    expect(a.services.companion!.status().link).not.toContain('654321');
+    expect(JSON.stringify(a.services.companion!.status())).not.toContain('654321');
 
     // Reading the certificate needs no PIN.
     const read = a.services.browser.approveSignature(procedureId, {
@@ -429,6 +431,35 @@ describe('DNIe signatures with the phone', () => {
     expect(await a.invoke('companion.unpair')).toEqual({ state: 'off' });
     expect(a.events.some((e) => e.type === 'companion.changed')).toBe(true);
   });
+});
+
+it('shows the QR only until a phone pairs, and pairs another phone without failing a signature', async () => {
+  const { relay, app: a, procedureId } = await setup();
+  const approval = a.services.browser.approveSignature(procedureId, summary);
+  await typeUnlock(a, procedureId);
+  await a.waitFor(() => a.services.companion!.status().state === 'waiting');
+  const first = (await a.invoke('companion.status')).link as string;
+  const old = phone(relay, first, () => {});
+  await a.waitFor(() => old.received.some((m) => m.type === 'sign.request'));
+  old.client.close();
+  await a.waitFor(() => a.services.companion!.status().state === 'away');
+  // The phone reconnects on its own: the QR, which no longer works, isn't shown again (D26).
+  expect(await a.invoke('companion.status')).toEqual({
+    state: 'away',
+    device: 'Phone under test',
+    expiresAt: expect.any(String),
+  });
+
+  const next = await a.invoke('companion.pairAnother');
+  expect(next.link).toMatch(/^https:\/\/relay\.example\.test\/p#/);
+  expect(next.link).not.toBe(first);
+  // The signature waiting for the old phone goes to the new one.
+  const { received } = phone(relay, next.link as string, (m, send) => {
+    if (m.type === 'sign.request')
+      send({ type: 'sign.error', requestId: m.requestId, code: 'rejected' });
+  });
+  await a.waitFor(() => received.some((m) => m.type === 'sign.request'));
+  expect(await approval).toBeNull();
 });
 
 it('ends login after inactivity and asks again for the next handshake', async () => {
@@ -682,7 +713,12 @@ describe('without the dnie-phone feature flag', () => {
   it('never starts the companion and refuses pairing and new DNIe credentials', async () => {
     const { relay, app: a } = await setupOff();
     expect(a.services.companion).toBeUndefined();
-    for (const method of ['companion.status', 'companion.pair', 'companion.unpair'] as const)
+    for (const method of [
+      'companion.status',
+      'companion.pair',
+      'companion.unpair',
+      'companion.pairAnother',
+    ] as const)
       await expect(a.invoke(method)).rejects.toThrow('no está disponible');
     await expect(a.invoke('vault.addDnie')).rejects.toThrow('no está disponible');
     await expect(a.invoke('companion.unlock', 'q-1', { can: CAN, pin: PIN })).rejects.toThrow(

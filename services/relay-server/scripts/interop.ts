@@ -125,7 +125,7 @@ async function main(): Promise<void> {
   writeFileSync(
     config,
     JSON.stringify({
-      link: pairing.link,
+      link: pairing.link as string,
       certificate: certificate.toString('base64'),
       privateKey: privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'),
       can: CAN,

@@ -419,7 +419,8 @@ AA300103 when the card moves during a read.
   stop abuse.
 - **Pairing: one desktop session.** 72 hours (12 at first; D20) or until the desktop app quits, no push
   notifications, nothing to unpair later. The phone keeps the pairing (Keystore-encrypted) to
-  reconnect after the app is killed. A new QR means a new pairing.
+  reconnect after the app is killed. A new QR means a new pairing. (The QR works for one phone
+  only since D26.)
 - **Consent on the phone, and what you see is what you sign.** The phone shows the document
   (the PDF itself), the site and the format. For CAdES and PAdES built by the desktop, it checks
   that every blob it signs binds to that document (CMS messageDigest; PAdES byte range and update
@@ -636,7 +637,7 @@ may hold the PIN, and the desktop gives it to the phone with the request.
   it from the unlocked vault, as it can the Cl@ve password. Without the card it's useless, and
   the phone's review and the card tap remain. "The paired phone" is whoever connects with the
   pairing link: until a pairing pins its phone, someone who has the QR and takes the phone's place gets the PIN with the
-  next request the user approves on the desktop. Signing with a saved PIN asks on both the desktop
+  next request the user approves on the desktop (closed by D26: the QR works once). Signing with a saved PIN asks on both the desktop
   and the phone. A "use automatically" policy for the DNIe would remove the desktop step; Mis
   datos doesn't offer one yet.
 
@@ -822,3 +823,32 @@ custom-endpoint users, and Exa's hosted MCP server is free without a key.
   still caught.
 - **Trade-offs.** The free tier is shared per IP and rate-limited, and Exa can change or close it
   at any time; the optional key is the fallback. Queries still leave the device as written.
+
+## D26 — The pairing QR works once; the phone reconnects with the pairing's own secret (2026-10-14)
+
+The QR's secret was the pairing's only secret, for its whole 72 hours. The phone reconnected
+with it, and the desktop showed the same QR again whenever the phone was away. So anyone who got
+the link (a screenshot, a shared screen, someone looking) could connect as the phone, push the
+real one out of the relay room, and receive the next request with the CAN and the PIN, while the
+desktop still said "connected". Now the QR is a one-time join secret.
+
+- **Two secrets.** The QR carries the join secret. The first handshake with it gets a WELCOME
+  with `session`: the pairing's own secret (32 random bytes). The desktop then forgets the QR's
+  secret, and both sides use the new one as the HKDF salt for every later handshake. A HELLO made
+  with the QR's secret no longer opens. The link format and the key derivation don't change.
+- **Phone storage.** The phone stores the pairing with the new secret in place of the QR's
+  (`PairingLink.withSession`), so a restarted app reconnects with it. Scanning the same QR again
+  is recognised by room and desktop key, and only reconnects.
+- **No QR once paired.** `CompanionStatus.link` exists only until a phone pairs. While the paired
+  phone is away, the desktop says to open the app, and offers "Vincular otro móvil"
+  (`companion.pairAnother`): a new pairing and a new QR. A signature in progress goes to the
+  phone that pairs with it. Scanning a new QR still replaces the old phone, with no extra
+  confirmation.
+- **Protocol 6.** WELCOME has the optional `session`. Protocol-5 phones must update: they would
+  reconnect with the QR's secret.
+- **Trade-offs.** Someone with an old QR can still connect to the relay room as the phone and
+  push the real phone out (the relay doesn't authenticate the phone), ending its pairing; they
+  get no session and no secrets, and the user pairs again. If the one WELCOME with `session` is
+  lost mid-flight, the phone can't reconnect and the user pairs again. Only the desktop's memory
+  holds the pairing secret, as before.
+

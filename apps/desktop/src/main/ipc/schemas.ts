@@ -117,6 +117,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'companion.status': none,
   'companion.pair': none,
   'companion.unpair': none,
+  'companion.pairAnother': none,
   'companion.unlock': z.tuple([
     id,
     z.strictObject({ can: DniAccessNumber.optional(), pin: DniePin.optional() }),

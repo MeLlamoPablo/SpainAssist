@@ -2,6 +2,7 @@ package es.spainassist.firma.app
 
 import es.spainassist.firma.VECTORS_JSON
 import es.spainassist.firma.card.CardException
+import es.spainassist.firma.channel.Base64Std
 import es.spainassist.firma.protocol.Algorithm
 import es.spainassist.firma.protocol.Check
 import es.spainassist.firma.protocol.CompanionDocument
@@ -34,6 +35,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFalse
@@ -198,15 +200,22 @@ class FirmaControllerTest {
         h.controller.confirmPairing()
         assertIs<Screen.Home>(h.screen)
         assertEquals("Test phone", h.spy.hellos.single().device)
-        h.link.connect()
+        // The first WELCOME carries the pairing's own secret, which replaces the QR's (D26).
+        val session = ByteArray(32) { 5 }
+        h.link.connect(session = Base64Std.encode(session))
         assertIs<LinkStatus.Connected>((h.screen as Screen.Home).link)
         assertTrue(h.platform.store.values.containsKey(FirmaController.KEY_PAIRING))
 
-        // A new process: the pairing comes back on its own.
+        // A new process: the pairing comes back on its own, with the pairing's secret.
         val spy = LinkSpy()
         val again = FirmaController(h.platform, TestScope(h.dispatcher), h.dispatcher, spy.factory)
         assertIs<Screen.Home>(again.screen.value)
         assertEquals(1, spy.last.started)
+        assertContentEquals(session, spy.last.pairing.secret)
+        // The same QR again is the same pairing: no new one, and the stored secret stays.
+        again.onLink(testLink())
+        assertIs<Screen.Home>(again.screen.value)
+        assertEquals(2, spy.last.started)
 
         // Expired: forgotten.
         h.platform.clock = Instant.parse("2026-10-11T22:00:01Z").toEpochMilliseconds()

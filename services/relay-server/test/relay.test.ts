@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import net, { type AddressInfo } from 'node:net';
-import { DesktopPairing, PhoneClient, PhoneSigner } from '@sa/companion';
+import { DesktopPairing, encodePairingLink, PhoneClient, PhoneSigner } from '@sa/companion';
 import { type DesktopToPhone, RELAY_CLOSE } from '@sa/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, createRelay, type Relay, type RelayOptions } from '../src';
@@ -215,9 +215,9 @@ describe('companion through the real relay', () => {
     const cert = crypto.randomBytes(200);
     const received: DesktopToPhone[] = [];
     let phone: PhoneClient | undefined;
-    const makePhone = () =>
+    const makePhone = (link = pairing.link as string) =>
       new PhoneClient({
-        link: pairing.link,
+        link,
         hello: { app: '1.0.0', platform: 'test', device: 'Relay test' },
         socket: { backoffMs: () => 20 },
         onMessage: (m) => {
@@ -252,9 +252,11 @@ describe('companion through the real relay', () => {
         pin: '12345678',
       });
       expect(key.certificates[0]?.equals(cert)).toBe(true);
-      // The phone app is killed and opened again (same link, new process).
+      // The phone app is killed and opened again (its stored pairing, new process). The QR's
+      // link no longer works: the stored pairing holds the secret the first WELCOME sent.
+      expect(pairing.link).toBeUndefined();
       phone.close();
-      phone = makePhone();
+      phone = makePhone(encodePairingLink(phone.pairing));
       await until(() => pairing.connected && (phone?.connected ?? false));
       const signature = await key.sign(Buffer.from([1, 2, 3]), 'SHA256withRSA');
       expect([...signature]).toEqual([3, 2, 1]);

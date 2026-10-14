@@ -56,7 +56,8 @@ interface Session extends Pending {
 }
 
 export class PhoneClient {
-  readonly pairing: PairingLink;
+  /** The scanned link; its secret becomes the pairing's own once the desktop sends it (D26). */
+  pairing: PairingLink;
   private readonly socket: RelaySocket;
   private pending?: Pending;
   private session?: Session;
@@ -187,6 +188,9 @@ export class PhoneClient {
     if (welcome.data.protocol !== COMPANION_PROTOCOL) {
       this.setStatus({ state: 'outdated', desktopProtocol: welcome.data.protocol });
       return;
+    }
+    if (welcome.data.session) {
+      this.pairing = { ...this.pairing, secret: Buffer.from(welcome.data.session, 'base64') };
     }
     this.session = { ...pending, assembler: new MessageAssembler() };
     this.setStatus({ state: 'connected', welcome: welcome.data });

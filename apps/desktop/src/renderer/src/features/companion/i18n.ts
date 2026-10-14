@@ -13,7 +13,8 @@ export const companionDict = defineDict({
     connecting: 'Conectando…',
     unavailable: 'Ahora mismo no se puede usar el móvil para firmar. Inténtalo más tarde.',
     away: (device: string) => `${device} no está conectado. Abre la app Spain Assist en el móvil.`,
-    rescan: 'Si no se conecta, escanea otra vez el código.',
+    otherPhone: '¿Has cambiado de móvil? Vincula el nuevo con un código nuevo.',
+    pairOther: 'Vincular otro móvil',
     connected: (device: string) => `Conectado con ${device}`,
     stage: {
       unlock: 'Escribe los datos de tu DNIe',
@@ -90,7 +91,8 @@ export const companionDict = defineDict({
     connecting: 'Connecting…',
     unavailable: "Signing with your phone isn't available right now. Try again later.",
     away: (device: string) => `${device} isn't connected. Open the Spain Assist app on your phone.`,
-    rescan: "If it doesn't connect, scan the code again.",
+    otherPhone: 'Using a different phone? Pair it with a new code.',
+    pairOther: 'Pair another phone',
     connected: (device: string) => `Connected to ${device}`,
     stage: {
       unlock: 'Type your DNIe details',

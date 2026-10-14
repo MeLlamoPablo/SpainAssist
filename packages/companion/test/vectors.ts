@@ -124,6 +124,8 @@ export async function buildVectors() {
   const desktop = keyPair('desktop');
   const phone = keyPair('phone');
   const secret = fixed('secret', 32);
+  // The pairing's own secret, sent in the first WELCOME (D26).
+  const sessionSecret = fixed('session secret', 32);
   const room = fixed('room', 16);
   const desktopNonce = fixed('desktop nonce', 16);
   const phoneNonce = fixed('phone nonce', 16);
@@ -158,6 +160,7 @@ export async function buildVectors() {
     protocol: COMPANION_PROTOCOL,
     app: '0.1.0',
     expiresAt: '2026-10-11T12:00:00.000Z',
+    session: sessionSecret.toString('base64'),
   });
   const desktopSealer = new Sealer(keys.desktopToPhone, 'desktopToPhone');
   const welcome = desktopSealer.seal(Buffer.from([FRAME.welcome]), welcomePlain);
@@ -198,6 +201,7 @@ export async function buildVectors() {
     phonePrivateKey: hex(phone.privateKey),
     phonePublicKey: hex(phone.publicKey),
     secret: hex(secret),
+    sessionSecret: hex(sessionSecret),
     room: hex(room),
     relayUrl,
     /** Text, not hex. */

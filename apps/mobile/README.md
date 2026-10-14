@@ -86,8 +86,9 @@ cd apps/mobile
 Login uses the AUTENTICACIÓN certificate; documents use FIRMA. A `login` review shows the site
 without a document. TLS digests arrive already hashed (`prehashed`); the card adapter wraps
 DigestInfo without hashing them again, while preserving PACE/CWA cryptography. After approval,
-cancel from the desktop. Protocol 5 (the required `can`, `sign.need` and `sign.unlock`; protocol
-4 added the optional `pin`, protocol 3 `can`) requires a matching desktop; old apps must update.
+cancel from the desktop. Protocol 6 (WELCOME's `session`, the pairing's own secret that replaces
+the QR's, D26; protocol 5 the required `can`, `sign.need` and `sign.unlock`; protocol 4 the
+optional `pin`, protocol 3 `can`) requires a matching desktop; old apps must update.
 
 ## Licence
 

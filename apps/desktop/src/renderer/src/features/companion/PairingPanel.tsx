@@ -2,8 +2,12 @@ import type { CompanionStatus } from '@sa/shared';
 import { Loader2, Smartphone, TriangleAlert } from 'lucide-react';
 import { useMemo } from 'react';
 import { encode } from 'uqr';
+import { Button } from '../../components/ui/button';
 import { useT } from '../../i18n';
+import { api, errorMessage } from '../../lib/api';
 import { cn } from '../../lib/cn';
+import { useAppStore } from '../../store/app';
+import { toast } from '../../store/toast';
 import { companionDict } from './i18n';
 
 /**
@@ -38,7 +42,7 @@ export function CompanionQr({ link, size = 196 }: { link: string; size?: number 
   );
 }
 
-/** QR code and connection state, while no phone is connected. */
+/** QR code (until a phone pairs) and connection state, while no phone is connected. */
 export function PairingPanel({
   status,
   className,
@@ -47,6 +51,15 @@ export function PairingPanel({
   className?: string;
 }) {
   const t = useT(companionDict);
+  // A paired phone reconnects on its own; its QR no longer works (D26).
+  const paired = !status.link && (status.state === 'away' || !!status.device);
+  const pairAnother = async () => {
+    try {
+      useAppStore.setState({ companion: await api.invoke('companion.pairAnother') });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
   if (status.state === 'unavailable')
     return (
       <p className={cn('flex items-start gap-2 text-[13.5px] text-fg-muted', className)}>
@@ -72,16 +85,29 @@ export function PairingPanel({
     >
       {status.link ? (
         <CompanionQr link={status.link} />
+      ) : paired ? (
+        <div className="flex size-11 shrink-0 items-center justify-center self-start rounded-full bg-surface-2">
+          <Smartphone size={20} className="text-fg-subtle" aria-hidden />
+        </div>
       ) : (
         <div className="flex size-[196px] items-center justify-center rounded-xl bg-surface-2">
           <Loader2 size={20} className="animate-spin text-fg-subtle" aria-hidden />
         </div>
       )}
       <div className="min-w-[200px] flex-1">
-        {status.state === 'away' && status.device ? (
+        {paired ? (
           <>
-            <p className="text-[14px] font-semibold text-fg">{t.away(status.device)}</p>
-            <p className="mt-1 text-[13px] text-fg-muted">{t.rescan}</p>
+            <p className="text-[14px] font-semibold text-fg">{t.away(status.device ?? t.app)}</p>
+            <p className="mt-1 text-[13px] text-fg-muted">{t.otherPhone}</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Smartphone}
+              className="mt-3"
+              onClick={() => void pairAnother()}
+            >
+              {t.pairOther}
+            </Button>
           </>
         ) : (
           <>
@@ -95,7 +121,7 @@ export function PairingPanel({
             {t.connecting}
           </p>
         ) : null}
-        <p className="mt-3 text-[12.5px] text-fg-subtle">{t.getApp}</p>
+        {paired ? null : <p className="mt-3 text-[12.5px] text-fg-subtle">{t.getApp}</p>}
       </div>
     </div>
   );

@@ -221,6 +221,8 @@ export interface SaMethods {
   'companion.status': [[], CompanionStatus];
   'companion.pair': [[], CompanionStatus];
   'companion.unpair': [[], CompanionStatus];
+  /** Replaces the pairing with a new one (a new QR) without failing a signature in progress. */
+  'companion.pairAnother': [[], CompanionStatus];
   /**
    * The CAN and/or PIN a pending `dnie_signature` prompt asks for in its `unlock` stage
    * (`DniAccessNumber`, `DniePin`). The only time they cross IPC: main never sends them back.
@@ -279,7 +281,7 @@ export type UpdateStatus =
  */
 export interface CompanionStatus {
   state: 'unavailable' | 'off' | 'connecting' | 'waiting' | 'away' | 'connected';
-  /** The pairing link for the QR code, while no phone is connected. Memory only. */
+  /** The pairing link for the QR code, until a phone pairs (it works once). Memory only. */
   link?: string;
   /** The paired phone's model ("Pixel 8"). */
   device?: string;

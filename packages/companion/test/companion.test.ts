@@ -58,9 +58,11 @@ function setup(relay = new MemoryRelay()) {
   });
   signer = new PhoneSigner(pairing);
   cleanups.push(() => pairing.unpair());
+  // The QR's link: the pairing shows it only until a phone pairs.
+  const qr = pairing.link as string;
   const phoneMessages: DesktopToPhone[] = [];
   const phoneStatuses: PhoneStatus[] = [];
-  const connectPhone = (link = pairing.link) => {
+  const connectPhone = (link = qr) => {
     const phone = new PhoneClient({
       link,
       hello: { app: '1.0.0', platform: 'test', device: 'Test phone' },
@@ -74,6 +76,7 @@ function setup(relay = new MemoryRelay()) {
   return {
     relay,
     pairing,
+    qr,
     signer,
     statuses,
     desktopMessages,
@@ -177,15 +180,36 @@ describe('DesktopPairing + PhoneClient', () => {
     await until(() => t.pairing.connected && phone.connected);
     t.relay.drop(roomId(phone.pairing.room), 'phone');
     await until(() => t.pairing.status.state === 'away');
+    // It reconnects with the pairing's own secret; the QR is gone.
+    expect(t.pairing.link).toBeUndefined();
     await until(() => t.pairing.connected && phone.connected);
     const id = crypto.randomUUID();
     expect(t.pairing.send({ type: 'sign.done', requestId: id })).toBe(true);
     await until(() => t.phoneMessages.length === 1);
   });
 
+  it('lets the QR pair one phone: a later phone with it gets no session (D26)', async () => {
+    const t = setup();
+    const phone = t.connectPhone();
+    await until(() => t.pairing.connected && phone.connected);
+    expect(t.pairing.link).toBeUndefined();
+    // The phone now holds the pairing's own secret, not the QR's.
+    expect(Buffer.from(phone.pairing.secret).equals(decodePairingLink(t.qr).secret)).toBe(false);
+
+    // Someone with a screenshot of the QR takes the phone's place in the relay room.
+    const intruder = t.connectPhone(t.qr);
+    await until(() => t.pairing.status.state === 'away');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(intruder.connected).toBe(false);
+    expect(t.pairing.connected).toBe(false);
+    expect(t.pairing.status).toMatchObject({ state: 'away', phone: { device: 'Test phone' } });
+    expect(t.pairing.send({ type: 'sign.done', requestId: crypto.randomUUID() })).toBe(false);
+    expect(t.phoneMessages).toEqual([]);
+  });
+
   it('refuses a phone that does not know the secret', async () => {
     const t = setup();
-    const link = decodePairingLink(t.pairing.link);
+    const link = decodePairingLink(t.qr);
     const forged = encodePairingLink({ ...link, secret: crypto.randomBytes(32) });
     const phone = t.connectPhone(forged);
     await new Promise((r) => setTimeout(r, 50));
@@ -199,7 +223,7 @@ describe('DesktopPairing + PhoneClient', () => {
     const t = setup(relay);
     relay.rooms.clear();
     relay.drop('x'.repeat(22), 'desktop');
-    const link = decodePairingLink(t.pairing.link);
+    const link = decodePairingLink(t.qr);
     const other = encodePairingLink({ ...link, room: crypto.randomBytes(16) });
     t.connectPhone(other);
     await until(() => t.phoneStatuses.some((s) => s.state === 'ended'));
@@ -306,8 +330,8 @@ describe('PhoneSigner', () => {
     expect(plain).toMatchObject({ can: '123456' });
     expect(plain).not.toHaveProperty('pin');
     expect(withPin).toMatchObject({ can: '123456', pin: 'Abcd1234' });
-    expect(t.pairing.link).not.toContain('123456');
-    expect(t.pairing.link).not.toContain('Abcd1234');
+    expect(t.qr).not.toContain('123456');
+    expect(t.qr).not.toContain('Abcd1234');
     const base = { ...withPin, requestId: crypto.randomUUID() };
     const { can: _can, ...noCan } = base;
     expect(DesktopToPhone.safeParse(noCan).success).toBe(false);

@@ -19,7 +19,7 @@ import { DniAccessNumber, DniePin } from './vault';
  *      answers with sign.unlock ─▶, and the request goes on
  *   sign.done ─▶  (or sign.cancel from the desktop, sign.error from the phone, at any point)
  */
-export const COMPANION_PROTOCOL = 5;
+export const COMPANION_PROTOCOL = 6;
 
 /** Standard Base64 (with padding), as both JSON encoders produce it. */
 const Base64 = (max: number) =>
@@ -67,6 +67,15 @@ export const CompanionWelcome = z.strictObject({
   app: z.string().min(1).max(40),
   /** When the pairing ends (ISO 8601); the phone forgets it then. */
   expiresAt: z.iso.datetime(),
+  /**
+   * The pairing's own secret (32 bytes, Base64), only in the WELCOME that answers the QR's secret. The
+   * phone keeps it and uses it in every later handshake; the desktop stops accepting the QR's, so
+   * a leaked QR is useless once a phone has paired (D26).
+   */
+  session: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{43}=$/)
+    .optional(),
 });
 export type CompanionWelcome = z.infer<typeof CompanionWelcome>;
 

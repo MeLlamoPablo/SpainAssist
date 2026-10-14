@@ -55,7 +55,7 @@ interface LinkListener {
  * serial dispatcher.
  */
 class PhoneLink(
-    val pairing: PairingLink,
+    pairing: PairingLink,
     private val hello: Hello,
     transport: (RelayEvents) -> RelayTransport,
     private val listener: LinkListener,
@@ -64,6 +64,10 @@ class PhoneLink(
     private class Pending(val sealer: Sealer, val opener: Opener)
 
     private class Session(val sealer: Sealer, val opener: Opener, val assembler: MessageAssembler)
+
+    /** The scanned link; its secret becomes the pairing's own once the desktop sends it (D26). */
+    var pairing: PairingLink = pairing
+        private set
 
     private val socket = transport(RelayEvents(::onRelayState, ::onFrame))
     private var pending: Pending? = null
@@ -197,6 +201,7 @@ class PhoneLink(
             setStatus(LinkStatus.Outdated(welcome.protocol))
             return
         }
+        welcome.session?.let { pairing = pairing.withSession(it) }
         session = Session(p.sealer, p.opener, MessageAssembler())
         setStatus(LinkStatus.Connected(welcome))
         listener.onSession()

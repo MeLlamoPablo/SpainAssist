@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonClassDiscriminator
  * The desktop validates with strict schemas, so the phone never sends fields it doesn't know
  * and leaves out empty optional ones.
  */
-const val COMPANION_PROTOCOL = 5
+const val COMPANION_PROTOCOL = 6
 
 /** Largest decrypted message, after joining fragments (same as the desktop). */
 const val MAX_MESSAGE_BYTES = 24 * 1024 * 1024
@@ -38,7 +38,12 @@ data class Welcome(
     val protocol: Int,
     val app: String,
     val expiresAt: String,
-)
+    /** The pairing's own secret (Base64), only in the WELCOME that answers the QR's (D26). */
+    val session: String? = null,
+) {
+    // Never log the secret.
+    override fun toString() = "Welcome(protocol=$protocol, app=$app, expiresAt=$expiresAt)"
+}
 
 @Serializable
 enum class Purpose {

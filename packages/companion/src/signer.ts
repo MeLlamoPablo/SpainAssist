@@ -120,7 +120,7 @@ const SIGNATURE_TIMEOUT_MS = 90_000;
 
 /**
  * Removes the PIN from the request kept for re-sending, and an answered `sign.unlock`: they go
- * once, so a phone that joins later (anyone with the pairing link) never gets them.
+ * once, so a phone that joins later never gets them.
  */
 function dropSecrets(active: Active, message: PhoneToDesktop): void {
   const request = active.outbox.get('request');

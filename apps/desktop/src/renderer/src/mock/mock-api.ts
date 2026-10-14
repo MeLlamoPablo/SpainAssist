@@ -206,7 +206,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     companionParam === 'connected'
       ? { state: 'connected', device: 'Pixel 8', expiresAt: pairedUntil }
       : companionParam === 'away'
-        ? { state: 'away', device: 'Pixel 8', link: demoLink, expiresAt: pairedUntil }
+        ? { state: 'away', device: 'Pixel 8', expiresAt: pairedUntil }
         : companionParam === 'waiting'
           ? { state: 'waiting', link: demoLink, expiresAt: pairedUntil }
           : { state: 'off' };
@@ -1346,6 +1346,12 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'companion.unpair': () => {
       requireDniePhone();
       setCompanion({ state: 'off' });
+      return companion;
+    },
+    'companion.pairAnother': () => {
+      requireDniePhone();
+      const expiresAt = new Date(Date.now() + 72 * 3600_000).toISOString();
+      setCompanion({ state: 'waiting', link: demoLink, expiresAt });
       return companion;
     },
     'companion.unlock': (promptItemId) => {

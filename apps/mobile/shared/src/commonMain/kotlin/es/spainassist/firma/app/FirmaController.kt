@@ -147,8 +147,8 @@ class FirmaController(
                 render()
                 return@launch
             }
-            if (stored()?.let { it == parsed } == true && link != null) {
-                // The same QR again: just make sure we're connected.
+            if (stored()?.samePairing(parsed) == true && link != null) {
+                // The same QR again (it no longer works once paired): just make sure we're connected.
                 log("pairing link: same pairing, reconnecting")
                 link?.start()
                 return@launch
@@ -247,6 +247,10 @@ class FirmaController(
         }
         if (status is LinkStatus.Connected) {
             parseInstant(status.welcome.expiresAt)?.let { store.put(KEY_EXPIRES, it.toString()) }
+            // The QR's secret no longer works: reconnect with the pairing's own from now on.
+            status.welcome.session?.let { session ->
+                stored()?.let { store.put(KEY_PAIRING, it.withSession(session).encode()) }
+            }
         }
         if (status is LinkStatus.Ended) {
             notice = when (status.reason) {

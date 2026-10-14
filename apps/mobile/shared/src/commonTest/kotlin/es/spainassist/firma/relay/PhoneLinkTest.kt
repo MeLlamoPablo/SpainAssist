@@ -1,5 +1,6 @@
 package es.spainassist.firma.relay
 
+import es.spainassist.firma.channel.Base64Std
 import es.spainassist.firma.channel.Crypto
 import es.spainassist.firma.channel.Direction
 import es.spainassist.firma.channel.Frame
@@ -16,6 +17,7 @@ import es.spainassist.firma.protocol.DesktopToPhone
 import es.spainassist.firma.protocol.Hello
 import es.spainassist.firma.protocol.Welcome
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -32,7 +34,7 @@ class PhoneLinkTest {
         val statuses = ArrayList<LinkStatus>()
         val messages = ArrayList<DesktopToPhone>()
         val logs = ArrayList<String>()
-        PhoneLink(
+        val link = PhoneLink(
             pairing,
             Hello(app = "1.0.0", platform = "android", device = "Test phone"),
             transport = { e ->
@@ -76,10 +78,20 @@ class PhoneLinkTest {
             phoneNonce = phoneNonce,
         )
         val sealer = Sealer(keys.desktopToPhone, Direction.DesktopToPhone)
-        val welcome = Welcome("welcome", COMPANION_PROTOCOL, "0.1.0", "2026-10-11T22:00:00.000Z")
+        val session = ByteArray(32) { 5 }
+        val welcome = Welcome(
+            "welcome",
+            COMPANION_PROTOCOL,
+            "0.1.0",
+            "2026-10-11T22:00:00.000Z",
+            session = Base64Std.encode(session),
+        )
         val welcomeJson = CompanionJson.encodeToString(Welcome.serializer(), welcome).encodeToByteArray()
         relay.onFrame(sealer.seal(byteArrayOf(Frame.WELCOME), singleRecord(welcomeJson)))
         assertIs<LinkStatus.Connected>(statuses.last())
+        // Later handshakes use the pairing's own secret (D26), which never reaches the log.
+        assertContentEquals(session, link.pairing.secret)
+        assertFalse(logs.any { it.contains(Base64Std.encode(session)) })
 
         // A field this build doesn't know: the decoding error quotes the input.
         val json = """{"type":"sign.cancel","requestId":"r1","reason":"cancelled","can":"918273"}"""

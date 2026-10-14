@@ -1,6 +1,8 @@
 package es.spainassist.firma.channel
 
 import es.spainassist.firma.VECTORS_JSON
+import es.spainassist.firma.protocol.CompanionJson
+import es.spainassist.firma.protocol.Welcome
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -52,7 +54,16 @@ class VectorsTest {
         assertContentEquals(phoneRecord.hex("frame"), sealer.seal(byteArrayOf(Frame.RECORD), phoneRecord.hex("plaintext")))
 
         val opener = Opener(keys.desktopToPhone, Direction.DesktopToPhone)
-        assertContentEquals(hex("welcomePlaintext"), opener.open(hex("welcomeFrame"), 1))
+        val welcomePlain = opener.open(hex("welcomeFrame"), 1)
+        assertContentEquals(hex("welcomePlaintext"), welcomePlain)
+        // The first WELCOME carries the pairing's own secret, which replaces the QR's (D26).
+        val welcome = CompanionJson.decodeFromString(
+            Welcome.serializer(),
+            parseSingleRecord(welcomePlain).decodeToString(),
+        )
+        val paired = PairingLink.parse(v.getValue("link").jsonPrimitive.content, allowInsecure = false)
+            .withSession(welcome.session!!)
+        assertContentEquals(hex("sessionSecret"), paired.secret)
         val assembler = MessageAssembler()
         val records = v.getValue("desktopRecords").jsonArray.map { it.jsonObject }
         val first = opener.open(records[0].hex("frame"), 1)
