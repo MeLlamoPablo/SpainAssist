@@ -4,7 +4,7 @@
 
 Spain _Assist_ is a local AI agent that deals with any bureaucracy with the Spanish public administrations.
 
-It knows how to use Cl@ve, the DNI electrónico and the FNMT's _Certificado Digital_, on state, regional and municipal sedes. It remembers the data you give it, stores it securely, and reuses it for future procedures.
+It knows how to use Cl@ve, the DNI electrónico and the FNMT's _Certificado Digital_, on state, regional and municipal headquarters. It remembers the data you give it, stores it securely, and reuses it for future procedures.
 
 ## Download
 
