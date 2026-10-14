@@ -317,10 +317,22 @@ define('Response', Response);
 
 define('fetch', async (input, init = {}) => {
   const url = input instanceof URL ? input.href : typeof input === 'object' && input?.url ? String(input.url) : String(input);
-  if (init.body != null) throw new TypeError('fetch cannot send a request body: only GET and HEAD are allowed');
   const headers = new Headers(init.headers);
-  const meta = JSON.stringify({ url, method: init.method, headers: Object.fromEntries(headers.entries()) });
-  const result = await host.fetch(meta);
+  let text;
+  let binary;
+  const body = init.body;
+  if (body instanceof URLSearchParams) {
+    if (!headers.has('content-type')) {
+      headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+    }
+    text = body.toString();
+  } else if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) {
+    binary = toArrayBuffer(body);
+  } else if (body != null) {
+    text = String(body);
+  }
+  const meta = JSON.stringify({ url, method: init.method, headers: Object.fromEntries(headers.entries()), body: text });
+  const result = await host.fetch(meta, binary);
   return new Response(JSON.parse(result.meta), result.body);
 });
 

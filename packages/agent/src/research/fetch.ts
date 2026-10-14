@@ -9,8 +9,8 @@ import { extractText, getDocumentProxy } from 'unpdf';
 /**
  * fetch_url core: download a page or PDF and turn it into compact Markdown/text for the model.
  * - http(s) only, private/local hosts blocked (unless allowed for dev/e2e), manual redirects
- *   (each hop re-checked), timeouts and byte caps. run_script's fetch shares the host checks
- *   (`fetchPublic`).
+ *   (each hop re-checked), timeouts and byte caps. run_script's fetch shares the host checks and
+ *   redirects (`fetchPublic`).
  * - Explicit charset decoding (header, BOM, <meta>, XML declaration; heuristic fallback to
  *   windows-1252, which many Spanish government sites still serve as ISO-8859-1).
  * - HTML: main content via Readability (linkedom DOM), fallback to <main>/body; tables keep
@@ -449,9 +449,10 @@ function looksLikePdf(bytes: Uint8Array): boolean {
 
 export interface PublicFetchOptions {
   signal: AbortSignal;
-  headers: Record<string, string>;
+  headers: Headers | Record<string, string>;
   /** Default GET. */
-  method?: 'GET' | 'HEAD';
+  method?: string;
+  body?: string | Uint8Array;
   /** Default 5. */
   maxRedirects?: number;
   /** Dev/e2e only: allow localhost and private networks. */
@@ -459,9 +460,20 @@ export interface PublicFetchOptions {
   fetchImpl?: typeof fetch;
 }
 
+/** Headers that describe the request body: dropped with it when a redirect turns into a GET. */
+const BODY_HEADERS = [
+  'content-type',
+  'content-length',
+  'content-encoding',
+  'content-language',
+  'content-location',
+];
+
 /**
- * A body-less request to a public http(s) host. Redirects are followed by hand, so every hop's
- * host is checked again. Returns the response of the last hop (any status) and its URL.
+ * A request to a public http(s) host. Redirects are followed by hand, so every hop's host is
+ * checked again. As in the platform's fetch, a 303 (or a 301/302 after a POST) goes on as a GET
+ * without the body, and a hop to another origin drops the authorization header. Returns the
+ * response of the last hop (any status) and its URL.
  */
 export async function fetchPublic(
   start: URL,
@@ -469,6 +481,9 @@ export async function fetchPublic(
 ): Promise<{ res: Response; url: URL; redirects: number }> {
   const doFetch = options.fetchImpl ?? fetch;
   const maxRedirects = options.maxRedirects ?? 5;
+  const headers = new Headers(options.headers);
+  let method = options.method ?? 'GET';
+  let body = options.body;
   let url = start;
   for (let hop = 0; ; hop++) {
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
@@ -481,10 +496,11 @@ export async function fetchPublic(
     let res: Response;
     try {
       res = await doFetch(url, {
-        method: options.method ?? 'GET',
+        method,
         redirect: 'manual',
         signal: options.signal,
-        headers: options.headers,
+        headers,
+        body,
       });
     } catch (error) {
       if (options.signal.aborted) throw error;
@@ -500,11 +516,22 @@ export async function fetchPublic(
       throw new FetchError('redirects', `Too many redirects (>${maxRedirects})`);
     }
     await res.body?.cancel().catch(() => {});
+    const from = url;
     try {
       url = new URL(location, url);
     } catch {
       throw new FetchError('invalid_url', `Invalid redirect target: ${location}`);
     }
+    const verb = method.toUpperCase();
+    if (
+      (res.status === 303 && verb !== 'GET' && verb !== 'HEAD') ||
+      ((res.status === 301 || res.status === 302) && verb === 'POST')
+    ) {
+      method = 'GET';
+      body = undefined;
+      for (const name of BODY_HEADERS) headers.delete(name);
+    }
+    if (url.origin !== from.origin) headers.delete('authorization');
   }
 }
 
