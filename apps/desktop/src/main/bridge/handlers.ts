@@ -29,10 +29,10 @@ import { type Logger, truncate } from '../core/logger';
 import { errorMessage, hostOf } from '../core/util';
 import type { MediaStore } from '../media/store';
 import { locateMapForm, type PlaceLookup, type PlaceResults } from '../places/resolve-form';
-import type { Biometric, BrowserPort, VaultPort } from '../ports';
+import type { Biometric, BrowserPort, PiiLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
 import type { ProviderManager } from '../providers/manager';
-import type { FeedbackService } from '../remote/feedback';
+import { type FeedbackService, scrubOutgoing } from '../remote/feedback';
 import { setPersonalPartial } from '../vault/partial';
 import type { BridgeContext, BridgeHandlers } from './server';
 
@@ -56,6 +56,8 @@ export interface BridgeHandlerDeps {
     'credentialFor' | 'refreshCredential' | 'exaKey' | 'voucherSpend'
   >;
   feedback: Pick<FeedbackService, 'search' | 'submit' | 'vote' | 'describeShared'>;
+  /** Removes personal data from what agents send off the device (`research.scrub`). */
+  pii: PiiLib;
   biometric: Biometric;
   /** Origins that commonly ask for a TLS client certificate (from @sa/browser). */
   certificateOrigins: readonly string[];
@@ -879,6 +881,19 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       const { result, shared } = await deps.feedback.submit(params);
       if (shared)
         deps.procedures.addNotice(ctx.procedureId, 'info', deps.feedback.describeShared(shared));
+      return result;
+    },
+
+    // --- research ----------------------------------------------------------------------------
+    'research.scrub': async (params, ctx) => {
+      // Local rules depend on the municipality: the research tools ask for it instead of the
+      // street address, so it stays.
+      const result = scrubOutgoing(deps.pii, deps.vault(), params.text, ['addressMunicipality']);
+      if (result.redactions > 0)
+        deps.logger.info('research query scrubbed', {
+          procedureId: ctx.procedureId,
+          redactions: result.redactions,
+        });
       return result;
     },
 

@@ -151,7 +151,9 @@ cancelled. Procedure cards do not expose a stop control.
 ### 3.2 Research and the card
 The procedure agent first uses `web_research`, with anonymized context from the user's saved
 data (age, municipality, document dates…) and a `mode` it chooses (`fast`, `balanced`,
-`deep`). Voucher users run it on Parallel's Task API through our key server, paid from the
+`deep`). Before any query leaves the device (`web_research`, `exa_search`), the host has main
+scrub it (bridge `research.scrub`: `@sa/pii` with the vault's values, keeping the municipality);
+if that fails, nothing is sent. Voucher users run it on Parallel's Task API through our key server, paid from the
 voucher (D13; `lite`, `core`, `pro`). ChatGPT plans run one Responses request with OpenAI's
 hosted `web_search` tool on the plan's usage (D21; `gpt-6-luna`, `gpt-6.1-sol`,
 `gpt-6-astra`, all at high effort). One request stays

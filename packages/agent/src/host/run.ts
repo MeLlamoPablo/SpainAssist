@@ -9,6 +9,7 @@ import { parseLiteLLMSpendHeaders } from '../providers/services';
 import { createChatGPTResearchTool } from '../research/chatgpt-research';
 import { createExaTools } from '../research/exa';
 import { createKeyServerResearchTool } from '../research/key-server-research';
+import { bridgeScrub } from '../research/scrub';
 import { createAssistantTools, createTools } from '../tools/index';
 import { BridgeCredentialStore } from './credentials';
 import { createSpainAssistExtension } from './extension';
@@ -77,6 +78,8 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
   // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
   // OpenAI's hosted web search, BYOK and custom endpoints on Exa's keyless tier.
   const keyServerUrl = config.research.keyServerUrl;
+  // Queries leave the device: the app removes personal data from them first.
+  const scrub = bridgeScrub(bridge);
   const research = await researchBackend(
     config,
     async () => (await credentials.read(config.model.provider))?.type === 'oauth',
@@ -90,6 +93,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
           return credential?.type === 'api_key' ? credential.key : undefined;
         },
         language: config.language,
+        scrub,
       }),
     );
   } else if (research === 'chatgpt') {
@@ -103,6 +107,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
           baseUrl: model.baseUrl,
         }),
         language: config.language,
+        scrub,
       }),
     );
   } else if (research === 'exa') {
@@ -110,6 +115,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
       ...createExaTools({
         apiKey: async () => (await bridge.call('agent.exaKey', {})).key ?? undefined,
         language: config.language,
+        scrub,
         ...(config.research.exaBaseUrl ? { baseUrl: config.research.exaBaseUrl } : {}),
       }),
     );
