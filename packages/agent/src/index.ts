@@ -42,6 +42,7 @@ export {
   credentialNeedsRefresh,
   loginChatGPT,
   refreshOAuthCredential,
+  revokeChatGPTCredential,
 } from './providers/chatgpt';
 export {
   ASSISTANT_MODELS,

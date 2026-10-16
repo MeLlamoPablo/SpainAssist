@@ -12,6 +12,7 @@ import {
   loginChatGPT,
   parseChatGPTCallback,
   refreshOAuthCredential,
+  revokeChatGPTCredential,
 } from '../src/providers/chatgpt';
 import { DEFAULT_MODELS, listByokProviders, listProviderModels } from '../src/providers/models';
 import {
@@ -34,6 +35,9 @@ interface FakeAuth {
   idTokenAudience?: string;
   tokenStatus: number;
   issued: number;
+  revocations: URLSearchParams[];
+  /** Status of the next revocation responses; 200 once they run out. */
+  revocationStatuses: number[];
   close(): Promise<void>;
 }
 
@@ -49,6 +53,8 @@ async function startFakeAuth(): Promise<FakeAuth> {
     idTokenAudience: undefined as string | undefined,
     tokenStatus: 200,
     issued: 0,
+    revocations: [] as URLSearchParams[],
+    revocationStatuses: [] as number[],
   };
   let base = '';
   const server: Server = createServer((req, res) => {
@@ -58,7 +64,23 @@ async function startFakeAuth(): Promise<FakeAuth> {
       res.end(JSON.stringify(body));
     };
     if (url.pathname === '/.well-known/openid-configuration') {
-      return json(200, { issuer: base, jwks_uri: `${base}/jwks` });
+      return json(200, {
+        issuer: base,
+        jwks_uri: `${base}/jwks`,
+        revocation_endpoint: `${base}/api/accounts/oauth/revoke`,
+      });
+    }
+    if (url.pathname === '/api/accounts/oauth/revoke' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (c) => {
+        body += c;
+      });
+      req.on('end', () => {
+        state.revocations.push(new URLSearchParams(body));
+        res.writeHead(state.revocationStatuses.shift() ?? 200);
+        res.end();
+      });
+      return;
     }
     if (url.pathname === '/jwks') return json(200, { keys: [publicJwk] });
     if (url.pathname === '/api/accounts/oauth/token' && req.method === 'POST') {
@@ -124,6 +146,8 @@ beforeEach(() => {
   auth.scope = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct';
   auth.idTokenAudience = undefined;
   auth.tokenStatus = 200;
+  auth.revocations.length = 0;
+  auth.revocationStatuses.length = 0;
 });
 
 const deviceId = randomUUID();
@@ -397,6 +421,54 @@ describe('Sign in with ChatGPT', () => {
       refreshOAuthCredential('openai', credential, { endpoints: auth.endpoints }),
     ).rejects.toThrow(/invalid_grant/);
     await expect(refreshOAuthCredential('anthropic', credential)).rejects.toThrow(/not supported/);
+  });
+
+  it('revokes the session on sign out with the refresh token and issued client id', async () => {
+    const credential = {
+      type: 'oauth' as const,
+      access: 'access-x',
+      refresh: 'refresh-x',
+      expires: Date.now() + 3_600_000,
+      clientId: 'oaiapp_issued',
+      scopes: ['chatgpt.tokens.use.direct'],
+    };
+    await revokeChatGPTCredential(credential, { endpoints: auth.endpoints });
+    expect(auth.revocations.map((form) => Object.fromEntries(form))).toEqual([
+      { token: 'refresh-x', token_type_hint: 'refresh_token', client_id: 'oaiapp_issued' },
+    ]);
+
+    // Server errors are retried; client errors are final.
+    auth.revocations.length = 0;
+    auth.revocationStatuses.push(503, 502);
+    await revokeChatGPTCredential(credential, { endpoints: auth.endpoints, retryDelaysMs: [0, 0] });
+    expect(auth.revocations).toHaveLength(3);
+
+    auth.revocations.length = 0;
+    auth.revocationStatuses.push(503, 503);
+    await expect(
+      revokeChatGPTCredential(credential, { endpoints: auth.endpoints, retryDelaysMs: [0] }),
+    ).rejects.toThrow(/503/);
+    expect(auth.revocations).toHaveLength(2);
+
+    auth.revocations.length = 0;
+    auth.revocationStatuses.push(400);
+    await expect(
+      revokeChatGPTCredential(credential, { endpoints: auth.endpoints, retryDelaysMs: [0, 0] }),
+    ).rejects.toThrow(/400/);
+    expect(auth.revocations).toHaveLength(1);
+
+    await expect(
+      revokeChatGPTCredential(
+        { ...credential },
+        {
+          endpoints: { ...auth.endpoints, revocationUrl: 'http://127.0.0.1:1/revoke' },
+          retryDelaysMs: [],
+        },
+      ),
+    ).rejects.toThrow(/Could not reach ChatGPT/);
+    await expect(revokeChatGPTCredential({ type: 'api_key', key: 'k' })).rejects.toThrow(
+      /Not a ChatGPT credential/,
+    );
   });
 });
 

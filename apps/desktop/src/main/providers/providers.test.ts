@@ -298,7 +298,7 @@ describe('ProviderManager', () => {
       model: 'llama',
       secretId: SECRET_IDS.custom,
     });
-    expect(await app.invoke('providers.logout')).toEqual({ configured: false });
+    expect(await app.invoke('providers.logout')).toEqual({ status: { configured: false } });
     expect(await app.vault.getSecret(SECRET_IDS.custom)).toBeUndefined();
     await expect(app.invoke('providers.setModel', 'x')).rejects.toThrow(
       t('es', 'agentErrorNoProvider'),
@@ -339,7 +339,7 @@ describe('ProviderManager', () => {
 
     // Disconnecting deletes it: no other setup uses it.
     await app.invoke('providers.setExaKey', 'exa-secret-key-456');
-    expect(await app.invoke('providers.logout')).toEqual({ configured: false });
+    expect(await app.invoke('providers.logout')).toEqual({ status: { configured: false } });
     expect(await app.vault.getSecret(SECRET_IDS.exa)).toBeUndefined();
     expect(await app.services.providers.exaKey()).toBeUndefined();
   });
@@ -383,6 +383,49 @@ describe('ProviderManager', () => {
     expect(procedureId).toBeDefined();
     const cred = await app.rpc('agent.credential', { providerId: 'openai' }, token);
     expect(cred.body.result.credential).toMatchObject({ type: 'oauth', access: 'access-1' });
+  });
+
+  it('ends the ChatGPT session at OpenAI on sign out and when signing in again', async () => {
+    let logins = 0;
+    let revokeFails = false;
+    const lib = createFakeProviderLib({
+      async loginChatGPT() {
+        logins++;
+        return {
+          credential: {
+            type: 'oauth',
+            access: `access-${logins}`,
+            refresh: `refresh-${logins}`,
+            expires: Date.now() + 3_600_000,
+            clientId: 'oaiapp_1',
+          },
+        };
+      },
+    });
+    const revokeChatGPTCredential = lib.revokeChatGPTCredential;
+    lib.revokeChatGPTCredential = async (credential) => {
+      if (revokeFails) throw new Error('Could not reach ChatGPT');
+      await revokeChatGPTCredential(credential);
+    };
+    app = await createTestApp({ providerLib: lib });
+
+    await app.invoke('providers.loginChatGPT');
+    expect(lib.revoked).toEqual([]);
+    // A second sign-in replaces the session: the old one ends.
+    await app.invoke('providers.loginChatGPT');
+    await vi.waitFor(() => expect(lib.revoked).toEqual(['refresh-1']));
+    expect(await app.invoke('providers.logout')).toEqual({ status: { configured: false } });
+    expect(lib.revoked).toEqual(['refresh-1', 'refresh-2']);
+    expect(await app.vault.getSecret(SECRET_IDS.chatgpt)).toBeUndefined();
+
+    // OpenAI unreachable: signed out here anyway, and the user is told.
+    await app.invoke('providers.loginChatGPT');
+    revokeFails = true;
+    expect(await app.invoke('providers.logout')).toEqual({
+      status: { configured: false },
+      chatgptStillConnected: true,
+    });
+    expect(await app.vault.getSecret(SECRET_IDS.chatgpt)).toBeUndefined();
   });
 
   it('explains that ChatGPT needs a paid plan when the account is not eligible', async () => {

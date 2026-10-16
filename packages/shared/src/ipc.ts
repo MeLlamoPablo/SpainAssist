@@ -82,6 +82,15 @@ export interface TranscribeCallInput {
 
 export type LoginResult = { ok: true; status: ProviderStatus } | { ok: false; error: string };
 
+/**
+ * `chatgptStillConnected`: signed out here, but OpenAI could not be told to end the session, so
+ * the user should disconnect Spain Assist in ChatGPT's settings themselves.
+ */
+export interface LogoutResult {
+  status: ProviderStatus;
+  chatgptStillConnected?: true;
+}
+
 /** A redeemed voucher: `addedUsd` is its amount (it may have topped up the existing key). */
 export type RedeemVoucherResult =
   | { ok: true; status: ProviderStatus; addedUsd: number }
@@ -149,7 +158,7 @@ export interface SaMethods {
   /** Models the connected provider can use (current model first if the list lacks it). */
   'providers.listModels': [[], ModelOption[]];
   'providers.setModel': [[model: string], ProviderStatus];
-  'providers.logout': [[], ProviderStatus];
+  'providers.logout': [[], LogoutResult];
   /**
    * BYOK and custom endpoints: saves the user's Exa API key for web research (D23), or deletes it
    * with null. The renderer only ever learns whether one is saved (`ProviderStatus.exaKey`).

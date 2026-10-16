@@ -15,6 +15,8 @@ export const settingsDict = defineDict({
       expires: 'Caduca el',
       disconnect: 'Desconectar',
       disconnected: 'IA desconectada',
+      chatgptStillConnected:
+        'No pude avisar a ChatGPT. Quita Spain Assist en los ajustes de ChatGPT si ya no lo usas.',
       notConfigured: 'Aún no has conectado ninguna IA. La necesito para empezar.',
       error: 'Hay un problema con la conexión',
       chatgpt: {
@@ -150,6 +152,8 @@ export const settingsDict = defineDict({
       expires: 'Expires on',
       disconnect: 'Disconnect',
       disconnected: 'AI disconnected',
+      chatgptStillConnected:
+        'I couldn’t reach ChatGPT. Remove Spain Assist in ChatGPT’s settings if you no longer use it.',
       notConfigured: 'You haven’t connected an AI yet. I need one to get started.',
       error: 'There’s a problem with the connection',
       chatgpt: {

@@ -19,6 +19,8 @@ export interface ChatGPTEndpoints {
   issuer: string;
   /** Override the JWKS URL (skips discovery). */
   jwksUrl?: string;
+  /** Override the token revocation URL (skips discovery). */
+  revocationUrl?: string;
   resource: string;
   callbackHost: string;
   callbackPort: number;
@@ -303,16 +305,23 @@ function credentialFrom(
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
+async function discover(
+  endpoints: ChatGPTEndpoints,
+  key: 'jwks_uri' | 'revocation_endpoint',
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<string> {
+  const discovery = `${endpoints.issuer.replace(/\/+$/, '')}/.well-known/openid-configuration`;
+  const res = await fetchImpl(discovery, { signal });
+  if (!res.ok) throw new Error(`OpenID discovery failed (${res.status})`);
+  const config = (await res.json()) as Record<string, unknown>;
+  const value = config[key];
+  if (typeof value !== 'string' || !value) throw new Error(`OpenID configuration has no ${key}`);
+  return value;
+}
+
 async function jwksFor(endpoints: ChatGPTEndpoints, fetchImpl: typeof fetch, signal?: AbortSignal) {
-  let jwksUrl = endpoints.jwksUrl;
-  if (!jwksUrl) {
-    const discovery = `${endpoints.issuer.replace(/\/+$/, '')}/.well-known/openid-configuration`;
-    const res = await fetchImpl(discovery, { signal });
-    if (!res.ok) throw new Error(`OpenID discovery failed (${res.status})`);
-    const config = (await res.json()) as { jwks_uri?: string };
-    if (!config.jwks_uri) throw new Error('OpenID configuration has no jwks_uri');
-    jwksUrl = config.jwks_uri;
-  }
+  const jwksUrl = endpoints.jwksUrl ?? (await discover(endpoints, 'jwks_uri', fetchImpl, signal));
   let jwks = jwksCache.get(jwksUrl);
   if (!jwks) {
     jwks = createRemoteJWKSet(new URL(jwksUrl));
@@ -594,4 +603,66 @@ export async function refreshOAuthCredential(
     options.fetchImpl ?? fetch,
   );
   return credentialFrom(token, clientId, credential);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sign out
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Ends the ChatGPT session of a credential at OpenAI (sign out). Without it OpenAI keeps the
+ * session, and every later sign-in shows Spain Assist once more in the user's ChatGPT settings.
+ * Retries server and network errors a few times; throws when OpenAI could not be told, so the
+ * app can tell the user to disconnect the app in ChatGPT's settings themselves.
+ */
+export async function revokeChatGPTCredential(
+  credential: PiCredential,
+  options: {
+    endpoints?: Partial<ChatGPTEndpoints>;
+    fetchImpl?: typeof fetch;
+    signal?: AbortSignal;
+    /** Waits before each retry (default 0.5 s, 1 s, 2 s). */
+    retryDelaysMs?: number[];
+  } = {},
+): Promise<void> {
+  const clientId = typeof credential.clientId === 'string' ? credential.clientId : '';
+  if (credential.type !== 'oauth' || typeof credential.refresh !== 'string' || !clientId) {
+    throw new Error('Not a ChatGPT credential');
+  }
+  const endpoints: ChatGPTEndpoints = { ...CHATGPT_ENDPOINTS, ...options.endpoints };
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const { signal } = options;
+  const delays = options.retryDelaysMs ?? [500, 1000, 2000];
+  for (let attempt = 0; ; attempt++) {
+    let res: Response | undefined;
+    let failure = '';
+    try {
+      const url =
+        endpoints.revocationUrl ??
+        (await discover(endpoints, 'revocation_endpoint', fetchImpl, signal));
+      res = await fetchImpl(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          token: credential.refresh,
+          token_type_hint: 'refresh_token',
+          client_id: clientId,
+        }).toString(),
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      failure = `Could not reach ChatGPT: ${(error as Error).message}`;
+    }
+    if (res) {
+      // 200 also when the token was already invalid (RFC 7009).
+      if (res.ok) return;
+      failure = `Revocation failed (${res.status})`;
+      // A client error won't change on retry.
+      if (res.status < 500) throw new Error(failure);
+    }
+    const delay = delays[attempt];
+    if (delay === undefined) throw new Error(failure);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
 }

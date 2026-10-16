@@ -88,6 +88,8 @@ export interface ProviderLib {
     cb: ChatGPTLoginCallbacks,
   ): Promise<{ credential: PiCredential; account?: string; idToken?: string }>;
   refreshOAuthCredential(providerId: string, credential: PiCredential): Promise<PiCredential>;
+  /** Ends a ChatGPT credential's session at OpenAI; throws when OpenAI could not be told. */
+  revokeChatGPTCredential(credential: PiCredential): Promise<void>;
   listByokProviders(): ProviderOption[];
   /** pi catalogue models of one provider. */
   listProviderModels(providerId: string): ModelOption[];

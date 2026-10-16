@@ -601,8 +601,11 @@ export const FAKE_ID_TOKEN = [
 
 export function createFakeProviderLib(overrides: Partial<ProviderLib> = {}): ProviderLib & {
   readonly refreshCalls: number;
+  /** Refresh tokens of the ChatGPT sessions ended at OpenAI, in order. */
+  readonly revoked: string[];
 } {
   const counters = { refresh: 0 };
+  const revoked: string[] = [];
   const lib: ProviderLib = {
     defaultModels: { chatgpt: 'gpt-test', voucher: 'test/voucher-model' },
     assistantModels: {
@@ -644,6 +647,9 @@ export function createFakeProviderLib(overrides: Partial<ProviderLib> = {}): Pro
         expires: Date.now() + 3_600_000,
       };
     },
+    async revokeChatGPTCredential(credential) {
+      revoked.push(String(credential.refresh));
+    },
     listByokProviders() {
       return [
         { id: 'anthropic', name: 'Anthropic', envVar: 'ANTHROPIC_API_KEY', models: [] },
@@ -676,9 +682,11 @@ export function createFakeProviderLib(overrides: Partial<ProviderLib> = {}): Pro
     },
     ...overrides,
   };
-  return Object.defineProperty(lib, 'refreshCalls', {
-    get: () => counters.refresh,
+  return Object.defineProperties(lib, {
+    refreshCalls: { get: () => counters.refresh },
+    revoked: { value: revoked },
   }) as ProviderLib & {
     readonly refreshCalls: number;
+    readonly revoked: string[];
   };
 }

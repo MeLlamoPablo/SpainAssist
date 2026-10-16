@@ -7,6 +7,7 @@ import type {
   CustomProviderInput,
   Language,
   LoginResult,
+  LogoutResult,
   ModelOption,
   ProviderConfig,
   ProviderOption,
@@ -413,7 +414,12 @@ export class ProviderManager {
       if (typeof credential.clientId === 'string')
         await this.deps.state.setChatgptClientId(credential.clientId);
       this.registerCredentialSecrets(credential);
+      // Signing in again without signing out: end the old session, or ChatGPT keeps listing it.
+      const previous = await this.readOAuth('chatgpt');
       await this.writeOAuth('chatgpt', { credential, ...(account ? { account } : {}) });
+      if (previous && previous.credential.refresh !== credential.refresh) {
+        void this.revokeChatGPT(previous.credential);
+      }
       this.oauthAccount = account;
       this.chatgptIdToken = undefined;
       this.scanKeyFailedAt = 0;
@@ -740,17 +746,33 @@ export class ProviderManager {
     });
   }
 
-  async logout(): Promise<ProviderStatus> {
+  async logout(): Promise<LogoutResult> {
     const p = this.config();
+    let revoked = true;
     if (p) {
       const vault = this.deps.vault();
+      if (p.kind === 'chatgpt') {
+        const stored = await this.readOAuth('chatgpt');
+        if (stored) revoked = await this.revokeChatGPT(stored.credential);
+      }
       const secretId = secretIdOf(p);
       if (secretId) await vault.deleteSecret(secretId).catch(() => {});
       this.deps.events.emit({ type: 'vault.changed' });
     }
     this.oauthAccount = undefined;
     await this.apply(undefined);
-    return this.status();
+    return { status: this.status(), ...(revoked ? {} : { chatgptStillConnected: true }) };
+  }
+
+  /** Ends a ChatGPT session at OpenAI (see revokeChatGPTCredential). False when that failed. */
+  private async revokeChatGPT(credential: PiCredential): Promise<boolean> {
+    try {
+      await this.deps.lib.revokeChatGPTCredential(credential);
+      return true;
+    } catch (err) {
+      this.deps.logger.warn('could not end the ChatGPT session', { error: errorMessage(err) });
+      return false;
+    }
   }
 
   /**

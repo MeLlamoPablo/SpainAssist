@@ -56,9 +56,13 @@ export function ProviderStatusCard() {
   const logout = async () => {
     setBusy(true);
     try {
-      const status = await api.invoke('providers.logout');
+      const { status, chatgptStillConnected } = await api.invoke('providers.logout');
       useAppStore.setState({ provider: status });
-      toast.success(t.provider.disconnected);
+      if (chatgptStillConnected) {
+        toast.info(t.provider.disconnected, t.provider.chatgptStillConnected);
+      } else {
+        toast.success(t.provider.disconnected);
+      }
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {

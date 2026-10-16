@@ -1033,7 +1033,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'providers.logout': () => {
       const status: ProviderStatus = { configured: false };
       setProvider(status);
-      return status;
+      return { status };
     },
 
     'procedures.list': () => [...state.procedures.values()],

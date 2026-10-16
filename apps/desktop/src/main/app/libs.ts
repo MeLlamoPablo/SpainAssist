@@ -25,6 +25,8 @@ export function providerLib(_fetchFn: FetchFn): ProviderLib {
   return {
     loginChatGPT: agent.loginChatGPT,
     refreshOAuthCredential: agent.refreshOAuthCredential,
+    revokeChatGPTCredential: (credential) =>
+      agent.revokeChatGPTCredential(credential, { signal: AbortSignal.timeout(15_000) }),
     listByokProviders: agent.listByokProviders,
     listProviderModels: agent.listProviderModels,
     redeemVoucher: agent.redeemVoucher,
