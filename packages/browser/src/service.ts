@@ -30,6 +30,15 @@ import {
   type Request,
   type Response,
 } from 'playwright-core';
+import {
+  CaptureRun,
+  type CaptureStep,
+  claimScratch,
+  currentCaptureTool,
+  releaseScratch,
+  SECRET_FIELD_STYLE,
+  tracesDirOf,
+} from './capture';
 import { certificateHosts } from './certificates';
 import {
   BrowserError,
@@ -127,9 +136,18 @@ interface Session {
   lastMedia?: { at: number; id: string; key: string };
   queue: Promise<void>;
   screencast?: Screencast;
+  /** Capture mode: the recording of the current context. */
+  capture?: CaptureRun;
   closed: boolean;
   visible: boolean;
   windowQueue: Promise<void>;
+}
+
+interface RunOptions {
+  /** Create the session if there is none. */
+  create?: boolean;
+  /** Capture mode: record this action as a step (with `ref`'s element). */
+  step?: Pick<CaptureStep, 'action' | 'args'> & { ref?: string };
 }
 
 export class PlaywrightBrowserService implements BrowserService {
@@ -145,6 +163,10 @@ export class PlaywrightBrowserService implements BrowserService {
   private readonly settleTimeout: number;
   private readonly signatureWait: number;
   private readonly mediaInterval: number;
+  /** Capture mode: this service's private scratch directory (capture.ts). */
+  private readonly captureScratch?: Promise<string>;
+  /** Capture runs being saved. */
+  private readonly captureWork = new Set<Promise<unknown>>();
 
   constructor(private readonly opts: BrowserServiceOptions) {
     this.log = opts.logger ?? silentLogger;
@@ -154,6 +176,12 @@ export class PlaywrightBrowserService implements BrowserService {
     this.settleTimeout = opts.settleTimeoutMs ?? 10_000;
     this.signatureWait = opts.signatureWaitMs ?? 60_000;
     this.mediaInterval = opts.mediaIntervalMs ?? 1_500;
+    if (opts.capture) {
+      this.captureScratch = claimScratch(opts.capture.scratchDir);
+      this.captureScratch.catch((err) =>
+        this.log.warn('browser capture unavailable', { error: errorMessage(err) }),
+      );
+    }
   }
 
   // =============================================================================================
@@ -180,19 +208,19 @@ export class PlaywrightBrowserService implements BrowserService {
         await this.navigate(s, page, target);
         return this.observe(s);
       },
-      { create: true },
+      { create: true, step: { action: 'open', args: { url, newTab: !!opts.newTab } } },
     );
   }
 
   snapshot(procedureId: string): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    return this.act(procedureId, { action: 'snapshot', args: {} }, async (s) => {
       await this.pageFor(s);
       return this.observe(s, { initialWait: 0 });
     });
   }
 
   click(procedureId: string, ref: string): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    return this.act(procedureId, { action: 'click', args: { ref }, ref }, async (s) => {
       const page = await this.pageFor(s);
       const loc = await this.resolveRef(page, ref);
       const stopIntercept = this.interceptFileChooser(s, page);
@@ -215,7 +243,12 @@ export class PlaywrightBrowserService implements BrowserService {
     text: string,
     opts: TypeOptions = {},
   ): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    const step = {
+      action: 'type',
+      args: { ref, text, submit: !!opts.submit, secret: !!opts.secret },
+      ref,
+    };
+    return this.act(procedureId, step, async (s) => {
       if (opts.secret) this.addSecret(s, text);
       const page = await this.pageFor(s);
       const loc = await this.resolveRef(page, ref);
@@ -229,6 +262,9 @@ export class PlaywrightBrowserService implements BrowserService {
         return this.observe(s);
       }
       try {
+        // Marked before typing too (screenshots and, in capture mode, trace screenshots).
+        if (opts.secret)
+          await loc.evaluate((el) => el.setAttribute('data-sa-secret', '')).catch(noop);
         await this.fill(loc, text);
         if (opts.secret) {
           // Lets screenshots mask the field (best effort; the page may re-render it).
@@ -249,7 +285,7 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   select(procedureId: string, ref: string, values: string[]): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    return this.act(procedureId, { action: 'select', args: { ref, values }, ref }, async (s) => {
       const page = await this.pageFor(s);
       const loc = await this.resolveRef(page, ref);
       const options = await loc
@@ -294,7 +330,7 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   check(procedureId: string, ref: string, checked: boolean): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    return this.act(procedureId, { action: 'check', args: { ref, checked }, ref }, async (s) => {
       const page = await this.pageFor(s);
       const loc = await this.resolveRef(page, ref);
       try {
@@ -307,7 +343,7 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   press(procedureId: string, key: string): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    return this.act(procedureId, { action: 'press', args: { key } }, async (s) => {
       const page = await this.pageFor(s);
       try {
         await page.keyboard.press(key);
@@ -322,7 +358,7 @@ export class PlaywrightBrowserService implements BrowserService {
     procedureId: string,
     opts: { text?: string; textGone?: string; seconds?: number },
   ): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    return this.act(procedureId, { action: 'wait', args: { ...opts } }, async (s) => {
       await this.pageFor(s);
       const seconds = Math.max(0, Math.min(opts.seconds ?? 0, 60));
       if (!opts.text && !opts.textGone) {
@@ -343,7 +379,7 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   back(procedureId: string): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    return this.act(procedureId, { action: 'back', args: {} }, async (s) => {
       const page = await this.pageFor(s);
       const before = page.url();
       try {
@@ -364,7 +400,8 @@ export class PlaywrightBrowserService implements BrowserService {
     action: 'list' | 'select' | 'close',
     index?: number,
   ): Promise<BrowserTab[]> {
-    return this.run(procedureId, async (s) => {
+    const step = action === 'list' ? undefined : { action: 'tabs', args: { action, index } };
+    return this.act(procedureId, step, async (s) => {
       await this.ensureContext(s);
       const pages = s.pages.filter((p) => !p.isClosed());
       if (action !== 'list') {
@@ -416,7 +453,15 @@ export class PlaywrightBrowserService implements BrowserService {
     ref: string,
     files: { name: string; mimeType: string; buffer: Buffer }[],
   ): Promise<BrowserObservation> {
-    return this.run(procedureId, async (s) => {
+    const step = {
+      action: 'upload',
+      args: {
+        ref,
+        files: files.map((f) => ({ name: f.name, mimeType: f.mimeType, size: f.buffer.length })),
+      },
+      ref,
+    };
+    return this.act(procedureId, step, async (s) => {
       const page = await this.pageFor(s);
       const loc = await this.resolveRef(page, ref);
       const payload = files.map((f) => ({
@@ -587,6 +632,11 @@ export class PlaywrightBrowserService implements BrowserService {
     const browser = this.browser ?? (await this.launching?.catch(() => undefined));
     this.browser = undefined;
     await browser?.close().catch(noop);
+    if (this.captureScratch) {
+      await settleAll(this.captureWork, 60_000);
+      // Raw trace resources shared by every context of the browser.
+      await this.captureScratch.then(releaseScratch).catch(noop);
+    }
   }
 
   startScreencast(
@@ -615,11 +665,22 @@ export class PlaywrightBrowserService implements BrowserService {
   // Sessions, browser and contexts
   // =============================================================================================
 
+  /** `run` for an action that capture mode records as a step. */
+  private act<T>(
+    procedureId: string,
+    step: NonNullable<RunOptions['step']> | undefined,
+    fn: (s: Session) => Promise<T>,
+  ): Promise<T> {
+    return this.run(procedureId, fn, { step });
+  }
+
   private async run<T>(
     procedureId: string,
     fn: (s: Session) => Promise<T>,
-    opts: { create?: boolean } = {},
+    opts: RunOptions = {},
   ): Promise<T> {
+    // Read before awaiting anything: the caller's async context.
+    const tool = opts.step ? currentCaptureTool() : undefined;
     let s = this.sessions.get(procedureId);
     if (!s) {
       if (!opts.create) {
@@ -637,16 +698,81 @@ export class PlaywrightBrowserService implements BrowserService {
     session.queue = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let step: CaptureStep | undefined;
     try {
       await previous;
       if (session.closed)
         throw new BrowserError('closed', 'The browser for this procedure was closed.');
+      if (opts.step && this.opts.capture) {
+        const { ref, ...rest } = opts.step;
+        const meta = ref ? session.lastRefs.get(ref.trim()) : undefined;
+        step = { ...rest, ...(ref ? { target: { ref, ...meta } } : {}), ...(tool ? { tool } : {}) };
+      }
       return await fn(session);
     } catch (err) {
-      throw publicError(session, err);
+      const error = publicError(session, err);
+      if (step) step.error = error.message;
+      throw error;
     } finally {
+      if (step) await this.recordStep(session, step);
       release();
     }
+  }
+
+  /** Capture mode: the HTML of every page after an action, and its line of actions.jsonl. */
+  private async recordStep(s: Session, step: CaptureStep): Promise<void> {
+    const run = s.capture;
+    if (!run || s.closed) return;
+    try {
+      await run.recordStep(step, s.pages, this.livePage(s));
+    } catch (err) {
+      this.log.warn('could not record a capture step', { error: errorMessage(err) });
+    }
+  }
+
+  /**
+   * Capture mode: saves the session's run (scrubbed) to its capture folder. With `context`,
+   * stops its trace and closes it first (Playwright writes the HAR on close).
+   */
+  private async endCapture(s: Session, context?: BrowserContext): Promise<void> {
+    const run = s.capture;
+    const capture = this.opts.capture;
+    s.capture = undefined;
+    if (context && run) await context.tracing.stop({ path: run.tracePath }).catch(noop);
+    await context?.close().catch(noop);
+    const scratch = this.captureScratch;
+    if (!run || !capture || !scratch) return;
+    const secrets = [...s.secrets];
+    const browserVersion = this.browser?.version();
+    const work = (async () => {
+      const out = await run.finish({
+        dir: capture.dir(s.id),
+        secrets,
+        redact: this.opts.certificates ? [this.opts.certificates.credentials.password] : [],
+        tracesDir: tracesDirOf(await scratch),
+        browserVersion,
+      });
+      if (out) this.log.info('browser capture saved', { procedureId: s.id, dir: out });
+    })().catch((err) =>
+      this.log.warn('could not save a browser capture', { error: errorMessage(err) }),
+    );
+    this.captureWork.add(work);
+    await work.finally(() => this.captureWork.delete(work));
+  }
+
+  async finishCapture(procedureId: string): Promise<void> {
+    if (!this.opts.capture || !this.sessions.get(procedureId)?.capture) return;
+    await this.run(procedureId, async (s) => {
+      const context = s.context;
+      if (!s.capture || !context) return;
+      // The next action starts a new context (and run) with the same cookies and storage.
+      if (this.browser?.isConnected())
+        s.pendingState = await context.storageState().catch(() => undefined);
+      s.context = undefined;
+      s.pages = [];
+      s.active = undefined;
+      await this.endCapture(s, context);
+    });
   }
 
   private async ensureBrowser(): Promise<Browser> {
@@ -674,6 +800,8 @@ export class PlaywrightBrowserService implements BrowserService {
       // some government WAFs (docs/research/browser.md §5.1).
       channel:
         this.opts.channel ?? (headless && !this.opts.executablePath ? 'chromium' : undefined),
+      // Capture mode: raw trace files go to the private scratch directory, not the OS temp dir.
+      tracesDir: await this.captureScratch?.then(tracesDirOf, () => undefined),
     };
     const browser = await chromium.launch(options);
     if (this.opts.certificates) {
@@ -698,6 +826,8 @@ export class PlaywrightBrowserService implements BrowserService {
       s.context = undefined;
       s.pages = [];
       s.active = undefined;
+      // Saves what the run has (no HAR or trace: they died with the browser).
+      if (s.capture) void this.endCapture(s);
     }
     this.log.warn('browser disconnected');
   }
@@ -747,7 +877,32 @@ export class PlaywrightBrowserService implements BrowserService {
         ? { server: await this.opts.certificates.openSession(s.proxyUser) }
         : undefined,
     };
+    // Capture mode: a new run per context (an earlier one is saved first).
+    let capture: CaptureRun | undefined;
+    if (this.captureScratch) {
+      if (s.capture) await this.endCapture(s);
+      capture = await this.captureScratch.then(CaptureRun.create, (err) => {
+        this.log.warn('browser capture unavailable', { error: errorMessage(err) });
+        return undefined;
+      });
+      if (capture) options.recordHar = { path: capture.harPath, content: 'embed', mode: 'full' };
+    }
     const context = await browser.newContext(options);
+    if (capture) {
+      try {
+        await context.tracing.start({
+          name: capture.id,
+          screenshots: true,
+          snapshots: true,
+          title: s.id,
+        });
+        await context.addInitScript(SECRET_FIELD_STYLE);
+      } catch (err) {
+        await context.close().catch(noop);
+        throw err;
+      }
+      s.capture = capture;
+    }
     context.setDefaultTimeout(this.actionTimeout);
     context.setDefaultNavigationTimeout(this.navigationTimeout);
     context.on('page', (page) => this.attachPage(s, context, page));
@@ -777,7 +932,8 @@ export class PlaywrightBrowserService implements BrowserService {
     s.context = undefined;
     s.pages = [];
     s.active = undefined;
-    await context?.close().catch(noop);
+    // Capture mode: stops the trace and closes the context, then saves the run (scrubbed).
+    await this.endCapture(s, context);
     s.secrets.clear();
     s.secretVariants = [];
     this.opts.certificates?.endSession(s.proxyUser);

@@ -852,3 +852,31 @@ desktop still said "connected". Now the QR is a one-time join secret.
   lost mid-flight, the phone can't reconnect and the user pairs again. Only the desktop's memory
   holds the pairing secret, as before.
 
+## D27 — Development browser captures keep personal data and scrub typed secrets (2026-10-16)
+
+SpainBench's mock sites need the real sites' raw material: HTML, network traffic, form field
+names, POST bodies and server responses. A procedure's pi session only has accessibility
+snapshots, URLs and titles. Development builds started with `SA_BROWSER_CAPTURE=1` now record
+each browser context (HAR with bodies, Playwright trace, HTML of every page and frame after each
+action, and an `actions.jsonl` that maps each step to the agent's tool call) in
+`procedures/<id>/capture/` (ARCHITECTURE "Browser capture (development)").
+
+- **Development only.** `SA_BROWSER_CAPTURE` is in `DEV_ONLY` (packaged builds drop it) and main
+  also checks `appInfo.isDev`. Off by default.
+- **Secrets are scrubbed before anything reaches the capture folder.** Unscrubbed files live only
+  in a private scratch directory under the app's tmpDir while the context is open. When it ends,
+  every value the browser typed with `secret: true`, and the sidecar's proxy password, is
+  replaced (raw and in URL, form, JSON and HTML encodings) in every file, trace entries
+  included, and the scratch copy is deleted. A crash leaves scratch files only; the next browser
+  service deletes them. Secret fields render as dots in trace screenshots. Private keys never
+  reach the browser.
+- **Personal data is kept.** Rebuilding a site needs the values it showed and received, and
+  telling personal data apart in arbitrary HTML and traffic isn't reliable. So captures are
+  only for synthetic or throwaway accounts (said in the docs, the startup log and the export
+  script). They stay on the device: not in the transcript export, nor the renderer, the model,
+  the logs or the network.
+- **Trade-offs.** Stopping or cancelling a procedure closes its browser context to finish the HAR
+  (Playwright writes it on close); the next action reopens the last page with the same cookies,
+  but not its in-page state. Secrets a page hashes or encrypts before sending aren't recognised
+  (they aren't the plain secret either). Session cookies and tokens sites issue are kept. A
+  secret in a plain text field can show in trace screenshots if the page re-renders the field.

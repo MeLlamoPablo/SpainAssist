@@ -14,12 +14,14 @@
  *  - AutoFirma replacement: inject the shim (from @sa/signer) in every frame and expose the
  *    AFIRMA_BINDING that forwards calls to the AfirmaHandler
  *  - low-res screenshots for the UI (stored through `saveMedia`) and a live screencast
+ *  - development only: capture mode (HAR, trace, HTML, actions.jsonl; secrets scrubbed)
  *
  * See README.md for the design notes and the known risks.
  */
 import { PlaywrightBrowserService } from './service';
 import type { BrowserService, BrowserServiceOptions } from './types';
 
+export { type CaptureOptions, type CaptureToolCall, withCaptureTool } from './capture';
 export {
   CERTIFICATE_ORIGINS,
   type CertificateSite,

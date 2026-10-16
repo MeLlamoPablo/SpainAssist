@@ -490,6 +490,9 @@ export class FakeBrowser implements BrowserPort {
     this.opened.delete(procedureId);
     this.calls.push({ method: 'close', procedureId, args: [] });
   }
+  async finishCapture(procedureId: string) {
+    this.calls.push({ method: 'finishCapture', procedureId, args: [] });
+  }
   async closeAll() {
     this.certificates = [];
     this.opened.clear();

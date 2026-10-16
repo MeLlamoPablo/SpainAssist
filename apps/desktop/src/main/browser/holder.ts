@@ -1,5 +1,10 @@
 import { join } from 'node:path';
-import type { CertificateProxy, ClientCertificateUse, DownloadedFile } from '@sa/browser';
+import type {
+  CaptureOptions,
+  CertificateProxy,
+  ClientCertificateUse,
+  DownloadedFile,
+} from '@sa/browser';
 import type {
   AfirmaSignatureSummary,
   CredentialSummary,
@@ -33,6 +38,8 @@ export interface BrowserHolderDeps {
   downloadsDir: string;
   /** Only enabled in the explicit development e2e mode. */
   ignoreHTTPSErrors?: boolean;
+  /** Development only (SA_BROWSER_CAPTURE): record browsing for offline mock sites. */
+  capture?: CaptureOptions;
   media: MediaStore;
   vault: () => VaultPort;
   procedures: ProcedureService;
@@ -145,6 +152,11 @@ export class BrowserHolder {
     if (this.service?.isOpen(procedureId)) await this.service.close(procedureId);
   }
 
+  /** Capture mode: saves the procedure's browser capture (when it is stopped or cancelled). */
+  async finishCapture(procedureId: string): Promise<void> {
+    await this.service?.finishCapture(procedureId);
+  }
+
   async closeAll(): Promise<void> {
     const service = this.service;
     this.service = undefined;
@@ -164,6 +176,7 @@ export class BrowserHolder {
       executablePath: deps.executablePath,
       installBrowser: deps.installBrowser,
       ignoreHTTPSErrors: deps.ignoreHTTPSErrors ?? false,
+      ...(deps.capture ? { capture: deps.capture } : {}),
       downloadsDir: deps.downloadsDir,
       saveMedia: async (procedureId, jpeg) => {
         // Never recreate the folder of a procedure deleted in the meantime.

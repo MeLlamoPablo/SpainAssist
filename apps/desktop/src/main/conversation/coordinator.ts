@@ -32,6 +32,8 @@ export interface CoordinatorDeps {
   lang(): Language;
   /** The user's saved documents (the vault's list). */
   documents(): DocumentMeta[];
+  /** Development capture mode: saves the procedure's browser capture when it stops. */
+  finishCapture?(procedureId: string): Promise<void>;
 }
 
 /**
@@ -72,6 +74,7 @@ export class Coordinator {
     const wasActive = this.deps.agents.isActive(procedureId);
     await this.deps.agents.stop(procedureId);
     this.deps.prompts.cancelAll(procedureId);
+    this.saveCapture(procedureId);
     if (procedure.status === 'cancelled' || procedure.status === 'done') return wasActive;
     procedures.applyUpdate(procedureId, { status: 'cancelled', nextAction: null });
     if (reason) procedures.addNotice(procedureId, 'info', reason);
@@ -82,6 +85,16 @@ export class Coordinator {
   async stop(procedureId: string): Promise<void> {
     this.deps.procedures.require(procedureId);
     await this.deps.agents.abort(procedureId);
+    this.saveCapture(procedureId);
+  }
+
+  /** In the background: it waits for the browser action in progress. */
+  private saveCapture(procedureId: string): void {
+    this.deps
+      .finishCapture?.(procedureId)
+      ?.catch((err) =>
+        this.deps.logger.warn('could not save the browser capture', { error: errorMessage(err) }),
+      );
   }
 
   /** Waits for background deliveries (tests, shutdown). */

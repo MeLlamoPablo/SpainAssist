@@ -230,6 +230,7 @@ describe('env', () => {
       SA_EXTRA_TRUSTED_HOSTS: 'localhost, Mock.Test ',
       SA_BROWSER_HEADLESS: 'true',
       SA_BROWSER_EXECUTABLE: '/opt/chromium',
+      SA_BROWSER_CAPTURE: '1',
       SA_PROVIDER: 'custom|http://127.0.0.1:8789/v1|mock-model',
     });
     expect(env.e2e).toBe(true);
@@ -239,6 +240,9 @@ describe('env', () => {
     expect(env.extraTrustedHosts).toEqual(['localhost', 'mock.test']);
     expect(env.browserHeadless).toBe(true);
     expect(env.browserExecutable).toBe('/opt/chromium');
+    expect(env.browserCapture).toBe(true);
+    expect(parseEnv({ SA_BROWSER_CAPTURE: '1' }, { packaged: true }).browserCapture).toBe(false);
+    expect(parseEnv({}).browserCapture).toBe(false);
     expect(env.hideWindow).toBe(false);
     expect(env.provider).toEqual({
       kind: 'custom',

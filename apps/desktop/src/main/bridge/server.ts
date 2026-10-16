@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { withCaptureTool } from '@sa/browser';
 import {
   ASSISTANT_AGENT_ID,
   ASSISTANT_METHODS,
@@ -23,6 +24,11 @@ export interface BridgeContext {
   procedureId: string;
   /** Aborted when the agent's HTTP request closes (e.g. the run was aborted). */
   signal: AbortSignal;
+}
+
+/** The agent tool behind a bridge method: "browser.fillFromVault" -> "browser_fill_from_vault". */
+function agentToolName(method: string): string {
+  return method.replace(/\./g, '_').replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
 export type BridgeParamsOut<M extends BridgeMethod> = z.output<(typeof BridgeParams)[M]>;
@@ -179,7 +185,11 @@ export class BridgeServer {
         params: unknown,
         ctx: BridgeContext,
       ) => Promise<unknown>;
-      const result = await handler(parsed.data, { procedureId, signal: controller.signal });
+      const call = () => handler(parsed.data, { procedureId, signal: controller.signal });
+      // Development capture mode labels browser actions with the agent's tool call.
+      const result = method.startsWith('browser.')
+        ? await withCaptureTool({ tool: agentToolName(method), args: parsed.data }, call)
+        : await call();
       log.debug(`rpc ${method} ok`, { procedureId, ms: Date.now() - started });
       this.send(res, 200, { ok: true, result });
     } catch (err) {

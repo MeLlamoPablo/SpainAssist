@@ -47,6 +47,22 @@ Run `corepack pnpm --filter @sa/browser typecheck` and `corepack pnpm --filter @
 with Node 24 and Go. Tests use local fixture HTTP(S) servers, cached Chromium and the sidecar,
 built once per run, through which every test browser connects (like the app).
 
+### Browser capture (development only)
+
+`capture: { dir, scratchDir }` records every context for offline mock sites (`capture.ts`):
+a HAR with bodies, a trace (screenshots, DOM snapshots), the HTML of every page and frame after
+each action, and `actions.jsonl` (each action with the agent's tool call, set by the caller with
+`withCaptureTool`, and the ref's role and accessible name). Everything is written to `scratchDir`
+while the context is open; when it closes (`close`, `closeAll`, `finishCapture`, a browser
+crash), each file is scrubbed and written to `dir(procedureId)/<start time>/`, and the scratch
+copy is deleted. A new service deletes scratch files left by a crash.
+
+Scrubbed: values typed with `secret: true` (as `«secret:<n>»`, raw and URL/form/JSON/HTML
+encoded, in HAR URLs, headers, cookies and bodies, HTML, `actions.jsonl` and trace entries) and
+the sidecar's proxy password. Not scrubbed: personal data, values typed without `secret`, session
+tokens, secrets a page hashes or encrypts. Use it only with synthetic or throwaway accounts; the
+app enables it only in development (`SA_BROWSER_CAPTURE=1`, docs/ARCHITECTURE.md).
+
 ### Native window visibility test
 
 The normal suite is headless. Run the window minimize/restore integration test separately on

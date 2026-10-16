@@ -297,6 +297,24 @@ describe('bridge: prompts', () => {
     });
   });
 
+  it('saves the browser capture when a procedure is stopped, in capture mode only', async () => {
+    const saved = (a: TestApp, id: string) =>
+      a.browser.calls.some((c) => c.method === 'finishCapture' && c.procedureId === id);
+    await app.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, token);
+    await app.invoke('procedures.stop', procedureId);
+    expect(saved(app, procedureId)).toBe(false);
+
+    const capturing = await createTestApp({ env: { browserCapture: true } });
+    try {
+      const own = await capturing.procedureWithToken();
+      await capturing.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, own.token);
+      await capturing.invoke('procedures.stop', own.procedureId);
+      await capturing.waitFor(() => saved(capturing, own.procedureId));
+    } finally {
+      await capturing.close();
+    }
+  });
+
   it('ignores the obsolete visibility setting without restarting an active session', async () => {
     await app.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, token);
     const browser = app.services.browser.current();

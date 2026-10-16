@@ -1,5 +1,6 @@
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { CaptureOptions } from '@sa/browser';
 import { type AppInfo, ASSISTANT_AGENT_ID, type Language } from '@sa/shared';
 import type { Sidecar } from '@sa/sidecar';
 import type { KeyProvider } from '@sa/vault';
@@ -321,6 +322,16 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       return undefined;
     },
   );
+  // Development only: never in packaged builds (parseEnv drops SA_BROWSER_CAPTURE there too).
+  const capture: CaptureOptions | undefined =
+    env.browserCapture && deps.appInfo.isDev
+      ? {
+          // Never recreate the folder of a procedure deleted in the meantime.
+          dir: (id) => (procedures.has(id) ? join(paths.proceduresDir, id, 'capture') : undefined),
+          // Unscrubbed files while a context is open; tmpDir is private and wiped with the data.
+          scratchDir: join(paths.tmpDir, 'browser-capture'),
+        }
+      : undefined;
   const browser = new BrowserHolder({
     certificates,
     certificateLoginsAvailable: !deps.startSidecar || !!certificates,
@@ -329,6 +340,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     installBrowser,
     ignoreHTTPSErrors: env.e2e,
     headless: env.e2e || deps.appInfo.isDev ? env.browserHeadless : undefined,
+    ...(capture ? { capture } : {}),
     downloadsDir: paths.downloadsDir,
     media,
     vault: vaultFn,
@@ -342,6 +354,10 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     logger: logger.child('browser'),
     lang,
   });
+  if (capture)
+    logger.warn(
+      'browser capture is on: procedures/<id>/capture/ gets HARs, traces and HTML with personal data (typed secrets scrubbed). Use synthetic accounts only.',
+    );
   // Download the browser now, not at the first browser action. Browser actions wait for it.
   // Failures are logged by the installer; the next browser action tries again.
   if (installBrowser) deps.ensureBrowser?.(logger.child('browser')).catch(() => {});
@@ -374,6 +390,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     clock,
     lang,
     documents: () => vaultFn().listDocuments(),
+    ...(capture ? { finishCapture: (id: string) => browser.finishCapture(id) } : {}),
   });
 
   bridge = new BridgeServer({

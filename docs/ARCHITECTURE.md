@@ -114,7 +114,8 @@
   (`ensureChromium` in `@sa/browser`, `gc: false` so other Playwright browsers stay). Browser
   actions wait for that download; when it fails, they return an actionable error and the next
   action tries again. E2e runs never download; the development-only `SA_BROWSER_EXECUTABLE`
-  override launches a given Chromium instead.
+  override launches a given Chromium instead. The development-only `SA_BROWSER_CAPTURE=1`
+  records each procedure's browsing for mock sites (see "Browser capture (development)").
 - **Packaged app** (D17, `apps/desktop/electron-builder.ts`). app.asar holds `out/` (main,
   preload, renderer), the agent host as `agent-host/host.js`, and the node_modules of
   `dependencies`, which include the host's external imports. Agent processes run that host as
@@ -598,6 +599,48 @@ the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
 `?dnieSaved=1` adds a saved DNIe to Mis datos (`?dnieSaved=pin`: with its PIN saved). The playground shows the CAN and PIN step
 (`?playground=1&example=dnie-unlock`, and `dnie-unlock-wrong-pin`).
 
+### Browser capture (development)
+
+To build offline mock sites (SpainBench) from real runs, development builds started with
+`SA_BROWSER_CAPTURE=1` record each procedure's browsing (D27). Packaged builds ignore the
+variable (`DEV_ONLY` in `app/env.ts`), and main only passes `capture` to `@sa/browser` when
+`appInfo.isDev`. Each browser context is one run, saved to
+`<userData>/procedures/<id>/capture/<start time>/`:
+
+| File | What |
+| --- | --- |
+| `network.har` | Playwright HAR with bodies embedded (request bodies, responses, headers, cookies) |
+| `pages/NNNN-tT-fF.html` | `page.content()` of tab T, frame F after step NNNN |
+| `actions.jsonl` | One line per browser action: step, time, the agent tool and its args, the service action and its args, the ref's role and accessible name from the snapshot the agent saw, the error if any, and every tab's URL, title and frames (with their HTML files) |
+| `trace.zip` | Playwright trace (screenshots, DOM snapshots, network), for `npx playwright show-trace` |
+| `capture.json` | Run summary, written last: a run without it is incomplete |
+
+While the context is open everything stays in a private scratch directory
+(`<tmpDir>/browser-capture/`; the HAR is written by Playwright only when the context closes, and
+the raw trace files live in the browser's `tracesDir` there). When the context ends (the agent
+closes it, the procedure is deleted, stopped or cancelled, or the app quits) `@sa/browser`
+scrubs each file and writes it to the capture folder, then deletes the scratch copy. Stopping or
+cancelling a procedure closes its context to finish the HAR; its next browser action reopens the
+last page with the same cookies. Scratch files a crash leaves behind are deleted by the next
+browser service, and wiping the app's data deletes tmpDir.
+
+Scrubbed: every value typed with `secret: true` (Cl@ve passwords and usernames, SMS codes from
+`browser_fill_from_user`) becomes `«secret:<n>»` (n in typing order), as raw text and in its URL,
+form, JSON and HTML encodings, everywhere: HAR URLs, headers, cookies and bodies (base64 bodies
+decoded first), HTML, `actions.jsonl` and every entry of the trace. The TLS sidecar's proxy
+password and `Proxy-Authorization` headers become `«redacted»`. Fields marked as secret render as
+dots in trace screenshots. Client-certificate private keys and `.p12` passwords never reach the
+browser (the sidecar holds the key), so no capture can hold them.
+
+Not scrubbed: personal data (names, DNI numbers, addresses, documents uploaded or downloaded),
+values typed without `secret: true` (`browser_type`, personal data from the vault), session
+cookies and tokens the sites issue, and secrets a page transforms before sending them (hashed or
+encrypted by its scripts). A secret typed into a plain text field can show in trace screenshots
+if the page re-renders the field and drops its mark. **Use capture mode only with synthetic or throwaway accounts.** Captures
+never leave the device: they are not in the transcript export, nor sent to the renderer, the
+model, the logs or the network. `corepack pnpm --filter @sa/desktop captures` lists a profile's
+captures, and `captures export <procedureId>/<run> [<out dir>]` copies one out.
+
 ## 4. Security model (MVP)
 
 - Personal data stays on the device except when needed by the user's selected inference
@@ -621,7 +664,8 @@ the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
   body) through `fetch_url`'s host checks (no localhost or private networks, every redirect hop
   re-checked).
 - Known MVP gaps: procedure metadata, transcripts, screenshots and pi session files are private
-  local files without encryption. ChatGPT OAuth tokens are stored in the encrypted vault and
+  local files without encryption. So are development browser captures (`SA_BROWSER_CAPTURE`,
+  never in packaged builds), which keep personal data and scrub only typed secrets (D27). ChatGPT OAuth tokens are stored in the encrypted vault and
   supplied to pi in memory through the authenticated bridge.
 - Secret typing is bound to the frame origin and input type checked before use; the browser
   rechecks both inside its queued action. Deleting a credential closes active browser contexts

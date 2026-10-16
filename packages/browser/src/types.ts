@@ -5,6 +5,7 @@ import type {
   BrowserTab,
 } from '@sa/shared';
 import type { Sidecar, SidecarIdentity } from '@sa/sidecar';
+import type { CaptureOptions } from './capture';
 
 export interface Logger {
   debug(msg: string, data?: unknown): void;
@@ -84,6 +85,11 @@ export interface BrowserServiceOptions {
   signatureWaitMs?: number;
   /** Minimum interval between UI screenshots of a procedure, in ms. Default 1500. */
   mediaIntervalMs?: number;
+  /**
+   * DEVELOPMENT ONLY: record every context (HAR, trace, HTML after each action, actions.jsonl)
+   * for offline mock sites, with typed secrets scrubbed (capture.ts). Never in production.
+   */
+  capture?: CaptureOptions;
 }
 
 /** What the browser needs from the TLS sidecar (`@sa/sidecar`'s `Sidecar`). */
@@ -176,6 +182,11 @@ export interface BrowserService {
   /** Serialized storage state (cookies, localStorage) for encrypted persistence by the app. */
   exportState(procedureId: string): Promise<string | null>;
   importState(procedureId: string, state: string): Promise<void>;
+  /**
+   * Capture mode only (a no-op otherwise): saves the procedure's capture run now. Its context is
+   * closed (that writes the HAR); the next action reopens the last page with the same cookies.
+   */
+  finishCapture(procedureId: string): Promise<void>;
   close(procedureId: string): Promise<void>;
   closeAll(): Promise<void>;
   /**

@@ -27,6 +27,9 @@ import type { UserKey } from '../providers/manager';
  *   SA_EXTRA_TRUSTED_HOSTS   comma-separated host suffixes allowed for credentials (mock sede)
  *   SA_BROWSER_HEADLESS      1/0: development/e2e headless override (no visible help window)
  *   SA_BROWSER_EXECUTABLE    development only: Chromium executable for the browser (no download)
+ *   SA_BROWSER_CAPTURE=1     development only: record each procedure's browsing (HAR, trace,
+ *                            HTML, actions.jsonl) in procedures/<id>/capture/, with typed
+ *                            secrets scrubbed but personal data kept (docs/ARCHITECTURE.md)
  *   SA_HIDE_WINDOW=1         never show the app window or Dock icon (headless e2e runs)
  *   SA_AGENT_HOST            path of the agent host script (default: @sa/agent dist/host.js)
  *   OPENROUTER_DECIDER_API_KEY Development override for scan frame screening: an OpenRouter
@@ -57,6 +60,8 @@ export interface SaEnv {
   extraTrustedHosts: string[];
   browserHeadless?: boolean;
   browserExecutable?: string;
+  /** Development only: record browsing for offline mock sites (SA_BROWSER_CAPTURE). */
+  browserCapture?: boolean;
   hideWindow?: boolean;
   agentHost?: string;
   /** Maps server for address lookups; undefined in e2e runs without an override. */
@@ -127,6 +132,7 @@ const DEV_ONLY = [
   'SA_DECIDER_URL',
   'SA_HIDE_WINDOW',
   'SA_BROWSER_EXECUTABLE',
+  'SA_BROWSER_CAPTURE',
   'SA_KEY_SERVER_URL',
   'SA_FEEDBACK_SERVER_URL',
   'SA_MAPS_SERVER_URL',
@@ -168,6 +174,7 @@ export function parseEnv(input: NodeJS.ProcessEnv, opts: { packaged?: boolean } 
       .filter(Boolean),
     browserHeadless: parseBool(env.SA_BROWSER_HEADLESS),
     browserExecutable: nonEmpty(env.SA_BROWSER_EXECUTABLE),
+    browserCapture: parseBool(env.SA_BROWSER_CAPTURE) === true,
     hideWindow: parseBool(env.SA_HIDE_WINDOW) === true,
     agentHost: nonEmpty(env.SA_AGENT_HOST),
     warnings,
