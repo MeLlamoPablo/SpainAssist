@@ -797,9 +797,6 @@ bring their model's key.
 - **No key.** The tools answer with a research blocker that says the user needs an Exa key and
   where to add it ("Ajustes → Proveedor de IA"); the prompt has the agent report it and stop
   before questions or execution, as before.
-- **No key ships.** `apps/desktop/scripts/secrets.ts` fails packaging when the build has
-  `EXA_API_KEY`, a literal `x-api-key`, a key in an Exa URL, Exa's MCP host or a UUID next to an
-  Exa mention, or a `.env` file; its test runs the same rules on the repository's sources.
 - **Trade-offs.** Queries leave the device as the model wrote them (the prompt asks for
   anonymized ones, as for `web_research`). Exa bills the user: $7 per 1,000 searches, $1 per
   1,000 pages, with $10 of free credit a month. Exa offers zero data retention only on

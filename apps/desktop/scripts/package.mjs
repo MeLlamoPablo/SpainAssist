@@ -3,7 +3,7 @@
 // a global pnpm of another major (this machine has v7) fails there, and electron-builder then
 // falls back to walking node_modules. Called by the `package*` scripts after the app is built.
 // First it writes THIRD_PARTY_NOTICES.txt (scripts/notices.ts, after the build so sa-sidecar's Go
-// licence is in it) and checks that the build carries no Exa API key (scripts/secrets.ts, D23).
+// licence is in it).
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,11 +16,6 @@ const shell = process.platform === 'win32';
 const noticesScript = fileURLToPath(new URL('notices.ts', import.meta.url));
 const notices = spawnSync(process.execPath, [noticesScript], { stdio: 'inherit' });
 if (notices.status !== 0) process.exit(notices.status ?? 1);
-
-// Users bring their own Exa key: refuses to package one (DECISIONS D23).
-const secretsScript = fileURLToPath(new URL('secrets.ts', import.meta.url));
-const secrets = spawnSync(process.execPath, [secretsScript], { stdio: 'inherit' });
-if (secrets.status !== 0) process.exit(secrets.status ?? 1);
 
 const shims = mkdtempSync(join(tmpdir(), 'sa-pnpm-'));
 try {

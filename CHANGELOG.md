@@ -13,7 +13,6 @@ What changed in each release of Spain Assist, newest first. Built from the commi
 
 ### Maintenance
 
-- The secrets check allows Exa's MCP host and still catches a key in its URL.
 - Version 0.2.1 everywhere, Android version code 4.
 
 ## 0.2.0 (2026-10-13)
