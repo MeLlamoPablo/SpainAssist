@@ -1,4 +1,4 @@
-import type { AgentHostConfig, PiCredential } from '@sa/agent';
+import type { AgentHostConfig, ChatGPTLoginPages, PiCredential } from '@sa/agent';
 import type {
   ByokInput,
   CustomModelCapabilities,
@@ -25,7 +25,6 @@ import { type Clock, errorMessage, hostOf, Mutex } from '../core/util';
 import type { ProviderLib, VaultPort } from '../ports';
 import type { FetchFn } from '../remote/http';
 import type { AppStateStore, SettingsStore } from '../settings/store';
-import { chatgptLoginPages } from './login-pages';
 import { probeCustomEndpoint } from './probe';
 
 /** pi provider of voucher keys: our LiteLLM gateway at the voucher's base URL (D10). */
@@ -143,6 +142,8 @@ export interface ProviderManagerDeps {
   events: EventBus;
   /** Opens the ChatGPT authorization URL in the system browser. */
   openExternal(url: string): Promise<void>;
+  /** The pages the browser tab shows when ChatGPT sends the user back after signing in. */
+  loginPages(): ChatGPTLoginPages;
   /** Called after the configuration changed (the app stops all agents). */
   onChanged(): Promise<void>;
   logger: Logger;
@@ -395,7 +396,7 @@ export class ProviderManager {
       const { credential, account, idToken } = await this.deps.lib.loginChatGPT({
         deviceId,
         clientId: await this.deps.state.chatgptClientId(),
-        pages: chatgptLoginPages(),
+        pages: this.deps.loginPages(),
         signal: controller.signal,
         onAuthUrl: (url) => {
           emit(t(this.lang(), 'loginOpenBrowser'), url);
@@ -930,10 +931,16 @@ export class ProviderManager {
         return stored.credential;
       const codex = this.deps.lib.codex;
       if (p.kind === 'codex' && !codex) return null;
+      // A rotated refresh token is saved the moment it arrives: the old one is spent, so losing
+      // the new one (an answer that then fails validation) would end the session.
+      const saveRotated = async (refresh: string) => {
+        this.deps.logger.addSecret(refresh);
+        await this.writeOAuth(p.kind, { ...stored, credential: { ...stored.credential, refresh } });
+      };
       const fresh =
         p.kind === 'codex'
-          ? await codex!.refresh(stored.credential)
-          : await this.deps.lib.refreshOAuthCredential(providerId, stored.credential);
+          ? await codex!.refresh(stored.credential, saveRotated)
+          : await this.deps.lib.refreshOAuthCredential(providerId, stored.credential, saveRotated);
       this.registerCredentialSecrets(fresh);
       await this.writeOAuth(p.kind, { ...stored, credential: fresh });
       return fresh;

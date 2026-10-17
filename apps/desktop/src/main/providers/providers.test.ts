@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../core/i18n';
 import { SECRET_IDS } from '../core/secrets';
 import { createFakeProviderLib, FAKE_ID_TOKEN } from '../testing/fakes';
-import { createFakeFetch, createTestApp, type TestApp } from '../testing/harness';
+import { createFakeFetch, createTestApp, TEST_LOGIN_PAGES, type TestApp } from '../testing/harness';
 
 let app: TestApp;
 afterEach(async () => {
@@ -346,10 +346,12 @@ describe('ProviderManager', () => {
 
   it('signs in with ChatGPT: stable device id, browser opened, progress events, account shown', async () => {
     const deviceIds: string[] = [];
+    const pages: unknown[] = [];
     app = await createTestApp({
       providerLib: createFakeProviderLib({
         async loginChatGPT(cb: ChatGPTLoginCallbacks) {
           deviceIds.push(cb.deviceId);
+          pages.push(cb.pages);
           cb.onAuthUrl('https://auth.openai.com/api/accounts/authorize?client_id=x');
           cb.onProgress?.('exchanging');
           return {
@@ -378,6 +380,8 @@ describe('ProviderManager', () => {
     await app.invoke('providers.loginChatGPT');
     expect(deviceIds[0]).toMatch(/^[0-9a-f-]{36}$/);
     expect(deviceIds[1]).toBe(deviceIds[0]);
+    // The sign-in's pages come from the app's dependencies (MainDeps.chatgptLoginPages).
+    expect(pages).toEqual([TEST_LOGIN_PAGES, TEST_LOGIN_PAGES]);
     expect(app.logLines.join('\n')).not.toContain('access-1');
     const { procedureId, token } = await app.procedureWithToken();
     expect(procedureId).toBeDefined();
@@ -561,6 +565,40 @@ describe('ProviderManager', () => {
 
     await app.invoke('providers.logout');
     expect(await app.vault.getSecret(SECRET_IDS.codex)).toBeUndefined();
+  });
+
+  it('saves a rotated Codex refresh token at once, even when the refresh then fails', async () => {
+    app = await createTestApp({
+      providerLib: createFakeProviderLib({
+        codex: {
+          async login() {
+            return {
+              credential: {
+                type: 'oauth' as const,
+                access: 'codex-access-1',
+                refresh: 'codex-refresh-1',
+                expires: Date.now() - 1,
+                accountId: 'acct-1',
+              },
+            };
+          },
+          async refresh(_previous, onRotatedRefreshToken) {
+            await onRotatedRefreshToken?.('codex-refresh-2');
+            throw new Error('token response has no expires_in');
+          },
+        },
+      }),
+    });
+    await app.invoke('providers.loginCodexDevice');
+    await expect(app.services.providers.refreshCredential('openai-codex')).rejects.toThrow(
+      'expires_in',
+    );
+    const stored = JSON.parse((await app.vault.getSecret(SECRET_IDS.codex))!);
+    expect(stored.credential).toMatchObject({
+      access: 'codex-access-1',
+      refresh: 'codex-refresh-2',
+    });
+    expect(app.logLines.join('\n')).not.toContain('codex-refresh-2');
   });
 
   it("uses SA_DEV_USER_KEY as a Codex session's user key", async () => {

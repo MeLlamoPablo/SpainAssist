@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { FormPrompt, SaEvent } from '@sa/shared';
+import { ASSISTANT_AGENT_ID, type FormPrompt, type SaEvent } from '@sa/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConversationService } from '../conversation/service';
 import { PromptCancelledError } from '../core/errors';
@@ -263,6 +263,28 @@ describe('PromptManager', () => {
     expect(JSON.stringify(events)).not.toContain('483920');
     expect(procedures.get(procedureId)?.runtime.activity).toBe('idle');
     expect(procedures.get(procedureId)?.runtime.prompts).toBeUndefined();
+  });
+
+  it('lists every pending prompt with its owner, oldest first, until answered', async () => {
+    const prompts = manager();
+    expect(prompts.pendingItems()).toEqual([]);
+    const first = prompts.ask(procedureId, form);
+    const second = prompts.ask(ASSISTANT_AGENT_ID, {
+      kind: 'confirm',
+      confirmKind: 'action',
+      title: '¿Seguimos?',
+      message: 'Se enviará la solicitud.',
+    });
+    const pending = prompts.pendingItems();
+    expect(pending.map((p) => p.owner)).toEqual([procedureId, ASSISTANT_AGENT_ID]);
+    expect(pending.map((p) => p.item.prompt.kind)).toEqual(['form', 'confirm']);
+    expect(pending.every((p) => p.item.status === 'pending')).toBe(true);
+    prompts.respond(pending[1]!.item.id, { kind: 'confirm', approved: true });
+    await second;
+    expect(prompts.pendingItems().map((p) => p.owner)).toEqual([procedureId]);
+    prompts.cancelAll(procedureId);
+    await expect(first).rejects.toBeInstanceOf(PromptCancelledError);
+    expect(prompts.pendingItems()).toEqual([]);
   });
 
   it('rejects mismatched or stale answers', async () => {

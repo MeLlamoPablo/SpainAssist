@@ -277,6 +277,11 @@ export class PromptManager {
     return this.pending.get(itemId)?.item;
   }
 
+  /** Every pending prompt with the agent that asked it, oldest first. */
+  pendingItems(): { owner: string; item: PromptItem }[] {
+    return [...this.pending.values()].map(({ owner, item }) => ({ owner, item }));
+  }
+
   /** The in-memory map pins of a pending prompt (never part of the saved item). */
   mapPins(itemId: string): MapPins | undefined {
     const entry = this.pending.get(itemId);

@@ -5,6 +5,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ChatGPTLoginPages } from '@sa/agent';
 import {
   ASSISTANT_AGENT_ID,
   type BridgeMethod,
@@ -31,6 +32,13 @@ import {
 } from './fakes';
 
 export const APP_PAGE = 'app://bundle/index.html';
+
+/** What the app shows in the browser tab after a ChatGPT sign-in (tests only check it arrives). */
+export const TEST_LOGIN_PAGES: ChatGPTLoginPages = {
+  success: '<h1>test: success</h1>',
+  failure: '<h1>test: failure</h1>',
+  notFound: '<h1>test: not found</h1>',
+};
 
 export interface TestAppOptions {
   env?: Partial<SaEnv>;
@@ -149,6 +157,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     openExternal: async (url) => {
       opened.push(url);
     },
+    chatgptLoginPages: () => TEST_LOGIN_PAGES,
     revealWindow: () => {},
     openPath: async (path) => {
       openedPaths.push(path);

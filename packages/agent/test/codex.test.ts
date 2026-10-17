@@ -6,6 +6,7 @@ import {
   loginCodexDevice,
   refreshCodexCredential,
 } from '../src/providers/codex';
+import type { PiCredential } from '../src/providers/types';
 
 function jwt(payload: Record<string, unknown>): string {
   const part = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
@@ -141,5 +142,159 @@ describe('OpenAI Codex device code (dev only)', () => {
       refresh_token: 'refresh-1',
     });
     expect(fresh).toMatchObject({ access: ACCESS, refresh: 'refresh-2', accountId: 'acct-123' });
+  });
+
+  describe('a refresh whose answer cannot be used', () => {
+    const OLD: PiCredential = {
+      type: 'oauth',
+      access: 'old',
+      refresh: 'refresh-old-1',
+      expires: 0,
+      accountId: 'a',
+    };
+    const NEW_ACCESS_NO_ACCOUNT = jwt({ sub: 'someone' });
+
+    /** A token endpoint that answers every request with `answer`. */
+    const answering = (answer: () => Response | Promise<Response>) =>
+      (async () => answer()) as unknown as typeof fetch;
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      });
+
+    async function refresh(fetchImpl: typeof fetch) {
+      const saved: string[] = [];
+      const events: string[] = [];
+      let error: unknown;
+      try {
+        await refreshCodexCredential(OLD, {
+          fetchImpl,
+          onRotatedRefreshToken: async (token) => {
+            events.push('saved');
+            saved.push(token);
+          },
+        });
+        events.push('returned');
+      } catch (e) {
+        events.push('threw');
+        error = e;
+      }
+      return { saved, events, error: error as Error | undefined };
+    }
+
+    it('hands the rotated refresh token to the caller before it validates the answer', async () => {
+      const { saved, events, error } = await refresh(
+        answering(() =>
+          json(200, {
+            access_token: NEW_ACCESS_NO_ACCOUNT,
+            refresh_token: 'refresh-new-2',
+            expires_in: 3600,
+          }),
+        ),
+      );
+      expect(saved).toEqual(['refresh-new-2']);
+      expect(events).toEqual(['saved', 'threw']);
+      expect(error).toMatchObject({ code: 'invalid_response' });
+    });
+
+    it('does so when the answer has no expires_in', async () => {
+      const { saved, error } = await refresh(
+        answering(() => json(200, { access_token: ACCESS, refresh_token: 'refresh-new-3' })),
+      );
+      expect(saved).toEqual(['refresh-new-3']);
+      expect(error).toMatchObject({ code: 'invalid_response' });
+    });
+
+    it('does so when the answer has no access token at all', async () => {
+      const { saved, error } = await refresh(
+        answering(() => json(200, { refresh_token: 'refresh-new-4', expires_in: 3600 })),
+      );
+      expect(saved).toEqual(['refresh-new-4']);
+      expect(error).toMatchObject({ code: 'invalid_response' });
+    });
+
+    it('waits for the caller to finish saving before it goes on', async () => {
+      const order: string[] = [];
+      await expect(
+        refreshCodexCredential(OLD, {
+          fetchImpl: answering(() =>
+            json(200, { access_token: ACCESS, refresh_token: 'refresh-new-5' }),
+          ),
+          onRotatedRefreshToken: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            order.push('saved');
+          },
+        }).catch(() => order.push('threw')),
+      ).resolves.toBeDefined();
+      expect(order).toEqual(['saved', 'threw']);
+    });
+
+    it('has nothing to hand over when the answer is not JSON or has no refresh token', async () => {
+      for (const answer of [
+        () => new Response('<html>bad gateway</html>', { status: 200 }),
+        () => new Response('{"access_token": "x", "refresh_tok', { status: 200 }),
+        () => json(200, { access_token: ACCESS, expires_in: 3600, refresh_token: '' }),
+        () => json(200, ['not', 'an', 'object']),
+      ]) {
+        const { saved, events, error } = await refresh(answering(answer));
+        expect(saved).toEqual([]);
+        expect(events).toEqual(['threw']);
+        expect(error).toMatchObject({ code: 'invalid_response' });
+      }
+    });
+
+    it('does not report a body that breaks off as a plain network error', async () => {
+      const broken = new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error('terminated'));
+          },
+        }),
+        { status: 200 },
+      );
+      const { saved, error } = await refresh(answering(() => broken));
+      expect(saved).toEqual([]);
+      expect(error).toMatchObject({ code: 'invalid_response' });
+      expect(error?.message).toContain('could not be read');
+    });
+
+    it('does not hand over anything when OpenAI refuses the refresh', async () => {
+      const { saved, error } = await refresh(
+        answering(() => json(400, { error: 'invalid_grant', refresh_token: 'refresh-echo' })),
+      );
+      expect(saved).toEqual([]);
+      expect(error).toMatchObject({ code: 'token_exchange', oauthError: 'invalid_grant' });
+    });
+
+    it('works without a callback, as the app calls it', async () => {
+      const { calls, fetchImpl } = fakeAuth();
+      expect((await refreshCodexCredential(OLD, { fetchImpl })).refresh).toBe('refresh-2');
+      expect(calls).toHaveLength(1);
+    });
+
+    it('never puts a token, or whatever the server wrote in its error field, into a message', async () => {
+      const tokens = ['refresh-old-1', 'refresh-new-9', ACCESS, NEW_ACCESS_NO_ACCOUNT];
+      const answers: (() => Response | Promise<Response>)[] = [
+        () => json(200, { access_token: NEW_ACCESS_NO_ACCOUNT, refresh_token: 'refresh-new-9' }),
+        () => json(200, { access_token: ACCESS, refresh_token: 'refresh-new-9' }),
+        () => json(200, { refresh_token: 'refresh-new-9', expires_in: 'soon' }),
+        () => new Response(`oops ${ACCESS} refresh-new-9`, { status: 200 }),
+        () => json(400, { error: ACCESS }),
+        () => json(400, { error: { code: 'refresh-old-1 and more words' } }),
+        () => json(500, { error: 'refresh-new-9' }),
+        () => {
+          throw new Error('socket hang up');
+        },
+      ];
+      for (const answer of answers) {
+        const { error } = await refresh(answering(answer));
+        expect(error).toBeInstanceOf(Error);
+        for (const token of tokens) {
+          expect(error?.message).not.toContain(token);
+          expect(JSON.stringify(error)).not.toContain(token);
+        }
+      }
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { ChatGPTLoginPages } from '@sa/agent';
 import type { CaptureOptions } from '@sa/browser';
 import { type AppInfo, ASSISTANT_AGENT_ID, type Language } from '@sa/shared';
 import type { Sidecar } from '@sa/sidecar';
@@ -77,6 +78,12 @@ export interface MainDeps {
   /** The app's own updates (`updates/updater.ts`); unsupported when absent (tests, dev). */
   updates?: Updates;
   openExternal(url: string): Promise<void>;
+  /**
+   * The pages of the ChatGPT sign-in's loopback listener. A dependency, not an import of
+   * `providers/login-pages.ts`, which imports fonts and styles with Vite-only suffixes: this
+   * file then loads in plain Node (`createHeadlessApp`).
+   */
+  chatgptLoginPages(): ChatGPTLoginPages;
   /** Show the app window (`app.reveal`). */
   revealWindow(): void;
   openPath(path: string): Promise<string>;
@@ -261,6 +268,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     fetch: deps.fetch,
     events,
     openExternal: deps.openExternal,
+    loginPages: deps.chatgptLoginPages,
     onChanged: () => agents.stopAll(),
     logger: logger.child('providers'),
     lang,

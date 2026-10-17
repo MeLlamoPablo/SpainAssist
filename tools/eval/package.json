@@ -1,0 +1,38 @@
+{
+  "name": "@sa/eval",
+  "version": "0.2.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "eval": "node --import tsx src/cli.ts",
+    "build:host": "node scripts/build-eval-host.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^1.1.0",
+    "@earendil-works/pi-coding-agent": "^1.1.0",
+    "@napi-rs/canvas": "^1.0.10",
+    "@sa/agent": "workspace:*",
+    "@sa/browser": "workspace:*",
+    "@sa/desktop": "workspace:*",
+    "@sa/shared": "workspace:*",
+    "@sa/vault": "workspace:*",
+    "jose": "^6.2.12",
+    "node-forge": "^1.4.0",
+    "playwright-core": "1.63.0",
+    "typebox": "1.3.27",
+    "unpdf": "^1.8.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@sa/mock-llm": "workspace:*",
+    "@types/node-forge": "^1.3.14",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15"
+  }
+}

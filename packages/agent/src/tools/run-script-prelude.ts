@@ -17,6 +17,8 @@ const host = {
   decoderNew: globalThis.__hostDecoderNew,
   decode: globalThis.__hostDecode,
   decodeBody: globalThis.__hostDecodeBody,
+  // Only when the host's clock is not the machine's.
+  now: globalThis.__hostNow,
 };
 for (const name of Object.keys(globalThis)) if (name.startsWith('__host')) delete globalThis[name];
 
@@ -351,4 +353,27 @@ const log = (...args) => {
   host.log(line.length > MAX_LOG_LINE ? line.slice(0, MAX_LOG_LINE) : line);
 };
 define('console', { log, info: log, warn: log, error: log, debug: log });
+
+// --- Date --------------------------------------------------------------------------------------
+
+// A host with a clock of its own (the eval suite's frozen "today") makes the script's Date agree
+// with it: only the current time changes, never a Date made from a value.
+if (host.now) {
+  const RealDate = Date;
+  const now = host.now;
+  const ClockDate = function Date(...args) {
+    if (!new.target) return new RealDate(now()).toString();
+    return args.length === 0 ? new RealDate(now()) : new RealDate(...args);
+  };
+  ClockDate.prototype = RealDate.prototype;
+  Object.defineProperty(RealDate.prototype, 'constructor', {
+    value: ClockDate,
+    writable: true,
+    configurable: true,
+  });
+  ClockDate.now = () => now();
+  ClockDate.parse = RealDate.parse;
+  ClockDate.UTC = RealDate.UTC;
+  define('Date', ClockDate);
+}
 `;

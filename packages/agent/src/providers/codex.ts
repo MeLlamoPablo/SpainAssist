@@ -143,12 +143,18 @@ function safeJson(text: string): unknown {
   }
 }
 
-/** `error` of an OAuth ({ error: "x" }) or API-style ({ error: { code: "x" } }) error body. */
+/** What an OAuth error code looks like (`invalid_grant`): short, lower-case snake case. */
+const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
+
+/**
+ * `error` of an OAuth ({ error: "x" }) or API-style ({ error: { code: "x" } }) error body. Only a
+ * short identifier is returned: it ends up in messages and logs, so a server that put something
+ * else in that field (a token, a page of HTML) is not repeated.
+ */
 function errorCode(body: unknown): string | undefined {
   const error = (body as { error?: unknown } | undefined)?.error;
-  if (typeof error === 'string') return error;
-  const code = (error as { code?: unknown } | undefined)?.code;
-  return typeof code === 'string' ? code : undefined;
+  const code = typeof error === 'string' ? error : (error as { code?: unknown } | undefined)?.code;
+  return typeof code === 'string' && ERROR_CODE.test(code) ? code : undefined;
 }
 
 /** The ChatGPT account id pi's openai-codex provider sends as `chatgpt-account-id`. */
@@ -196,6 +202,7 @@ async function postToken(
   form: Record<string, string>,
   signal: AbortSignal,
   fetchImpl: typeof fetch,
+  onRotatedRefreshToken?: (refreshToken: string) => void | Promise<void>,
 ): Promise<TokenResponse> {
   const res = await request(
     fetchImpl,
@@ -210,7 +217,18 @@ async function postToken(
     },
     signal,
   );
-  const body = safeJson(await res.text());
+  let text: string;
+  try {
+    text = await res.text();
+  } catch {
+    if (signal.aborted) throw cancelled();
+    // The connection broke while the body arrived; OpenAI may already have rotated the token.
+    throw new ChatGPTLoginError(
+      'invalid_response',
+      `The answer of OpenAI to the token request (${res.status}) could not be read`,
+    );
+  }
+  const body = safeJson(text);
   if (!res.ok) {
     const code = errorCode(body);
     throw new ChatGPTLoginError(
@@ -219,6 +237,10 @@ async function postToken(
       code,
     );
   }
+  // Before anything else is checked: the answer rotated the refresh token, so this is the only
+  // copy of a token that works, whatever else is wrong with the answer.
+  const rotated = (body as { refresh_token?: unknown } | undefined)?.refresh_token;
+  if (typeof rotated === 'string' && rotated) await onRotatedRefreshToken?.(rotated);
   const parsed = TokenResponse.safeParse(body);
   if (!parsed.success) {
     throw new ChatGPTLoginError('invalid_response', 'Unexpected token response from OpenAI');
@@ -354,6 +376,13 @@ export async function loginCodexDevice(cb: CodexLoginCallbacks): Promise<CodexLo
 /**
  * Refresh a Codex credential. Refresh tokens rotate: the app must serialize calls and persist the
  * result before using it (same rules as `refreshOAuthCredential`).
+ *
+ * The rotated refresh token is the one thing that cannot be fetched again, so it is handed to
+ * `onRotatedRefreshToken` (awaited) as soon as OpenAI's answer has one, before the rest of the
+ * answer is validated. If the answer is then unusable (no ChatGPT account id in the access token,
+ * no `expires_in`) this function throws, and the caller has already saved the new token: pair it
+ * with the old access token and the next refresh recovers. An answer that cannot be read at all
+ * carries no token to save: the old one may then be dead too.
  */
 export async function refreshCodexCredential(
   credential: PiCredential,
@@ -361,6 +390,7 @@ export async function refreshCodexCredential(
     endpoints?: Partial<CodexEndpoints>;
     fetchImpl?: typeof fetch;
     signal?: AbortSignal;
+    onRotatedRefreshToken?: (refreshToken: string) => void | Promise<void>;
   } = {},
 ): Promise<PiCredential> {
   if (credential.type !== 'oauth' || typeof credential.refresh !== 'string') {
@@ -376,6 +406,7 @@ export async function refreshCodexCredential(
     },
     options.signal ?? AbortSignal.timeout(30_000),
     options.fetchImpl ?? fetch,
+    options.onRotatedRefreshToken,
   );
   return credentialFrom(token, credential);
 }

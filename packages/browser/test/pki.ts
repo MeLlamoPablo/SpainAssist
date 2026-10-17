@@ -28,7 +28,10 @@ function makeCert(opts: {
 }): forge.pki.Certificate {
   const cert = forge.pki.createCertificate();
   cert.publicKey = opts.publicKey;
-  cert.serialNumber = `0${crypto.randomBytes(8).toString('hex')}`;
+  // Positive, no leading zero byte: OpenSSL rejects a DER integer with one (1 in 256 serials).
+  const serial = crypto.randomBytes(16);
+  serial[0] = ((serial[0] as number) & 0x7f) | 0x10;
+  cert.serialNumber = serial.toString('hex');
   cert.validity.notBefore = new Date(Date.now() - 24 * 3600 * 1000);
   cert.validity.notAfter = new Date(Date.now() + 365 * 24 * 3600 * 1000);
   const attrs = [

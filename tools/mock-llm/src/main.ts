@@ -1,6 +1,7 @@
 /**
  * CLI: corepack pnpm --filter @sa/mock-llm start -- --port 8789 [--scenario file.json|demo|echo]
  *      [--chunk-delay 15] [--chunk-size 16] [--host 127.0.0.1] [--verbose]
+ *      [--litellm] [--litellm-budget <usd>]   emulate a LiteLLM gateway (headers, spend, 422 over budget)
  */
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -16,6 +17,8 @@ const { values } = parseArgs({
     'chunk-delay': { type: 'string', default: '15' },
     'chunk-size': { type: 'string', default: '16' },
     verbose: { type: 'boolean', default: false },
+    litellm: { type: 'boolean', default: false },
+    'litellm-budget': { type: 'string' },
   },
 });
 
@@ -31,6 +34,11 @@ const llm = await createMockLlm({
   chunkDelayMs: Number(values['chunk-delay']),
   chunkSize: Number(values['chunk-size']),
   verbose: values.verbose,
+  ...(values.litellm || values['litellm-budget']
+    ? {
+        litellm: values['litellm-budget'] ? { maxBudgetUsd: Number(values['litellm-budget']) } : {},
+      }
+    : {}),
 });
 
 process.stderr.write(

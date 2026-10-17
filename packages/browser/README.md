@@ -63,6 +63,11 @@ the sidecar's proxy password. Not scrubbed: personal data, values typed without 
 tokens, secrets a page hashes or encrypts. Use it only with synthetic or throwaway accounts; the
 app enables it only in development (`SA_BROWSER_CAPTURE=1`, docs/ARCHITECTURE.md).
 
+`capture.scrub: false` keeps the typed values too (only the sidecar's proxy password is still
+redacted; `capture.json` says so). It is for runs with made-up accounts, like the eval suite's.
+A captured context is closed page by page first, with a timeout: `context.close()` alone never
+finishes for a context that records a HAR and ever showed a PDF in Chromium's viewer.
+
 ### Native window visibility test
 
 The normal suite is headless. Run the window minimize/restore integration test separately on

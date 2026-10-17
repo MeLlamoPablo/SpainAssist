@@ -17,6 +17,7 @@ import {
   TOOL_NAMES,
   WEB_RESEARCH_TOOL_NAME,
 } from '../src/tools/names';
+import { EVAL_MARKERS } from './helpers/eval-markers';
 import { createFakeBridge, type FakeBridge, hang } from './helpers/fake-bridge';
 import { createFakeSse, sseEvent } from './helpers/fake-sse';
 
@@ -115,6 +116,21 @@ beforeAll(() => {
   });
   expect(existsSync(hostPath)).toBe(true);
 }, 120_000);
+
+describe('the shipped host bundle', () => {
+  it('carries no eval, test or hook-entry code', () => {
+    expect(readFileSync(hostPath, 'utf8')).not.toMatch(EVAL_MARKERS);
+    const { sources } = JSON.parse(readFileSync(`${hostPath}.map`, 'utf8')) as {
+      sources: string[];
+    };
+    expect(sources.some((source) => source.endsWith('src/host/run.ts'))).toBe(true);
+    expect(
+      sources.filter(
+        (source) => !source.includes('node_modules') && /eval|\/test\/|runtime\.ts$/i.test(source),
+      ),
+    ).toEqual([]);
+  });
+});
 
 describe('agent host over RPC (integration)', () => {
   let llm: MockLlm;

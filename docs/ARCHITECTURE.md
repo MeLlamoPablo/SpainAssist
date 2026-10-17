@@ -641,6 +641,73 @@ never leave the device: they are not in the transcript export, nor sent to the r
 model, the logs or the network. `corepack pnpm --filter @sa/desktop captures` lists a profile's
 captures, and `captures export <procedureId>/<run> [<out dir>]` copies one out.
 
+The library option `CaptureOptions.scrub` (default true) turns the typed-secret scrub off: the
+SpainBench eval suite (`tools/eval`) runs with made-up accounts and keeps the typed values in its
+captures. The app never sets it. Closing a captured context closes its pages first (with a
+timeout): `context.close()` alone never finishes for a context that records a HAR and ever showed
+a PDF in Chromium's viewer.
+
+### Headless app and eval hooks (development)
+
+The eval suite (`tools/eval`, `docs/EVAL.md`) runs the real agents against local copies of
+government sites. It needs the app's logic without a window, and the agent host without the
+internet. Neither exists in the packaged app.
+
+**`createHeadlessApp`** (`apps/desktop/src/main/app/headless.ts`, imported as
+`@sa/desktop/headless`) is `createMainServices` with everything Electron gives the app passed
+explicitly: the insecure test key provider (`keySeed`), no Touch ID, an offline `fetch`, no
+updates, no window. Nothing is read from `process.env` (never `parseEnv` here: it fills in the
+production services), the environment is `e2e` (headless browser that accepts invalid
+certificates, no Chromium download, no maps or relay) with no key, feedback, maps or relay URL,
+and a production URL in `env` is refused. Feature flags default to off. It returns `{ services,
+paths, logger, invoke, on, close }`: `invoke` is `window.sa.invoke` (same methods, zod checks and
+sender check) and `on` its event channel, so a harness plays the user through the renderer API
+(`chat.send`, `chat.respond`, `vault.addClave`...); `services.prompts.pendingItems()` lists what
+is waiting for the user; `close()` stops everything and removes the scratch directory, leaving the
+profile directory to copy (snapshot) and reopen with the same `keySeed` (restore). Options replace
+the libraries (`agentLib` and `browserFactory` wrap the real ones to patch the agent's launch,
+tee its events or map the browser's network; `providerLib` overrides provider functions by
+name; `fetch`, `places`, `hostScript`, `clock`, `ids`, `idleMs`, `capture`; `openVault` wraps or
+replaces how the vault is opened (a clock, secrets kept out of the profile) and `logsDir` moves
+`main.log`). `index.ts` does not import it. Two decouplings make it load in plain Node: `MainDeps.chatgptLoginPages` (the sign-in
+pages, which use Vite-only `?inline` imports, are passed in by `index.ts` instead of imported by
+`ProviderManager`) and `providerLib(codex?)` (the development-only Codex login,
+`app/codex-dev.ts`, is an argument: `index.ts` passes it only under `import.meta.env.DEV`, so
+production bundles still drop it). The package also exports the renderer's React-free form
+helpers (`initialValues`, `validate`, `buildResponse`) as `@sa/desktop/form-logic`, so a harness
+answers forms with exactly the shape the UI produces.
+
+**`HostHooks`** (`packages/agent/src/host/hooks.ts`, see the package README) are the seams of
+`runHost(env, hooks)`: the egress of `fetch_url`, `run_script` and `boe_search` plus a DNS
+stand-in for the SSRF guard (so a harness serves real hostnames from a mock and nothing reaches
+the internet), a web research stub, a tool wrapper, a model callback and a clock. The shipped
+host entry (`main.ts` → `dist/host.js`) passes none and nothing in its bundle can enable them;
+the eval's own host entry (`tools/eval/src/host`, bundled to `tools/eval/dist/eval-host.js`) imports
+`runHost` from `@sa/agent/host-runtime` and is never packaged.
+
+The eval's SpainBench client (`tools/eval/src/bench`) is the harness's only link to the scoring API of the
+private mock server: a validating HTTP client (`BenchApi`), a launcher that runs the server as a child
+process on free loopback ports with a minimal environment and a random token (and never leaves it behind), the
+scoring-API version check, a follower that turns the world's long-polled events into observations, and the
+artifacts of a world. It never talks to the server's public listener; the agent's traffic reaches that one
+through the network layer only (`tools/eval/README.md`).
+
+**`createEvalApp`** (`tools/eval/src/run/app`) composes the two for a run: the headless app with the
+real agent hosts replaced by the eval host, Chromium behind the eval's mapping proxy, the meter as the model's
+gateway, a vault that keeps the provider credential in memory (the key provider of a run's profile is a
+fixed, public seed, so a credential sealed in it would be as good as plaintext in a run directory) and
+the observers that turn the app's events, the hosts' session files and both network logs into the run's
+observations. It adds nothing to the product: every seam it uses is an argument of `createHeadlessApp`.
+
+**The eval run** (`tools/eval/src/run`) is what drives the headless app as the user would. `runFixture`
+creates SpainBench's world, the meter run and the app, plays the user (`createUserSimulator`: scripted
+answers through `chat.respond` and `vault.addClave`, the answerer model for what is not scripted), feeds
+every observation to the rule engine and ends the run on an instant failure, quiescence, a limit, the
+meter's caps or an abort. It writes the run folder (`run.json`, `events.jsonl`, `result.json`,
+`report.md`, checkpoints) and always shuts everything down. The app, the SpainBench client and the event
+follower reach it through injected functions (`CreateEvalApp`, `FollowBench`, `SaveBenchArtifacts` in
+`tools/eval/src/contracts.ts`), so the loop has no dependency on Electron or on the private repo.
+
 ## 4. Security model (MVP)
 
 - Personal data stays on the device except when needed by the user's selected inference

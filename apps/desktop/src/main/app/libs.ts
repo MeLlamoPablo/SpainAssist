@@ -14,17 +14,23 @@ import type {
   SignerLib,
   VaultPort,
 } from '../ports';
-import type { FetchFn } from '../remote/http';
 
 export const agentLib: AgentLib = {
   buildAgentLaunch: (opts) => agent.buildAgentLaunch(opts),
   createClient: (launch) => new agent.PiRpcClient(launch),
 };
 
-export function providerLib(_fetchFn: FetchFn): ProviderLib {
+/**
+ * The real provider functions. `codex` is the development-only Codex login (`app/codex-dev.ts`):
+ * pass it only from development entry points, never from production code.
+ */
+export function providerLib(codex?: CodexLib): ProviderLib {
   return {
     loginChatGPT: agent.loginChatGPT,
-    refreshOAuthCredential: agent.refreshOAuthCredential,
+    refreshOAuthCredential: (providerId, credential, onRotatedRefreshToken) =>
+      agent.refreshOAuthCredential(providerId, credential, {
+        ...(onRotatedRefreshToken ? { onRotatedRefreshToken } : {}),
+      }),
     revokeChatGPTCredential: (credential) =>
       agent.revokeChatGPTCredential(credential, { signal: AbortSignal.timeout(15_000) }),
     listByokProviders: agent.listByokProviders,
@@ -34,17 +40,9 @@ export function providerLib(_fetchFn: FetchFn): ProviderLib {
     getVoucherCredit: (keyServerUrl, apiKey) => agent.getVoucherCredit(keyServerUrl, apiKey),
     defaultModels: agent.DEFAULT_MODELS,
     assistantModels: agent.ASSISTANT_MODELS,
-    // Impersonating Codex CLI is against OpenAI's terms: production builds must not contain it.
-    // Vite replaces import.meta.env.DEV with `false` there, so the module is never bundled.
-    ...(import.meta.env.DEV ? { codex: devCodexLib } : {}),
+    ...(codex ? { codex } : {}),
   };
 }
-
-const devCodexLib: CodexLib = {
-  login: async (cb) => (await import('@sa/agent/codex')).loginCodexDevice(cb),
-  refresh: async (credential) =>
-    (await import('@sa/agent/codex')).refreshCodexCredential(credential),
-};
 
 export const browserFactory: BrowserFactory = (opts) => createBrowserService(opts);
 export const ensureBrowser: BrowserInstaller = (logger) => ensureChromium({ logger });

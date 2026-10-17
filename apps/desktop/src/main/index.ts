@@ -28,6 +28,7 @@ import type { AppUpdater } from 'electron-updater';
 import { z } from 'zod';
 import { type CameraAccess, SCANNER_CHANNEL } from '../scanner';
 import { resolveAgentHostScript } from './agents/host';
+import { devCodexLib } from './app/codex-dev';
 import { parseEnv } from './app/env';
 import {
   agentLib,
@@ -54,6 +55,7 @@ import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
 import { catastro } from './places/catastro';
 import { noBiometric } from './ports';
+import { chatgptLoginPages } from './providers/login-pages';
 import { featuresFromNames, loadFeatureFlags } from './remote/flags';
 import { createCameraRequester, logCameraEvent } from './scanner/camera';
 import { OpenRouterFrameGate } from './scanner/decider';
@@ -371,7 +373,10 @@ async function main(): Promise<void> {
     biometric,
     openVault: (dir, keys) => openVault(dir, keys, log),
     agentLib,
-    providerLib: providerLib(fetch),
+    // Impersonating Codex CLI is against OpenAI's terms: production builds must not contain it.
+    // Vite replaces import.meta.env.DEV with `false` there, so the module is never bundled.
+    providerLib: providerLib(import.meta.env.DEV ? devCodexLib : undefined),
+    chatgptLoginPages,
     browserFactory,
     startSidecar: () =>
       Sidecar.start({

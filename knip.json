@@ -25,10 +25,28 @@
       "entry": ["public/js/*.js"]
     },
     "packages/agent": {
-      "entry": ["src/host/main.ts", "scripts/*.mjs", "test/fixtures/make-pdf-fixture.ts"]
+      "entry": [
+        "src/host/main.ts",
+        "scripts/*.mjs",
+        "test/fixtures/make-pdf-fixture.ts",
+        "test/helpers/hook-host.ts"
+      ]
     },
     "e2e": {
       "ignoreDependencies": ["electron"]
+    },
+    "tools/eval": {
+      "entry": [
+        "src/host/eval-main.ts",
+        "test/bench/harness-child.ts",
+        "test/cli/helpers/slow-run.ts",
+        "test/host/probe-host.ts",
+        "test/llm/helpers/lock-child.ts",
+        "test/llm/helpers/refresh-child.ts",
+        "test/net/helpers/loopback-fetch-child.mts"
+      ],
+      "ignoreDependencies": ["typebox"],
+      "ignoreBinaries": ["pgrep", "wget", "WGET.exe"]
     },
     "packages/browser": {
       "ignoreBinaries": ["pgrep"]

@@ -87,7 +87,12 @@ export interface ProviderLib {
   loginChatGPT(
     cb: ChatGPTLoginCallbacks,
   ): Promise<{ credential: PiCredential; account?: string; idToken?: string }>;
-  refreshOAuthCredential(providerId: string, credential: PiCredential): Promise<PiCredential>;
+  /** `onRotatedRefreshToken`: as `CodexLib.refresh`, the new refresh token before validation. */
+  refreshOAuthCredential(
+    providerId: string,
+    credential: PiCredential,
+    onRotatedRefreshToken?: (refreshToken: string) => Promise<void>,
+  ): Promise<PiCredential>;
   /** Ends a ChatGPT credential's session at OpenAI; throws when OpenAI could not be told. */
   revokeChatGPTCredential(credential: PiCredential): Promise<void>;
   listByokProviders(): ProviderOption[];
@@ -113,7 +118,15 @@ export interface ProviderLib {
 
 export interface CodexLib {
   login(cb: CodexLoginCallbacks): Promise<{ credential: PiCredential; account?: string }>;
-  refresh(credential: PiCredential): Promise<PiCredential>;
+  /**
+   * Refresh tokens rotate: `onRotatedRefreshToken` gets the new one as soon as OpenAI sends it,
+   * before the rest of the answer is validated, so the caller can save it even if the refresh
+   * then fails.
+   */
+  refresh(
+    credential: PiCredential,
+    onRotatedRefreshToken?: (refreshToken: string) => Promise<void>,
+  ): Promise<PiCredential>;
 }
 
 export interface PiiLib {

@@ -55,6 +55,7 @@ export {
   getChatGPTKey,
   getVoucherCredit,
   KeyServerError,
+  parseLiteLLMSpendHeaders,
   redeemVoucher,
 } from './providers/services';
 export type { LoginStage, PiCredential } from './providers/types';

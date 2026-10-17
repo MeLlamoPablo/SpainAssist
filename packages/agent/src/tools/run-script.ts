@@ -9,7 +9,14 @@ import {
 } from 'quickjs-emscripten-core';
 import { Type } from 'typebox';
 import { z } from 'zod';
-import { decodeBody, fetchPublic, readCapped, USER_AGENT } from '../research/fetch';
+import {
+  type BlockedRequest,
+  decodeBody,
+  fetchPublic,
+  type HostResolver,
+  readCapped,
+  USER_AGENT,
+} from '../research/fetch';
 import { defineSaTool, errorResult, textResult } from './common';
 import { PRELUDE } from './run-script-prelude';
 
@@ -23,8 +30,18 @@ import { PRELUDE } from './run-script-prelude';
 
 export interface RunScriptOptions {
   fetchImpl?: typeof fetch;
+  /** DNS for the host guard (default: the system resolver). */
+  resolveHost?: HostResolver;
+  /** Told about every request the host guard refuses (the script's `fetch` then fails). */
+  onBlocked?: (request: BlockedRequest) => void;
   /** Dev/e2e only: allow localhost and private networks. */
   allowPrivateHosts?: boolean;
+  /**
+   * The date the script's `Date` shows: what `now()` says when the script starts, then moving at
+   * real speed. Default: the real clock. For hosts whose "today" is not the machine's (the eval
+   * suite's frozen clock): a script that counts days must agree with the system prompt.
+   */
+  now?: () => Date;
   /** Default 30 s. */
   timeoutMs?: number;
   /**
@@ -132,7 +149,11 @@ export async function runScript(code: string, options: RunScriptOptions = {}): P
     if (!fits(bytes)) throw new RangeError(outOfMemoryText);
   };
   // A fresh WebAssembly instance per run: nothing survives between scripts.
-  const module = await newQuickJSWASMModuleFromVariant(newVariant(variant, { wasmMemory: memory }));
+  // `as never`: the engine types its memory as the DOM lib's WebAssembly.Memory, for which the
+  // local declaration above stands in where that lib is absent.
+  const module = await newQuickJSWASMModuleFromVariant(
+    newVariant(variant, { wasmMemory: memory as never }),
+  );
   const runtime = module.newRuntime();
   runtime.setMemoryLimit(memoryLimit);
   runtime.setMaxStackSize(1024 * 1024);
@@ -146,7 +167,7 @@ export async function runScript(code: string, options: RunScriptOptions = {}): P
     handle === undefined || context.typeof(handle) === 'undefined'
       ? undefined
       : context.getString(handle);
-  const bytesOf = (handle: QuickJSHandle | undefined): Uint8Array | undefined => {
+  const bytesOf = (handle: QuickJSHandle | undefined): Uint8Array<ArrayBuffer> | undefined => {
     if (handle === undefined || context.typeof(handle) === 'undefined') return undefined;
     const view = context.getArrayBuffer(handle);
     // A view into the engine's memory: copy it before releasing the handle.
@@ -167,7 +188,14 @@ export async function runScript(code: string, options: RunScriptOptions = {}): P
     return context.newArrayBuffer(exactBuffer(bytes));
   };
 
+  // The clock of the script's Date: the host's "now" at the start, then real elapsed time.
+  const startedAt = Date.now();
+  const clockStart = options.now?.().getTime();
+
   const hostFunctions: Record<string, (...args: QuickJSHandle[]) => QuickJSHandle | undefined> = {
+    ...(clockStart === undefined
+      ? {}
+      : { __hostNow: () => context.newNumber(clockStart + (Date.now() - startedAt)) }),
     __hostLog: (line) => {
       if (logsFull) return undefined;
       if (logs.length < MAX_LOG_LINES && logChars < maxLogChars) {
@@ -270,7 +298,7 @@ export async function runScript(code: string, options: RunScriptOptions = {}): P
 
   async function performFetch(
     request: z.infer<typeof FetchRequest>,
-    binary: Uint8Array | undefined,
+    binary: Uint8Array<ArrayBuffer> | undefined,
   ): Promise<{ meta: string; bytes: Uint8Array }> {
     const headers = new Headers(request.headers);
     if (!headers.has('user-agent')) headers.set('user-agent', USER_AGENT);
@@ -287,6 +315,8 @@ export async function runScript(code: string, options: RunScriptOptions = {}): P
       signal: fetchSignal,
       allowPrivateHosts: options.allowPrivateHosts,
       fetchImpl: options.fetchImpl,
+      resolveHost: options.resolveHost,
+      onBlocked: options.onBlocked,
     });
     const { bytes, truncated } = await readCapped(res, maxResponseBytes);
     const meta = JSON.stringify({

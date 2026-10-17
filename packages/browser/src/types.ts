@@ -66,6 +66,19 @@ export interface BrowserServiceOptions {
   /** Extra Chromium command-line switches. */
   launchArgs?: string[];
   /**
+   * Scripts (source text) injected into every frame of every context before the page's own
+   * scripts run (`addInitScript`). For embedders that must change what a page can see or do, such
+   * as the eval suite, which removes WebRTC.
+   */
+  initScripts?: readonly string[];
+  /**
+   * Playwright's own handlers for SIGINT, SIGTERM and SIGHUP, which close the browser and then
+   * exit the process (code 130 for SIGINT) without asking anyone else (default true). A host that
+   * handles those signals itself and must outlive them, like a command line that saves its run
+   * before it exits, sets false: it then stops the browser through `close`.
+   */
+  handleSignals?: boolean;
+  /**
    * DEVELOPMENT/TESTS ONLY (e.g. the mock sede with a self-signed certificate): accept invalid
    * server certificates in every context. Never enable in production.
    */

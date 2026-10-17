@@ -47,6 +47,8 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 - `src/providers/` — ChatGPT OAuth, refresh, model lists/defaults, BYOK catalogue, key server,
   LiteLLM gateway credit and models (vouchers).
 - `src/index.ts` — what the desktop main process imports (light: no HTML/PDF libraries).
+- `src/host/hooks.ts`, `src/host/runtime.ts` — `HostHooks` and the `@sa/agent/host-runtime`
+  subpath for harnesses (see "Eval hooks"); the shipped host does not use them.
 
 ## Tools
 
@@ -145,6 +147,34 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 `buildAgentLaunch` passes only an allow-list of the parent environment (PATH, HOME, temp dirs,
 locale, proxies, CA bundles) plus `PI_*`, `SA_*` and `ELECTRON_RUN_AS_NODE` when requested: no
 API keys, no `NODE_OPTIONS`.
+
+### Eval hooks (`HostHooks`)
+
+`runHost(env, hooks)` takes optional `HostHooks` (`src/host/hooks.ts`) for code that runs the host
+outside the app: the eval suite (`tools/eval`, `docs/EVAL.md`) and tests. All are optional, and a
+call without them is the product host.
+
+| Hook | What it does |
+| --- | --- |
+| `egress.fetch` | All outbound HTTP of `fetch_url`, `run_script` and `boe_search` (`ToolDeps.fetchImpl`), with the real URL the agent asked for |
+| `egress.resolveHost` | DNS stand-in for the SSRF guard (`ToolDeps.resolveHost`, `HostResolver` in `research/fetch.ts`). The guard still blocks IP literals, `localhost` and private answers with the production messages; every other name resolves through it, so nothing touches real DNS before `egress.fetch` is called |
+| `research` | Replaces the web research backend (`researchBackend()`: which prompt text and tool shape the agent gets) and its tools. Procedure agents only: the assistant never researches |
+| `wrapTool` | Wraps every tool, research ones included, once at startup (an `AsyncLocalStorage` per tool call, logging). The wrapper must keep `tool.name` (checked) |
+| `onModel` | Called with the configured model right after `configureModel`, before the host talks to anything: install guards that need the gateway's origin |
+| `now` | Clock of "Today is …" in both system prompts, read on every turn |
+
+The shipped entry `src/host/main.ts` (bundled to `dist/host.js`) calls `runHost()` with none of
+them and imports nothing else: hooks are function values given by the code that calls `runHost`,
+so no config key or environment variable switches them on in a packaged app (`test/host-entry.test.ts`
+and the bundle check in `test/integration.test.ts` guard this). An embedder bundles its own entry
+from the `@sa/agent/host-runtime` subpath, which exports `runHost`, the hook types, `HostResolver`,
+the research factories (`createKeyServerResearchTool`, `createChatGPTResearchTool`,
+`createExaTools`) with their option types and `ResearchBackend`, and `hostLog` (stderr: stdout is
+the RPC protocol). The bundle keeps `@earendil-works/*`, `typebox` and
+`@napi-rs/canvas` external like `scripts/build-host.mjs`, and must resolve them from where it
+runs. `test/helpers/hook-host.ts` is a worked example (see `test/host-hooks.test.ts`).
+`parseLiteLLMSpendHeaders` is exported from the package index for meters that read LiteLLM's
+spend headers.
 
 ## Providers
 

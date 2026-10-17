@@ -9,9 +9,11 @@ import { parseLiteLLMSpendHeaders } from '../providers/services';
 import { createChatGPTResearchTool } from '../research/chatgpt-research';
 import { createExaTools } from '../research/exa';
 import { createKeyServerResearchTool } from '../research/key-server-research';
+import type { AnyToolDefinition } from '../tools/common';
 import { createAssistantTools, createTools } from '../tools/index';
 import { BridgeCredentialStore } from './credentials';
 import { createSpainAssistExtension } from './extension';
+import type { HostHooks } from './hooks';
 import { IDLE_COMPACTION_MIN_TOKENS, SessionRequests } from './idle-compaction';
 import { hostLog } from './log';
 import { configureModel, LITELLM_PROVIDER_ID, needsPromptCacheKey } from './model';
@@ -23,8 +25,14 @@ import { prepareSessionFile } from './session';
  * Agent host: one process per active agent (the assistant, or one procedure's agent). Reads its configuration from the environment
  * (see BRIDGE_ENV), builds a pi session with only SpainAssist tools and serves pi's RPC
  * protocol (JSONL) on stdin/stdout via `runRpcMode`. Never returns.
+ *
+ * `hooks` are for harnesses and tests that run the host outside the app (see hooks.ts). The
+ * shipped entry (main.ts) passes none, and without them this is exactly the product host.
  */
-export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+export async function runHost(
+  env: NodeJS.ProcessEnv = process.env,
+  hooks: HostHooks = {},
+): Promise<void> {
   // Everything this process creates (session file, pi's private dir) is private to the user.
   process.umask(0o077);
   // pi must never phone home or touch ~/.pi.
@@ -58,6 +66,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
     allowModelNetwork: false,
   });
   const model = configureModel(modelRuntime, config.model);
+  hooks.onModel?.(model, config);
   const imagesSupported = model.input.includes('image');
   const redactPages = redactsPages(model.id);
 
@@ -69,19 +78,29 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         imagesSupported,
         allowPrivateHosts: config.research.allowPrivateHosts ?? false,
         boeBaseUrl: config.research.boeBaseUrl,
+        fetchImpl: hooks.egress?.fetch,
+        resolveHost: hooks.egress?.resolveHost,
+        onBlocked: hooks.egress?.onBlocked,
+        now: hooks.now,
         feedback: config.feedback,
         dniePhone: config.dniePhone,
         redactPages,
         timeZone: config.timeZone,
       });
   // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
-  // OpenAI's hosted web search, BYOK and custom endpoints on Exa's keyless tier.
+  // OpenAI's hosted web search, BYOK and custom endpoints on Exa's keyless tier. A research
+  // stub (hooks) replaces both the choice and the tools, for procedure agents only.
+  const stub = assistant ? undefined : hooks.research;
   const keyServerUrl = config.research.keyServerUrl;
-  const research = await researchBackend(
-    config,
-    async () => (await credentials.read(config.model.provider))?.type === 'oauth',
-  );
-  if (research === 'key server' && keyServerUrl) {
+  const research = stub
+    ? stub.backend
+    : await researchBackend(
+        config,
+        async () => (await credentials.read(config.model.provider))?.type === 'oauth',
+      );
+  if (stub) {
+    tools.push(...stub.tools({ config, bridge, language: config.language }));
+  } else if (research === 'key server' && keyServerUrl) {
     tools.push(
       createKeyServerResearchTool({
         keyServerUrl,
@@ -114,12 +133,18 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
       }),
     );
   }
+  const agentTools = wrapTools(tools, hooks.wrapTool);
   const systemPrompt = () =>
     assistant
-      ? buildAssistantPrompt({ language: config.language, timeZone: config.timeZone })
+      ? buildAssistantPrompt({
+          language: config.language,
+          timeZone: config.timeZone,
+          now: hooks.now?.(),
+        })
       : buildSystemPrompt({
           language: config.language,
           timeZone: config.timeZone,
+          now: hooks.now?.(),
           research: promptResearch(research),
           feedback: config.feedback,
           dniePhone: config.dniePhone,
@@ -139,7 +164,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
   let currentSession: { getSessionId(): string } | undefined;
   const requests = new SessionRequests(modelRuntime, () => currentSession?.getSessionId() ?? '');
   const extension = createSpainAssistExtension({
-    tools,
+    tools: agentTools,
     systemPrompt,
     promptCacheKey: needsPromptCacheKey(model),
     redactPages,
@@ -196,7 +221,7 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
         sessionStartEvent: options.sessionStartEvent,
         model,
         thinkingLevel: config.model.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
-        tools: tools.map((tool) => tool.name),
+        tools: agentTools.map((tool) => tool.name),
       });
       return { ...result, services, diagnostics: services.diagnostics };
     },
@@ -212,7 +237,21 @@ export async function runHost(env: NodeJS.ProcessEnv = process.env): Promise<voi
   if (runtime.modelFallbackMessage) hostLog('warn', runtime.modelFallbackMessage);
   hostLog(
     'info',
-    `ready: ${config.role}, ${model.provider}/${model.id}, ${tools.length} tools, web research ${research ?? 'off'}`,
+    `ready: ${config.role}, ${model.provider}/${model.id}, ${agentTools.length} tools, web research ${research ?? 'off'}`,
   );
   await pi.runRpcMode(runtime);
+}
+
+/** `wrap` applied to every tool; a wrapper that renames a tool breaks the session's tool list. */
+function wrapTools(tools: AnyToolDefinition[], wrap: HostHooks['wrapTool']): AnyToolDefinition[] {
+  if (!wrap) return tools;
+  return tools.map((tool) => {
+    const wrapped = wrap(tool);
+    if (wrapped.name !== tool.name) {
+      throw new Error(
+        `HostHooks.wrapTool must keep the tool name: "${tool.name}" became "${wrapped.name}"`,
+      );
+    }
+    return wrapped;
+  });
 }

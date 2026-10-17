@@ -1,4 +1,5 @@
 import type { BridgeTransport } from '../bridge/client';
+import type { BlockedRequest, HostResolver } from '../research/fetch';
 import { assistantTools } from './assistant';
 import { browserTools } from './browser';
 import type { AnyToolDefinition } from './common';
@@ -22,7 +23,14 @@ export interface ToolDeps {
   allowPrivateHosts?: boolean;
   /** BOE API base URL override (tests). */
   boeBaseUrl?: string;
+  /** HTTP for fetch_url, run_script and boe_search (default: the global fetch). */
   fetchImpl?: typeof fetch;
+  /** DNS for the SSRF guard of fetch_url and run_script (default: the system resolver). */
+  resolveHost?: HostResolver;
+  /** Told about every request the SSRF guard of fetch_url and run_script refuses. */
+  onBlocked?: (request: BlockedRequest) => void;
+  /** The date run_script's `Date` shows (default: the real clock). */
+  now?: () => Date;
   /** Community learnings: feedback_search, plus feedback_submit / feedback_vote when on. */
   feedback?: { submit: boolean; vote: boolean };
   /** The DNIe through the phone app (feature flag): browser_use_certificate offers it. */
@@ -57,8 +65,19 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
       }),
       ...downloadTools(deps.bridge),
       ...researchTools(deps.bridge, { baseUrl: deps.boeBaseUrl, fetchImpl: deps.fetchImpl }),
-      fetchUrlTool({ allowPrivateHosts: deps.allowPrivateHosts, fetchImpl: deps.fetchImpl }),
-      runScriptTool({ allowPrivateHosts: deps.allowPrivateHosts, fetchImpl: deps.fetchImpl }),
+      fetchUrlTool({
+        allowPrivateHosts: deps.allowPrivateHosts,
+        fetchImpl: deps.fetchImpl,
+        resolveHost: deps.resolveHost,
+        onBlocked: deps.onBlocked,
+      }),
+      runScriptTool({
+        allowPrivateHosts: deps.allowPrivateHosts,
+        fetchImpl: deps.fetchImpl,
+        resolveHost: deps.resolveHost,
+        onBlocked: deps.onBlocked,
+        now: deps.now,
+      }),
     ].filter((tool) => active(tool.name)),
   );
 }

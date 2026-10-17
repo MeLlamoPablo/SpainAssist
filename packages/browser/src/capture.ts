@@ -34,6 +34,12 @@ export interface CaptureOptions {
    * temporary directory). A new service deletes whatever earlier ones left there.
    */
   scratchDir: string;
+  /**
+   * Replace the secrets a procedure typed with `secret: true` in everything saved. Default true.
+   * Only synthetic runs (the eval suite, with made-up accounts) turn it off, to keep the typed
+   * values in the HAR, the pages and the trace; the TLS helper's password is redacted either way.
+   */
+  scrub?: boolean;
 }
 
 /** The agent tool call behind a browser action, for `actions.jsonl`. */
@@ -176,6 +182,8 @@ export class CaptureRun {
     dir: string | undefined;
     secrets: string[];
     redact: string[];
+    /** The typed secrets are kept (`secrets` is empty): the capture says so. */
+    keepTyped?: boolean;
     tracesDir: string;
     browserVersion?: string;
   }): Promise<string | undefined> {
@@ -215,8 +223,9 @@ export class CaptureRun {
             har: !!har,
             trace: !!traceEntries,
             secrets: opts.secrets.length,
-            scrubbed:
-              'Secrets typed with secret: true (as «secret:<n>», in raw, URL, form, JSON and HTML encodings) and the TLS helper password. Personal data is NOT scrubbed.',
+            scrubbed: opts.keepTyped
+              ? 'Only the TLS helper password. Typed secrets and personal data are NOT scrubbed: synthetic data only.'
+              : 'Secrets typed with secret: true (as «secret:<n>», in raw, URL, form, JSON and HTML encodings) and the TLS helper password. Personal data is NOT scrubbed.',
           },
           null,
           2,

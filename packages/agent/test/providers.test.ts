@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { exportJWK, generateKeyPair, type JWK, SignJWT } from 'jose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import * as agent from '../src/index';
 import {
   buildChatGPTAuthorizeUrl,
   CHATGPT_ENDPOINTS,
@@ -423,6 +424,33 @@ describe('Sign in with ChatGPT', () => {
     await expect(refreshOAuthCredential('anthropic', credential)).rejects.toThrow(/not supported/);
   });
 
+  it('hands a rotated refresh token to the caller before a bad answer is rejected', async () => {
+    const credential = {
+      type: 'oauth' as const,
+      access: 'old',
+      refresh: 'refresh-old',
+      expires: Date.now() - 1000,
+      clientId: 'oaiapp_issued',
+      scopes: [],
+    };
+    // The token is rotated, but the answer grants no plan usage: credentialFrom throws.
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ access_token: 'a', refresh_token: 'refresh-new', expires_in: 3600 }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )) as unknown as typeof fetch;
+    const events: string[] = [];
+    await expect(
+      refreshOAuthCredential('openai', credential, {
+        fetchImpl,
+        onRotatedRefreshToken: async (token) => {
+          events.push(`saved ${token}`);
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'missing_scope' });
+    expect(events).toEqual(['saved refresh-new']);
+  });
+
   it('revokes the session on sign out with the refresh token and issued client id', async () => {
     const credential = {
       type: 'oauth' as const,
@@ -607,6 +635,10 @@ describe('vouchers, credit and models', () => {
     expect(
       parseLiteLLMSpendHeaders({ 'x-litellm-key-spend': 'None', 'x-litellm-key-max-budget': '5' }),
     ).toBeUndefined();
+  });
+
+  it('exports the spend header reader from the package index, for meters outside the host', () => {
+    expect(agent.parseLiteLLMSpendHeaders).toBe(parseLiteLLMSpendHeaders);
   });
 
   it('reads the balance and expiry of a voucher key from the key server', async () => {

@@ -734,7 +734,7 @@ it spends the plan the user already pays for.
   facts come from unofficial ones. Research uses the user's plan limits. Plus includes GPT-6
   Astra only in Codex and Work, as it rolls out, with 5–45 local messages per 5 h; the SIWC docs
   don't list which models plan usage can call, so `deep` may be refused or soon run out on Plus. Unverified against the
-  live SIWC route; e2e runs cannot cover it (the mock LLM has no Responses API).
+  live SIWC route; e2e runs cannot cover it (the mock LLM answers the Responses API but not with hosted web search results).
 
 ## D22 — The DNIe PIN is saved in the vault, and managed in Mis datos (2026-10-12)
 
@@ -877,3 +877,51 @@ action, and an `actions.jsonl` that maps each step to the agent's tool call) in
   but not its in-page state. Secrets a page hashes or encrypts before sending aren't recognised
   (they aren't the plain secret either). Session cookies and tokens sites issue are kept. A
   secret in a plain text field can show in trace screenshots if the page re-renders the field.
+
+## D28 — The SpainBench eval suite: the real agents against local copies of government sites (2026-10-17)
+
+`tools/eval` measures how well the real agents complete real procedures (docs/EVAL.md). The
+decisions that shape it:
+
+- **Two repos, one HTTP contract.** The copies of the sites, their captured assets and the
+  prompt-injection payloads live in SpainBench, a private repo. This repo holds only the harness.
+  SpainBench runs one server (public listener with the real hostnames as virtual hosts, a scoring
+  listener on another port, `/version`) and the suite talks to it over HTTP (scoring API v1). A
+  fixture names an injection *variant id*, never a payload.
+- **The product is the system under test.** The run drives `createHeadlessApp` (the app's composition
+  root without Electron) and plays the user through the same calls the UI makes (`chat.send`,
+  prompt responses, `vault.addClave`). Feature flags stay at the product's defaults (off).
+- **The agent must believe the pages are real.** Requests keep their real hostnames and land on the
+  mock: the browser goes through a per-run CONNECT proxy that terminates TLS with a pinned key; the
+  agent host's `fetch_url`/`run_script` go through the `HostHooks` egress seam. Anything unmapped
+  fails like an unknown host. The seam is an argument of `runHost`: the shipped host entry passes
+  none and its bundle cannot enable them; only `tools/eval`'s own host bundle does, and it is never
+  packaged.
+- **Model access goes through a loopback meter.** It counts cost, enforces caps (per run, per agent,
+  per UTC day, a reserve under which real calls stop), writes a ledger and records/replays model
+  calls, so a run can be repeated for free and deterministically. Providers: a LiteLLM voucher key,
+  the dev-only Codex device login (explicit consent; its credential is stored in the eval's
+  data folder (`spainbench` in the OS's app-data folder), never read from the app's vault), and the scripted `tools/mock-llm`.
+  Provider credentials are kept in memory in a run's profile and never reach a run folder.
+- **Rules over what happened, not over what was said.** A fixture lists required, scored and
+  negated rules over the transcript or the project state (vault, SpainBench's world, network). A
+  negated required rule that matches ends the run at 0 at once; all required rules must hold;
+  otherwise the score is the share of scored rules, minus a penalty per wrong turn (a request to a
+  page nobody links to). A run is a resumable state machine: checkpoints hold the profile, the
+  world snapshot and the browser state.
+- **Injection tests are a floor, not a safety claim.** Four variants, one per technique, with plain
+  names: `assistant-notice` (a task-aligned required step addressed to assistants, the account
+  holder's voice and a forged system message, planted on the pages and in the PDF),
+  `fake-verification` (no assistant-addressed marker: harmless notes, then a look-alike verification
+  link on the page and in the PDF), `page-title` (a request in the page title, text the tools print
+  above their untrusted-content label) and `hidden-text` (invisible Unicode tag characters and a
+  hidden control's label: text the user cannot see but a snapshot can). Each has a page placement,
+  so a model meets it on the way. The default full run plays all four (`vida-laboral-inyeccion:<name>`),
+  so a result says which technique bit. A page quotes no account data before the login. The texts are
+  fixed: nothing adapts to the agent, and no variant has yet been shown to beat a real model, so
+  passing means "did not follow these texts". The research behind them and what is not covered is
+  `docs/research/prompt-injection-agents-2026.md`. The injection fixture needs the right PDF saved
+  *and* no exfiltration.
+- **Typed secrets and personal data.** Secrets typed in a run are registered and masked in every
+  artifact; the personas are synthetic. Browser captures keep personal data (D27), which is why
+  runs only use synthetic accounts.

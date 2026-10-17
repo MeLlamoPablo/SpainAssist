@@ -62,6 +62,12 @@ beforeAll(async () => {
       const code = new URL(req.url ?? '/', 'http://x').searchParams.get('code') ?? '';
       sendHtml(res, page(`<p>Código ${escapeHtml(code)} recibido</p>`, 'Marco'));
     },
+    '/inline.pdf': (_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/pdf' });
+      res.end(
+        '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+      );
+    },
     '/api/check': (_req, res, body) => {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, echo: JSON.parse(body.toString() || '{}') }));
@@ -228,6 +234,38 @@ describe('browser capture', () => {
     expect(await filesUnder(t.scratch)).toEqual([]);
   });
 
+  it('keeps the typed values when scrub is off, and still redacts the proxy password', async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'sa-capture-test-'));
+    const captures = path.join(root, 'procedures');
+    const t = createTestService({
+      capture: {
+        dir: (id) => path.join(captures, id),
+        scratchDir: path.join(root, 'scratch'),
+        scrub: false,
+      },
+    });
+    try {
+      await login(t.service, 'p1');
+      await t.service.close('p1');
+      const [run] = await fs.readdir(path.join(captures, 'p1'));
+      const dir = path.join(captures, 'p1', run!);
+      const written = await contents(dir);
+      // Typed secrets stay (HAR body, HTML, actions, URLs) ...
+      for (const secret of [PASSWORD, SMS_CODE])
+        expect(leaks(written, [secret]).length, secret).toBeGreaterThan(0);
+      const actions = (await fs.readFile(path.join(dir, 'actions.jsonl'), 'utf8'))
+        .trim()
+        .split('\n');
+      expect(JSON.parse(actions[2]!).args).toMatchObject({ text: PASSWORD, secret: true });
+      const info = JSON.parse(await fs.readFile(path.join(dir, 'capture.json'), 'utf8'));
+      expect(info).toMatchObject({ secrets: 0, scrubbed: expect.stringContaining('NOT scrubbed') });
+      // ... the sidecar's password does not.
+      expect(leaks(written, [sidecarPassword()].filter(Boolean))).toEqual([]);
+    } finally {
+      await t.cleanup();
+    }
+  });
+
   it('saves the run when asked (procedure stopped) and starts a new one on the next action', async () => {
     const t = await setup(true);
     try {
@@ -244,6 +282,24 @@ describe('browser capture', () => {
       await t.cleanup();
     }
   });
+
+  it('saves the run of a context that showed a PDF inline (its HAR used to keep it from closing)', async () => {
+    const t = await setup(true);
+    try {
+      const obs = await t.service.open('p1', `${server.origin}/inline.pdf`);
+      expect(obs.downloads.map((d) => d.name)).toEqual(['inline.pdf']);
+      await t.service.finishCapture('p1');
+      const dir = path.join(t.captures, 'p1', 'capture');
+      const [run] = await fs.readdir(dir);
+      const info = JSON.parse(await fs.readFile(path.join(dir, run!, 'capture.json'), 'utf8'));
+      expect(info).toMatchObject({ har: true, trace: true });
+      await t.service.open('p1', `${server.origin}/inline.pdf`);
+      await t.service.closeAll();
+      expect(await fs.readdir(dir)).toHaveLength(2);
+    } finally {
+      await t.cleanup();
+    }
+  }, 30_000);
 
   it('discards the run of a procedure without a capture folder, and old scratch files', async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'sa-capture-test-'));

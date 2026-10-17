@@ -56,7 +56,19 @@ Read `SPEC.md` (product), `docs/ARCHITECTURE.md` (how it fits together) and the 
 | `services/maps-server` | Mapbox address lookups for maps, behind the user's LiteLLM key and a daily limit (Hono) |
 | `services/relay-server` | Relay for the desktop ↔ phone channel (end-to-end encrypted frames, no accounts) |
 | `tools/mock-llm` | Scripted OpenAI-compatible LLM server for e2e tests |
+| `tools/eval` | SpainBench eval suite: the real agents against local copies of government sites (needs the private SpainBench repo for real runs; `docs/EVAL.md`) |
 | `e2e` | Playwright tests driving the Electron app with all backends mocked |
+
+- **Eval suite** (`tools/eval`, D28): `corepack pnpm --filter @sa/eval eval <command>` (`list`, `run`,
+  `report`, `budget`, `doctor`, `login codex`...). `suite` with no fixture is the full run: fixtures 1
+  and 2 and `vida-laboral-inyeccion:<variant>` for each of SpainBench's four injection variants
+  (`assistant-notice`, `fake-verification`, `page-title`, `hidden-text`). Its tests are offline; the ones against SpainBench
+  skip unless `SPAINBENCH_DIR` names the private repo's checkout. Real model runs spend a voucher
+  key's budget (the meter caps them): only run them when asked. The Codex login is development-only
+  and needs explicit consent. Its voucher key and Codex login in its data folder (`spainbench` in the OS's app-data folder,
+  e.g. `~/Library/Application Support/spainbench`) are the one
+  exception to "never use real credentials": only the eval CLI reads them (never the app's vault,
+  never a test). Never put an injection payload or captured site material in this repo.
 
 Local ports: key-server 8787, feedback-server 8788, mock-llm 8789, mock-sede 8790 (+8791 for
 client-certificate login), maps-server 8793, relay-server 8794.

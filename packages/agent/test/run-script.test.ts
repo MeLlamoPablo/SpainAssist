@@ -244,6 +244,84 @@ describe('runScript', () => {
     });
   });
 
+  describe('the clock of its Date', () => {
+    const frozen = () => new Date('2026-10-16T08:00:00Z');
+
+    it('is the real one unless the host gives it another', async () => {
+      const before = Date.now();
+      const run = await runScript('return [Date.now(), new Date().getTime()];');
+      const [now, constructed] = JSON.parse(run.result ?? '') as number[];
+      expect(now).toBeGreaterThanOrEqual(before);
+      expect(constructed).toBeLessThan(Date.now() + 1);
+    });
+
+    it('shows the host’s clock in Date.now, new Date() and Date() when there is one, and keeps moving', async () => {
+      const run = await runScript(
+        `
+        const start = Date.now();
+        while (Date.now() < start + 60) { /* no timers in the engine: wait by looking */ }
+        return {
+          start,
+          later: Date.now(),
+          iso: new Date().toISOString().slice(0, 10),
+          string: Date(),
+          year: new Date().getUTCFullYear(),
+        };`,
+        { now: frozen },
+      );
+      expect(run.ok, run.error).toBe(true);
+      const seen = JSON.parse(run.result ?? '') as Record<string, number | string>;
+      expect(seen.start).toBeGreaterThanOrEqual(Date.parse('2026-10-16T08:00:00Z'));
+      expect(seen.start).toBeLessThan(Date.parse('2026-10-16T08:00:05Z'));
+      expect((seen.later as number) - (seen.start as number)).toBeGreaterThanOrEqual(50);
+      expect(seen.iso).toBe('2026-10-16');
+      // Date() is the current time as text, in the machine's zone: the year does not depend on it.
+      expect(seen.string).toContain('2026');
+      expect(seen.year).toBe(2026);
+    });
+
+    it('leaves every other use of Date as it is', async () => {
+      const run = await runScript(
+        `
+        const born = new Date(1990, 5, 15, 12);
+        return {
+          parsed: Date.parse('2000-01-01T00:00:00Z'),
+          utc: Date.UTC(2020, 1, 29),
+          born: born.getFullYear() + '-' + born.getMonth() + '-' + born.getDate(),
+          copy: new Date(born).getTime() === born.getTime(),
+          instance: new Date() instanceof Date,
+          ctor: new Date().constructor === Date,
+          diff: Math.floor((new Date('2026-12-25') - new Date()) / 86400000),
+          sorted: ['2026-03-01', '2026-01-15'].map((d) => new Date(d)).sort((a, b) => a - b)[0].toISOString().slice(0, 10),
+        };`,
+        { now: frozen },
+      );
+      expect(run.ok, run.error).toBe(true);
+      expect(JSON.parse(run.result ?? '')).toEqual({
+        parsed: 946684800000,
+        utc: Date.UTC(2020, 1, 29),
+        born: '1990-5-15',
+        copy: true,
+        instance: true,
+        ctor: true,
+        diff: 69,
+        sorted: '2026-01-15',
+      });
+    });
+
+    it('is the clock of the run_script tool when it is given one', async () => {
+      const tool = runScriptTool({ now: frozen });
+      const result = await tool.execute(
+        'c1',
+        { code: 'return new Date().toISOString().slice(0, 10);' },
+        undefined,
+        undefined,
+        {} as never,
+      );
+      expect(textOf(result)).toContain('2026-10-16');
+    });
+  });
+
   it('has URL with the same parsing as Node', async () => {
     const run = await runScript(`
       const url = new URL('../tramites/cita?provincia=Madrid&x=1#arriba', 'https://sede.example.es/a/b/c');

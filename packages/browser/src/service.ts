@@ -89,6 +89,9 @@ type StorageState = Exclude<BrowserContextOptions['storageState'], string | unde
 const REF_RE = /^(?:f\d+)?e\d+$/;
 const DEFAULT_BUDGET = 24_000;
 const QUIET_MS = 350;
+/** Closing the pages of a context before the context itself, and the wait for either. */
+const PAGE_CLOSE_MS = 3_000;
+const CONTEXT_CLOSE_MS = 15_000;
 
 const silentLogger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
 
@@ -739,16 +742,18 @@ export class PlaywrightBrowserService implements BrowserService {
     const capture = this.opts.capture;
     s.capture = undefined;
     if (context && run) await context.tracing.stop({ path: run.tracePath }).catch(noop);
-    await context?.close().catch(noop);
+    if (context) await closeContext(context);
     const scratch = this.captureScratch;
     if (!run || !capture || !scratch) return;
-    const secrets = [...s.secrets];
+    const keepTyped = capture.scrub === false;
+    const secrets = keepTyped ? [] : [...s.secrets];
     const browserVersion = this.browser?.version();
     const work = (async () => {
       const out = await run.finish({
         dir: capture.dir(s.id),
         secrets,
         redact: this.opts.certificates ? [this.opts.certificates.credentials.password] : [],
+        keepTyped,
         tracesDir: tracesDirOf(await scratch),
         browserVersion,
       });
@@ -802,6 +807,9 @@ export class PlaywrightBrowserService implements BrowserService {
         this.opts.channel ?? (headless && !this.opts.executablePath ? 'chromium' : undefined),
       // Capture mode: raw trace files go to the private scratch directory, not the OS temp dir.
       tracesDir: await this.captureScratch?.then(tracesDirOf, () => undefined),
+      ...(this.opts.handleSignals === false
+        ? { handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false }
+        : {}),
     };
     const browser = await chromium.launch(options);
     if (this.opts.certificates) {
@@ -912,6 +920,14 @@ export class PlaywrightBrowserService implements BrowserService {
       s.pages = [];
       s.active = undefined;
     });
+    for (const content of this.opts.initScripts ?? []) {
+      try {
+        await context.addInitScript({ content });
+      } catch (err) {
+        await context.close().catch(noop);
+        throw err;
+      }
+    }
     await this.installAfirma(s, context);
     return context;
   }
@@ -2021,6 +2037,21 @@ async function answerProxyLogins(
     handleAuthRequests: true,
     patterns: [{ urlPattern: 'http://*' }, { urlPattern: 'https://*' }],
   });
+}
+
+/**
+ * Closes a context after its pages. `context.close()` alone never finishes for a context that
+ * records a HAR and ever showed a PDF in Chromium's viewer (even after navigating away); closing
+ * the pages first takes milliseconds. Neither wait can block the caller: a context that does not
+ * close in time is left to the browser (which closes with the service).
+ */
+async function closeContext(context: BrowserContext): Promise<void> {
+  await Promise.all(
+    context
+      .pages()
+      .map((page) => withTimeout(page.close({ runBeforeUnload: false }), PAGE_CLOSE_MS, undefined)),
+  );
+  await withTimeout(context.close(), CONTEXT_CLOSE_MS, undefined);
 }
 
 async function headfulUserAgent(browser: Browser): Promise<string | undefined> {

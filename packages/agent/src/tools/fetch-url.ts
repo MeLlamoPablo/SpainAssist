@@ -1,9 +1,11 @@
 import { Type } from 'typebox';
 import {
+  type BlockedRequest,
   FetchError,
   type FetchedDocument,
   type FetchOptions,
   fetchDocument,
+  type HostResolver,
   sliceText,
 } from '../research/fetch';
 import { defineSaTool, errorResult, isAbortError, StringEnum, textResult } from './common';
@@ -11,6 +13,10 @@ import { defineSaTool, errorResult, isAbortError, StringEnum, textResult } from 
 export interface FetchUrlToolOptions {
   allowPrivateHosts?: boolean;
   fetchImpl?: typeof fetch;
+  /** DNS for the host guard (default: the system resolver). */
+  resolveHost?: HostResolver;
+  /** Told about every request the host guard refuses. */
+  onBlocked?: (request: BlockedRequest) => void;
   /** Cache entries live this long (ms). Default 10 min. */
   cacheTtlMs?: number;
 }
@@ -54,6 +60,8 @@ export function fetchUrlTool(options: FetchUrlToolOptions = {}) {
       mode,
       allowPrivateHosts: options.allowPrivateHosts,
       fetchImpl: options.fetchImpl,
+      resolveHost: options.resolveHost,
+      onBlocked: options.onBlocked,
     };
     const doc = await fetchDocument(url, fetchOptions);
     cache.delete(key);

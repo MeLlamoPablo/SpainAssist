@@ -8,6 +8,11 @@
   "author": "Spain Assist",
   "homepage": "https://github.com/MeLlamoPablo/SpainAssist",
   "main": "./out/main/index.js",
+  "exports": {
+    "./headless": "./src/main/app/headless.ts",
+    "./form-logic": "./src/renderer/src/features/chat/prompts/formLogic.ts",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "build:agent": "corepack pnpm --filter @sa/agent build",
     "dev": "corepack pnpm --filter @sa/sidecar build && corepack pnpm build:agent && install-electron && node scripts/run-electron-vite.mjs dev",

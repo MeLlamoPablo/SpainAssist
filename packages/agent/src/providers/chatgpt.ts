@@ -213,6 +213,7 @@ async function postToken(
   form: Record<string, string>,
   signal: AbortSignal | undefined,
   fetchImpl: typeof fetch,
+  onRotatedRefreshToken?: (refreshToken: string) => void | Promise<void>,
 ): Promise<TokenResponse> {
   let res: Response;
   try {
@@ -258,7 +259,12 @@ async function postToken(
       oauthError,
     );
   }
-  const parsed = TokenResponse.safeParse(safeJson(text));
+  const body = safeJson(text);
+  // Before anything else is checked: the answer rotated the refresh token, so this is the only
+  // copy of a token that works, whatever else is wrong with the answer.
+  const rotated = (body as { refresh_token?: unknown } | undefined)?.refresh_token;
+  if (typeof rotated === 'string' && rotated) await onRotatedRefreshToken?.(rotated);
+  const parsed = TokenResponse.safeParse(body);
   if (!parsed.success) {
     throw new ChatGPTLoginError('invalid_response', 'Unexpected token response from ChatGPT');
   }
@@ -571,6 +577,10 @@ export function credentialNeedsRefresh(
 /**
  * Refresh an OAuth credential. Refresh tokens rotate: the app must serialize calls (one at a
  * time per credential, across all agent processes) and persist the result before using it.
+ *
+ * The rotated refresh token is handed to `onRotatedRefreshToken` (awaited) as soon as the answer
+ * has one, before the rest of it is validated: if the answer is then unusable (a missing scope or
+ * field) this throws, and the caller has already saved the only token that still works.
  */
 export async function refreshOAuthCredential(
   providerId: string,
@@ -579,6 +589,7 @@ export async function refreshOAuthCredential(
     endpoints?: Partial<ChatGPTEndpoints>;
     fetchImpl?: typeof fetch;
     signal?: AbortSignal;
+    onRotatedRefreshToken?: (refreshToken: string) => void | Promise<void>;
   } = {},
 ): Promise<PiCredential> {
   if (providerId !== 'openai') {
@@ -601,6 +612,7 @@ export async function refreshOAuthCredential(
     },
     options.signal,
     options.fetchImpl ?? fetch,
+    options.onRotatedRefreshToken,
   );
   return credentialFrom(token, clientId, credential);
 }

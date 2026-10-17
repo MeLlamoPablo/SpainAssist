@@ -1,9 +1,12 @@
+/// <reference path="../types/turndown-plugin-gfm.d.ts" />
+import { type LookupAddress, type LookupOptions, lookup as lookupCallback } from 'node:dns';
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 /**
@@ -53,6 +56,10 @@ export interface FetchOptions {
   /** "auto": main content (Readability, with fallback). "full": the whole page body. */
   mode?: 'auto' | 'full';
   fetchImpl?: typeof fetch;
+  /** DNS for the host guard (default: the system resolver). */
+  resolveHost?: HostResolver;
+  /** Told about every request the host guard refuses, before the error is thrown. */
+  onBlocked?: (request: BlockedRequest) => void;
 }
 
 export interface FetchedDocument {
@@ -78,40 +85,176 @@ export const USER_AGENT =
 // Host safety
 // ---------------------------------------------------------------------------------------------
 
-function isPrivateIPv4(ip: string): boolean {
-  const parts = ip.split('.').map(Number);
-  const [a = 0, b = 0] = parts;
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 198 && (b === 18 || b === 19)) ||
-    a >= 224
+/** IPv4 ranges that are not the public internet (RFC 6890 plus multicast and reserved space). */
+const PRIVATE_IPV4 = new BlockList();
+for (const [network, prefix] of [
+  ['0.0.0.0', 8], // "this" network
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10], // carrier-grade NAT
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16], // link local, cloud metadata
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24], // IETF protocol assignments
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15], // benchmarking
+  ['224.0.0.0', 3], // multicast, reserved, broadcast
+] as const) {
+  PRIVATE_IPV4.addSubnet(network, prefix, 'ipv4');
+}
+
+/**
+ * IPv6 ranges that are never a public host. The ones that carry an IPv4 address inside
+ * (`::ffff:0:0/96`, `::ffff:0:0:0/96`, `64:ff9b::/96`, `2002::/16`) are not here: they are as
+ * private as the IPv4 address they hold (`embeddedIPv4`).
+ */
+const PRIVATE_IPV6 = new BlockList();
+for (const [network, prefix] of [
+  ['::', 96], // unspecified, loopback and the deprecated IPv4-compatible addresses
+  ['100::', 64], // discard-only
+  ['2001::', 32], // Teredo: tunnels to an IPv4 address chosen by the sender
+  ['64:ff9b:1::', 48], // local-use NAT64 (RFC 8215)
+  ['fc00::', 7], // unique local
+  ['fe80::', 10], // link local
+  ['fec0::', 10], // site local (deprecated)
+  ['ff00::', 8], // multicast
+] as const) {
+  PRIVATE_IPV6.addSubnet(network, prefix, 'ipv6');
+}
+
+/** One part of an IPv4 address as `inet_aton` and the URL parser read it: decimal, 0x hex or 0 octal. */
+function ipv4Part(part: string): number | undefined {
+  let digits: string;
+  let radix: number;
+  if (/^0[xX]/.test(part)) {
+    digits = part.slice(2) || '0';
+    radix = 16;
+  } else if (part.length > 1 && part.startsWith('0')) {
+    digits = part.slice(1);
+    radix = 8;
+  } else {
+    digits = part;
+    radix = 10;
+  }
+  const valid = radix === 16 ? /^[0-9a-f]+$/i : radix === 8 ? /^[0-7]+$/ : /^[0-9]+$/;
+  if (digits.length > 12 || !valid.test(digits)) return undefined;
+  return Number.parseInt(digits, radix);
+}
+
+/**
+ * The four bytes of an IPv4 address in any spelling the platform's resolver accepts: `127.0.0.1`
+ * and also `2130706433`, `0x7f000001`, `0177.0.0.1`, `127.1` and a trailing dot. A URL's
+ * hostname is already normalised, but a resolver's answer or another caller's string is not.
+ */
+function parseIPv4(text: string): [number, number, number, number] | undefined {
+  const parts = text.replace(/\.$/, '').split('.');
+  if (parts.length > 4) return undefined;
+  const numbers: number[] = [];
+  for (const part of parts) {
+    const value = ipv4Part(part);
+    if (value === undefined) return undefined;
+    numbers.push(value);
+  }
+  const last = numbers.pop() as number;
+  if (numbers.some((n) => n > 255) || last >= 256 ** (4 - numbers.length)) return undefined;
+  const bytes: number[] = [...numbers];
+  for (let shift = 8 * (3 - numbers.length); shift >= 0; shift -= 8) {
+    bytes.push(Math.floor(last / 2 ** shift) % 256);
+  }
+  return bytes as [number, number, number, number];
+}
+
+/** The 16 bytes of an IPv6 address (a zone id is ignored), or undefined when it is not one. */
+function parseIPv6(text: string): Uint8Array | undefined {
+  if (isIP(text) !== 6) return undefined;
+  let address = text.replace(/%.*$/, '');
+  const dotted = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(address);
+  if (dotted) {
+    const [a = 0, b = 0, c = 0, d = 0] = dotted.slice(1).map(Number);
+    address = `${address.slice(0, dotted.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head = '', tail, ...extra] = address.split('::');
+  if (extra.length > 0) return undefined;
+  const groups = (part: string) => (part === '' ? [] : part.split(':'));
+  const first = groups(head);
+  const last = tail === undefined ? [] : groups(tail);
+  if (tail === undefined ? first.length !== 8 : first.length + last.length > 7) return undefined;
+  const all = [...first, ...new Array<string>(8 - first.length - last.length).fill('0'), ...last];
+  const bytes = new Uint8Array(16);
+  all.forEach((group, i) => {
+    const value = Number.parseInt(group, 16);
+    bytes[2 * i] = value >> 8;
+    bytes[2 * i + 1] = value & 0xff;
+  });
+  return bytes;
+}
+
+/** The IPv4 address an IPv6 address carries inside (mapped, SIIT, NAT64, 6to4), if it does. */
+function embeddedIPv4(bytes: Uint8Array): [number, number, number, number] | undefined {
+  const head = (n: number) => bytes.subarray(0, n).every((byte) => byte === 0);
+  const tail = Array.from(bytes.subarray(12, 16)) as [number, number, number, number];
+  // ::ffff:a.b.c.d (mapped) and ::ffff:0:a.b.c.d (SIIT, RFC 2765)
+  if (head(10) && bytes[10] === 0xff && bytes[11] === 0xff) return tail;
+  if (head(8) && bytes[8] === 0xff && bytes[9] === 0xff && bytes[10] === 0 && bytes[11] === 0) {
+    return tail;
+  }
+  // 64:ff9b::/96 (NAT64)
+  if (bytes[0] === 0 && bytes[1] === 0x64 && bytes[2] === 0xff && bytes[3] === 0x9b) {
+    if (bytes.subarray(4, 12).every((byte) => byte === 0)) return tail;
+  }
+  // 2002::/16 (6to4): the IPv4 address follows the prefix
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) {
+    return Array.from(bytes.subarray(2, 6)) as [number, number, number, number];
+  }
+  return undefined;
+}
+
+function isPrivateIPv4Bytes(bytes: readonly number[]): boolean {
+  return PRIVATE_IPV4.check(bytes.join('.'), 'ipv4');
+}
+
+/**
+ * Whether `address` (an IP literal in any spelling, IPv6 zone ids and brackets included) is not a
+ * public unicast address: loopback, private, link local, multicast, reserved, or an IPv6 form that
+ * wraps such an IPv4 address. Anything that is not an IP address counts as private (fail closed).
+ */
+export function isPrivateAddress(address: string): boolean {
+  const host = address.trim().replace(/^\[|\]$/g, '');
+  const v4 = parseIPv4(host);
+  if (v4) return isPrivateIPv4Bytes(v4);
+  const v6 = parseIPv6(host);
+  if (!v6) return true;
+  const embedded = embeddedIPv4(v6);
+  if (embedded) return isPrivateIPv4Bytes(embedded);
+  const groups = Array.from({ length: 8 }, (_, i) =>
+    (((v6[2 * i] as number) << 8) | (v6[2 * i + 1] as number)).toString(16),
   );
+  return PRIVATE_IPV6.check(groups.join(':'), 'ipv6');
 }
 
-function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  if (lower === '::1' || lower === '::') return true;
-  if (/^f[cd]/.test(lower)) return true; // fc00::/7 unique local
-  if (/^fe[89ab]/.test(lower)) return true; // fe80::/10 link local
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-  return mapped?.[1] ? isPrivateIPv4(mapped[1]) : false;
+/**
+ * Where the guard gets a hostname's addresses. The default asks the system resolver; an
+ * embedder (a test, an offline harness) can pass its own so the check never touches real DNS.
+ */
+export type HostResolver = (hostname: string) => Promise<readonly { address: string }[]>;
+
+const systemResolver: HostResolver = (hostname) => lookup(hostname, { all: true, verbatim: true });
+
+/** What a refused request tells the embedder (`onBlocked`): the URL, its method and the guard's message. */
+export interface BlockedRequest {
+  url: URL;
+  method: string;
+  message: string;
 }
 
-export function isPrivateAddress(ip: string): boolean {
-  const version = isIP(ip);
-  if (version === 4) return isPrivateIPv4(ip);
-  if (version === 6) return isPrivateIPv6(ip);
-  return false;
-}
-
-async function assertPublicHost(hostname: string): Promise<void> {
-  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+async function assertPublicHost(
+  hostname: string,
+  resolve: HostResolver = systemResolver,
+): Promise<void> {
+  // A trailing dot is the same name (and the same address) to the resolver.
+  const host = hostname
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase()
+    .replace(/\.+$/, '');
   if (
     host === 'localhost' ||
     host.endsWith('.localhost') ||
@@ -120,21 +263,73 @@ async function assertPublicHost(hostname: string): Promise<void> {
   ) {
     throw new FetchError('blocked', `Blocked: ${host} is a local address`);
   }
-  if (isIP(host)) {
+  if (parseIPv4(host) || parseIPv6(host)) {
     if (isPrivateAddress(host))
       throw new FetchError('blocked', `Blocked: ${host} is a private address`);
     return;
   }
-  let addresses: { address: string }[];
+  let addresses: readonly { address: string }[];
   try {
-    addresses = await lookup(host, { all: true, verbatim: true });
+    addresses = await resolve(host);
   } catch {
     throw new FetchError('network', `Could not resolve ${host}`);
   }
+  // No answer is no way to know where the name leads.
+  if (addresses.length === 0) throw new FetchError('network', `Could not resolve ${host}`);
   if (addresses.some((a) => isPrivateAddress(a.address))) {
     throw new FetchError('blocked', `Blocked: ${host} resolves to a private address`);
   }
 }
+
+/** The error code the connect-time guard fails a connection with (see `guardedFetch`). */
+const BLOCKED_AT_CONNECT = 'ESA_BLOCKED_ADDRESS';
+
+/**
+ * The DNS lookup of the connections `guardedFetch` opens: the addresses a connection really goes
+ * to, checked again. `assertPublicHost` asked the resolver before the request; a name that then
+ * answers differently (DNS rebinding: a short TTL, a public address for the check and a private
+ * one for the connection) is refused here, on the very answer the socket uses.
+ */
+function guardedLookup(
+  hostname: string,
+  options: LookupOptions,
+  callback: (
+    error: NodeJS.ErrnoException | null,
+    address: string | LookupAddress[],
+    family?: number,
+  ) => void,
+): void {
+  lookupCallback(hostname, { ...options, all: true, verbatim: true }, (error, addresses) => {
+    if (error) return callback(error, '');
+    const answer = addresses as LookupAddress[];
+    const blocked = answer.length === 0 || answer.some((a) => isPrivateAddress(a.address));
+    if (blocked) {
+      const refused: NodeJS.ErrnoException = new Error(
+        `Blocked: ${hostname} resolves to a private address`,
+      );
+      refused.code = BLOCKED_AT_CONNECT;
+      return callback(refused, '');
+    }
+    if (options.all) return callback(null, answer);
+    const first = answer[0] as LookupAddress;
+    callback(null, first.address, first.family);
+  });
+}
+
+let guardedAgent: Agent | undefined;
+
+/**
+ * The default fetch of `fetchPublic` when private hosts are not allowed: undici's own fetch over a
+ * dispatcher whose connections resolve through `guardedLookup`. (The platform's fetch has no hook
+ * at connect time, and a dispatcher of another undici major cannot be handed to it.)
+ */
+const guardedFetch = ((input: URL, init: RequestInit) => {
+  guardedAgent ??= new Agent({ connect: { lookup: guardedLookup } });
+  return undiciFetch(input, {
+    ...(init as Parameters<typeof undiciFetch>[1]),
+    dispatcher: guardedAgent,
+  });
+}) as unknown as typeof fetch;
 
 // ---------------------------------------------------------------------------------------------
 // Charset
@@ -452,12 +647,16 @@ export interface PublicFetchOptions {
   headers: Headers | Record<string, string>;
   /** Default GET. */
   method?: string;
-  body?: string | Uint8Array;
+  body?: string | Uint8Array<ArrayBuffer>;
   /** Default 5. */
   maxRedirects?: number;
   /** Dev/e2e only: allow localhost and private networks. */
   allowPrivateHosts?: boolean;
   fetchImpl?: typeof fetch;
+  /** DNS for the host guard (default: the system resolver). */
+  resolveHost?: HostResolver;
+  /** Told about every request the host guard refuses, before the error is thrown. */
+  onBlocked?: (request: BlockedRequest) => void;
 }
 
 /** Headers that describe the request body: dropped with it when a redirect turns into a GET. */
@@ -479,7 +678,7 @@ export async function fetchPublic(
   start: URL,
   options: PublicFetchOptions,
 ): Promise<{ res: Response; url: URL; redirects: number }> {
-  const doFetch = options.fetchImpl ?? fetch;
+  const doFetch = options.fetchImpl ?? (options.allowPrivateHosts ? fetch : guardedFetch);
   const maxRedirects = options.maxRedirects ?? 5;
   const headers = new Headers(options.headers);
   let method = options.method ?? 'GET';
@@ -492,7 +691,16 @@ export async function fetchPublic(
     if (url.username || url.password) {
       throw new FetchError('invalid_url', 'URLs with embedded credentials are not allowed');
     }
-    if (!options.allowPrivateHosts) await assertPublicHost(url.hostname);
+    if (!options.allowPrivateHosts) {
+      try {
+        await assertPublicHost(url.hostname, options.resolveHost);
+      } catch (error) {
+        if (error instanceof FetchError && error.code === 'blocked') {
+          options.onBlocked?.({ url, method, message: error.message });
+        }
+        throw error;
+      }
+    }
     let res: Response;
     try {
       res = await doFetch(url, {
@@ -505,6 +713,11 @@ export async function fetchPublic(
     } catch (error) {
       if (options.signal.aborted) throw error;
       const cause = (error as { cause?: { code?: string; message?: string } }).cause;
+      if (cause?.code === BLOCKED_AT_CONNECT) {
+        const message = cause.message ?? `Blocked: ${url.hostname} resolves to a private address`;
+        options.onBlocked?.({ url, method, message });
+        throw new FetchError('blocked', message);
+      }
       throw new FetchError(
         'network',
         `Could not fetch ${url.host}: ${cause?.code ?? cause?.message ?? (error as Error).message}`,
@@ -558,6 +771,8 @@ export async function fetchDocument(
       maxRedirects: options.maxRedirects,
       allowPrivateHosts: options.allowPrivateHosts,
       fetchImpl: options.fetchImpl,
+      resolveHost: options.resolveHost,
+      onBlocked: options.onBlocked,
       headers: {
         'user-agent': USER_AGENT,
         accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9,text/plain;q=0.8,*/*;q=0.5',
