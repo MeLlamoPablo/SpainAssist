@@ -8,10 +8,6 @@ output "ipv6_address" {
   value       = hcloud_primary_ip.ipv6.ip_network
 }
 
-output "base_domain" {
-  value = local.base_domain
-}
-
 output "urls" {
   description = "Public endpoints. The app's PRODUCTION_SERVICES take key_server, feedback_server, maps_server and relay_server."
   value = {
@@ -26,6 +22,11 @@ output "urls" {
   }
 }
 
+output "legacy_urls" {
+  description = "Endpoints on the server's sslip.io name that released desktop apps still call."
+  value       = { for name, host in local.legacy_hosts : name => "https://${host}" }
+}
+
 output "unleash_frontend_tokens" {
   description = "Unleash frontend tokens built into the desktop app, by environment (public by design)."
   value = {
@@ -36,7 +37,7 @@ output "unleash_frontend_tokens" {
 }
 
 output "coolify_root_email" {
-  value = var.coolify_root_email != "" ? var.coolify_root_email : "admin@${local.base_domain}"
+  value = var.coolify_root_email != "" ? var.coolify_root_email : "admin@${var.domain}"
 }
 
 output "ssh" {

@@ -130,7 +130,7 @@ resource "coolify_service" "litellm" {
   urls = [{
     name = "litellm"
     # The port is the container port Coolify's proxy forwards to; the public URL is plain 443.
-    url = "https://${local.hosts.llm}:4000"
+    url = join(",", [for host in local.all_hosts.llm : "https://${host}:4000"])
   }]
 }
 

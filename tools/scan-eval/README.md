@@ -48,7 +48,7 @@ Every model goes through our LiteLLM gateway. The script gets a gateway key in t
 
 Keys, tokens and voucher codes stay in memory; the script never prints or writes them. The key
 server is `https://keys.<domain>` (`SA_KEY_SERVER_URL` overrides it), with the domain from the
-same tfvars. Each run without a key creates a new voucher.
+same tfvars (default `spainassist.es`). Each run without a key creates a new voucher.
 
 Options:
 

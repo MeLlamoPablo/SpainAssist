@@ -6,11 +6,17 @@
 locals {
   everywhere = ["0.0.0.0/0", "::/0"]
 
-  ipv4        = hcloud_primary_ip.ipv4.ip_address
-  base_domain = var.domain != "" ? var.domain : "${replace(local.ipv4, ".", "-")}.sslip.io"
-  # One host per service, <subdomain>.<base domain>; dns.tf has their records.
+  ipv4 = hcloud_primary_ip.ipv4.ip_address
+  # One host per service, <subdomain>.<domain>; dns.tf has their records.
   subdomains = ["coolify", "keys", "feedback", "maps", "relay", "llm", "flags"]
-  hosts      = { for name in local.subdomains : name => "${name}.${local.base_domain}" }
+  hosts      = { for name in local.subdomains : name => "${name}.${var.domain}" }
+  # Released desktop apps call these hosts on the server's sslip.io name, which resolves to the
+  # IPv4 without any DNS: they keep answering there too. Never release the reserved IPv4 (the
+  # names are the IP). The relay and Coolify's dashboard only had users of our own.
+  legacy_domain = "${replace(local.ipv4, ".", "-")}.sslip.io"
+  legacy_hosts  = { for name in ["keys", "feedback", "maps", "llm", "flags"] : name => "${name}.${local.legacy_domain}" }
+  # Every host a service answers on.
+  all_hosts = { for name in local.subdomains : name => compact([local.hosts[name], lookup(local.legacy_hosts, name, "")]) }
 }
 
 data "tls_public_key" "admin" {

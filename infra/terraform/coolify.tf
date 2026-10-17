@@ -127,25 +127,25 @@ locals {
     key_server = {
       name        = "key-server"
       port        = "8787"
-      domain      = local.hosts.keys
+      hosts       = local.all_hosts.keys
       watch_paths = concat(["services/key-server/**"], local.workspace_paths)
     }
     feedback_server = {
       name        = "feedback-server"
       port        = "8788"
-      domain      = local.hosts.feedback
+      hosts       = local.all_hosts.feedback
       watch_paths = concat(["services/feedback-server/**", "packages/pii/**", "packages/gateway-keys/**"], local.workspace_paths)
     }
     maps_server = {
       name        = "maps-server"
       port        = "8793"
-      domain      = local.hosts.maps
+      hosts       = local.all_hosts.maps
       watch_paths = concat(["services/maps-server/**", "packages/gateway-keys/**"], local.workspace_paths)
     }
     relay_server = {
       name        = "relay-server"
       port        = "8794"
-      domain      = local.hosts.relay
+      hosts       = local.all_hosts.relay
       watch_paths = concat(["services/relay-server/**"], local.workspace_paths)
     }
   }
@@ -216,7 +216,7 @@ resource "coolify_application_private_git" "app" {
   base_directory         = "/"
   dockerfile_location    = "/services/${each.value.name}/Dockerfile"
   ports_exposes          = each.value.port
-  domains                = "https://${each.value.domain}"
+  domains                = join(",", [for host in each.value.hosts : "https://${host}"])
   is_force_https_enabled = true
   # Push to deploy: github_repository_webhook.coolify calls Coolify, which checks the signature
   # with this secret and redeploys the app if the push touched one of its watch_paths.

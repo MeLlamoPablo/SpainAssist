@@ -56,7 +56,7 @@ resource "coolify_service" "unleash" {
 
   urls = [{
     name = "unleash"
-    url  = "https://${local.hosts.flags}:4242"
+    url  = join(",", [for host in local.all_hosts.flags : "https://${host}:4242"])
   }]
 }
 

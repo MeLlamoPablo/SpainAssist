@@ -15,8 +15,6 @@ EOT
 ssh_extra_public_keys = ["ssh-ed25519 AAAA... you@laptop"]
 # ssh_allowed_cidrs   = ["203.0.113.4/32"]
 
-# domain = "spainassist.es" # empty = sslip.io; set to dns_domain to serve the apps on it (see dns.tf)
-
 # The Terraform IAM user's key (aws_iam.tf). Leave them out for the first apply, run with an
 # admin key in AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, then copy the new key here:
 #   terraform show -json | jq -r '.values.root_module.resources[] | select(.address == "aws_iam_access_key.terraform") | .values | .id, .secret'

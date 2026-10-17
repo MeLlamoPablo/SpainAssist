@@ -165,7 +165,7 @@ describe('production services', () => {
     const config = plain.agentLib.launches[0]?.config;
     expect(config?.research?.keyServerUrl).toBeUndefined();
     expect(config?.feedback).toBeUndefined();
-    expect(JSON.stringify(plain.agentLib.launches)).not.toContain('sslip.io');
+    expect(JSON.stringify(plain.agentLib.launches)).not.toMatch(/spainassist\.es|sslip\.io/);
 
     const local = await openWithProvider({
       userDataDir: join(root, 'local'),

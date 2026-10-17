@@ -12,7 +12,7 @@ describe('offline test network guard', () => {
     // Documentation addresses (TEST-NET): nothing could answer even if the guard failed.
     expect(() => net.connect({ host: '203.0.113.9', port: 80 })).toThrow(NetworkGuardError);
     expect(() => net.connect(80, '203.0.113.9')).toThrow(NetworkGuardError);
-    expect(() => net.connect(443, 'llm.2-31-6-160.sslip.io')).toThrow(NetworkGuardError);
+    expect(() => net.connect(443, 'llm.spainassist.es')).toThrow(NetworkGuardError);
     expect(() => dns.lookup('example.com', () => {})).toThrow(NetworkGuardError);
   });
 

@@ -204,17 +204,18 @@ export type SettingsPatch = z.infer<typeof SettingsPatch>;
  * Backend URLs, built into the app: they are not settings. Packaged builds always use these;
  * development builds accept SA_KEY_SERVER_URL / SA_FEEDBACK_SERVER_URL / SA_MAPS_SERVER_URL /
  * SA_RELAY_SERVER_URL (e2e tests,
- * `corepack pnpm dev:local`). Change them here when the real domain replaces sslip.io.
+ * `corepack pnpm dev:local`). Released versions before the move to spainassist.es call
+ * `<name>.2-31-6-160.sslip.io`, which the server keeps serving (infra/terraform/hetzner.tf).
  */
 export const PRODUCTION_SERVICES = {
-  keyServerUrl: 'https://keys.2-31-6-160.sslip.io',
-  feedbackServerUrl: 'https://feedback.2-31-6-160.sslip.io',
+  keyServerUrl: 'https://keys.spainassist.es',
+  feedbackServerUrl: 'https://feedback.spainassist.es',
   /** Address lookups for maps (services/maps-server; Mapbox behind it). */
-  mapsServerUrl: 'https://maps.2-31-6-160.sslip.io',
+  mapsServerUrl: 'https://maps.spainassist.es',
   /** Desktop ↔ phone relay for DNIe signatures (services/relay-server). */
-  relayServerUrl: 'https://relay.2-31-6-160.sslip.io',
+  relayServerUrl: 'https://relay.spainassist.es',
   /** Unleash, for feature flags (infra/terraform/unleash.tf). */
-  flagsUrl: 'https://flags.2-31-6-160.sslip.io',
+  flagsUrl: 'https://flags.spainassist.es',
   /**
    * Unleash frontend tokens (`./tf.sh output -json unleash_frontend_tokens`), one per Unleash
    * environment: packaged builds read `production`, development builds `development`. Public by

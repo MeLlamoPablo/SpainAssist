@@ -66,13 +66,7 @@ variable "ssh_allowed_cidrs" {
 # --- Domains -------------------------------------------------------------------------------
 
 variable "domain" {
-  description = "Base domain the services are served on, e.g. var.dns_domain once its records resolve. Empty = <ipv4-with-dashes>.sslip.io, which resolves to the server without any DNS setup."
-  type        = string
-  default     = ""
-}
-
-variable "dns_domain" {
-  description = "Domain registered with Route 53 Domains whose hosted zone holds the service records (dns.tf)."
+  description = "Domain the services are served on (<subdomain>.<domain>), registered with Route 53 Domains; its hosted zone holds their records (dns.tf)."
   type        = string
   default     = "spainassist.es"
 }
@@ -101,7 +95,7 @@ variable "coolify_version" {
 }
 
 variable "coolify_root_email" {
-  description = "Login e-mail of Coolify's root user. Empty = admin@<base domain>."
+  description = "Login e-mail of Coolify's root user. Empty = admin@<domain>."
   type        = string
   default     = ""
 }

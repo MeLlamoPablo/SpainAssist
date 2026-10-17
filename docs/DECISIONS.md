@@ -290,9 +290,11 @@ runbook: [infra/README.md](../infra/README.md#production-hetzner--coolify-terraf
 - **One Postgres, one role and database per service**, created over SSH (Coolify's API has no
   init scripts). Services are built by Coolify from GitHub with a read-only deploy key, so a
   deploy needs a push.
-- **Domains**: `<ip>.sslip.io` until the apps move to `spainassist.es` (Route 53 Domains and a
-  Route 53 hosted zone). Its records point straight at the server: no CDN proxy that cuts long
-  LiteLLM streams or sees prompts.
+- **Domains**: `spainassist.es` (Route 53 Domains and a Route 53 hosted zone). Its records point
+  straight at the server: no CDN proxy that cuts long LiteLLM streams or sees prompts. Released
+  desktop versions before the move call `<ip>.sslip.io` (built-in service URLs, and the LiteLLM
+  URL saved with a voucher until its next top-up), so the server keeps answering on those names
+  too. Saved URLs are not rewritten.
 - **Trade-offs**: on the 4 GB server Coolify takes about 0.5 GB and LiteLLM 0.75 GB; with both
   services and Postgres about 1.9 GB stays free (plus 2 GB swap). The provider is young (0.1.x)
   and Coolify 4.3.23 needed two workarounds (LiteLLM joins Coolify's network from its compose

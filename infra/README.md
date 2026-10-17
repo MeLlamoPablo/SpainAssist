@@ -91,10 +91,15 @@ Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443 (+ ICMP)
          └─ unleash           https://flags.<domain>     Unleash: feature flags
 ```
 
-`<domain>` is `var.domain`, or `<ipv4-with-dashes>.sslip.io` while it is empty. The real
-domain, `spainassist.es` (`var.dns_domain`), is registered with Route 53 Domains, and its
-hosted zone already has an A and an AAAA record for every host above (see `dns.tf`). The apex
-and `www` point at the website, which is on Framer.
+`<domain>` is `spainassist.es` (`var.domain`). It is registered with Route 53 Domains, and its
+hosted zone has an A and an AAAA record for every host above (see `dns.tf`). The apex and `www`
+point at the website, which is on Framer.
+
+Desktop versions released before the move call the server's sslip.io name instead
+(`keys.2-31-6-160.sslip.io` and so on, which resolves to the IP without DNS). So keys, feedback,
+maps, llm and flags answer on both names (`legacy_hosts` in `hetzner.tf`,
+`./tf.sh output legacy_urls`). Keep them, and never release
+the reserved IPv4: the old names are the IP. The relay and the dashboard are on `<domain>` only.
 
 | File | What |
 | --- | --- |

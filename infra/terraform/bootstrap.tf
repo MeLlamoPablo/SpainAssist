@@ -12,7 +12,7 @@ locals {
   bootstrap_env = join("\n", [for k, v in {
     COOLIFY_VERSION  = var.coolify_version
     SA_COOLIFY_URL   = local.coolify_url
-    SA_ROOT_EMAIL    = var.coolify_root_email != "" ? var.coolify_root_email : "admin@${local.base_domain}"
+    SA_ROOT_EMAIL    = var.coolify_root_email != "" ? var.coolify_root_email : "admin@${var.domain}"
     SA_ROOT_PASSWORD = var.coolify_root_password
     SA_API_TOKEN     = var.coolify_api_token
   } : "${k}='${v}'"])

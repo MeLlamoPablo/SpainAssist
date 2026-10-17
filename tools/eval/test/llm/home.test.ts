@@ -166,7 +166,7 @@ describe('credentials home', () => {
     it('accepts https to a name, and plain http only to this machine', () => {
       for (const urls of [
         {
-          baseUrl: 'https://llm.2-31-6-160.sslip.io/v1',
+          baseUrl: 'https://llm.spainassist.es/v1',
           keyServerUrl: 'https://keys.example.test',
         },
         { baseUrl: 'http://127.0.0.1:8789/v1', keyServerUrl: 'http://localhost:8787' },

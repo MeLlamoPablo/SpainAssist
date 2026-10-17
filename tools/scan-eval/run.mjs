@@ -198,8 +198,8 @@ function readTfvars(path, names) {
 }
 
 const tfvars = DRY || MOCK ? {} : readTfvars(TFVARS, ['domain', 'key_server_admin_token']);
-// hetzner.tf: base domain = var.domain, or the server's sslip.io name when it is empty.
-const BASE_DOMAIN = tfvars.domain?.trim() || '2-31-6-160.sslip.io';
+// variables.tf: var.domain, spainassist.es unless the tfvars set it.
+const BASE_DOMAIN = tfvars.domain?.trim() || 'spainassist.es';
 const KEY_SERVER_URL = process.env.SA_KEY_SERVER_URL?.trim() || `https://keys.${BASE_DOMAIN}`;
 
 /**

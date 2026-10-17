@@ -19,7 +19,7 @@ android {
         versionCode = 4
         versionName = "0.2.1"
         // The host of pairing links (App Links): the production relay.
-        manifestPlaceholders["linkHost"] = "relay.2-31-6-160.sslip.io"
+        manifestPlaceholders["linkHost"] = "relay.spainassist.es"
     }
 
     buildFeatures { buildConfig = true }

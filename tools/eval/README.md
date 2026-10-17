@@ -325,7 +325,7 @@ of the account id.
 
 | File | What |
 | --- | --- |
-| `litellm.json` | The voucher key: `{ "baseUrl": "https://llm.2-31-6-160.sslip.io/v1", "apiKey": "sk-...", "keyServerUrl": "...", "limitUsd": 5, "expiresAt": null }` (extra keys are ignored). Written by hand; only the harness process reads it. The key goes to both URLs with every request, so the file is refused when either one is plain `http` (unless it is this machine: `localhost`, `127.0.0.0/8`, `::1`), is a bare IP address outside the loopback (unless `SA_EVAL_ALLOW_IP_GATEWAY=1`: a certificate cannot tie an address to the gateway you expect), or carries user info, a query or a fragment |
+| `litellm.json` | The voucher key: `{ "baseUrl": "https://llm.spainassist.es/v1", "apiKey": "sk-...", "keyServerUrl": "...", "limitUsd": 5, "expiresAt": null }` (extra keys are ignored). Written by hand; only the harness process reads it. The key goes to both URLs with every request, so the file is refused when either one is plain `http` (unless it is this machine: `localhost`, `127.0.0.0/8`, `::1`), is a bare IP address outside the loopback (unless `SA_EVAL_ALLOW_IP_GATEWAY=1`: a certificate cannot tie an address to the gateway you expect), or carries user info, a query or a fragment |
 | `codex.json` | The Codex login (`eval login codex`): `{ v, provider, loginAt, updatedAt, credential: { type: "oauth", access, refresh, expires, accountId } }` |
 | `ledger/spend-YYYY-MM.jsonl` | One JSON line per model request (forwarded, replayed or refused), a `reserve` line for each request on its way upstream and the `release` or the settling `forward` line that ends it, and `epoch` lines |
 | `ledger/codex-cooldown.json` | A Codex usage limit seen by any process: every meter answers locally until it resets |
@@ -359,7 +359,7 @@ await meter.close();
 
 | Provider | pi provider id | Host `model.baseUrl` | Upstream the meter forwards to |
 | --- | --- | --- | --- |
-| `voucher` | `litellm` (not `custom`: that changes the prompt, tools and caching) | `http://127.0.0.1:<port>/r/<runToken>/a/<agentKey>/v1` | `https://llm.2-31-6-160.sslip.io/v1` (from `litellm.json`) |
+| `voucher` | `litellm` (not `custom`: that changes the prompt, tools and caching) | `http://127.0.0.1:<port>/r/<runToken>/a/<agentKey>/v1` | `https://llm.spainassist.es/v1` (from `litellm.json`) |
 | `codex` | `openai-codex` | `http://127.0.0.1:<port>/r/<runToken>/a/<agentKey>/backend-api` (pi appends `/codex/responses`; no `/v1`) | `https://chatgpt.com/backend-api` |
 | `mock` | `litellm` | as `voucher` | a `tools/mock-llm` `baseUrl` |
 
