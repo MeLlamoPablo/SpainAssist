@@ -51,6 +51,8 @@ const sol: PriceEntry = {
   tiers: [{ inputTokensAbove: 272_000, input: 4, output: 15, cacheRead: 0.4, cacheWrite: 5 }],
 };
 const sol61: PriceEntry = { ...sol, cacheRead: 0.1 };
+/** InclusionAI's Ling 3.0 Flash VL on OpenRouter (no cache write charge). */
+const lingFlashVl: PriceEntry = { input: 0.06, output: 0.18, cacheRead: 0.012, cacheWrite: 0.06 };
 const astra: PriceEntry = {
   input: 10,
   output: 50,
@@ -61,7 +63,8 @@ const astra: PriceEntry = {
 
 /**
  * The models the eval runs: the voucher gateway's OpenRouter ids and the bare ids of the Codex
- * backend. Haiku 5.5 is $0.10 per million input tokens and $0.50 per million output tokens.
+ * backend, and other OpenRouter models tried on the suite. Haiku 5.5 is $0.10 per million input
+ * tokens and $0.50 per million output tokens.
  * Codex prices are what the same tokens would cost on the API: informational only, the plan is
  * metered by requests.
  */
@@ -71,6 +74,7 @@ export const DEFAULT_PRICES: PriceTable = {
   'openai/gpt-6-sol': sol,
   'openai/gpt-6.1-sol': sol61,
   'openai/gpt-6-astra': astra,
+  'inclusionai/ling-3.0-flash-vl': lingFlashVl,
   'gpt-6-luna': luna,
   'gpt-6-sol': sol,
   'gpt-6.1-sol': sol61,
