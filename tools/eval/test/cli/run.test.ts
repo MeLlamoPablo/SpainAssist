@@ -587,11 +587,11 @@ describe('eval run: output and exit code', () => {
 describe('eval run: a run that cannot start', () => {
   it('exits 2 with the refusal, and 1 for an unexpected error', async () => {
     const harness = runCli(() => {
-      throw new EvaluationRefused('The voucher key has $0.40 left, under the $1.00 floor');
+      throw new EvaluationRefused('The voucher key expired on 2026-01-01T00:00:00Z');
     });
     cli = harness.cli;
     expect(await cli.run('run', 'vida-laboral-sin-datos')).toBe(2);
-    expect(cli.err()).toContain('error: The voucher key has $0.40 left, under the $1.00 floor');
+    expect(cli.err()).toContain('error: The voucher key expired on 2026-01-01T00:00:00Z');
     expect(cli.out()).toBe('');
     cli.cleanup();
 

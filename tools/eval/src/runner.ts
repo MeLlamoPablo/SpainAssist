@@ -6,7 +6,7 @@
  *
  * It is two steps. `prepareEvaluation` decides everything that can be decided without starting a
  * process (the fixture, the run id, the checkpoint, the credential, Codex consent, the SpainBench
- * target, the voucher's balance against its floor) and refuses with `EvaluationRefused` (or the
+ * target, the voucher's expiry) and refuses with `EvaluationRefused` (or the
  * typed error of the part that knows: `UnknownFixtureError`, `EvalHomeError`, `CodexConsentError`,
  * `BenchTargetError`, `CheckpointError`) before anything exists. `runEvaluation` then starts what
  * the run needs and stops everything it started, whatever happens: the bench server it launched,
@@ -50,7 +50,6 @@ import {
 import { ensureLoopbackNoProxy } from './net/proxy-env';
 import { type CheckpointRef, type RunOutcome, readCheckpoint, runFixture } from './run';
 import { createEvalApp } from './run/app';
-import { VOUCHER_FLOOR_USD } from './run/caps';
 import { assertValidRunId, defaultRunsRoot, generateRunId } from './run/results';
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api';
@@ -69,7 +68,7 @@ export interface EvaluationRequest {
   allowFixtureChange?: boolean;
   limits?: Partial<RunLimits>;
   models?: Partial<EvalModelChoice>;
-  /** Overrides of the meter's caps (the reserve for the voucher is `VOUCHER_FLOOR_USD`). */
+  /** Overrides of the meter's caps. */
   meterLimits?: MeterLimitsInput;
   captureBrowser?: boolean;
   keepWorld?: boolean;
@@ -111,8 +110,6 @@ export interface EvaluationRequest {
   shutdownTimeoutMs?: number;
   /** Progress lines for a terminal (nothing is printed by default). */
   log?: (line: string) => void;
-  /** Real voucher calls need at least this much left on the key (default `VOUCHER_FLOOR_USD`). */
-  voucherFloorUsd?: number;
   /**
    * Where the browser of the agents is (default: Playwright's cache, `cachedChromium`). A run
    * without one is refused before anything starts: it would have the agents fail at the first
@@ -149,14 +146,6 @@ export function defaultModels(
   };
 }
 
-const dollars = (value: number) => `$${value.toFixed(2)}`;
-
-/** The refusal for a voucher key with less left than the floor, or undefined when it has enough. */
-export function floorRefusal(remainingUsd: number, floorUsd: number): string | undefined {
-  if (remainingUsd >= floorUsd) return undefined;
-  return `The voucher key has ${dollars(remainingUsd)} left, under the ${dollars(floorUsd)} floor: real calls are stopped (replay a recorded run with --cache replay, or use another provider)`;
-}
-
 /** The refusal for a voucher key whose expiry date has passed, or undefined. */
 export function expiryRefusal(
   expiresAt: string | null | undefined,
@@ -186,7 +175,6 @@ export interface PreparedEvaluation {
   /** The voucher key's balance at the start, when the key server answered. */
   keyRemainingUsd?: number;
   voucherBaseUrl?: string;
-  voucherFloorUsd: number;
   /** The `local` provider's server (`EvaluationRequest.localBaseUrl`, checked). */
   localBaseUrl?: string;
   /** `EvaluationRequest.answererProvider` and its credential. */
@@ -259,7 +247,6 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
       }
     : undefined;
 
-  const voucherFloorUsd = request.voucherFloorUsd ?? VOUCHER_FLOOR_USD;
   let keyRemainingUsd: number | undefined;
   let voucherBaseUrl: string | undefined;
   if ((provider === 'voucher' || answerer?.provider === 'voucher') && cache !== 'replay') {
@@ -277,8 +264,6 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
       // The key server knows the expiry even when `litellm.json` does not record it.
       const lapsed = expiryRefusal(status.voucher.expiresAt);
       if (lapsed) throw new EvaluationRefused(lapsed);
-      const refusal = floorRefusal(status.voucher.remainingUsd, voucherFloorUsd);
-      if (refusal) throw new EvaluationRefused(refusal);
     }
   }
 
@@ -294,7 +279,6 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
     target,
     ...(keyRemainingUsd !== undefined ? { keyRemainingUsd } : {}),
     ...(voucherBaseUrl !== undefined ? { voucherBaseUrl } : {}),
-    voucherFloorUsd,
     ...(localBaseUrl !== undefined ? { localBaseUrl } : {}),
     ...(answerer ? { answerer } : {}),
   };
@@ -460,12 +444,7 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
             ),
           }
         : {}),
-      limits: {
-        ...(provider === 'voucher' || plan.answerer?.provider === 'voucher'
-          ? { reserveUsd: plan.voucherFloorUsd }
-          : {}),
-        ...request.meterLimits,
-      },
+      limits: { ...request.meterLimits },
       ...(plan.keyRemainingUsd !== undefined ? { keyRemainingUsd: plan.keyRemainingUsd } : {}),
       ...(request.codexConsent !== undefined ? { codexConsent: request.codexConsent } : {}),
       env: plan.env,

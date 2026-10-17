@@ -455,10 +455,10 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
     const remaining = keyRemaining();
     if (remaining !== undefined) {
       const inFlight = ledger.pendingUsd({ sinceMs: nowMs - IN_FLIGHT_MS }) - ownUsd;
-      if (remaining - inFlight - reserveUsd < limits.reserveUsd) {
+      if (remaining - inFlight - reserveUsd < 0) {
         return refuse(
-          'key_reserve',
-          `the key has about ${formatUsd(Math.max(0, remaining - inFlight))} left and ${formatUsd(limits.reserveUsd)} is kept in reserve`,
+          'key_balance',
+          `the key has about ${formatUsd(Math.max(0, remaining - inFlight))} left`,
         );
       }
     }

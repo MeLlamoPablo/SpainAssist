@@ -300,7 +300,7 @@ describe('meter: Codex (ChatGPT plan)', () => {
         });
       }
       // Dollar limits that would stop any voucher run mean nothing for a plan.
-      const run = env.openRun({ limits: { perRunUsd: 0, dailyUsd: 0, reserveUsd: 1000 } });
+      const run = env.openRun({ limits: { perRunUsd: 0, dailyUsd: 0 } });
       for (let i = 0; i < 3; i++) {
         const res = await codexPost(run, 'p', responsesBody(`request ${i}`));
         expect(res.status).toBe(200);

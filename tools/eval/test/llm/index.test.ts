@@ -21,6 +21,5 @@ describe('public API of src/llm', () => {
     expect(llm.CODEX_CONSENT_FLAG).toBe('--codex-consent');
     expect(llm.ANSWERER_AGENT_KEY).toBe('answerer');
     expect(llm.DEFAULT_ANSWERER_MODEL).toBe('anthropic/claude-haiku-5.5');
-    expect(llm.DEFAULT_LIMITS.reserveUsd).toBe(1);
   });
 });

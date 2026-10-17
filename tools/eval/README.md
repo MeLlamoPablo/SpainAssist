@@ -388,19 +388,18 @@ pre-flight caps and a reservation in the ledger → forward → settle (cost, le
   are the requests answered from a recording and `looseHits` (optional: absent in older results) those of them that
   were not an exact replay (below).
 - **Caps** (`MeterLimits`, defaults in `DEFAULT_LIMITS`; `src/llm/limits.ts` says in what order they are checked):
-  reserve of the key's balance ($1.00: `VOUCHER_FLOOR_USD` is this number, and a run does not even start when the key
-  server says the key has less), per run ($0.50, 250 requests), per agent ($0.35, 200 requests; the answerer $0.05),
+  the key's balance (a request whose worst case the key cannot pay), per run ($0.50, 250 requests), per agent ($0.35, 200 requests; the answerer $0.05),
   per day ($1.00, UTC, all runs and processes), optional lifetime ceiling, largest request (400k input tokens). What a
   run really gets over those defaults is `src/run/caps.ts`: the per-run dollar cap is the fixture's `maxCostUsd`
   (`--max-cost`; `openRun`'s `limits`), and the shipped fixtures' own limits (150 requests, $0.30) are below the
   per-agent and per-run caps, so the fixture's limit fires first. `eval budget` prints these numbers. A request is
   refused by the first cap it reaches; the `cap` event says which (`CapReason`: `requests_cap` is the run's,
   `agent_requests_cap` the agent's, `run_budget` and `agent_budget` the dollars of the run and of the agent,
-  `key_reserve`, `daily`, `lifetime`, `input_too_large`, `codex_cooldown`, `stopped`;
+  `key_balance`, `daily`, `lifetime`, `input_too_large`, `codex_cooldown`, `stopped`;
   the event carries the agent, `answerer` included). **Whose doing a cap is** decides what the run does
   (`src/run/infra.ts`, `classifyCap`): the per-run and per-agent request and dollar caps (`run_budget`,
   `requests_cap`, `agent_requests_cap`, `agent_budget`, `input_too_large`) stop an agent that loops or
-  bloats its context, so the run ends `limit:cost` or `limit:requests` and the rules judge it; the key's reserve, the
+  bloats its context, so the run ends `limit:cost` or `limit:requests` and the rules judge it; the key's balance, the
   daily and lifetime caps, the kill switch and a Codex usage limit are the harness's budget (`limit:budget`, no
   score); the answerer's own caps are the harness's too. Each request first **reserves** its worst case (estimated
   input at the dearest price plus the full `max_tokens` output), so parallel agents cannot overshoot. The key's
@@ -412,7 +411,7 @@ pre-flight caps and a reservation in the ledger → forward → settle (cost, le
 - **Reservations** are in the ledger, not only in memory: before a request is sent the meter appends a `reserve` line
   (its request id and worst case), and the `forward` line that settles it carries the same `rid` (a request refused
   after all, or that ends with no line of its own, gets a `release` line). Until then the worst case counts as spent
-  for **every process** that reads the ledger: the day, the lifetime ceiling, the key's reserve and the Codex request
+  for **every process** that reads the ledger: the day, the lifetime ceiling, the key's balance and the Codex request
   windows. So several evals at once cannot all spend the same headroom (the meter checks again after writing its own
   reservation: two processes racing for the last room may both be refused, never both admitted), a Codex request counts
   from the moment it starts, and a process killed mid-request leaves a conservative charge (its worst case, until
@@ -607,7 +606,7 @@ contains a registered secret is refused before the call.
 (`GET /v1/vouchers/credit`), ledger totals by day, run, agent and model (replays with how many were loose, and the
 requests that are reserved and not settled yet), the caps in force, the Codex login (no tokens), usage-limit pause and
 the kill switch. `eval budget` passes the limits a run really gets (`shippedMeterLimits` in `src/run/caps.ts`: the
-$1.00 reserve and the fixtures' per-run cap, not `DEFAULT_LIMITS`') and adds `describeRunLimits`: the fixtures'
+fixtures' per-run cap, not `DEFAULT_LIMITS`') and adds `describeRunLimits`: the fixtures'
 limits and which endings are the agent's and which the harness's.
 
 ### Tests
@@ -1146,7 +1145,7 @@ console.log(outcome.summary);                        // one line; outcome.result
 | `simulator.ts` | `createUserSimulator`: the simulated user (answer groups, answerer, unexpected prompts) |
 | `checkpoint.ts` | `writeCheckpoint`, `readCheckpoint`, `parseCheckpointRef`, `listCheckpoints`: manifest (zod), staging a restore |
 | `infra.ts` | Whose fault a stop is: `classifyAgentFailure` (the model gateway, a crashed host, Chromium: the infrastructure's), `classifyCap` (the meter's caps: the agent's or the harness's), `browserLaunchFailure` |
-| `caps.ts` | The caps a run really gets (`VOUCHER_FLOOR_USD`, the fixtures' per-run cap) and the text `eval budget` adds |
+| `caps.ts` | The caps a run really gets (the fixtures' per-run cap) and the text `eval budget` adds |
 | `results.ts` | Run ids, folder layout, `run.json` / `result.json` / `report.md`, `reportRun` (`eval report`), `summarizeResult`, `renderSummaryTable` |
 | `secrets.ts` | `RunSecrets`: the run's secret list and the mask every file goes through |
 | `observation-log.ts` | `ObservationLog`: the one sequencer (`events.jsonl`) |
@@ -1205,7 +1204,7 @@ scored; the infrastructure failing is never read as the agent failing, and the h
 | `decided` | every positive required rule matched, every scored rule and precondition is decided, and the fixture has no negated required rule left to fail | by the rules | Judges, aborts the app. **None of the three vida laboral fixtures can end this way** (each has negated required rules, so only quiescence, `settle-timeout` or a limit ends them); it serves fixtures without one |
 | `settle-timeout` | every positive required rule matched but the agents were still busy after `settleTimeoutMs` (120 s) | by the rules, **cut short** (below) | Judges what happened, aborts the app |
 | `limit:wall-clock`, `limit:tool-calls`, `limit:prompts`, `limit:cost`, `limit:requests` | `RunLimits` exceeded (`wallClockMs`; `app.counters()` strictly over `maxToolCalls` / `maxPrompts`; the meter's `usage` events over `maxCostUsd` or `maxRequests` model requests), or a meter cap that is the agent's doing: `run_budget` (that cost limit), `requests_cap`, `agent_requests_cap`, `agent_budget`, `input_too_large` | by the rules (a job done before the limit still counts), **cut short** (below) | Aborts the app, judges what happened: a looping agent that never did the job fails its required rules |
-| `limit:budget` | a meter cap that is the harness's (kill switch, key reserve, daily or lifetime ceiling, a Codex usage-limit cooldown, or any cap of the answerer), a `gateway_limit`, an agent's turn that failed with `quota`, or the answerer refused for budget | `aborted`, no score (the harness ran out of money, not the agent) | As above; the note names the cause |
+| `limit:budget` | a meter cap that is the harness's (kill switch, key's balance, daily or lifetime ceiling, a Codex usage-limit cooldown, or any cap of the answerer), a `gateway_limit`, an agent's turn that failed with `quota`, or the answerer refused for budget | `aborted`, no score (the harness ran out of money, not the agent) | As above; the note names the cause |
 | `replay-miss` | the replay cache had no recording (`replay_miss`, from an agent or the answerer) | `aborted`, no score | As above; the note carries the meter's description of the divergence |
 | `unexpected-prompt` | the fixture's `fail` policy met a prompt no answer covers, or a `freeform` answer met a prompt that is not a form | `aborted`, no score | Leaves the prompt unanswered, aborts |
 | `abort` | `options.signal` aborted (even before the start, or while the app was still starting) | `aborted`, no score | |
@@ -1633,7 +1632,7 @@ make a free scripted run a paid one.
 | --- | --- |
 | 0 | It worked. For `run`: the run produced a result (`completed`, `failed_required`, `inconclusive`), including a run that ended by one of its own `RunLimits` (it has a verdict). **A `failed_required` run, an exfiltration included, exits 0**, and so does an `inconclusive` one: the exit code says the run produced a result, `--min-score` is the bar for CI (the CLI says so on stderr and in `--help`) |
 | 1 | An error. For `run`: `error` (the model gateway, an agent host, Chromium or SpainBench failing is one: never a failed run) or `aborted` (Ctrl-C, or the harness ran out of budget or of recorded model calls: `limit:budget`, `replay-miss`: no score), a score below `--min-score`, a run cut short that `--min-score` cannot trust, or an unexpected exception (`SA_EVAL_DEBUG=1` adds its stack). For `suite`: any of that in any run, or a mean below `--min-score`. For `doctor`: a check that a mock run needs failed. `whoami`: a credential file is unusable |
-| 2 | A usage error, or the command refused to start: unknown command, option or fixture, a bad number, an empty option value, no SpainBench configured or reachable, a SpainBench that cannot start or speaks another scoring API, no Chromium in Playwright's cache, no voucher key or one that expired, a voucher under its floor, Codex without consent or without a login, an unusable checkpoint (or one of a fixture that changed) or run id. Nothing was started (a refusal after SpainBench was launched, such as a fixture it cannot run, still stops it) |
+| 2 | A usage error, or the command refused to start: unknown command, option or fixture, a bad number, an empty option value, no SpainBench configured or reachable, a SpainBench that cannot start or speaks another scoring API, no Chromium in Playwright's cache, no voucher key or one that expired, Codex without consent or without a login, an unusable checkpoint (or one of a fixture that changed) or run id. Nothing was started (a refusal after SpainBench was launched, such as a fixture it cannot run, still stops it) |
 
 pnpm's `--filter` form (`corepack pnpm eval` from the repo root, `corepack pnpm --filter @sa/eval eval`) is a recursive run
 and reports any failing script as exit 1 (`ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL`), so 2 shows up as 1. Where the difference
@@ -1710,8 +1709,8 @@ when it is valid.
    (`CodexConsentError`) and a stored Codex login (`CodexAuthError`); the SpainBench target (`BenchTargetError`, or
    `EvaluationRefused` when none is configured); the agents' Chromium in Playwright's cache (`EvaluationRefused`; the
    request's `chromiumPath` is the seam, default `cachedChromium`); and for a voucher run that really calls the model (not `--cache replay`): an
-   expired key (`expiryRefusal`) and a balance under the floor (`floorRefusal`, `VOUCHER_FLOOR_USD` = $1, from
-   `budgetStatus`; a key server that cannot be reached is not a refusal: the meter learns the balance from the gateway). It
+   expired key (`expiryRefusal`, also from `budgetStatus`; a key server that cannot be reached is not a refusal: the meter
+   learns the balance from the gateway). It
    returns a `PreparedEvaluation`: the fixture, provider, cache (`defaultCache`), the credentials home (`evalHome` of the
    request's `env`: `SPAINBENCH_DATA_DIR` or the OS's data folder), the resolved runs root, the run id, the credential source, the target and the balance.
 2. **`runEvaluation`** opens SpainBench (a launched server's log goes to `_bench`, and it is started with `keepOnSignal` when
@@ -1721,7 +1720,7 @@ when it is valid.
    folder (`settleBenchLog`; `findBenchLog` says where it is).
 
 `EvaluationRequest` also takes `cwd` (the base of a relative `SPAINBENCH_DIR` and `runsRoot`), `keyServerFetch` (tests: a fake
-key server), `offlineBudget`, `voucherFloorUsd`, `meterLimits` and `log` (progress lines). Models: `defaultModels` gives the
+key server), `offlineBudget`, `meterLimits` and `log` (progress lines). Models: `defaultModels` gives the
 answerer the provider's cheap model; the assistant and procedure models stay the product's unless overridden.
 
 ### Files
@@ -1753,7 +1752,7 @@ stdout and stderr, a fake clock, fake signals and `exit`, run folders written wi
 | `doctor` | Every check in its ok, warn, FAIL and skip forms with a fake SpainBench object; no secret in the output |
 | `process` | `node --import tsx src/cli.ts` as a process: `--help`, `list`, usage errors and refusals with their exit codes, the package script |
 | `real-run` | With `SPAINBENCH_DIR`: a real `run` of `vida-laboral-sin-datos` with a refusing mock model (exit 0, `failed_required`, a complete folder with `logs/bench-server.log`, nothing left running), `--json`, `--min-score`, a fixture the server cannot run, `list` and `doctor` against the server, and a real run interrupted with SIGINT to its process group and to the process (exit 1, `aborted`, the bench state saved, the port closed), also with Chromium up (a scripted model that opens a page and waits: `helpers/slow-run.ts` with `SA_EVAL_TEST_SLOW=browser`; with Playwright's own handlers on the CLI exited 130 with no result), and a second Ctrl-C with the browser up |
-| `../runner.test.ts` | The small decisions (`defaultCache`, `defaultModels`, `floorRefusal`, `expiryRefusal`) and every refusal of `prepareEvaluation` without starting anything (a fake key server through `keyServerFetch`), the log move |
+| `../runner.test.ts` | The small decisions (`defaultCache`, `defaultModels`, `expiryRefusal`) and every refusal of `prepareEvaluation` without starting anything (a fake key server through `keyServerFetch`), the log move |
 
 ```sh
 corepack pnpm --filter @sa/eval test test/cli test/runner

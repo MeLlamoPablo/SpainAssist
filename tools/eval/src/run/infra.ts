@@ -71,7 +71,7 @@ export function classifyCap(reason: CapReason, agent: string): CapEnding {
     case 'stopped':
     case 'lifetime':
     case 'daily':
-    case 'key_reserve':
+    case 'key_balance':
     case 'codex_cooldown':
       return 'limit:budget';
   }

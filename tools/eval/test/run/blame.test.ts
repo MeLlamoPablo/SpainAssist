@@ -235,7 +235,7 @@ describe("the caps of a run and of an agent are the agent's doing", () => {
     ['stopped', 'assistant'],
     ['lifetime', 'assistant'],
     ['daily', 'procedure-p_1'],
-    ['key_reserve', 'assistant'],
+    ['key_balance', 'assistant'],
     ['codex_cooldown', 'assistant'],
   ] as const)('%s of %s is the harness budget: aborted, no score', async (reason, agent) => {
     env = createEnv();
@@ -261,7 +261,7 @@ describe("the caps of a run and of an agent are the agent's doing", () => {
       'input_too_large',
       'lifetime',
       'daily',
-      'key_reserve',
+      'key_balance',
       'run_budget',
       'agent_budget',
       'codex_cooldown',

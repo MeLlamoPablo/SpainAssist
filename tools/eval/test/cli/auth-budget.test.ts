@@ -317,16 +317,16 @@ describe('eval budget', () => {
     expect(out).toMatch(
       /Caps \(voucher runs\)\n {2}per run 250 requests and the cost limit of its fixture/,
     );
-    expect(out).toContain("reserve $1.00 of the key's balance");
+    expect(out).toContain('and what the key has left');
     expect(out).toMatch(
       /Limits of a run[^\n]*\n {2}150 model requests and \$0\.30 per run, 400 tool calls, 12 prompts, 20 minutes/,
     );
     expect(out).toMatch(
-      /Budget of the harness[^\n]*\n {2}the key reserve, the daily and lifetime caps/,
+      /Budget of the harness[^\n]*\n {2}the key's balance, the daily and lifetime caps/,
     );
     expect(out).toMatch(/Codex \(ChatGPT plan, no eval cap\)\n {2}not logged in/);
     noSecrets(out);
-    expect(server.options).toEqual([{ home: cli.home, limits: { reserveUsd: 1, perRunUsd: 0.3 } }]);
+    expect(server.options).toEqual([{ home: cli.home, limits: { perRunUsd: 0.3 } }]);
     expect(server.calls).toEqual([
       { url: 'http://127.0.0.1:1/v1/vouchers/credit', authorization: `Bearer ${TEST_VOUCHER_KEY}` },
     ]);
@@ -339,9 +339,7 @@ describe('eval budget', () => {
     expect(await cli.run('budget', '--offline')).toBe(0);
     expect(cli.out()).toMatch(/balance unavailable: offline: the key server was not asked/);
     expect(server.calls).toHaveLength(0);
-    expect(server.options).toEqual([
-      { home: cli.home, limits: { reserveUsd: 1, perRunUsd: 0.3 }, offline: true },
-    ]);
+    expect(server.options).toEqual([{ home: cli.home, limits: { perRunUsd: 0.3 }, offline: true }]);
   });
 
   it('says the voucher is not configured when there is no key file, and still shows the rest', async () => {

@@ -14,7 +14,6 @@ describe('meter limits', () => {
   it('has conservative defaults', () => {
     expect(resolveLimits()).toEqual(DEFAULT_LIMITS);
     expect(DEFAULT_LIMITS).toMatchObject({
-      reserveUsd: 1,
       perRunUsd: 0.5,
       perRunRequests: 250,
       perAgentUsd: 0.35,

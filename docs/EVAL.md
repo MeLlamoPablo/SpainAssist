@@ -173,7 +173,7 @@ model gateway, or nothing; what each guard covers is below.
   Responses): any other path is refused with a 403. Every request is on the ledger's books from the
   moment it is sent (a `reserve` line with its worst-case cost, settled by its own line), so parallel
   evals cannot spend the same headroom and a killed process leaves a conservative charge. The caps a
-  voucher run enforces: the key keeps $1 (the floor under which a run does not start either), $1 a day
+  voucher run enforces: no request the key's balance cannot pay, $1 a day
   for everything, $0.35 and 200 requests per agent ($0.05 for the answerer), 250 requests per run and
   the fixture's own cost limit (`maxCostUsd`, `--max-cost`; $1.50, above the day's cap, so the day and
   the agents' caps bind first). `eval budget` prints them.
@@ -218,11 +218,11 @@ model gateway, or nothing; what each guard covers is below.
   backend, so Codex runs never spend plan usage on hosted web search.
 - The answerer is a cheap model (default `anthropic/claude-haiku-5.5`, low reasoning), tweakable per
   run, called through the same meter.
-- **Caps, and whose they are.** What a voucher run gets: the key keeps $1 (`VOUCHER_FLOOR_USD`), a day may
+- **Caps, and whose they are.** What a voucher run gets: no request the key cannot pay, a day may
   spend $1, an agent $0.35 and 200 requests, a run 250 requests, the answerer $0.05, and the fixtures'
   own limits are $0.30 and 150 requests per run (`eval budget` prints them). The per-run and per-agent
   request and dollar caps stop an agent that loops or bloats its context, so they are the agent's doing
-  and are scored (`limit:requests`, `limit:cost`); the key's reserve, the daily and lifetime caps, the
+  and are scored (`limit:requests`, `limit:cost`); the key's balance, the daily and lifetime caps, the
   kill switch and the gateway's limits are the harness's budget (`limit:budget`, no score).
 
 ## Run loop
@@ -260,7 +260,7 @@ model gateway, or nothing; what each guard covers is below.
    doing a stop is decides what it means**: the agent's own limits (`RunLimits`: wall clock, tool calls,
    model requests, cost, prompts, and the meter's per-run and per-agent request and dollar caps, which a
    looping or bloated agent trips) end a run as `limit:<which>` and the rules judge what happened; the
-   harness's own budget (the key's reserve, the daily and lifetime caps, the kill switch, the gateway,
+   harness's own budget (the key's balance, the daily and lifetime caps, the kill switch, the gateway,
    the replay cache) ends it as `limit:budget` / `replay-miss` with no score; the infrastructure
    failing (the model gateway after pi's retries, an agent host that crashed, Chromium that cannot start,
    SpainBench that stopped answering) ends it as `error`, with no score and never as a quiet run that
@@ -447,7 +447,7 @@ runs' folders.
 | --- | --- |
 | 0 | The command worked; for `run`, the run produced a result (`completed`, `failed_required`, `inconclusive`). **A `failed_required` run, an exfiltration included, exits 0**, and so does an `inconclusive` one: CI sets the bar with `--min-score` (the CLI says so on stderr and in `--help`) |
 | 1 | An error; for `run`, `error` (the model gateway, a host, Chromium or SpainBench failing is one) or `aborted` (Ctrl-C, or the harness's own budget or the replay cache ran out: no score), a score below `--min-score` (for CI; a run without a score, or cut short before its negated rules could be judged, does not meet it), for `suite` any of that in any run or a mean below `--min-score`; for `doctor`, a check a mock run needs failed |
-| 2 | A usage error (an empty option value too), or the command refused to start: unknown fixture, no SpainBench, no Chromium, no credential, a voucher key under its $1 floor or expired, Codex without consent, an unusable checkpoint (or one of a fixture that changed). Nothing was started |
+| 2 | A usage error (an empty option value too), or the command refused to start: unknown fixture, no SpainBench, no Chromium, no credential, an expired voucher key, Codex without consent, an unusable checkpoint (or one of a fixture that changed). Nothing was started |
 
 pnpm's `--filter` form reports any failing script as exit 1; `corepack pnpm -C tools/eval eval ...` (or running from
 `tools/eval`, or `node --import tsx src/cli.ts`) passes the real code through.

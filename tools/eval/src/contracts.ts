@@ -226,8 +226,6 @@ export interface ResearchAnswer {
 export type CacheMode = 'off' | 'record' | 'replay' | 'auto';
 
 export interface MeterBudget {
-  /** Stop all real calls when the key's remaining budget (USD) would fall below this. */
-  reserveUsd: number;
   /** Per-run cap in USD (voucher) or `maxRequests` (codex). */
   perRunUsd: number;
   perRunRequests?: number;

@@ -170,7 +170,7 @@ const EXIT_NOTES =
   '(the model gateway, a host or SpainBench failing is an error, never a failed run), aborted ' +
   '(Ctrl-C, or no score because the harness ran out of budget: limit:budget, replay-miss), or ' +
   'below --min-score; 2 usage error or refused to start (unknown fixture, no SpainBench, no ' +
-  'Chromium, no credential, voucher under its floor, Codex without consent, an unusable ' +
+  'Chromium, no credential, an expired voucher, Codex without consent, an unusable ' +
   'checkpoint, an empty option value).';
 
 export const RUN_SPEC: CommandSpec = {

@@ -207,63 +207,62 @@ describe('meter budget', () => {
     expect((await call(run, 'procedure-9', 'after')).status).toBe(200);
   });
 
-  it('shares in-flight reservations across runs for the key reserve', async () => {
+  it("shares in-flight reservations across runs for the key's balance", async () => {
     env = await startEnv({
       mock: { scenario: { rules: [], fallback: { text: 'ok', delayMs: 150 } }, litellm: {} },
-      meter: { keyRemainingUsd: 0.2551, limits: { reserveUsd: 0.25 } },
+      meter: { keyRemainingUsd: 0.0051 },
     });
     const a = env.openRun();
     const b = env.openRun();
-    // 0.2551 - 0.0041 leaves 0.251 for the first; the second reservation would go below the reserve.
+    // 0.0051 - 0.0041 leaves 0.001 for the first; the second reservation would go below zero.
     const [ra, rb] = await Promise.all([call(a), call(b)]);
     expect([ra.status, rb.status].sort()).toEqual([200, 402]);
     await Promise.all([ra.text(), rb.text()]);
   });
 
-  describe("the key's balance and the reserve", () => {
-    it('keeps the reserve: refuses when the key would fall below it', async () => {
+  describe("the key's balance", () => {
+    it('refuses a request the key could not pay', async () => {
       env = await startEnv({
         mock: costing(0.01),
-        meter: { keyRemainingUsd: 0.26, limits: { reserveUsd: 0.25 } },
+        meter: { keyRemainingUsd: 0.011 },
       });
       const run = env.openRun();
       const first = await call(run);
       expect(first.status).toBe(200);
       await first.text();
-      expect(env.meter.keyRemainingUsd()).toBeCloseTo(0.25, 12);
+      expect(env.meter.keyRemainingUsd()).toBeCloseTo(0.001, 12);
       const second = await refusal(await call(run, 'procedure-1', 'again'));
-      expect(second).toMatchObject({ status: 402, reason: 'key_reserve' });
+      expect(second).toMatchObject({ status: 402, reason: 'key_balance' });
       expect(second.message).toContain('out of budget');
-      expect(second.message).toContain('$0.2500 left');
+      expect(second.message).toContain('$0.0010 left');
       expect(env.llm.requests()).toHaveLength(1);
     });
 
     it('learns the balance from the gateway headers, which only ever lower it', async () => {
       env = await startEnv({
-        mock: { ...costing(0.001), litellm: { maxBudgetUsd: 1, spendUsd: 0.8 } },
+        mock: { ...costing(0.001), litellm: { maxBudgetUsd: 1, spendUsd: 0.998 } },
       });
       const run = env.openRun();
       expect(env.meter.keyRemainingUsd()).toBeUndefined();
       await (await call(run)).text();
-      // The key had 1 - 0.8 = 0.2 before this call and the call cost 0.001 more: below the
-      // default reserve, so no further real call.
-      expect(env.meter.keyRemainingUsd()).toBeCloseTo(0.199, 12);
+      // The key had 1 - 0.998 = 0.002 before this call and the call cost 0.001 more: too little
+      // for the worst case of another request, so no further real call.
+      expect(env.meter.keyRemainingUsd()).toBeCloseTo(0.001, 12);
       const r = await refusal(await call(run, 'procedure-1', 'again'));
-      expect(r.reason).toBe('key_reserve');
+      expect(r.reason).toBe('key_balance');
       env.llm.litellm?.set({ spendUsd: 0.5 });
       expect(await refusal(await call(run, 'procedure-1', 'again 2'))).toMatchObject({
-        reason: 'key_reserve',
+        reason: 'key_balance',
       });
       // The estimate only ever goes down: a header that claims more is left (the gateway's spend is
       // one call behind) is not believed, and no real call was sent.
-      expect(env.meter.keyRemainingUsd()).toBeCloseTo(0.199, 12);
+      expect(env.meter.keyRemainingUsd()).toBeCloseTo(0.001, 12);
       expect(env.llm.requests()).toHaveLength(1);
     });
 
     it('adopts a lower balance than its own accounting (another machine spending)', async () => {
       env = await startEnv({
         mock: { ...costing(0.001), litellm: { maxBudgetUsd: 1, spendUsd: 0.5 } },
-        meter: { limits: { reserveUsd: 0.01 } },
       });
       const run = env.openRun();
       await (await call(run)).text();
@@ -364,16 +363,15 @@ describe('meter budget', () => {
       }
     });
 
-    it('does not let several processes take the key below its reserve', async () => {
+    it('does not let several processes take the key below zero', async () => {
       env = await startEnv({
         mock: slow,
-        meter: { keyRemainingUsd: 0.2551, limits: { reserveUsd: 0.25 } },
+        meter: { keyRemainingUsd: 0.0051 },
       });
       const other = await createMeter({
         home: env.t.home,
         upstreams: { voucher: `${env.llm.url}/v1` },
-        keyRemainingUsd: 0.2551,
-        limits: { reserveUsd: 0.25 },
+        keyRemainingUsd: 0.0051,
       });
       try {
         const [a, b] = await Promise.all([
@@ -536,10 +534,8 @@ describe('meter budget', () => {
 
   describe("the gateway's own budget", () => {
     it("passes LiteLLM's 422 through verbatim, flags it in the ledger and emits an event", async () => {
-      // No reserve of its own: the gateway's refusal is what this test is about, not the meter's.
       env = await startEnv({
         mock: { ...costing(0.01), litellm: { maxBudgetUsd: 1 } },
-        meter: { limits: { reserveUsd: 0 } },
       });
       const run = env.openRun();
       const events: MeterEvent[] = [];

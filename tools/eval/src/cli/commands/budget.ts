@@ -9,7 +9,7 @@ import { BUDGET_SPEC } from '../specs';
 
 export async function budgetCommand(args: readonly string[], deps: CliDeps): Promise<number> {
   const parsed = parseCommandArgs(BUDGET_SPEC, args, { min: 0, max: 0, names: '' });
-  // The caps a run really gets: the meter's defaults with the reserve and per-run cap of a run.
+  // The caps a run really gets: the meter's defaults with the per-run cap of a run.
   const status = await deps.budgetStatus({
     home: evalHome(deps.env),
     limits: shippedMeterLimits(),

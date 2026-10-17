@@ -12,7 +12,7 @@ const EXIT_CODES_HELP = [
   '   aborted, no score because the harness ran out of budget, Ctrl-C, or below --min-score;',
   '   for "doctor": a check a mock run needs failed',
   '2  usage error (an empty option value too), or the command refused to start (unknown',
-  '   fixture, no SpainBench, no Chromium, no credential, voucher under its floor, Codex',
+  '   fixture, no SpainBench, no Chromium, no credential, an expired voucher, Codex',
   '   without consent)',
 ];
 

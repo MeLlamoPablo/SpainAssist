@@ -118,8 +118,7 @@ describe('budgetStatus', () => {
     });
     expect(status.ledger.sinceEpochUsd).toBeCloseTo(0.0123, 12);
     expect(status.ledger.byDay).toEqual({ '2026-10-17': 0.0123 });
-    // The reserve is the floor a run enforces (VOUCHER_FLOOR_USD), not a smaller number.
-    expect(status.limits).toMatchObject({ perRunUsd: 0.2, reserveUsd: 1, dailyUsd: 1 });
+    expect(status.limits).toMatchObject({ perRunUsd: 0.2, dailyUsd: 1 });
     const text = formatBudgetStatus(status);
     expect(text).toContain('balance $5.00 left');
     expect(text).toContain('since the last epoch $0.0123');
@@ -131,7 +130,7 @@ describe('budgetStatus', () => {
     );
     expect(text).toContain('per agent $0.3500 and 200 requests (answerer $0.0500)');
     expect(text).toContain(
-      "per day $1.00 (UTC, all runs and processes); reserve $1.00 of the key's balance, also the floor under which a run does not start",
+      'per day $1.00 (UTC, all runs and processes); and what the key has left',
     );
     expect(text).toContain('last gateway headers: spend $0.5000 of $5.00');
     expect(text).not.toContain(TEST_VOUCHER_KEY);

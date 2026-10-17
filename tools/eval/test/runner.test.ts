@@ -20,7 +20,6 @@ import { CodexAuthError, CodexConsentError } from '../src/llm/codex-auth';
 import { PLACEHOLDER_API_KEY } from '../src/llm/credentials';
 import { EvalHomeError } from '../src/llm/home';
 import { CheckpointError } from '../src/run';
-import { VOUCHER_FLOOR_USD } from '../src/run/caps';
 import {
   defaultCache,
   defaultModels,
@@ -28,7 +27,6 @@ import {
   type EvaluationRequest,
   expiryRefusal,
   findBenchLog,
-  floorRefusal,
   NO_BENCH_MESSAGE,
   pendingBenchLog,
   prepareEvaluation,
@@ -130,17 +128,6 @@ describe('small decisions', () => {
       answererModel: 'u',
       answererThinking: 'low',
     });
-  });
-
-  it('refuses real calls under the voucher floor, in a message that says what to do', () => {
-    expect(VOUCHER_FLOOR_USD).toBe(1);
-    expect(floorRefusal(0.4, 1)).toBe(
-      'The voucher key has $0.40 left, under the $1.00 floor: real calls are stopped (replay a recorded run with --cache replay, or use another provider)',
-    );
-    expect(floorRefusal(0.999, 1)).toMatch(/\$1\.00 left, under the \$1\.00 floor/);
-    expect(floorRefusal(1, 1)).toBeUndefined();
-    expect(floorRefusal(3.2, 1)).toBeUndefined();
-    expect(floorRefusal(0.1, 0.05)).toBeUndefined();
   });
 
   it('refuses a voucher key whose expiry date has passed', () => {
@@ -279,21 +266,6 @@ describe('prepareEvaluation refuses before anything starts', () => {
     none();
   });
 
-  it('a voucher key with less than the floor left, as the key server says', async () => {
-    writeLitellmFile(home.home, { keyServerUrl: 'http://127.0.0.1:1' });
-    const server = keyServer({ limitUsd: 5, spendUsd: 4.6, maxBudgetUsd: 5 });
-    await expect(
-      prepareEvaluation(
-        request({ provider: 'voucher', scenario: undefined, keyServerFetch: server.fetchImpl }),
-      ),
-    ).rejects.toThrow(
-      /The voucher key has \$0\.40 left, under the \$1\.00 floor: real calls are stopped \(replay a recorded run with --cache replay, or use another provider\)/,
-    );
-    expect(server.calls).toHaveLength(1);
-    expect(server.calls[0]?.url).toBe('http://127.0.0.1:1/v1/vouchers/credit');
-    none();
-  });
-
   it('a voucher key that expired, without asking the key server', async () => {
     writeLitellmFile(home.home, { expiresAt: '2026-01-01T00:00:00Z' });
     const server = keyServer({ limitUsd: 5, spendUsd: 0, maxBudgetUsd: 5 });
@@ -348,7 +320,6 @@ describe('prepareEvaluation decides what the run starts with', () => {
     expect(plan.runsRoot).toBe(join(root, 'my-runs'));
     expect(plan.target).toEqual({ mode: 'launch', dir: join(root, 'bench/repo') });
     expect(plan.home).toBe(home.home);
-    expect(plan.voucherFloorUsd).toBe(1);
     expect(plan.keyRemainingUsd).toBeUndefined();
     expect(plan.voucherBaseUrl).toBeUndefined();
     expect(await plan.credentials.credential('litellm')).toMatchObject({ type: 'api_key' });
@@ -412,7 +383,7 @@ describe('prepareEvaluation decides what the run starts with', () => {
     });
   });
 
-  it('for a voucher run with enough left: the balance, the gateway and the floor', async () => {
+  it('for a voucher run: the balance and the gateway', async () => {
     writeLitellmFile(home.home, {
       baseUrl: 'https://gateway.example.test/v1/',
       keyServerUrl: 'http://127.0.0.1:1',
@@ -424,24 +395,18 @@ describe('prepareEvaluation decides what the run starts with', () => {
     expect(plan.cache).toBe('auto');
     expect(plan.keyRemainingUsd).toBe(4);
     expect(plan.voucherBaseUrl).toBe('https://gateway.example.test/v1');
-    expect(plan.voucherFloorUsd).toBe(1);
     expect(await plan.credentials.credential('litellm')).toMatchObject({ type: 'api_key' });
     expect(server.calls[0]?.authorization).toMatch(/^Bearer sk-test-voucher/);
   });
 
-  it('lets the caller move the floor', async () => {
+  it('starts with a little left on the key: the meter refuses only what the key cannot pay', async () => {
     writeLitellmFile(home.home, { keyServerUrl: 'http://127.0.0.1:1' });
     const server = keyServer({ limitUsd: 5, spendUsd: 4.6, maxBudgetUsd: 5 });
     const plan = await prepareEvaluation(
-      request({
-        provider: 'voucher',
-        scenario: undefined,
-        keyServerFetch: server.fetchImpl,
-        voucherFloorUsd: 0.25,
-      }),
+      request({ provider: 'voucher', scenario: undefined, keyServerFetch: server.fetchImpl }),
     );
     expect(plan.keyRemainingUsd).toBeCloseTo(0.4, 10);
-    expect(plan.voucherFloorUsd).toBe(0.25);
+    expect(server.calls[0]?.url).toBe('http://127.0.0.1:1/v1/vouchers/credit');
   });
 
   it('goes on without a balance when the key server cannot be reached (the meter learns it from the gateway)', async () => {

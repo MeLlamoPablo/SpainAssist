@@ -15,7 +15,7 @@ export type CapReason =
   | 'input_too_large'
   | 'lifetime'
   | 'daily'
-  | 'key_reserve'
+  | 'key_balance'
   | 'run_budget'
   | 'agent_budget'
   /** A Codex usage limit was observed; answered locally with the same 429 until it resets. */
@@ -24,14 +24,13 @@ export type CapReason =
 /**
  * Every cap of the meter, and what refuses a request first: a request is checked, in this order,
  * against the kill switch, the requests of the run and of the agent, its estimated input size,
- * then (voucher) the lifetime ceiling and the day, the key's balance (`reserveUsd`), the cost of
+ * then (voucher) the lifetime ceiling and the day, the key's balance, the cost of
  * the run and of the agent. Codex use has no cap of its own beyond the request counts: the plan
  * has no price per call, and its own usage limit is honoured as a cooldown. The ledger's figures
  * (lifetime, day) and the key's balance count every reservation in it, those of other processes
  * and of requests in flight included.
  *
- * `reserveUsd`, `perRunUsd` and `perRunRequests` are `MeterBudget` (contracts.ts): stop real calls
- * when the key's remaining balance would drop below the reserve, and cap one run's spend and
+ * `perRunUsd` and `perRunRequests` are `MeterBudget` (contracts.ts): they cap one run's spend and
  * request count. For Codex runs (the plan has no price per call) only the request counts apply.
  *
  * The defaults are what a voucher run enforces, with one exception: the run loop gives each run
@@ -57,9 +56,6 @@ export interface MeterLimits extends MeterBudget {
 export type MeterLimitsInput = Partial<MeterLimits>;
 
 export const DEFAULT_LIMITS: MeterLimits = {
-  // The user's rule for the voucher: no real call when the key would be left with less than $1.
-  // The runner refuses to start under it too (`VOUCHER_FLOOR_USD` is this number).
-  reserveUsd: 1,
   perRunUsd: 0.5,
   perRunRequests: 250,
   perAgentUsd: 0.35,
