@@ -14,7 +14,7 @@ import { randomId, type SedeIdentity } from '../state';
 import { alertBox, autoPostPage, gatewayPage } from '../views';
 
 /** Error codes shown by the mock. Only 003002 mirrors a message observed on the real gateway. */
-export const CERT_ERRORS = {
+const CERT_ERRORS = {
   noCertificate: {
     code: '003002',
     english: 'Authentication Failed (no certificate has been submitted)',

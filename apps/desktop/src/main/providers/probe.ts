@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { FetchFn } from '../remote/http';
 
 /** Each probe request gives up after this long: probing never holds the user up. */
-export const PROBE_TIMEOUT_MS = 3_000;
+const PROBE_TIMEOUT_MS = 3_000;
 /** Bigger answers are ignored (OpenRouter's model list is about 1 MB). */
 const MAX_BODY_CHARS = 8_000_000;
 

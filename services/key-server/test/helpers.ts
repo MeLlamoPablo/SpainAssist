@@ -25,7 +25,7 @@ import {
 
 export const TEST_PEPPER = 'test-pepper-0123456789abcdef';
 export const ADMIN_TOKEN = 'admin-token-0123456789abcdef';
-export const DEFAULT_IP = '203.0.113.10';
+const DEFAULT_IP = '203.0.113.10';
 export const DECIDER_MODEL = 'perplexity/pplx-decider-v1.1-27b';
 export const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 7);
 
@@ -66,7 +66,7 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   };
 }
 
-export interface RequestOptions {
+interface RequestOptions {
   body?: unknown;
   /** Bearer token. */
   token?: string;
@@ -306,8 +306,8 @@ export function fakeLiteLLM(
 
 // --- fake OpenAI ID tokens -------------------------------------------------------------------
 
-export const OPENAI_ISSUER = 'https://auth.openai.com';
-export const AUDIENCE_PREFIX = 'oaiapp_';
+const OPENAI_ISSUER = 'https://auth.openai.com';
+const AUDIENCE_PREFIX = 'oaiapp_';
 
 const openaiKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const foreignKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });

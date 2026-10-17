@@ -14,7 +14,7 @@ import { html, type SafeHtml } from '../html';
 import { type CaptchaChallenge, type CaptchaTile, randomId } from '../state';
 import { alertBox } from '../views';
 
-export const CAPTCHA_COOKIE = 'sede_verificacion';
+const CAPTCHA_COOKIE = 'sede_verificacion';
 
 const TILE_NAMES: Record<CaptchaTile, string> = {
   semaforo: 'semáforos',

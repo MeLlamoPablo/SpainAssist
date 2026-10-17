@@ -41,7 +41,7 @@ export function isAbortError(error: unknown, signal?: AbortSignal): boolean {
 }
 
 /** Model-facing explanation of a bridge failure. */
-export function bridgeErrorText(error: unknown): string {
+function bridgeErrorText(error: unknown): string {
   if (!(error instanceof BridgeError)) {
     return `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
   }

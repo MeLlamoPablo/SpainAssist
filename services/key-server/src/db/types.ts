@@ -15,14 +15,3 @@ export interface Db extends Queryable {
   transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
-
-/** SQLSTATE code of a database error (both drivers expose it as `code`), if any. */
-export function sqlState(err: unknown): string | undefined {
-  if (typeof err === 'object' && err !== null && 'code' in err) {
-    const code = (err as { code: unknown }).code;
-    return typeof code === 'string' ? code : undefined;
-  }
-  return undefined;
-}
-
-export const UNIQUE_VIOLATION = '23505';

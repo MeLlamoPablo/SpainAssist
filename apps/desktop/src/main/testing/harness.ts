@@ -57,7 +57,7 @@ export interface RpcBody {
   error?: { code: string; message: string };
 }
 
-export const offlineFetch: FetchFn = async () => {
+const offlineFetch: FetchFn = async () => {
   throw new TypeError('fetch failed');
 };
 

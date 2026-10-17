@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { SERVICE_DIR } from '../config';
 import type { Db } from './types';
 
-export const MIGRATIONS_DIR = join(SERVICE_DIR, 'migrations');
+const MIGRATIONS_DIR = join(SERVICE_DIR, 'migrations');
 
 /**
  * Applies `migrations/*.sql` in name order, once each, recording them in `schema_migrations`.

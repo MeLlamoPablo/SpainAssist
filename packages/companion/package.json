@@ -14,8 +14,7 @@
     "vectors": "tsx scripts/vectors.ts"
   },
   "dependencies": {
-    "@sa/shared": "workspace:*",
-    "zod": "^4.6.5"
+    "@sa/shared": "workspace:*"
   },
   "devDependencies": {
     "@sa/signer": "workspace:*"

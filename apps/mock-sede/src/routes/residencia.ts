@@ -47,7 +47,7 @@ import {
 } from '../views';
 
 const BASE = '/tramites/residencia';
-export const RESIDENCIA_PATHS = {
+const RESIDENCIA_PATHS = {
   info: BASE,
   personal: `${BASE}/solicitud/datos-personales`,
   domicilio: `${BASE}/solicitud/domicilio`,
@@ -183,7 +183,7 @@ function firstIncompleteStep(d: ResidenciaDraft): number {
 const xmlEscape = (s: string) => s.replace(/[<>&"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 /** The document signed with AutoFirma: a UTF-8 XML rendering of the application. */
-export function buildSolicitudXml(
+function buildSolicitudXml(
   reference: string,
   preparedAt: Date,
   d: { personal: PersonalData; domicilio: AddressData; documentacion: DocumentationData },

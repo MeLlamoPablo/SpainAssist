@@ -6,7 +6,7 @@ import { useProcedureStore } from './procedures';
 import { useVaultStore } from './vault';
 
 /** Applies one push event from main to the stores. Exported for tests. */
-export function applyEvent(event: SaEvent): void {
+function applyEvent(event: SaEvent): void {
   switch (event.type) {
     case 'procedure.upserted':
       useProcedureStore.getState().upsert(event.procedure);

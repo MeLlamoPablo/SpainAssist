@@ -4,17 +4,17 @@ import { type HtmlValue, html, raw, type SafeHtml } from './html';
 import type { AuthMethod, Session } from './state';
 
 export const MINISTRY = 'Ministerio de Trámites Simulados';
-export const SEDE_NAME = 'Sede electrónica';
-export const TEST_NOTICE =
+const SEDE_NAME = 'Sede electrónica';
+const TEST_NOTICE =
   'Entorno de pruebas: sitio ficticio para el desarrollo de Spain Assist. No introduzcas datos reales.';
 
-export const AUTH_METHOD_LABELS: Record<AuthMethod, string> = {
+const AUTH_METHOD_LABELS: Record<AuthMethod, string> = {
   'clave-permanente': 'Cl@ve Permanente',
   'clave-movil': 'Cl@ve Móvil',
   certificado: 'certificado electrónico',
 };
 
-export interface Crumb {
+interface Crumb {
   label: string;
   href?: string;
 }

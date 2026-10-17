@@ -2,7 +2,7 @@ import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
 import { callBridge, defineSaTool, textResult } from './common';
 
-export const DownloadSaveParams = Type.Object({
+const DownloadSaveParams = Type.Object({
   downloadId: Type.String({
     minLength: 1,
     maxLength: 120,

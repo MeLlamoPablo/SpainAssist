@@ -21,7 +21,7 @@ export function parse(xml: string | Buffer): Document {
   return new xmldom.DOMParser().parseFromString(xml.toString(), 'text/xml') as unknown as Document;
 }
 
-export function signatureElement(doc: Document): Element {
+function signatureElement(doc: Document): Element {
   const sigs = doc.getElementsByTagNameNS(DS, 'Signature');
   if (!sigs[0]) throw new Error('no ds:Signature');
   return sigs[0];

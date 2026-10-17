@@ -25,9 +25,9 @@ import { ScanTranscript } from './transcript';
 const LEGIBILITY_HELP_DELAY_MS = 5_000;
 
 /** Scan model of OpenAI / ChatGPT connections, with low reasoning. */
-export const OPENAI_SCANNER_MODEL = 'gpt-6.1-sol';
+const OPENAI_SCANNER_MODEL = 'gpt-6.1-sol';
 /** Scan model of vouchers (our LiteLLM gateway), with low reasoning. */
-export const VOUCHER_SCANNER_MODEL = 'anthropic/claude-haiku-5.5';
+const VOUCHER_SCANNER_MODEL = 'anthropic/claude-haiku-5.5';
 /** Models that cannot turn reasoning off and scan with their lowest effort instead. */
 const LOWEST_SCAN_REASONING: Record<string, 'minimal' | 'low'> = {
   'google/gemini-3.5-flash-lite': 'minimal',

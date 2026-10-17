@@ -11,7 +11,7 @@ import {
   textResult,
 } from './common';
 
-export function renderBoeLaw(law: BoeLaw, index: number): string {
+function renderBoeLaw(law: BoeLaw, index: number): string {
   const meta = [
     law.rank,
     law.department,

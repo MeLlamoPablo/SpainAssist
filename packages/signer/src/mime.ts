@@ -5,8 +5,8 @@
  */
 
 export const DEFAULT_MIME = 'application/octet-stream';
-export const OID_DATA = '1.2.840.113549.1.7.1';
-export const DEFAULT_DESCRIPTION = 'binary';
+const OID_DATA = '1.2.840.113549.1.7.1';
+const DEFAULT_DESCRIPTION = 'binary';
 
 export interface MimeInfo {
   mimeType: string;

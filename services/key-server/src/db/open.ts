@@ -6,7 +6,7 @@ import { openPglite } from './pglite';
 import type { Db } from './types';
 
 /** Root of the key-server package (relative PGlite paths resolve against it). */
-export const SERVICE_DIR = fileURLToPath(new URL('../..', import.meta.url));
+const SERVICE_DIR = fileURLToPath(new URL('../..', import.meta.url));
 
 export const DEFAULT_DATABASE_URL = 'pglite://.data/key-server';
 

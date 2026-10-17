@@ -514,7 +514,7 @@ function sameIssuerSubject(child: crypto.X509Certificate, parent: crypto.X509Cer
 }
 
 /** Orders `certs` as a path starting at `leaf` (only certificates that chain are kept). */
-export function buildChain(leaf: Buffer, certs: Buffer[]): Buffer[] {
+function buildChain(leaf: Buffer, certs: Buffer[]): Buffer[] {
   const chain = [leaf];
   const pool = certs.filter((c) => !c.equals(leaf));
   let current = new crypto.X509Certificate(leaf);
@@ -657,8 +657,8 @@ export function readP12(p12: Uint8Array, passphrase: string): P12Contents {
 // Encoding
 // ---------------------------------------------------------------------------------------------
 
-export type P12KeyEncryption = 'aes-256-cbc' | 'pbeWithSHAAnd3-KeyTripleDES-CBC';
-export type P12CertEncryption =
+type P12KeyEncryption = 'aes-256-cbc' | 'pbeWithSHAAnd3-KeyTripleDES-CBC';
+type P12CertEncryption =
   | 'aes-256-cbc'
   | 'pbeWithSHAAnd3-KeyTripleDES-CBC'
   | 'pbeWithSHAAnd40BitRC2-CBC'

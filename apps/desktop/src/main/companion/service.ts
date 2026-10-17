@@ -122,7 +122,7 @@ function siteLabel(host: string): string {
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /** A loopback relay seen from the phone: the same port on this machine's LAN address. */
-export function lanRelayUrl(relayUrl: string): string {
+function lanRelayUrl(relayUrl: string): string {
   const url = new URL(relayUrl);
   if (!LOOPBACK.has(url.hostname)) return relayUrl;
   for (const addresses of Object.values(networkInterfaces())) {

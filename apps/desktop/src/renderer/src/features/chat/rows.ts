@@ -68,24 +68,6 @@ export function buildRows(
   return rows;
 }
 
-export function groupStatus(items: ActivityItem[]): ActivityItem['status'] {
-  if (items.some((i) => i.status === 'running')) return 'running';
-  return items[items.length - 1]?.status === 'error' ? 'error' : 'done';
-}
-
-/** The item that best describes a group: the running one, else the last one. */
-export function groupHeadline(items: ActivityItem[]): ActivityItem {
-  return items.find((i) => i.status === 'running') ?? items[items.length - 1]!;
-}
-
-export function latestImage(items: ActivityItem[]): string | undefined {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const id = items[i]!.imageId;
-    if (id) return id;
-  }
-  return undefined;
-}
-
 /** The assistant's own questions waiting for the user (procedures ask on their cards). */
 export function pendingPrompts(items: ChatItem[]): PromptItem[] {
   return items.filter(

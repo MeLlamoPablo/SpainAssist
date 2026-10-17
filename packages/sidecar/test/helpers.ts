@@ -20,7 +20,7 @@ export function sidecarBinary(): Promise<string> {
 
 // --- Certificates -----------------------------------------------------------------------------
 
-export interface Issued {
+interface Issued {
   certDer: Buffer;
   certPem: string;
   key: crypto.KeyObject;

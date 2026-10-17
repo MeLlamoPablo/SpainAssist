@@ -4,8 +4,8 @@ import * as fsp from 'node:fs/promises';
 import { basename, dirname } from 'node:path';
 import { VaultError } from './errors';
 
-export const DIR_MODE = 0o700;
-export const FILE_MODE = 0o600;
+const DIR_MODE = 0o700;
+const FILE_MODE = 0o600;
 /** Temp files are "<target>.tmp-<random>"; leftovers from a crash are removed on open. */
 export const TEMP_MARK = '.tmp-';
 

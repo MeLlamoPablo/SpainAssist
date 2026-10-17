@@ -7,7 +7,7 @@ import { asBuffer, toArrayBuffer } from './base64';
 
 export type Asn1 = asn1js.AsnType;
 
-export class Asn1Error extends Error {
+class Asn1Error extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'Asn1Error';
@@ -37,14 +37,11 @@ export const seq = (...value: Asn1[]) =>
 export const set = (...value: Asn1[]) => new asn1js.Set({ value: value as asn1js.BaseBlock[] });
 export const oid = (value: string) => new asn1js.ObjectIdentifier({ value });
 export const int = (value: number) => new asn1js.Integer({ value });
-export const intBytes = (value: Uint8Array) =>
-  new asn1js.Integer({ valueHex: toArrayBuffer(value) });
 export const nul = () => new asn1js.Null();
 export const octets = (value: Uint8Array) =>
   new asn1js.OctetString({ valueHex: toArrayBuffer(value) });
 export const bmp = (value: string) => new asn1js.BmpString({ value });
 export const utf8 = (value: string) => new asn1js.Utf8String({ value });
-export const ia5 = (value: string) => new asn1js.IA5String({ value });
 export const utcTime = (value: Date) => new asn1js.UTCTime({ valueDate: value });
 /** Context-specific [n] EXPLICIT wrapper. */
 export const explicit = (tagNumber: number, ...value: Asn1[]) =>
@@ -58,8 +55,6 @@ export const implicitOctets = (tagNumber: number, value: Uint8Array) =>
     idBlock: { tagClass: 3, tagNumber },
     valueHex: toArrayBuffer(value),
   });
-/** Re-uses an already DER-encoded element as is. */
-export const raw = (der: Uint8Array): Asn1 => parseBer(der);
 
 /** DER SET OF: elements sorted by their encodings (X.690 §11.6). */
 export function derSetOf(elements: Uint8Array[]): Buffer {
@@ -68,7 +63,7 @@ export function derSetOf(elements: Uint8Array[]): Buffer {
   return Buffer.concat([Buffer.from([0x31]), derLength(body.length), body]);
 }
 
-export function derLength(n: number): Buffer {
+function derLength(n: number): Buffer {
   if (n < 0x80) return Buffer.from([n]);
   const bytes: number[] = [];
   let v = n;

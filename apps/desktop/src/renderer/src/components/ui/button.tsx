@@ -4,8 +4,8 @@ import { cn } from '../../lib/cn';
 import { Spinner } from './misc';
 import { Tooltip } from './tooltip';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft' | 'link';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft' | 'link';
+type ButtonSize = 'sm' | 'md' | 'lg';
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary:

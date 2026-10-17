@@ -22,7 +22,7 @@ export const PERSONAL_CHOICES = PERSONAL_FIELDS.filter(
 
 const KEY_PATTERN = '^([a-zA-Z][a-zA-Z0-9]*|custom\\.[a-z0-9][a-z0-9_-]{0,48})$';
 
-export const VaultReadParams = Type.Object({
+const VaultReadParams = Type.Object({
   keys: Type.Optional(
     Type.Array(Type.String({ maxLength: 80 }), {
       maxItems: 50,
@@ -31,7 +31,7 @@ export const VaultReadParams = Type.Object({
   ),
 });
 
-export const VaultSaveParams = Type.Object({
+const VaultSaveParams = Type.Object({
   items: Type.Array(
     Type.Object({
       key: Type.String({
@@ -51,13 +51,13 @@ export const VaultSaveParams = Type.Object({
 });
 
 /** A saved YYYY-MM-DD date as Spanish forms write it: dd/mm/yyyy. Anything else as is. */
-export function formatVaultDate(value: string): string {
+function formatVaultDate(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
 }
 
 /** An ISO timestamp as dd/mm/yyyy hh:mm:ss (24 h) in the user's time zone. */
-export function formatVaultDateTime(value: string, timeZone: string): string {
+function formatVaultDateTime(value: string, timeZone: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -97,7 +97,7 @@ function formatPersonalValue(key: string, value: string): string {
   }
 }
 
-export function renderVault(result: VaultReadResult, timeZone = resolveTimeZone()): string {
+function renderVault(result: VaultReadResult, timeZone = resolveTimeZone()): string {
   const lines: string[] = [];
   if (result.personal.length > 0) {
     lines.push(`Personal data (${result.personal.length}; dates as dd/mm/yyyy):`);

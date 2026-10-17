@@ -18,7 +18,7 @@ export interface FetchUrlToolOptions {
 const DEFAULT_MAX_CHARS = 20_000;
 const CACHE_SIZE = 8;
 
-export function renderFetched(doc: FetchedDocument, page: ReturnType<typeof sliceText>): string {
+function renderFetched(doc: FetchedDocument, page: ReturnType<typeof sliceText>): string {
   const lines = [
     `URL: ${doc.url}${doc.url !== doc.requestedUrl ? ` (redirected from ${doc.requestedUrl})` : ''}`,
   ];

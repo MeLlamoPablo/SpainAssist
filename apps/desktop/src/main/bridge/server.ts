@@ -31,7 +31,7 @@ function agentToolName(method: string): string {
   return method.replace(/\./g, '_').replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
-export type BridgeParamsOut<M extends BridgeMethod> = z.output<(typeof BridgeParams)[M]>;
+type BridgeParamsOut<M extends BridgeMethod> = z.output<(typeof BridgeParams)[M]>;
 
 export type BridgeHandlers = {
   [M in BridgeMethod]: (

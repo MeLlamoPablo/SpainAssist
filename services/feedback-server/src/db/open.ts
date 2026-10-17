@@ -16,7 +16,7 @@ export async function openDb(url: string): Promise<Db> {
   throw new Error('DATABASE_URL must start with postgres://, postgresql:// or pglite://');
 }
 
-export async function openPglite(dataDir?: string): Promise<Db> {
+async function openPglite(dataDir?: string): Promise<Db> {
   const [{ PGlite }, { unaccent }, { pg_trgm }] = await Promise.all([
     import('@electric-sql/pglite'),
     import('@electric-sql/pglite/contrib/unaccent'),
@@ -83,7 +83,7 @@ function isAlive(pid: number): boolean {
   }
 }
 
-export async function openPg(connectionString: string): Promise<Db> {
+async function openPg(connectionString: string): Promise<Db> {
   const { default: pg } = await import('pg');
   const pool = new pg.Pool({ connectionString, max: 10 });
   pool.on('error', (err) => process.stderr.write(`postgres pool error: ${err.message}\n`));

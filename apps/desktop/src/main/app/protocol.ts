@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
  * a response header on every file (tested setup: docs/research/mrz-ocr.md §8.1.5).
  */
 export const APP_SCHEME = 'app';
-export const APP_HOST = 'bundle';
+const APP_HOST = 'bundle';
 export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
 /** Same policy as the <meta> tag in src/renderer/index.html. */

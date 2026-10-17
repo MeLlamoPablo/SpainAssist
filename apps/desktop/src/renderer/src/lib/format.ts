@@ -48,11 +48,6 @@ export function formatLongDate(value: string | Date, lang: Lang): string {
   });
 }
 
-export function formatTime(value: string | Date, lang: Lang): string {
-  const d = toDate(value);
-  return d ? format(d, 'HH:mm', { locale: DATE_LOCALE[lang] }) : '';
-}
-
 /** "hace 5 minutos" / "5 minutes ago"; "ahora" for < 45 s. */
 export function formatRelative(value: string | Date, lang: Lang): string {
   const d = toDate(value);

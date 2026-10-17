@@ -42,7 +42,7 @@ export const DEMO_PERSON = {
 /** Password of `fixtures/demo-identity.p12`. */
 export const DEMO_IDENTITY_PASSPHRASE = '1234';
 
-export const CLIENT_CA_ORGANIZATION = 'MOCK-FNMT (entorno de pruebas)';
+const CLIENT_CA_ORGANIZATION = 'MOCK-FNMT (entorno de pruebas)';
 
 export interface ClientCa {
   root: CertAndKey;

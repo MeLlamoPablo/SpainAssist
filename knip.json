@@ -1,0 +1,44 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.mjs",
+        "marketing/launch-video/render.mjs",
+        "marketing/launch-video/scene.js",
+        "tools/scan-eval/run.mjs"
+      ],
+      "project": ["scripts/**", "tools/scan-eval/**", "marketing/**/*.{js,mjs}"],
+      "ignoreBinaries": ["ffmpeg"]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main/dev/*.ts",
+        "packaging/render-icon.mjs",
+        "scripts/*.{ts,mjs}",
+        "electron-builder.ts"
+      ],
+      "ignoreDependencies": ["typebox", "@napi-rs/canvas"],
+      "ignoreBinaries": ["plutil", "go"]
+    },
+    "apps/mock-sede": {
+      "entry": ["public/js/*.js"]
+    },
+    "packages/agent": {
+      "entry": ["src/host/main.ts", "scripts/*.mjs", "test/fixtures/make-pdf-fixture.ts"]
+    },
+    "e2e": {
+      "ignoreDependencies": ["electron"]
+    },
+    "packages/browser": {
+      "ignoreBinaries": ["pgrep"]
+    },
+    "packages/sidecar": {
+      "ignoreBinaries": ["go"]
+    },
+    "services/relay-server": {
+      "ignoreBinaries": ["openssl"],
+      "ignoreUnresolved": ["./gradlew"]
+    }
+  }
+}

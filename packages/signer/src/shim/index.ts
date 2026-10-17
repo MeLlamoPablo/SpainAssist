@@ -2,7 +2,7 @@ import { AFIRMA_BINDING, AFIRMA_NOTICE } from '@sa/shared';
 import { type AutoscriptShimConfig, installAutoscriptShim } from './runtime';
 
 export type { AutoscriptShimConfig, AutoscriptShimHandle } from './runtime';
-export { installAutoscriptShim, SHIM_HANDLE_SYMBOL } from './runtime';
+export { installAutoscriptShim } from './runtime';
 
 /** AutoScript VERSION reported until the site's own autoscript.js provides the real one. */
 export const DEFAULT_AUTOSCRIPT_VERSION = '1.10.1';

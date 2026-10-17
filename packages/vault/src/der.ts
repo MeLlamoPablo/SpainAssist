@@ -29,8 +29,8 @@ export const TAG = {
   BMP_STRING: 30,
 } as const;
 
-export const CLASS_UNIVERSAL = 0;
-export const CLASS_CONTEXT = 2;
+const CLASS_UNIVERSAL = 0;
+const CLASS_CONTEXT = 2;
 
 export interface Asn1Node {
   /** 0 universal, 1 application, 2 context-specific, 3 private. */
@@ -147,13 +147,6 @@ export function sequence(
 ): Asn1Node[] {
   if (!isUniversal(node, tag) || !node.constructed) throw new Asn1Error(`Expected ${what}`);
   return node.children;
-}
-
-/** Child `index` of a node, or a descriptive error. */
-export function child(node: Asn1Node, index: number, what: string): Asn1Node {
-  const c = node.children[index];
-  if (!c) throw new Asn1Error(`Missing ${what}`);
-  return c;
 }
 
 /** The single element inside an EXPLICIT context tag `[n]`. */

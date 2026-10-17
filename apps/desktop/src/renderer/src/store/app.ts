@@ -10,7 +10,7 @@ export type View =
   | { kind: 'vault'; tab?: VaultTab }
   | { kind: 'settings'; section?: SettingsSection };
 
-export interface LoginProgress {
+interface LoginProgress {
   message: string;
   url?: string;
   /** Device-code logins: the code to type at `url`. */

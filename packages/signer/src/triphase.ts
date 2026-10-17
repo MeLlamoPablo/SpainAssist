@@ -19,7 +19,7 @@ import type { KeySigner } from './key';
 import { decodeBase64, toBase64, toBase64Url } from './util/base64';
 import { elementChildren, parseXml } from './util/xml';
 
-export type TriphaseFormat =
+type TriphaseFormat =
   | 'CAdES'
   | 'CAdES-ASiC-S'
   | 'XAdES'
@@ -72,20 +72,15 @@ class CookieJar {
   }
 }
 
-export interface HttpPhase {
-  /** Name used in errors. */
-  phase: 'pre' | 'post' | 'batch';
-}
-
 /** Body as AutoFirma writes it: `k=v&k=v` with the (Base64URL) values not URL-encoded. */
-export function formBody(fields: [string, string | undefined][]): string {
+function formBody(fields: [string, string | undefined][]): string {
   return fields
     .filter((f): f is [string, string] => f[1] !== undefined)
     .map(([k, v]) => `${k}=${v}`)
     .join('&');
 }
 
-export async function postForm(
+async function postForm(
   url: string,
   body: string,
   opts: {
@@ -135,7 +130,7 @@ function checkServerReply(text: string, phase: 'pre' | 'post'): string {
 }
 
 /** `ERR-NN: message` → AF3004xx codes like AOTriphaseException. */
-export function triphaseServerError(text: string, phase: 'pre' | 'post'): AfirmaError {
+function triphaseServerError(text: string, phase: 'pre' | 'post'): AfirmaError {
   const m = /^ERR-(\d+)\s*:\s*(.*)$/is.exec(text.trim());
   const n = m ? Number(m[1]) : Number.NaN;
   const detail = m ? m[2] : text;
@@ -152,7 +147,7 @@ export function triphaseServerError(text: string, phase: 'pre' | 'post'): Afirma
 // TriphaseData
 // ---------------------------------------------------------------------------------------------
 
-export interface TriphaseSign {
+interface TriphaseSign {
   id: string;
   signid?: string;
   params: Map<string, string>;
@@ -195,7 +190,7 @@ function triphaseDataOf(doc: Document): TriphaseData {
 }
 
 /** Serialized exactly like AutoFirma's TriphaseData.toString() (no declaration, no escaping). */
-export function serializeTriphaseData(data: TriphaseData): string {
+function serializeTriphaseData(data: TriphaseData): string {
   let out = '<xml>\n';
   out += data.format ? ` <firmas format="${data.format}">\n` : ' <firmas>\n';
   for (const s of data.signs) {
@@ -208,7 +203,7 @@ export function serializeTriphaseData(data: TriphaseData): string {
 }
 
 /** TriphaseDataSigner: PK1 = Signature(algo).sign(PRE); PRE dropped unless NEED_PRE=true. */
-export async function signTriphaseData(
+async function signTriphaseData(
   data: { signs: { params: Map<string, string> }[] },
   algorithm: ResolvedAlgorithm,
   signer: KeySigner,
@@ -322,7 +317,7 @@ export async function triphaseSign(opts: TriphaseOptions): Promise<Buffer> {
 // JSON batch (signBatchProcess)
 // ---------------------------------------------------------------------------------------------
 
-export interface BatchSingleSign {
+interface BatchSingleSign {
   id: string;
   datareference: string;
   format?: string;
@@ -448,7 +443,7 @@ export async function batchSign(opts: BatchOptions): Promise<BatchResult> {
 // ---------------------------------------------------------------------------------------------
 
 /** One `<singlesign>` of a `<signbatch>` document, as the consent summary needs it. */
-export interface XmlBatchEntry {
+interface XmlBatchEntry {
   id: string;
   format?: string;
   suboperation?: string;

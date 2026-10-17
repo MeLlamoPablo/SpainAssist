@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { cn } from '../../lib/cn';
 
-export const inputBase =
+const inputBase =
   'w-full rounded-lg border border-line-strong/70 bg-surface px-3 text-[14px] text-fg shadow-xs transition-[border-color,box-shadow] duration-150 placeholder:text-fg-subtle hover:border-line-strong focus:border-accent focus:outline-none focus:ring-3 focus:ring-ring/40 disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-fg-muted aria-invalid:border-danger aria-invalid:focus:ring-danger/25';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(

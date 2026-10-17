@@ -31,7 +31,7 @@ const LOCKOUT_MS = 30 * 60_000;
 const MAX_SMS_ATTEMPTS = 3;
 const MAX_SMS_RESENDS = 3;
 
-export function identityFromUser(user: ClaveUser, method: AuthMethod, loa: Loa): SedeIdentity {
+function identityFromUser(user: ClaveUser, method: AuthMethod, loa: Loa): SedeIdentity {
   return {
     dni: user.dni,
     givenName: user.givenName,

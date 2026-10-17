@@ -41,7 +41,7 @@ import {
 } from '../views';
 
 const BASE = '/tramites/cita';
-export const CITA_PATHS = {
+const CITA_PATHS = {
   info: BASE,
   oficina: `${BASE}/solicitud/oficina`,
   horario: `${BASE}/solicitud/horario`,
@@ -55,7 +55,7 @@ const BREADCRUMBS = [
   { label: 'Trámites', href: '/tramites' },
   { label: NAME, href: C.info },
 ];
-export const SLOT_TIMES = [
+const SLOT_TIMES = [
   '09:00',
   '09:30',
   '10:00',
@@ -80,7 +80,7 @@ function hash(text: string): number {
   return h >>> 0;
 }
 
-export function workingDays(todayIso: string, count = WORKING_DAYS): string[] {
+function workingDays(todayIso: string, count = WORKING_DAYS): string[] {
   const out: string[] = [];
   let day = addDays(todayIso, 1);
   while (out.length < count) {

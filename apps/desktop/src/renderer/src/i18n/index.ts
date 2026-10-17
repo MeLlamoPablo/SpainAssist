@@ -22,7 +22,7 @@ export function defineDict<T>(dict: { es: T; en: NoInfer<T> }): Dict<T> {
   return dict;
 }
 
-export function getLang(): Lang {
+function getLang(): Lang {
   return useAppStore.getState().settings?.language ?? 'es';
 }
 

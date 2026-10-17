@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export interface Toast {
+interface Toast {
   id: number;
   kind: 'info' | 'success' | 'error';
   title: string;

@@ -37,10 +37,10 @@ export const CHATGPT_ENDPOINTS: ChatGPTEndpoints = {
   callbackPath: '/auth/callback',
 };
 
-export const CHATGPT_DYNAMIC_CLIENT_ID = 'dynamic_agent_client';
-export const CHATGPT_AGENT_NAME = 'Spain Assist';
-export const CHATGPT_DIRECT_SCOPE = 'chatgpt.tokens.use.direct';
-export const CHATGPT_SCOPE = `openid profile email offline_access resource.invoke ${CHATGPT_DIRECT_SCOPE}`;
+const CHATGPT_DYNAMIC_CLIENT_ID = 'dynamic_agent_client';
+const CHATGPT_AGENT_NAME = 'Spain Assist';
+const CHATGPT_DIRECT_SCOPE = 'chatgpt.tokens.use.direct';
+const CHATGPT_SCOPE = `openid profile email offline_access resource.invoke ${CHATGPT_DIRECT_SCOPE}`;
 /** Refresh this long before the real expiry (same margin pi uses). */
 const EXPIRY_MARGIN_MS = 3 * 60_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -123,13 +123,13 @@ function base64url(bytes: Buffer): string {
   return bytes.toString('base64url');
 }
 
-export function createPkce(): { verifier: string; challenge: string } {
+function createPkce(): { verifier: string; challenge: string } {
   const verifier = base64url(randomBytes(32));
   const challenge = base64url(createHash('sha256').update(verifier).digest());
   return { verifier, challenge };
 }
 
-export function redirectUri(endpoints: ChatGPTEndpoints, port = endpoints.callbackPort): string {
+function redirectUri(endpoints: ChatGPTEndpoints, port = endpoints.callbackPort): string {
   return `http://127.0.0.1:${port}${endpoints.callbackPath}`;
 }
 
@@ -331,7 +331,7 @@ async function jwksFor(endpoints: ChatGPTEndpoints, fetchImpl: typeof fetch, sig
 }
 
 /** Verify the ID token: signature (JWKS), issuer, audience (= issued client id) and nonce. */
-export async function verifyChatGPTIdToken(
+async function verifyChatGPTIdToken(
   idToken: string,
   expected: { clientId: string; nonce: string },
   options: { endpoints?: ChatGPTEndpoints; fetchImpl?: typeof fetch; signal?: AbortSignal } = {},
@@ -358,7 +358,7 @@ export async function verifyChatGPTIdToken(
  * other apps: for the rest the code exchange fails, observed as a bare `invalid_grant`. Only
  * applies to a fresh authorization code; on refresh `invalid_grant` means an expired session.
  */
-export function asEligibilityError(error: unknown): unknown {
+function asEligibilityError(error: unknown): unknown {
   if (!(error instanceof ChatGPTLoginError) || error.code !== 'token_exchange') return error;
   const oauthError = error.oauthError ?? '';
   if (oauthError !== 'invalid_grant' && !oauthError.endsWith('user_not_eligible')) return error;
@@ -370,7 +370,7 @@ export function asEligibilityError(error: unknown): unknown {
 }
 
 /** Exchange the authorization code, validate the ID token and build the pi credential. */
-export async function exchangeChatGPTCode(params: {
+async function exchangeChatGPTCode(params: {
   code: string;
   verifier: string;
   clientId: string;

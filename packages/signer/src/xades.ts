@@ -28,13 +28,13 @@ import type { SignaturePolicy } from './policy';
 import { toBase64 } from './util/base64';
 import { parseXml } from './util/xml';
 
-export const NS = {
+const NS = {
   ds: 'http://www.w3.org/2000/09/xmldsig#',
   xades: 'http://uri.etsi.org/01903/v1.3.2#',
   xmlns: 'http://www.w3.org/2000/xmlns/',
 } as const;
 
-export const XML_ALG = {
+const XML_ALG = {
   c14n: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
   c14nWithComments: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments',
   excC14n: 'http://www.w3.org/2001/10/xml-exc-c14n#',
@@ -99,7 +99,7 @@ function decodeXmlText(data: Buffer): string {
 }
 
 /** The data as an XML document, or null when AutoFirma would treat it as binary. */
-export function parseInputXml(data: Buffer): Document | null {
+function parseInputXml(data: Buffer): Document | null {
   const text = decodeXmlText(data);
   // AutoFirma's secure parser rejects DOCTYPEs: such documents are signed as binary data.
   if (/<!DOCTYPE/i.test(text)) return null;
@@ -130,7 +130,7 @@ function inScopeNamespaces(node: Node): { prefix: string; namespaceURI: string }
 }
 
 /** Canonical form of `node` as it sits in its document (inherited namespaces included). */
-export function canonicalize(node: Node, algorithm: string = XML_ALG.c14n): string {
+function canonicalize(node: Node, algorithm: string = XML_ALG.c14n): string {
   if (algorithm === XML_ALG.excC14n) {
     return new ExclusiveCanonicalization().process(node as Element, {});
   }
@@ -146,7 +146,7 @@ function digest(hash: DigestName, data: string | Buffer): string {
 }
 
 /** `yyyy-MM-ddTHH:mm:ss±hh:mm` in local time, as jxades writes SigningTime. */
-export function xmlDateTime(d: Date): string {
+function xmlDateTime(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   const off = -d.getTimezoneOffset();
   const abs = Math.abs(off);

@@ -1,6 +1,6 @@
 /** Independent verification helpers (pkijs) for CMS signatures. */
 import crypto from 'node:crypto';
-import * as asn1js from 'asn1js';
+import type * as asn1js from 'asn1js';
 import * as pkijs from 'pkijs';
 
 pkijs.setEngine(
@@ -12,7 +12,7 @@ function ab(buf: Uint8Array): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
-export function parseSignedData(der: Uint8Array): pkijs.SignedData {
+function parseSignedData(der: Uint8Array): pkijs.SignedData {
   const ci = pkijs.ContentInfo.fromBER(ab(der));
   return new pkijs.SignedData({ schema: ci.content });
 }
@@ -31,11 +31,6 @@ export async function pkijsVerify(
   });
 }
 
-export interface AttributeSummary {
-  types: string[];
-  signedAttrsDer: Buffer;
-}
-
 export function signedAttributeTypes(der: Uint8Array, index = 0): string[] {
   const sd = parseSignedData(der);
   return (sd.signerInfos[index].signedAttrs?.attributes ?? []).map((a) => a.type);
@@ -49,5 +44,3 @@ export function signedAttribute(
   const sd = parseSignedData(der);
   return sd.signerInfos[index].signedAttrs?.attributes.find((a) => a.type === type)?.values[0];
 }
-
-export { asn1js, pkijs };

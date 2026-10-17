@@ -7,7 +7,7 @@ import {
 } from '@sa/shared';
 
 // Format, alphabet and normalization live in `@sa/shared` (voucher-code.ts), shared with the app.
-export { CROCKFORD_ALPHABET, formatVoucherCode, normalizeVoucherCode, VOUCHER_BODY_LENGTH };
+export { CROCKFORD_ALPHABET, formatVoucherCode, normalizeVoucherCode };
 
 /** Public demo code seeded when DEV_SEED=1 (mock provider only). */
 export const DEMO_VOUCHER_CODE = 'SA-DEMO42';

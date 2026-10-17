@@ -86,6 +86,9 @@ client-certificate login), maps-server 8793, relay-server 8794.
   short sentences, "tú" form, no bureaucratic jargon.
 - Style: Biome defaults from `biome.json` (2 spaces, single quotes, width 100). Run
   `corepack pnpm exec biome check --write <paths>` on files you touch.
+- Dead code: `corepack pnpm knip` must stay clean (config in `knip.json`). Delete what it reports;
+  declare a new entry point in `knip.json` only when something really is run from outside the code
+  (a script, a spawned process, a static file). Don't export a symbol just for a test.
 - Tests: Vitest, colocated in `test/` or `*.test.ts`. Keep unit tests fast and offline.
 
 ## Framer designs
@@ -152,7 +155,7 @@ The UI is designed in the Framer project "Spain Assistant"
   extra disk). Don't symlink the main checkout's `node_modules`: workspace links (`@sa/shared`, …)
   would then resolve to the main checkout's sources instead of your worktree's.
 - **Run all relevant checks in the worktree before merging, however small the change**: Biome on
-  touched files, `corepack pnpm typecheck`, the tests of the packages you touched, and for UI
+  touched files, `corepack pnpm typecheck`, `corepack pnpm knip`, the tests of the packages you touched, and for UI
   changes a web-preview screenshot. "No dependencies in the worktree" is never a reason to skip
   them. Report any failures, and say which ones were already failing on the trunk.
 - **Do the merge yourself; never hand it back to the human as a command to run.** Commit in your

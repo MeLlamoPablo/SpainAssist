@@ -6,7 +6,7 @@ import { countFeedback, insertFeedback, type NewFeedback } from './repo';
  * Example learnings for development (DEV_SEED=1). Generic, PII-free, written by a human and
  * tagged "seed" so they can be told apart from real submissions (and deleted with the admin API).
  */
-export const SEED_TAG = 'seed';
+const SEED_TAG = 'seed';
 
 type Seed = Omit<NewFeedback, 'createdAt' | 'author'> & { daysAgo: number };
 

@@ -4,7 +4,7 @@ import { CUSTOM_MODEL_DEFAULTS } from '@sa/shared';
 import type { ResolvedHostConfig } from '../config';
 import { TEMPLATE_MODEL_BY_PROVIDER } from '../providers/defaults';
 
-export const CUSTOM_PROVIDER_ID = 'custom';
+const CUSTOM_PROVIDER_ID = 'custom';
 /**
  * Voucher keys: our LiteLLM gateway (D10). OpenAI-compatible, and LiteLLM serves models under
  * their OpenRouter ids, so model metadata comes from pi's OpenRouter catalog.
@@ -16,7 +16,7 @@ const LITELLM_CATALOG_PROVIDER = 'openrouter';
  * API key used for "custom" endpoints when the app has none (local models): pi only considers a
  * provider configured when some key resolves. A real key from the app (bridge) always wins.
  */
-export const NO_KEY_PLACEHOLDER = 'sa-no-key';
+const NO_KEY_PLACEHOLDER = 'sa-no-key';
 
 type ModelConfig = ResolvedHostConfig['model'];
 

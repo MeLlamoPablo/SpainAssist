@@ -74,20 +74,6 @@ const dayAt = (now: number, daysAgo: number, h: number, m: number) => {
   return d.toISOString();
 };
 
-export const DEMO_SCAN = {
-  format: 'TD1' as const,
-  documentCode: 'ID',
-  issuingState: 'ESP',
-  documentNumber: 'CAA123456',
-  personalNumber: '12345678Z',
-  surnames: ['MARTIN', 'ORTEGA'],
-  givenNames: 'LUCIA',
-  nationality: 'ESP',
-  birthDate: '1991-03-08',
-  sex: 'F' as const,
-  expiryDate: '2026-10-31',
-};
-
 export const BYOK_PROVIDERS: ProviderOption[] = [
   {
     id: 'anthropic',
@@ -158,7 +144,7 @@ export const BYOK_PROVIDERS: ProviderOption[] = [
   },
 ];
 
-export function providerPreset(kind: string | null): ProviderStatus {
+function providerPreset(kind: string | null): ProviderStatus {
   switch (kind) {
     case 'none':
       return { configured: false };
@@ -196,7 +182,7 @@ function runtime(partial: Partial<ProcedureRuntime> = {}): ProcedureRuntime {
   return { activity: 'idle', unread: false, ...partial };
 }
 
-export function demoPersonal(now: number, lang: Lang): PersonalDataItem[] {
+function demoPersonal(now: number, lang: Lang): PersonalDataItem[] {
   const rows: [string, string, PersonalDataItem['source'], number][] = [
     ['givenName', 'Lucía', 'scan', 30],
     ['surname1', 'Martín', 'scan', 30],
@@ -226,7 +212,7 @@ export function demoPersonal(now: number, lang: Lang): PersonalDataItem[] {
   }));
 }
 
-export function demoCredentials(now: number): CredentialSummary[] {
+function demoCredentials(now: number): CredentialSummary[] {
   return [
     {
       id: 'cred-clave',
@@ -265,7 +251,7 @@ export function demoCredentials(now: number): CredentialSummary[] {
   ];
 }
 
-export function demoDocuments(
+function demoDocuments(
   now: number,
   t: Tr,
 ): {
@@ -554,7 +540,7 @@ const bot = (id: string, createdAt: string, text: string): ChatItem => ({
 const started = (t: Tr) => t('Trámite creado', 'Procedure created');
 
 /** The compact row the app adds to the conversation when a procedure's agent reports. */
-export function reportRow(
+function reportRow(
   id: string,
   createdAt: string,
   procedureId: string,
@@ -590,7 +576,7 @@ export const URLS = {
 // ---------------------------------------------------------------------------------------------
 
 /** The DNI agent's pending question, shown on its card. */
-export function dniPrompt(now: number, t: Tr): PromptItem {
+function dniPrompt(now: number, t: Tr): PromptItem {
   return {
     id: DEMO_IDS.dniPrompt,
     type: 'prompt',
@@ -1030,7 +1016,7 @@ function demoProcedures(now: number, t: Tr): ProcedureListItem[] {
 // Activity logs of the procedures' agents
 // ---------------------------------------------------------------------------------------------
 
-export const REPORTS = {
+const REPORTS = {
   fnmt1: (t: Tr) =>
     t(
       'Certificado pedido. A Lucía le ha llegado un código al correo. Ahora tiene que validar su identidad en una oficina con el DNI y ese código.',

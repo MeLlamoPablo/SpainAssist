@@ -26,7 +26,7 @@ export const ATTR = {
 
 export type NameSpec = Array<[oid: string, value: string]>;
 
-export function encodeName(name: NameSpec): Buffer {
+function encodeName(name: NameSpec): Buffer {
   return der.sequence(
     ...name.map(([oid, value]) =>
       der.set(
@@ -44,9 +44,8 @@ export interface KeyPair {
   publicKey: KeyObject;
 }
 
-export const rsaKeyPair = (bits = 2048): KeyPair =>
-  generateKeyPairSync('rsa', { modulusLength: bits });
-export const ecKeyPair = (curve: 'P-256' | 'P-384' = 'P-256'): KeyPair =>
+const rsaKeyPair = (bits = 2048): KeyPair => generateKeyPairSync('rsa', { modulusLength: bits });
+const ecKeyPair = (curve: 'P-256' | 'P-384' = 'P-256'): KeyPair =>
   generateKeyPairSync('ec', { namedCurve: curve });
 
 function signatureAlgorithm(key: KeyObject): { hash: string; id: Buffer } {
@@ -75,7 +74,7 @@ export interface CertOptions {
   ca?: boolean;
 }
 
-export function makeCertificate(options: CertOptions): X509Certificate {
+function makeCertificate(options: CertOptions): X509Certificate {
   const notBefore = options.notBefore ?? new Date(Date.now() - 24 * 3600_000);
   const notAfter = options.notAfter ?? new Date(Date.now() + 365 * 24 * 3600_000);
   const serial = randomBytes(12);
@@ -100,13 +99,13 @@ export function makeCertificate(options: CertOptions): X509Certificate {
   return new X509Certificate(der.sequence(tbs, algorithm.id, der.bitString(signature)));
 }
 
-export const CA_NAME: NameSpec = [
+const CA_NAME: NameSpec = [
   [ATTR.C, 'ES'],
   [ATTR.O, 'SPAINASSISTANT TEST'],
   [ATTR.CN, 'AC TEST'],
 ];
 
-export const CARMEN: NameSpec = [
+const CARMEN: NameSpec = [
   [ATTR.C, 'ES'],
   [ATTR.SERIALNUMBER, 'IDCES-99999999R'],
   [ATTR.SN, 'ESPAÑOLA ESPAÑOLA'],

@@ -16,7 +16,7 @@ export async function makeDb(): Promise<Db> {
 export const USER_KEY = 'sk-test-user-key-1';
 
 /** A fake LiteLLM key check: `sk-test-…` keys are fine, `sk-broke-…` keys have no credit. */
-export async function fakeCheckKey(key: string): Promise<KeyStatus> {
+async function fakeCheckKey(key: string): Promise<KeyStatus> {
   if (key.startsWith('sk-test-')) return 'ok';
   return key.startsWith('sk-broke-') ? 'no_credit' : 'invalid';
 }

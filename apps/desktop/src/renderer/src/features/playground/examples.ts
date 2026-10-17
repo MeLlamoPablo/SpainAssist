@@ -21,7 +21,7 @@ export interface PlaygroundExample {
   /** Starting value of the procedure card's state picker. */
   procedureState?: string;
 }
-export const PLAYGROUND_TIME = '2026-10-04T10:00:00.000Z';
+const PLAYGROUND_TIME = '2026-10-04T10:00:00.000Z';
 
 /** Mock-only catalogue. Each interactive example is also registered with the mock API. */
 export function playgroundExamples(language: Language): PlaygroundExample[] {

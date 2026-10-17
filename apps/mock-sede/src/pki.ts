@@ -10,7 +10,7 @@ import forge from 'node-forge';
 
 const { pki, asn1 } = forge;
 
-export interface DnAttribute {
+interface DnAttribute {
   /** forge short name (CN, C, O, OU...) or long name (serialNumber, surname, givenName). */
   name: string;
   value: string;
@@ -49,11 +49,11 @@ function randomSerialHex(): string {
 }
 
 /** forge emits CRLF line endings; normalize to LF. */
-export function certToPem(cert: forge.pki.Certificate): string {
+function certToPem(cert: forge.pki.Certificate): string {
   return pki.certificateToPem(cert).replace(/\r\n/g, '\n');
 }
 
-export function certToDer(cert: forge.pki.Certificate): Buffer {
+function certToDer(cert: forge.pki.Certificate): Buffer {
   return Buffer.from(asn1.toDer(pki.certificateToAsn1(cert)).getBytes(), 'binary');
 }
 
@@ -239,10 +239,6 @@ export function stillValid(cert: forge.pki.Certificate, now = new Date()): boole
 export function spkiSha256Base64(certPem: string): string {
   const spki = createPublicKey(certPem).export({ type: 'spki', format: 'der' });
   return createHash('sha256').update(spki).digest('base64');
-}
-
-export function sha256Hex(data: Buffer | string): string {
-  return createHash('sha256').update(data).digest('hex');
 }
 
 // ---------------------------------------------------------------------------------------------

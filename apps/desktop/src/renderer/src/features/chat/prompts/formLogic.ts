@@ -104,7 +104,7 @@ export function validate(fields: FormField[], values: Values): Record<string, Fi
 }
 
 /** Fields whose answer is always saved to "Mis datos" (never secrets or documents). */
-export function saveableFields(fields: FormField[]): FormField[] {
+function saveableFields(fields: FormField[]): FormField[] {
   return fields.filter((f) => f.vaultKey && f.type !== 'secret' && f.type !== 'document');
 }
 

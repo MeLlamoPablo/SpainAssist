@@ -2,7 +2,6 @@
 import { isCadesSignature } from './cades';
 import { AfirmaError } from './errors';
 import { isFacturae, isPdf, looksLikeXml } from './mime';
-import type { TriphaseFormat } from './triphase';
 
 export type FormatFamily =
   | 'CAdES'
@@ -71,10 +70,6 @@ export function parseFormat(format: string | null | undefined): FormatSpec {
   const f = FORMATS[key];
   if (!f) throw AfirmaError.unsupportedFormat(requested);
   return { requested, family: f.family, triphase: !!f.triphase };
-}
-
-export function triphaseFormatOf(family: FormatFamily): TriphaseFormat {
-  return family;
 }
 
 /** AutoFirma's AUTO for sign: PDF → PAdES, FacturaE, XML → XAdES, anything else → CAdES. */

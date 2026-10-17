@@ -89,8 +89,3 @@ export function orderProcedures(list: ProcedureListItem[]): {
   );
   return { active: sorted.filter((p) => !p.archived), archived: sorted.filter((p) => p.archived) };
 }
-
-export function stepProgress(p: Pick<ProcedureListItem, 'steps'>): { done: number; total: number } {
-  const relevant = p.steps.filter((s) => s.status !== 'skipped');
-  return { done: relevant.filter((s) => s.status === 'done').length, total: relevant.length };
-}

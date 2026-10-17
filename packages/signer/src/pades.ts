@@ -58,7 +58,7 @@ const DEFAULT_RESERVED_BYTES = 27000;
 const SUBFILTERS = new Set(['ETSI.CAdES.detached', 'adbe.pkcs7.detached']);
 
 /** PDF date: D:YYYYMMDDHHmmSS+HH'mm' (local time). */
-export function pdfDate(d: Date): string {
+function pdfDate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   const off = -d.getTimezoneOffset();
   const abs = Math.abs(off);

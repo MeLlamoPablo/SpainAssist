@@ -17,7 +17,7 @@ import type { PiiLib, VaultPort } from '../ports';
 import { type FetchFn, HttpError, joinUrl, NetworkError, requestJson } from './http';
 
 /** Removes personal data from text that leaves the device (feedback queries and submissions). */
-export function scrubOutgoing(
+function scrubOutgoing(
   pii: PiiLib,
   vault: VaultPort,
   text: string,

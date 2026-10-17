@@ -88,7 +88,7 @@ export async function voucherState(
   return rows[0] ?? null;
 }
 
-export interface IssuedKeySummary {
+interface IssuedKeySummary {
   provider: string;
   label: string;
   limitUsd: number;
@@ -421,13 +421,7 @@ export async function lockIssuedKey(
 
 // --- research runs ---------------------------------------------------------------------------
 
-export type ResearchRunState =
-  | 'reserved'
-  | 'running'
-  | 'completed'
-  | 'refunding'
-  | 'refunded'
-  | 'expired';
+type ResearchRunState = 'reserved' | 'running' | 'completed' | 'refunding' | 'refunded' | 'expired';
 
 export interface ResearchRun {
   id: string;

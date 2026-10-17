@@ -69,8 +69,6 @@ export interface AutoscriptShimHandle {
   };
 }
 
-export const SHIM_HANDLE_SYMBOL = 'sa.afirma.shim';
-
 export function installAutoscriptShim(config: AutoscriptShimConfig): void {
   type Fn = (...args: unknown[]) => unknown;
   type Batch = {

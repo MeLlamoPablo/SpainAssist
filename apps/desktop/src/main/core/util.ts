@@ -8,7 +8,7 @@ export function newId(prefix: string): string {
 export type IdFactory = (prefix: string) => string;
 
 /** Ids created by `newId` (used to validate ids that become paths). */
-export const SAFE_ID = /^[a-z]{1,8}_[a-f0-9]{16}$/;
+const SAFE_ID = /^[a-z]{1,8}_[a-f0-9]{16}$/;
 
 export function isSafeId(id: string): boolean {
   return SAFE_ID.test(id);

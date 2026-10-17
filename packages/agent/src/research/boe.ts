@@ -4,7 +4,7 @@
  *   GET {base}/legislacion-consolidada?query=<json>&limit=N   (Accept: application/json)
  */
 
-export const BOE_API_BASE = 'https://www.boe.es/datosabiertos/api';
+const BOE_API_BASE = 'https://www.boe.es/datosabiertos/api';
 
 export interface BoeLaw {
   id: string;

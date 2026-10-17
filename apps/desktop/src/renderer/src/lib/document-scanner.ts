@@ -11,32 +11,6 @@ export async function scannerStatus(): Promise<ScannerStatus> {
   return window.saScanner?.status() ?? { available: false, reason: 'no_provider' };
 }
 
-export async function readDocument(
-  source: CanvasImageSource,
-  width: number,
-  height: number,
-): Promise<ScanOutcome> {
-  if (!(await scannerStatus()).available) throw new Error('Connect an AI model to scan documents.');
-  const canvas = document.createElement('canvas');
-  const scale = Math.min(1, 2048 / Math.max(width, height));
-  canvas.width = Math.round(width * scale);
-  canvas.height = Math.round(height * scale);
-  const ctx = canvas.getContext('2d');
-  if (!ctx || !width || !height) throw new Error('Image unavailable');
-  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-  const fields = isMockApi()
-    ? {
-        givenName: 'Carmen',
-        surname1: 'García',
-        surname2: 'López',
-        documentType: 'DNI',
-        documentNumber: '99999999R',
-        birthDate: '1990-01-15',
-      }
-    : await window.saScanner!.read(canvas.toDataURL('image/jpeg', 0.9));
-  return { fields, permanent: false };
-}
-
 // 1408² is below Decider's 2048 tiles of 32×32 pixels, even for square/portrait uploads.
 export function documentFrame(source: CanvasImageSource, width: number, height: number): string {
   if (!width || !height) throw new Error('Image unavailable');
@@ -158,7 +132,7 @@ export function scanDocumentSession(options: {
   return cancel;
 }
 
-export function waitForFrame(signal: AbortSignal, milliseconds = 200): Promise<void> {
+function waitForFrame(signal: AbortSignal, milliseconds = 200): Promise<void> {
   return new Promise((resolve, reject) => {
     signal.throwIfAborted();
     const abort = () => {

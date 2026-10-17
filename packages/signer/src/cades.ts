@@ -70,7 +70,7 @@ export const OID = {
 // SignaturePolicyIdentifier (RFC 5126 §5.8.1); decorators applied as plain calls.
 // ---------------------------------------------------------------------------------------------
 
-export class OtherHashAlgAndValue {
+class OtherHashAlgAndValue {
   hashAlgorithm = new AlgorithmIdentifier();
   hashValue = new OctetString();
   constructor(params: Partial<OtherHashAlgAndValue> = {}) {
@@ -81,7 +81,7 @@ AsnProp({ type: AlgorithmIdentifier })(OtherHashAlgAndValue.prototype, 'hashAlgo
 AsnProp({ type: OctetString })(OtherHashAlgAndValue.prototype, 'hashValue');
 AsnType({ type: AsnTypeTypes.Sequence })(OtherHashAlgAndValue);
 
-export class SigPolicyQualifierInfo {
+class SigPolicyQualifierInfo {
   sigPolicyQualifierId = '';
   /** SPURI (id-spq-ets-uri) as IA5String. */
   sigQualifier = '';
@@ -96,7 +96,7 @@ AsnProp({ type: AsnPropTypes.ObjectIdentifier })(
 AsnProp({ type: AsnPropTypes.IA5String })(SigPolicyQualifierInfo.prototype, 'sigQualifier');
 AsnType({ type: AsnTypeTypes.Sequence })(SigPolicyQualifierInfo);
 
-export class SignaturePolicyId {
+class SignaturePolicyId {
   sigPolicyId = '';
   sigPolicyHash = new OtherHashAlgAndValue();
   sigPolicyQualifiers?: SigPolicyQualifierInfo[];
@@ -116,12 +116,12 @@ AsnType({ type: AsnTypeTypes.Sequence })(SignaturePolicyId);
 // Signed attributes
 // ---------------------------------------------------------------------------------------------
 
-export interface ContentHintsValue {
+interface ContentHintsValue {
   oid: string;
   description?: string;
 }
 
-export interface SignedAttributeOptions {
+interface SignedAttributeOptions {
   algorithm: ResolvedAlgorithm;
   /** DER of the signer's certificate. */
   certificateDer: Buffer;
@@ -214,7 +214,7 @@ function policyAttribute(policy: SignaturePolicy): cms.Attribute {
 }
 
 /** Signed attributes in DER order plus the exact bytes that get signed (the DER SET OF). */
-export function buildSignedAttributes(opts: SignedAttributeOptions): {
+function buildSignedAttributes(opts: SignedAttributeOptions): {
   attributes: cms.Attribute[];
   der: Buffer;
 } {

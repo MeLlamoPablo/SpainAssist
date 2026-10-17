@@ -29,7 +29,7 @@ const ChatResponse = z.object({
 });
 
 /** The model's instructions; speaker labels in the user's language. */
-export function transcriptionInstructions(language: Language): string {
+function transcriptionInstructions(language: Language): string {
   const [you, them] = language === 'en' ? ['You', 'Them'] : ['Tú', 'Ellos'];
   return [
     'Transcribe this recording of a phone call, word for word, in the language spoken (usually Spanish). Do not translate, summarise or comment.',

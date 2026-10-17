@@ -23,7 +23,7 @@ const fieldText = z.string().trim().min(1).max(200);
 const fieldSchema = (key: string) =>
   (key === 'drivingCategories' ? LicenceCategories : fieldText).optional();
 const documentTypes = Object.keys(SCAN_DOCUMENT_KEYS_BY_TYPE) as ScanDocumentType[];
-export const documentFieldSchemas = Object.fromEntries(
+const documentFieldSchemas = Object.fromEntries(
   documentTypes.map((type) => [
     type,
     z

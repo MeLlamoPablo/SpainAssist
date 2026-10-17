@@ -2,7 +2,8 @@
 export { SCAN_KEYS as SCAN_FIELD_KEYS } from '../../../scanner';
 
 import type { DocumentFields } from '../../../scanner';
-export type ScannedFields = DocumentFields;
+
+type ScannedFields = DocumentFields;
 
 export interface ScanOutcome {
   fields: ScannedFields;

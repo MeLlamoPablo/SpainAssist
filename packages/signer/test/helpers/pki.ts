@@ -216,7 +216,7 @@ function extension(extnID: string, value: unknown, critical = false): x509.Exten
   });
 }
 
-export interface IssueOptions {
+interface IssueOptions {
   subject: [string, string][];
   publicKey: KeyObject;
   /** Issuer certificate (DER) + its key; omit for a self-signed CA. */
@@ -228,7 +228,7 @@ export interface IssueOptions {
   policies?: string[];
 }
 
-export function issueCertificate(opts: IssueOptions): Buffer {
+function issueCertificate(opts: IssueOptions): Buffer {
   const subject = new x509.Name(opts.subject.map(([t, v]) => attr(t, v)));
   const issuerCert = opts.issuer
     ? AsnConvert.parse(opts.issuer.certDer, x509.Certificate)
@@ -304,7 +304,7 @@ export function issueCertificate(opts: IssueOptions): Buffer {
 }
 
 /** EC P-384 CA + EC P-256 "persona física" certificate (FNMT's newer hierarchy style). */
-export function createEcIdentity(curve: 'P-256' | 'P-384' = 'P-256'): TestIdentity {
+function createEcIdentity(curve: 'P-256' | 'P-384' = 'P-256'): TestIdentity {
   const ca = crypto.generateKeyPairSync('ec', { namedCurve: 'P-384' });
   const user = crypto.generateKeyPairSync('ec', { namedCurve: curve });
   const caDer = issueCertificate({

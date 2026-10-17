@@ -6,7 +6,7 @@ import {
   Certificate,
   CertificatePolicies,
   id_ce_certificatePolicies,
-  Name,
+  type Name,
 } from '@peculiar/asn1-x509';
 import type { CertificateInfo } from '@sa/shared';
 import { asBuffer, toArrayBuffer } from './util/base64';
@@ -45,9 +45,9 @@ const JAVA_RFC2253_KEYWORDS: Record<string, string> = {
   '0.9.2342.19200300.100.1.25': 'DC',
 };
 
-export const OID_SERIAL_NUMBER = '2.5.4.5';
-export const OID_GIVEN_NAME = '2.5.4.42';
-export const OID_SURNAME = '2.5.4.4';
+const OID_SERIAL_NUMBER = '2.5.4.5';
+const OID_GIVEN_NAME = '2.5.4.42';
+const OID_SURNAME = '2.5.4.4';
 export const OID_COMMON_NAME = '2.5.4.3';
 
 export function parseCertificate(der: Uint8Array): Certificate {
@@ -68,7 +68,7 @@ function escapeRfc4514(value: string): string {
 }
 
 /** Most-specific-first display string, e.g. "CN=JUAN ESPAÑOL - 12345678Z, SERIALNUMBER=..., C=ES". */
-export function formatName(name: Name): string {
+function formatName(name: Name): string {
   return [...name]
     .reverse()
     .map((rdn) =>
@@ -77,10 +77,6 @@ export function formatName(name: Name): string {
         .join('+'),
     )
     .join(', ');
-}
-
-export function parseName(nameDer: Uint8Array): Name {
-  return AsnConvert.parse(toArrayBuffer(nameDer), Name);
 }
 
 /**
@@ -189,10 +185,4 @@ export function certificatePolicies(cert: Certificate): CertificatePolicies | un
   const ext = cert.tbsCertificate.extensions?.find((e) => e.extnID === id_ce_certificatePolicies);
   if (!ext) return undefined;
   return AsnConvert.parse(ext.extnValue.buffer, CertificatePolicies);
-}
-
-export function isSelfIssued(cert: Certificate): boolean {
-  return Buffer.from(AsnConvert.serialize(cert.tbsCertificate.subject)).equals(
-    Buffer.from(AsnConvert.serialize(cert.tbsCertificate.issuer)),
-  );
 }

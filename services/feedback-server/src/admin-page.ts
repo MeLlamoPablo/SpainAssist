@@ -1222,7 +1222,7 @@ export const ADMIN_PAGE_HTML = `<!doctype html>
 `;
 
 /** No third-party origins; only this page's own inline style/script and same-origin API calls. */
-export const ADMIN_PAGE_CSP = [
+const ADMIN_PAGE_CSP = [
   "default-src 'none'",
   `script-src ${sha256(SCRIPT)}`,
   `style-src ${sha256(STYLE)}`,

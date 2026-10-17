@@ -9,7 +9,7 @@ import { join } from 'node:path';
  *  - obvious secret shapes (Bearer tokens, sk-... keys, JWTs) are masked as a last line of defense.
  */
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface Logger {
   debug(msg: string, data?: unknown): void;
@@ -22,7 +22,7 @@ export interface Logger {
   addSecret(value: string | undefined | null): void;
 }
 
-export type LogSink = (line: string, level: LogLevel) => void;
+type LogSink = (line: string, level: LogLevel) => void;
 
 const LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 

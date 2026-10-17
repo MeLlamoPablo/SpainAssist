@@ -54,7 +54,7 @@ const Source = Type.Object({
   }),
 });
 
-export const ProcedureUpdateParams = Type.Object({
+const ProcedureUpdateParams = Type.Object({
   title: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
   summary: Type.Optional(
     Type.String({ maxLength: 1000, description: 'One or two plain-language sentences' }),

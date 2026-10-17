@@ -7,7 +7,7 @@ export function normalizeDocumentId(value: string): string {
   return value.toUpperCase().replace(/[\s.-]/g, '');
 }
 
-export function dniLetter(digits: number): string {
+function dniLetter(digits: number): string {
   return DNI_LETTERS[digits % 23]!;
 }
 
@@ -38,12 +38,6 @@ export function parseSpanishDate(value: string): Date | null {
     return null;
   }
   return date;
-}
-
-export function formatSpanishDate(date: Date): string {
-  const dd = String(date.getUTCDate()).padStart(2, '0');
-  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-  return `${dd}/${mm}/${date.getUTCFullYear()}`;
 }
 
 /** Spanish mobile number: 9 digits starting with 6 or 7, optional +34/0034 prefix and spaces. */

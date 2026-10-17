@@ -4,7 +4,7 @@ import { api } from './api';
 /** Media (screenshots) are immutable: cache data URLs per id for the session. */
 const cache = new Map<string, Promise<string | null>>();
 
-export function loadMedia(id: string): Promise<string | null> {
+function loadMedia(id: string): Promise<string | null> {
   let pending = cache.get(id);
   if (!pending) {
     pending = api.invoke('media.get', id).catch(() => null);

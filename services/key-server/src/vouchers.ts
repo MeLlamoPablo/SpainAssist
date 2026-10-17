@@ -42,7 +42,7 @@ export async function createVouchers(
   return { codes, batch };
 }
 
-export const DEMO_VOUCHER_AMOUNT_USD = 5;
+const DEMO_VOUCHER_AMOUNT_USD = 5;
 
 /**
  * Development only (DEV_SEED=1 with the mock provider): makes sure the public demo voucher

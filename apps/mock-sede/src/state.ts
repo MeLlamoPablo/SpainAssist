@@ -156,7 +156,7 @@ export interface ResidenciaDraft {
   toSign?: { reference: string; xml: string; preparedAt: number };
 }
 
-export interface CitaDraft {
+interface CitaDraft {
   oficina?: string;
   servicio?: string;
   /** "YYYY-MM-DDTHH:MM" */

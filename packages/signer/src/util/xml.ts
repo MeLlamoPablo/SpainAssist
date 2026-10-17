@@ -1,7 +1,7 @@
 /** Strict XML parsing with @xmldom/xmldom (no network access, no DTD processing). */
 import { DOMParser } from '@xmldom/xmldom';
 
-export class XmlParseError extends Error {
+class XmlParseError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'XmlParseError';

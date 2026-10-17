@@ -42,7 +42,7 @@ import {
   TAG,
 } from './der';
 
-export const OID = {
+const OID = {
   data: '1.2.840.113549.1.7.1',
   envelopedData: '1.2.840.113549.1.7.3',
   encryptedData: '1.2.840.113549.1.7.6',

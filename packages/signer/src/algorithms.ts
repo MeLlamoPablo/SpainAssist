@@ -36,7 +36,7 @@ export interface ResolvedAlgorithm {
   xmlDigestMethod: string;
 }
 
-export const DEFAULT_ALGORITHM = 'SHA512withRSA';
+const DEFAULT_ALGORITHM = 'SHA512withRSA';
 
 const DIGESTS: Record<DigestName, { oid: string; xml: string; bits: string }> = {
   sha1: { oid: '1.3.14.3.2.26', xml: 'http://www.w3.org/2000/09/xmldsig#sha1', bits: '1' },
@@ -69,10 +69,10 @@ const ECDSA_OIDS: Record<DigestName, string> = {
   sha384: '1.2.840.10045.4.3.3',
   sha512: '1.2.840.10045.4.3.4',
 };
-export const OID_RSA_ENCRYPTION = '1.2.840.113549.1.1.1';
+const OID_RSA_ENCRYPTION = '1.2.840.113549.1.1.1';
 
 /** Digest named in an algorithm string, or null if it is not one AutoFirma accepts. */
-export function parseDigest(algorithm: string): DigestName | null {
+function parseDigest(algorithm: string): DigestName | null {
   const m = /^\s*SHA-?(1|256|384|512)(?:with(?:RSA|ECDSA))?\s*$/i.exec(algorithm);
   if (!m) return null;
   return `sha${m[1]}` as DigestName;

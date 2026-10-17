@@ -20,7 +20,7 @@ interface ChatState {
 }
 
 /** Upsert by id, keeping the original position of existing items. */
-export function upsertItem(items: ChatItem[], item: ChatItem): ChatItem[] {
+function upsertItem(items: ChatItem[], item: ChatItem): ChatItem[] {
   const index = items.findIndex((i) => i.id === item.id);
   if (index === -1) return [...items, item];
   const next = items.slice();
@@ -29,7 +29,7 @@ export function upsertItem(items: ChatItem[], item: ChatItem): ChatItem[] {
 }
 
 /** Append streamed text to an assistant item. Unknown items are ignored (the next load has it). */
-export function appendDelta(items: ChatItem[], itemId: string, delta: string): ChatItem[] {
+function appendDelta(items: ChatItem[], itemId: string, delta: string): ChatItem[] {
   const index = items.findIndex((i) => i.id === itemId);
   if (index === -1) return items;
   const item = items[index]!;
@@ -43,7 +43,7 @@ export function appendDelta(items: ChatItem[], itemId: string, delta: string): C
  * Merge a freshly loaded transcript with items pushed while it was loading: the loaded list is
  * the base; pushed items replace their loaded twin or are appended.
  */
-export function mergeLoaded(loaded: ChatItem[], pushed: ChatItem[]): ChatItem[] {
+function mergeLoaded(loaded: ChatItem[], pushed: ChatItem[]): ChatItem[] {
   let items = loaded;
   for (const item of pushed) items = upsertItem(items, item);
   return items;

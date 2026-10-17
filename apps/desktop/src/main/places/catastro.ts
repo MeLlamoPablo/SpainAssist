@@ -297,7 +297,5 @@ export function createCatastro({
   };
 }
 
-export type Catastro = ReturnType<typeof createCatastro>;
-
 /** One instance per app, so every lookup shares the request spacing. */
 export const catastro = createCatastro();

@@ -6,7 +6,7 @@ import { DEFAULT_VOTE_POLICY, type VotePolicy } from './feedback/votes';
 export const SERVICE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Dev default: embedded Postgres (PGlite) in services/feedback-server/.data (gitignored). */
-export const DEFAULT_DATABASE_URL = 'pglite://.data/feedback-server';
+const DEFAULT_DATABASE_URL = 'pglite://.data/feedback-server';
 
 /**
  * Normalizes a database URL: `postgres://…` is returned as is; `pglite://memory` stays

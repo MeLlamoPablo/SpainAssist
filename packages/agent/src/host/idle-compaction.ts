@@ -72,7 +72,7 @@ export class SessionRequests {
  * How long the provider keeps the prompt cache entry `request` wrote. Undefined when it does not
  * cache or the model declares no lifetime (`promptCache`): idle compaction is then off.
  */
-export function cacheTtlMs(request: SessionRequest): number | undefined {
+function cacheTtlMs(request: SessionRequest): number | undefined {
   const retention =
     request.options.cacheRetention ??
     (process.env.PI_CACHE_RETENTION === 'long' ? 'long' : 'short');

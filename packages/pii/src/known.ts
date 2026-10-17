@@ -38,7 +38,7 @@ const MONTHS = [
 ];
 
 /** Lower-case, accent-free letters and digits only (other characters are dropped). */
-export function fold(value: string): string {
+function fold(value: string): string {
   let out = '';
   for (const ch of value) {
     for (const f of ch.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase()) {

@@ -9,7 +9,7 @@ import { searchFeedback, type VoteContext } from './feedback/repo';
  * Read-only MCP server (Streamable HTTP, stateless, JSON responses) so third-party agents can
  * query the community learnings.
  */
-export function createMcpServer(db: Db, votes: VoteContext, random?: () => number): McpServer {
+function createMcpServer(db: Db, votes: VoteContext, random?: () => number): McpServer {
   const server = new McpServer({ name: 'spainassist-feedback', version: '0.1.1' });
 
   server.registerTool(

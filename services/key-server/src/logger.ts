@@ -1,6 +1,6 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
 
-export type LogFields = Record<string, string | number | boolean | null | undefined>;
+type LogFields = Record<string, string | number | boolean | null | undefined>;
 
 /**
  * JSON-lines logger. Privacy rule for every call site: never log voucher codes, API keys (ours

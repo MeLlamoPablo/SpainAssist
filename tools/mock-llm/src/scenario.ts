@@ -107,7 +107,7 @@ export interface ChatMessage {
   name?: string;
 }
 
-export interface ToolResultInfo {
+interface ToolResultInfo {
   toolCallId?: string;
   name?: string;
   content: string;
@@ -124,7 +124,7 @@ export interface RequestFacts {
 
 const IMAGE_FOLLOW_UP = /^Attached image\(s\) from tool result/i;
 
-export function contentText(content: unknown): string {
+function contentText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content

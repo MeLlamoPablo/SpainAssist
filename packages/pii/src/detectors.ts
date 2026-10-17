@@ -330,7 +330,7 @@ const URL_RE = new RegExp(
 );
 
 /** Finds URLs in text and returns their spans, without trailing punctuation. */
-export function findUrls(text: string): { start: number; end: number }[] {
+function findUrls(text: string): { start: number; end: number }[] {
   const urls: { start: number; end: number }[] = [];
   for (const m of text.matchAll(URL_RE)) {
     let url = m[0];

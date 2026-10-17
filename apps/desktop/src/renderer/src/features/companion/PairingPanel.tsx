@@ -14,7 +14,7 @@ import { companionDict } from './i18n';
  * The pairing link as a QR code. Always dark modules on a white tile, whatever the theme:
  * phone scanners read inverted codes badly.
  */
-export function CompanionQr({ link, size = 196 }: { link: string; size?: number }) {
+function CompanionQr({ link, size = 196 }: { link: string; size?: number }) {
   const t = useT(companionDict);
   const path = useMemo(() => {
     const qr = encode(link, { ecc: 'M', border: 2 });

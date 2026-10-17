@@ -23,11 +23,13 @@
     "reset:dev": "corepack pnpm --filter @sa/desktop reset:dev",
     "reset:dev:onboarding": "corepack pnpm --filter @sa/desktop reset:dev:onboarding",
     "design:colors": "node tools/design-colors.mjs",
-    "design:colors:check": "node tools/design-colors.mjs --check"
+    "design:colors:check": "node tools/design-colors.mjs --check",
+    "knip": "knip"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@types/node": "^24.0.0",
+    "knip": "^6.41.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"

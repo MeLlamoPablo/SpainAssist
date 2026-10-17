@@ -19,17 +19,17 @@ interface CredentialBase {
   lastUsedAt?: string;
 }
 
-export interface StoredClave extends CredentialBase {
+interface StoredClave extends CredentialBase {
   kind: 'clave_permanente';
   username: string;
   password: string;
 }
 
-export interface StoredClaveMovil extends CredentialBase {
+interface StoredClaveMovil extends CredentialBase {
   kind: 'clave_movil';
 }
 
-export interface StoredCertificate extends CredentialBase {
+interface StoredCertificate extends CredentialBase {
   kind: 'certificate';
   fileName: string;
   /** Normalized PKCS#12 (base64). */
@@ -45,7 +45,7 @@ export interface StoredCertificate extends CredentialBase {
  * The DNIe signs in the paired phone; we keep its certificate's details once read, and its PIN
  * once the user saves it or the card accepts a typed one (D22).
  */
-export interface StoredDnie extends CredentialBase {
+interface StoredDnie extends CredentialBase {
   kind: 'dnie';
   certificate?: CertificateInfo;
   pin?: string;
@@ -53,7 +53,7 @@ export interface StoredDnie extends CredentialBase {
 
 export type StoredCredential = StoredClave | StoredClaveMovil | StoredCertificate | StoredDnie;
 
-export interface StoredSecret {
+interface StoredSecret {
   label: string;
   value: string;
   createdAt: string;

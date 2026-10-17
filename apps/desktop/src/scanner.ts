@@ -107,6 +107,7 @@ export type ScannerEvent =
   | { sessionId: string; type: 'complete'; fields: DocumentFields; permanent: boolean }
   | { sessionId: string; type: 'error'; message: string };
 
+/** @public Used by `renderer/env.d.ts` through an inline `import()` type. */
 export interface ScannerApi {
   start(sessionId: string, source?: 'camera' | 'photo'): Promise<void>;
   frames(sessionId: string, requestId: string, images: string[]): Promise<void>;

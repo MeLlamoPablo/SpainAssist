@@ -76,7 +76,7 @@ const FormField = Type.Object({
   ),
 });
 
-export const AskUserParams = Type.Object({
+const AskUserParams = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 160 }),
   message: Type.Optional(
     Type.String({ maxLength: 2000, description: 'Why you need it, in one or two sentences' }),
@@ -85,7 +85,7 @@ export const AskUserParams = Type.Object({
   submitLabel: Type.Optional(Type.String({ maxLength: 40 })),
 });
 
-export const ConfirmActionParams = Type.Object({
+const ConfirmActionParams = Type.Object({
   confirmKind: StringEnum(['action', 'submission', 'payment', 'certificate_site'], {
     description:
       'submission = sending an official form/application; payment = paying a fee; certificate_site = allowing certificate logins on a site outside the official list, only when browser_use_certificate tells you to (needs site and sources)',
@@ -124,7 +124,7 @@ export const ConfirmActionParams = Type.Object({
   ),
 });
 
-export const RequestUserActionParams = Type.Object({
+const RequestUserActionParams = Type.Object({
   actionKind: StringEnum(['captcha', 'qr_scan', 'phone_approval', 'manual_step', 'offline'], {
     description:
       'captcha | qr_scan (e.g. Cl@ve Móvil QR) | phone_approval (approve on the phone) | manual_step (in the browser) | offline (outside the computer)',
@@ -170,7 +170,7 @@ const CREDENTIAL_NEXT = {
   dnie: "Log in with browser_use_certificate when the site asks for a client certificate, or click the login button when it signs with AutoFirma; the app pairs the phone if needed, don't ask the user to do it.",
 } as const;
 
-export const RequestPhoneCallParams = Type.Object({
+const RequestPhoneCallParams = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 160, description: 'e.g. "Llama a EMASESA"' }),
   organization: Type.String({
     minLength: 1,

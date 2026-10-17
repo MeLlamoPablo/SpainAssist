@@ -20,7 +20,7 @@ export interface CertificateHolder {
 }
 
 /** Parses Node's multi-line X509Certificate subject/issuer ("C=ES\nCN=..."). */
-export function parseDistinguishedName(dn: string): Record<string, string> {
+function parseDistinguishedName(dn: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const line of dn.split('\n')) {
     const eq = line.indexOf('=');

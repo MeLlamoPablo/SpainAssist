@@ -41,7 +41,7 @@ const DN_NAMES: Record<string, string> = {
 };
 
 /** Issuer and subject attributes, in DER order (most general first), with decoded values. */
-export function certificateNames(cert: X509Certificate): {
+function certificateNames(cert: X509Certificate): {
   issuer: DnAttribute[][];
   subject: DnAttribute[][];
 } {
@@ -76,7 +76,7 @@ function escapeDnValue(value: string): string {
 }
 
 /** RFC 4514-style string, most specific attribute first: "CN=..., SERIALNUMBER=..., C=ES". */
-export function formatDn(name: DnAttribute[][]): string {
+function formatDn(name: DnAttribute[][]): string {
   return [...name]
     .reverse()
     .map((rdn) => rdn.map((a) => `${a.name}=${escapeDnValue(a.value)}`).join('+'))
@@ -164,7 +164,7 @@ export interface ImportedCertificate {
 }
 
 /** Maximum accepted size of a .p12 file. Personal certificates are a few KB. */
-export const MAX_P12_SIZE = 256 * 1024;
+const MAX_P12_SIZE = 256 * 1024;
 
 /**
  * Validates and normalizes a user-provided PKCS#12 file. Throws `VaultError` with codes

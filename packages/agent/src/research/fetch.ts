@@ -151,7 +151,7 @@ function supportedCharset(label: string | undefined): string | undefined {
   }
 }
 
-export function detectCharset(
+function detectCharset(
   contentType: string,
   bytes: Uint8Array,
 ): {
@@ -188,7 +188,7 @@ const CP1252_HIGH = [
  * ascii labels WHATWG folds into it) byte-for-byte, so € and curly quotes in 0x80–0x9F would
  * come out as C1 control characters.
  */
-export function decodeWindows1252(bytes: Uint8Array): string {
+function decodeWindows1252(bytes: Uint8Array): string {
   const parts: string[] = [];
   const chunk = 8192;
   for (let start = 0; start < bytes.length; start += chunk) {
@@ -325,7 +325,7 @@ function cleanText(text: string | null | undefined): string {
   return (text ?? '').replace(/\s+/g, ' ').trim();
 }
 
-export function tidyMarkdown(markdown: string): string {
+function tidyMarkdown(markdown: string): string {
   return markdown
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')

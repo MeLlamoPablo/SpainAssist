@@ -17,13 +17,13 @@ const ProcedureId = Type.String({
   description: 'Procedure id from procedure_list or procedure_start, e.g. "p_0123456789abcdef"',
 });
 
-export const ProcedureListParams = Type.Object({
+const ProcedureListParams = Type.Object({
   includeArchived: Type.Optional(Type.Boolean({ description: 'Default false' })),
 });
 
-export const ProcedureReadParams = Type.Object({ procedureId: ProcedureId });
+const ProcedureReadParams = Type.Object({ procedureId: ProcedureId });
 
-export const ProcedureStartParams = Type.Object({
+const ProcedureStartParams = Type.Object({
   title: Type.String({
     minLength: 1,
     maxLength: 160,
@@ -37,7 +37,7 @@ export const ProcedureStartParams = Type.Object({
   }),
 });
 
-export const ProcedureMessageParams = Type.Object({
+const ProcedureMessageParams = Type.Object({
   procedureId: ProcedureId,
   message: Type.String({
     minLength: 1,
@@ -46,7 +46,7 @@ export const ProcedureMessageParams = Type.Object({
   }),
 });
 
-export const ProcedureCancelParams = Type.Object({
+const ProcedureCancelParams = Type.Object({
   procedureId: ProcedureId,
   reason: Type.Optional(Type.String({ maxLength: 300 })),
 });
@@ -57,7 +57,7 @@ const ACTIVITY: Record<ProcedureBrief['activity'], string> = {
   needs_user: 'waiting for the user',
 };
 
-export function renderBrief(p: ProcedureBrief): string {
+function renderBrief(p: ProcedureBrief): string {
   const parts = [`${p.id} "${p.title}"`, p.status, ACTIVITY[p.activity]];
   if (p.archived) parts.push('archived');
   if (p.nextAction) parts.push(`next: ${clip(p.nextAction.text, 120)} (${p.nextAction.owner})`);
@@ -66,7 +66,7 @@ export function renderBrief(p: ProcedureBrief): string {
   return `- ${parts.join(' · ')}`;
 }
 
-export function renderCard(p: ProcedureListItem): string {
+function renderCard(p: ProcedureListItem): string {
   const lines = [renderProcedure(p).replace(/^Plan card updated\. /, '')];
   if (p.summary) lines.push(`Summary: ${clip(p.summary, 400)}`);
   lines.push(

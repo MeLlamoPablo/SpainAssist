@@ -13,7 +13,7 @@ export class FakeBridgeError extends Error {
   }
 }
 
-export interface FakeBridgeCall {
+interface FakeBridgeCall {
   method: string;
   params: Record<string, unknown>;
   authorization?: string;

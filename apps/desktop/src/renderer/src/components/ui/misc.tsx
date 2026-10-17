@@ -47,7 +47,7 @@ export const TONE_PILL: Record<Tone, string> = {
   brand: 'bg-accent-soft text-accent-text ring-accent-line',
 };
 
-export const TONE_DOT: Record<Tone, string> = {
+const TONE_DOT: Record<Tone, string> = {
   research: 'bg-st-research-dot',
   attention: 'bg-st-attention-dot',
   progress: 'bg-st-progress-dot',
@@ -57,18 +57,6 @@ export const TONE_DOT: Record<Tone, string> = {
   blocked: 'bg-st-blocked-dot',
   neutral: 'bg-st-neutral-dot',
   brand: 'bg-accent',
-};
-
-export const TONE_TEXT: Record<Tone, string> = {
-  research: 'text-st-research-fg',
-  attention: 'text-st-attention-fg',
-  progress: 'text-st-progress-fg',
-  planned: 'text-st-planned-fg',
-  waiting: 'text-st-waiting-fg',
-  done: 'text-st-done-fg',
-  blocked: 'text-st-blocked-fg',
-  neutral: 'text-st-neutral-fg',
-  brand: 'text-accent-text',
 };
 
 export function Pill({
@@ -99,14 +87,6 @@ export function Pill({
       {Icon ? <Icon size={size === 'sm' ? 11 : 13} aria-hidden /> : null}
       {children}
     </span>
-  );
-}
-
-export function Kbd({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-line bg-surface-2 px-1 font-sans text-[11px] font-medium text-fg-subtle">
-      {children}
-    </kbd>
   );
 }
 
@@ -145,15 +125,6 @@ export function EmptyState({
       {children ? <p className="mt-1 max-w-sm text-[13px] text-fg-muted">{children}</p> : null}
       {action ? <div className="mt-4">{action}</div> : null}
     </div>
-  );
-}
-
-/** Small uppercase-free section label used across screens. */
-export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <h3 className={cn('text-[12px] font-semibold tracking-wide text-fg-subtle', className)}>
-      {children}
-    </h3>
   );
 }
 

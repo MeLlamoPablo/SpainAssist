@@ -21,7 +21,7 @@ export const SIDECAR_TARGETS: readonly SidecarTarget[] = [
   { platform: 'linux', arch: 'x64' },
 ];
 
-export function sidecarFileName(platform: NodeJS.Platform = process.platform): string {
+function sidecarFileName(platform: NodeJS.Platform = process.platform): string {
   return platform === 'win32' ? 'sa-sidecar.exe' : 'sa-sidecar';
 }
 

@@ -10,7 +10,7 @@ function toDataUrl(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-export type FakePageKind = 'login' | 'form' | 'list' | 'message' | 'download' | 'qr' | 'home';
+type FakePageKind = 'login' | 'form' | 'list' | 'message' | 'download' | 'qr' | 'home';
 
 export interface FakePageOptions {
   host: string;

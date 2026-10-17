@@ -378,7 +378,7 @@ function fetchErrorText(error: unknown): string {
   return detail ? `${error.message} (${detail})` : error.message;
 }
 
-export function renderScriptRun(run: ScriptRun, maxChars: number): string {
+function renderScriptRun(run: ScriptRun, maxChars: number): string {
   const parts: string[] = [];
   if (run.logs.length > 0) parts.push(`--- Logs ---\n${run.logs.join('\n')}`);
   if (run.ok)

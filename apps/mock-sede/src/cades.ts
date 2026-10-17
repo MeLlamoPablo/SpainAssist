@@ -42,7 +42,7 @@ const SIGNATURE_DIGEST_BY_OID: Record<string, string | null> = {
   '1.2.840.10045.4.3.4': 'sha512',
 };
 
-export type CadesCheckId =
+type CadesCheckId =
   | 'structure'
   | 'content'
   | 'contentType'

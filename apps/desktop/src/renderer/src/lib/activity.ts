@@ -429,8 +429,3 @@ function fillFromVaultLabel(args: Record<string, unknown>, ctx: ActivityContext)
   }
   return { text: es ? 'Rellenando con tus datos' : 'Filling in with your data', icon: Keyboard };
 }
-
-/** Group key for consecutive activities: a host if they are browser steps on one site. */
-export function isBrowserTool(tool: string): boolean {
-  return normalizeTool(tool).startsWith('browser_');
-}

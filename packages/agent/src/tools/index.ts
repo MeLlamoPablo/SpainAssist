@@ -14,13 +14,6 @@ import { vaultTools } from './vault';
 
 export type { AnyToolDefinition } from './common';
 
-export {
-  ASSISTANT_TOOL_NAMES,
-  type AssistantToolName,
-  TOOL_NAMES,
-  type ToolName,
-} from './names';
-
 export interface ToolDeps {
   bridge: BridgeTransport;
   /** Whether the model accepts images (browser_screenshot). */
