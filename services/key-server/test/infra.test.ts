@@ -127,7 +127,7 @@ describe('loadConfig', () => {
       devSeed: false,
       keyTtlDays: 180,
       searchTools: [],
-      deciderModel: 'perplexity/pplx-decider-v1.1-27b',
+      deciderModel: '~perplexity/pplx-decider-flash-latest',
       chatgptKeys: {
         enabled: true,
         dailyBudgetUsd: 0.1,

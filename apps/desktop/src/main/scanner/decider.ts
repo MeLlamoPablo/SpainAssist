@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const FRAME_DECIDER_MODEL = 'perplexity/pplx-decider-v1.1-27b';
+export const FRAME_DECIDER_MODEL = '~perplexity/pplx-decider-flash-latest';
 export const FRAME_DECIDER_ENDPOINT = 'https://openrouter.ai/api/v1/systemone';
 export const FRAME_DOCUMENT_THRESHOLD = 0.8;
 export const FRAME_LEGIBILITY_THRESHOLD = 0.7;

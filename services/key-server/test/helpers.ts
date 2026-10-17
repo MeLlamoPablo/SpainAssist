@@ -26,7 +26,7 @@ import {
 export const TEST_PEPPER = 'test-pepper-0123456789abcdef';
 export const ADMIN_TOKEN = 'admin-token-0123456789abcdef';
 const DEFAULT_IP = '203.0.113.10';
-export const DECIDER_MODEL = 'perplexity/pplx-decider-v1.1-27b';
+export const DECIDER_MODEL = '~perplexity/pplx-decider-flash-latest';
 export const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 7);
 
 // A promise, so a test that times out while the template boots can't leave the next test an
@@ -222,6 +222,8 @@ export interface FakeKey {
   blocked: boolean;
   /** ISO 8601; null = never expires. */
   expires: string | null;
+  /** The `models` of `/key/generate`, replaced by `/key/update {key, models}`. */
+  models: string[];
 }
 
 /** LiteLLM's `duration` ("15552000s"; the key server always sends seconds) → ISO expiry. */
@@ -231,8 +233,8 @@ const expiryOf = (duration: string | null | undefined) =>
 /**
  * Fake LiteLLM admin API: `/key/generate` answers like v1.104 (plaintext key once, hashed token
  * in `token` and `token_id`), `/key/block` answers 200 (or what `block` returns), and
- * `/key/info?key=<hash>` / `/key/update {key, max_budget, duration?}` read and move the budget
- * and expiry in `keys`.
+ * `/key/info?key=<hash>` / `/key/update {key, max_budget?, duration?, models?}` read and move the
+ * budget, expiry and models in `keys`.
  */
 export function fakeLiteLLM(
   options: {
@@ -260,22 +262,34 @@ export function fakeLiteLLM(
     if (url.pathname === '/key/update') {
       const custom = options.update?.(call);
       if (custom) return custom;
-      const body = call.body as { key: string; max_budget: number; duration?: string | null };
+      const body = call.body as {
+        key: string;
+        max_budget?: number;
+        duration?: string | null;
+        models?: string[];
+      };
       const key = keys.get(body.key);
       if (!key) return jsonResponse({ error: { message: 'not found' } }, 404);
-      key.max_budget = body.max_budget;
+      if (body.max_budget !== undefined) key.max_budget = body.max_budget;
       if (body.duration !== undefined) key.expires = expiryOf(body.duration);
-      return jsonResponse({ key: body.key, max_budget: body.max_budget });
+      if (body.models) key.models = body.models;
+      return jsonResponse({ key: body.key, max_budget: key.max_budget });
     }
     if (call.url.endsWith('/key/generate')) {
       n++;
       const custom = options.generate?.(call, n);
       if (custom) return custom;
-      const body = call.body as { duration?: string; max_budget: number };
+      const body = call.body as { duration?: string; max_budget: number; models: string[] };
       const expires = expiryOf(body.duration);
       const key = `sk-litellm-key-${n}`;
       const id = options.realHashes ? sha256Hex(key) : tokenId(n);
-      keys.set(id, { max_budget: body.max_budget, spend: 0, blocked: false, expires });
+      keys.set(id, {
+        max_budget: body.max_budget,
+        spend: 0,
+        blocked: false,
+        expires,
+        models: body.models,
+      });
       return jsonResponse({
         key,
         key_name: `sk-...${n}`,

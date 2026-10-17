@@ -10,6 +10,7 @@ import { createLogger } from './logger';
 import { createProvisioner } from './providers';
 import { ParallelTaskApi } from './research/parallel';
 import { ResearchService } from './research/service';
+import { SubsidyTeam } from './subsidy-team';
 import { ensureDemoVoucher } from './vouchers';
 
 const HOUR_MS = 3_600_000;
@@ -77,6 +78,24 @@ async function main(): Promise<void> {
       .catch((err) => log.warn('research housekeeping failed', { error: errorSummary(err) }));
   void resumeResearch();
 
+  // ChatGPT keys get a changed DECIDER_MODEL; retried by the housekeeping until it succeeds.
+  const subsidyTeam = new SubsidyTeam(db, provisioner, {
+    deciderModel: config.deciderModel,
+    monthlyBudgetUsd: config.chatgptKeys.globalMonthlyBudgetUsd,
+  });
+  let keyModelsSynced = false;
+  const syncKeyModels = () =>
+    keyModelsSynced
+      ? undefined
+      : subsidyTeam
+          .syncModels()
+          .then((keys) => {
+            keyModelsSynced = true;
+            if (keys) log.info('ChatGPT keys moved to the decider model', { keys });
+          })
+          .catch((err) => log.warn('ChatGPT key models not updated', { error: errorSummary(err) }));
+  void syncKeyModels();
+
   const app = createApp({
     db,
     config: { ...config, devSeed },
@@ -94,8 +113,11 @@ async function main(): Promise<void> {
     });
   });
 
-  // Housekeeping: follow unfinished research runs and retry refunds.
-  const housekeeping = setInterval(() => void resumeResearch(), HOUR_MS);
+  // Housekeeping: follow unfinished research runs, retry refunds and key model updates.
+  const housekeeping = setInterval(() => {
+    void resumeResearch();
+    void syncKeyModels();
+  }, HOUR_MS);
   housekeeping.unref();
 
   let stopping = false;

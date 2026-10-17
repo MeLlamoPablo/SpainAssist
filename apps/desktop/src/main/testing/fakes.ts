@@ -632,7 +632,7 @@ export function createFakeProviderLib(overrides: Partial<ProviderLib> = {}): Pro
         provider: 'litellm' as const,
         baseUrl: 'https://llm.example.test/v1',
         apiKey: 'sk-litellm-chatgpt-scan-key-123456',
-        deciderModel: 'perplexity/pplx-decider-v1.1-27b',
+        deciderModel: '~perplexity/pplx-decider-flash-latest',
         dailyLimitUsd: 0.1,
         monthlyLimitUsd: 0.5,
       };

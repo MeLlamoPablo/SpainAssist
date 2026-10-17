@@ -285,6 +285,16 @@ export async function touchChatGPTKey(
     : null;
 }
 
+/** LiteLLM ids (hashed tokens) of the ChatGPT keys a provider issued that are not disabled. */
+export async function chatGPTKeyHashes(db: Queryable, provider: string): Promise<string[]> {
+  const { rows } = await db.query<{ key_hash: string }>(
+    `SELECT key_hash FROM issued_keys
+      WHERE kind = 'chatgpt' AND provider = $1 AND disabled_at IS NULL`,
+    [provider],
+  );
+  return rows.map((row) => row.key_hash);
+}
+
 // --- server settings -------------------------------------------------------------------------
 
 export async function getSetting(db: Queryable, name: string): Promise<string | null> {

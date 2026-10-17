@@ -189,3 +189,22 @@ got 403 on `/openrouter/v1/systemone`, `/openrouter/v1/chat/completions` and `/v
 but `/openrouter/alpha/decisions/../../v1/chat/completions` (also `%2e%2e`) reached the upstream
 chat endpoint with the proxy's key: the public reverse proxy must forward only the exact path.
 Not yet checked against the live gateway or a real OpenRouter decision.
+
+Decider Flash, latest (2026-10-17): `perplexity/pplx-decider-v1.1-27b` started answering 404
+"No endpoints found" on OpenRouter, so screening fell through to the bypass. A user-requested
+bench through our gateway compared `perplexity/pplx-decider-v1.2` with
+`perplexity/pplx-decider-flash-v1.2` (both `-20261016`), same request and thresholds as the app:
+144 images, each three times. The images were the 23 saved scan-eval frames (should pass), 69
+made unreadable from them (strong blur, shrunk to 56 px) plus 6 images without a document
+(should fail), and 115 borderline variants (mild blur, dim, dark) reported but not scored. Flash
+scored 99% (one dim, blurred DNI frame rejected at 0.69 legibility, no false accepts), median
+535 ms, $0.000013 per 1,300-token frame; v1.2 scored 97% (two such frames rejected), 670 ms,
+$0.000026. Both answered identically on every repeat. The negatives are synthetic and the hard
+real frames are few: a signal, not a calibration. The app now calls
+`~perplexity/pplx-decider-flash-latest`, OpenRouter's alias that follows the newest Flash decider
+(on 2026-10-17 it answered as `pplx-decider-flash-v1.2-20261016` with the same scores), so a new
+version needs no release. The gateway's hand-registered price follows the alias and must be
+checked when it moves. ChatGPT keys were created with the old id in their model list, which
+LiteLLM checks on the decisions route too: the key server now gives the team and every ChatGPT
+key the configured `DECIDER_MODEL` at startup, once per model list. No frames or personal values
+are in this memo.

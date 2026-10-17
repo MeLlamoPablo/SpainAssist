@@ -4,6 +4,7 @@ import { createApp } from '../src/app';
 import { openSecret, sealSecret } from '../src/crypto';
 import { silentLogger } from '../src/logger';
 import { MockProvisioner } from '../src/providers/key-provisioner';
+import { SubsidyTeam } from '../src/subsidy-team';
 import {
   DECIDER_MODEL,
   errorCode,
@@ -256,6 +257,56 @@ describe('POST /v1/chatgpt-keys', () => {
     h = await setup();
     expect((await h.request('POST', '/v1/search-tokens')).status).toBe(404);
     expect((await h.request('POST', '/v1/search', { body: { query: 'x' } })).status).toBe(404);
+  });
+});
+
+describe('SubsidyTeam.syncModels', () => {
+  it('moves the team and every ChatGPT key to a new decider model, once', async () => {
+    const upstream = fakeLiteLLM();
+    h = await setup({ provisioner: litellmProvisioner(upstream.fetch) });
+    await getKey(h, await idToken());
+    await getKey(h, await idToken({ sub: 'google-oauth2|user-2' }));
+    expect([...upstream.keys.values()].map((k) => k.models)).toEqual([
+      [DECIDER_MODEL, TRANSCRIPTION_MODEL],
+      [DECIDER_MODEL, TRANSCRIPTION_MODEL],
+    ]);
+
+    const next = 'perplexity/pplx-decider-next';
+    const team = () =>
+      new SubsidyTeam(h!.db, h!.provisioner, { deciderModel: next, monthlyBudgetUsd: null });
+    upstream.calls.length = 0;
+    expect(await team().syncModels()).toBe(2);
+    expect(upstream.calls.map((c) => c.url)).toEqual([
+      'http://litellm:4000/team/update',
+      'http://litellm:4000/key/update',
+      'http://litellm:4000/key/update',
+    ]);
+    expect(upstream.calls[0]!.body).toMatchObject({ models: [next, TRANSCRIPTION_MODEL] });
+    expect([...upstream.keys.values()].map((k) => k.models)).toEqual([
+      [next, TRANSCRIPTION_MODEL],
+      [next, TRANSCRIPTION_MODEL],
+    ]);
+
+    // The next start finds the list applied and calls nothing.
+    upstream.calls.length = 0;
+    expect(await team().syncModels()).toBe(0);
+    expect(upstream.calls).toEqual([]);
+  });
+
+  it('retries on the next call when an update fails', async () => {
+    let fail = true;
+    const upstream = fakeLiteLLM({
+      update: () => (fail ? jsonResponse({ error: { message: 'down' } }, 500) : undefined),
+    });
+    h = await setup({ provisioner: litellmProvisioner(upstream.fetch) });
+    await getKey(h, await idToken());
+    const team = new SubsidyTeam(h.db, h.provisioner, {
+      deciderModel: 'perplexity/pplx-decider-next',
+      monthlyBudgetUsd: null,
+    });
+    await expect(team.syncModels()).rejects.toThrow('key update failed (500)');
+    fail = false;
+    expect(await team.syncModels()).toBe(1);
   });
 });
 

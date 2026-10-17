@@ -69,7 +69,7 @@ export interface ServerConfig extends AppConfig {
   warnings: string[];
 }
 
-const DEFAULT_DECIDER_MODEL = 'perplexity/pplx-decider-v1.1-27b';
+const DEFAULT_DECIDER_MODEL = '~perplexity/pplx-decider-flash-latest';
 /** Used only with PGlite when VOUCHER_PEPPER is unset; never acceptable with Postgres. */
 export const DEV_PEPPER = 'sa-dev-pepper-NOT-SECRET-do-not-use-in-production';
 /** Used only with PGlite when KEY_ENCRYPTION_KEY is unset (32 public bytes). */

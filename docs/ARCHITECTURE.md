@@ -442,7 +442,8 @@ longest edge (below Decider's 2,048 image-tile cap for any aspect ratio). Only t
 unchecked frame is retained. For camera sessions, main continues checking frames during extraction, keeping at
 most three distinct accepted JPEGs younger than ten seconds in memory for the next retry.
 Uploaded photos are checked on demand. Main checks one frame at a time with OpenRouter's
-Decisions API, using `perplexity/pplx-decider-v1.1-27b`. Two typed yes/no questions test
+Decisions API, using `~perplexity/pplx-decider-flash-latest` (OpenRouter's alias for Perplexity's
+newest Flash decider). Two typed yes/no questions test
 presence of an identity document and legibility. Document presence must reach 0.8 and text legibility 0.7 while screening is active; reflections outside readable main fields/MRZ are tolerated; rejected frames produce localized guidance and never reach
 the extraction model. Screening goes through our LiteLLM gateway (`{gateway}/openrouter/alpha/decisions`,
 D12) with the user's own gateway key, kept in main only: the voucher key (charged to the voucher),

@@ -83,6 +83,8 @@ export interface KeyProvisioner {
    * Only the key server changes them after creation.
    */
   setMaxBudget(id: string, maxBudgetUsd: number, expiresAt?: Date | null): Promise<void>;
+  /** Replaces the models a key may call (unknown keys are skipped: nothing left to change). */
+  setModels(id: string, models: string[]): Promise<void>;
 }
 
 /** USD amounts sent to LiteLLM: rounded to 1e-6 so repeated reservations do not drift. */
@@ -342,6 +344,12 @@ export class LiteLLMProvisioner implements KeyProvisioner {
     const res = await this.post('/key/update', body, 'key update');
     await this.ensureOk(res, 'key update');
   }
+
+  async setModels(id: string, models: string[]): Promise<void> {
+    const res = await this.post('/key/update', { key: id, models }, 'key update');
+    if (res.status === 404) return;
+    await this.ensureOk(res, 'key update');
+  }
 }
 
 export const MOCK_LLM_BASE_URL = 'http://127.0.0.1:8789/v1';
@@ -363,6 +371,8 @@ export class MockProvisioner implements KeyProvisioner {
       teamId?: string;
       /** Null = never expires. */
       expiresAt: Date | null;
+      /** Set only by setModels (create does not know the server's model lists). */
+      models?: string[];
       spendUsd: number;
       disabled: boolean;
     }
@@ -430,5 +440,10 @@ export class MockProvisioner implements KeyProvisioner {
     if (!entry) throw new ProviderError('Unknown mock key');
     entry.limitUsd = roundUsd(maxBudgetUsd);
     if (expiresAt !== undefined) entry.expiresAt = expiresAt;
+  }
+
+  async setModels(id: string, models: string[]): Promise<void> {
+    const entry = this.keys.get(id);
+    if (entry) entry.models = models;
   }
 }

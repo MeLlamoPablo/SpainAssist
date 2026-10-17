@@ -544,7 +544,7 @@ describe('vouchers, credit and models', () => {
               provider: 'litellm',
               baseUrl: 'https://llm.example.org/v1',
               apiKey: 'sk-litellm-chatgpt',
-              deciderModel: 'perplexity/pplx-decider-v1.1-27b',
+              deciderModel: '~perplexity/pplx-decider-flash-latest',
               dailyLimitUsd: 0.1,
               monthlyLimitUsd: 0.5,
             });
@@ -609,7 +609,7 @@ describe('vouchers, credit and models', () => {
       provider: 'litellm',
       baseUrl: 'https://llm.example.org/v1',
       apiKey: 'sk-litellm-chatgpt',
-      deciderModel: 'perplexity/pplx-decider-v1.1-27b',
+      deciderModel: '~perplexity/pplx-decider-flash-latest',
       dailyLimitUsd: 0.1,
       monthlyLimitUsd: 0.5,
     });

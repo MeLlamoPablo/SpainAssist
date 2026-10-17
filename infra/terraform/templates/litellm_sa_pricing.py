@@ -16,10 +16,11 @@ OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 REFRESH_SECONDS = 6 * 60 * 60
 
 # Not in OpenRouter's model list: Perplexity Decider (document scan screening) through
-# /openrouter/alpha/decisions.
+# /openrouter/alpha/decisions. The app calls the alias that follows Perplexity's latest Flash
+# decider (perplexity/pplx-decider-flash-v1.2 on 2026-10-17): check this price when it moves.
 STATIC_PRICES = {
-    "openrouter/perplexity/pplx-decider-v1.1-27b": {
-        "input_cost_per_token": 2e-08,
+    "openrouter/~perplexity/pplx-decider-flash-latest": {
+        "input_cost_per_token": 1e-08,
         "output_cost_per_token": 0.0,
         "litellm_provider": "openrouter",
         "mode": "evaluation",

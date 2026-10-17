@@ -24,7 +24,7 @@ const accepted: FrameDecision = {
   accepted: true,
   documentPresent: 0.99,
   documentLegible: 0.99,
-  model: 'perplexity/pplx-decider-v1.1-27b',
+  model: '~perplexity/pplx-decider-flash-latest',
   usage: { input_tokens: 100, output_tokens: 0, cost: 0.000004 },
   startedAt: 1,
   completedAt: 2,

@@ -257,7 +257,7 @@ logged at $0, pass-through for virtual keys is Enterprise-only), so the key serv
 | `LITELLM_KEY_MODELS` | empty (all models) | Comma-separated LiteLLM model names voucher keys may call. Include the app's voucher model (`DEFAULT_MODELS.voucher` in `@sa/agent`) and `anthropic/claude-haiku-5.5` (document scanning). Keep it empty in production |
 | `LITELLM_SEARCH_TOOLS` | empty (all tools) | Comma-separated LiteLLM search tool names keys may call; also told to clients as `searchTools` |
 | `KEY_TTL_DAYS` | `180` | Lifetime of a key from a voucher with no `expiresAt` (`0` = no expiry); a voucher's own `expiresAt` always wins |
-| `DECIDER_MODEL` | `perplexity/pplx-decider-v1.1-27b` | OpenRouter id of the scan decider; added to voucher keys' models, the only model of ChatGPT keys |
+| `DECIDER_MODEL` | `~perplexity/pplx-decider-flash-latest` | OpenRouter id of the scan decider; added to voucher keys' models, the only model of ChatGPT keys. When it changes, the server gives the ChatGPT keys and their team the new model at startup (once per model list) |
 | `CHATGPT_KEYS` | `1` | `0` disables `POST /v1/chatgpt-keys` |
 | `KEY_ENCRYPTION_KEY` | dev key (PGlite only) | 32 random bytes as 64 hex characters or base64 (`openssl rand -hex 32`). Encrypts stored ChatGPT keys; changing it makes them unreadable. Without it on Postgres, ChatGPT keys are disabled (warning at startup) |
 | `CHATGPT_DAILY_BUDGET_USD` | `0.10` | Per-account cap per UTC day |
@@ -281,19 +281,19 @@ callback below logs nothing). Expose only the routes clients need (`/v1/chat/com
 `/v1/models`, `/v1/search/*`, exactly `/openrouter/alpha/decisions`, `/key/info`) at the public
 reverse proxy; the admin API stays internal.
 
-LiteLLM v1.104's price map has no `openrouter/perplexity/pplx-decider-v1.1-27b`, so without help
+LiteLLM v1.104's price map has no `openrouter/~perplexity/pplx-decider-flash-latest`, so without help
 every decision costs $0 and budgets never fill. A `model_list` entry does not help (custom prices
 are registered only under the deployment id, not the `openrouter/<model>` key the pass-through
 looks up). The proxy needs a small callback module next to its config that registers the price
-($0.02 per million input tokens, output free, as OpenRouter lists it):
+($0.01 per million input tokens, output free, as OpenRouter charges it):
 
 ```python
 # sa_pricing.py, loaded with litellm_settings.callbacks: ["sa_pricing.handler"]
 import litellm
 from litellm.integrations.custom_logger import CustomLogger
 
-litellm.register_model({"openrouter/perplexity/pplx-decider-v1.1-27b": {
-    "input_cost_per_token": 2e-08, "output_cost_per_token": 0.0,
+litellm.register_model({"openrouter/~perplexity/pplx-decider-flash-latest": {
+    "input_cost_per_token": 1e-08, "output_cost_per_token": 0.0,
     "litellm_provider": "openrouter", "mode": "evaluation"}})
 handler = CustomLogger()
 ```
