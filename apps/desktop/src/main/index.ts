@@ -304,6 +304,8 @@ async function main(): Promise<void> {
           token: env.flagsToken,
           appName: 'desktop',
           appVersion: app.getVersion(),
+          platform: process.platform,
+          arch: process.arch,
           logger: log,
         });
 

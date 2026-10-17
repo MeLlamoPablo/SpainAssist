@@ -113,3 +113,31 @@ resource "unleash_context_field" "app_version" {
 
   depends_on = [coolify_resource_action.unleash]
 }
+
+# The desktop app's OS (`process.platform`, sent as `properties[platform]`), so a flag can
+# target one OS.
+resource "unleash_context_field" "platform" {
+  name        = "platform"
+  description = "Spain Assist desktop OS (Node's process.platform)"
+  stickiness  = false
+  legal_values = [
+    { value = "darwin", description = "macOS" },
+    { value = "win32", description = "Windows" },
+    { value = "linux", description = "Linux" },
+  ]
+
+  depends_on = [coolify_resource_action.unleash]
+}
+
+# The desktop app's CPU (`process.arch`, sent as `properties[arch]`), so a flag can target one CPU.
+resource "unleash_context_field" "arch" {
+  name        = "arch"
+  description = "Spain Assist desktop CPU (Node's process.arch)"
+  stickiness  = false
+  legal_values = [
+    { value = "arm64", description = "64-bit ARM (Apple silicon)" },
+    { value = "x64", description = "64-bit Intel or AMD" },
+  ]
+
+  depends_on = [coolify_resource_action.unleash]
+}

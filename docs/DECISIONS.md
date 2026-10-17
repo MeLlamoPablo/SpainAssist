@@ -666,10 +666,12 @@ may hold the PIN, and the desktop gives it to the phone with the request.
   reaches the renderer (`updates.status`, `UpdateStatus`) for the must-update screen. Stable
   versions never get prereleases (`vX.Y.Z-suffix` tags); a prerelease install keeps getting
   them (electron-updater's default).
-- **Unleash knows the version.** The flags request sends `properties[appVersion]`, so a flag can
-  be constrained by version (`SEMVER_LT`). Unleash's `appVersion` context field is in Terraform
-  (`unleash_context_field.app_version`, `infra/terraform/unleash.tf`); the flags themselves are
-  made in Unleash's UI, since the provider can't manage them.
+- **Unleash knows the version, OS and CPU.** The flags request sends `properties[appVersion]`,
+  `properties[platform]` (`process.platform`: `darwin`, `win32`, `linux`) and `properties[arch]`
+  (`process.arch`: `arm64`, `x64`), so a flag can be constrained by version (`SEMVER_LT`), OS or
+  CPU. Unleash's `appVersion`, `platform` and `arch` context fields are in Terraform
+  (`unleash_context_field.*`, `infra/terraform/unleash.tf`); the flags themselves are made in
+  Unleash's UI, since the provider can't manage them.
 - **`must-update`.** When it's on for this version, the app shows only the must-update screen
   (`MustUpdate.tsx`), not the onboarding and not the shell. Where the app updates itself, main
   checks at once and installs the update as soon as it's downloaded, restarting the app.

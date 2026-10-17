@@ -14,6 +14,8 @@ function load(handler: Parameters<typeof createFakeFetch>[0]) {
     token: 'default:production.token',
     appName: 'desktop',
     appVersion: '0.2.0-beta.1',
+    platform: 'darwin',
+    arch: 'arm64',
     logger,
   });
   return { fetch, flags };
@@ -32,10 +34,12 @@ describe('loadFeatureFlags', () => {
     });
     const request = fetch.requests[0];
     expect(request?.url.pathname).toBe('/api/frontend');
-    // The version is a context property, so Unleash constraints can compare it (SEMVER_LT).
+    // The version, OS and CPU are context properties, so Unleash constraints can target them.
     expect(Object.fromEntries(request?.url.searchParams ?? [])).toEqual({
       appName: 'desktop',
       'properties[appVersion]': '0.2.0-beta.1',
+      'properties[platform]': 'darwin',
+      'properties[arch]': 'arm64',
     });
     expect(request?.headers.get('authorization')).toBe('default:production.token');
   });

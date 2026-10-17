@@ -17,8 +17,9 @@ export function featuresFromNames(enabled: Iterable<string>): FeatureFlags {
 
 /**
  * Reads the feature flags from Unleash's frontend API, which lists only the flags that are on.
- * The app version goes along as the `appVersion` context property, so a flag can target versions
- * (`must-update` with SEMVER_LT, for example). Fails closed: when Unleash can't be reached or answers nonsense, every feature is off.
+ * The app version, OS and CPU go along as the `appVersion`, `platform` and `arch` context
+ * properties, so a flag can target versions (`must-update` with SEMVER_LT, for example), one OS
+ * (`process.platform`: darwin, win32, linux) or one CPU (`process.arch`: arm64, x64). Fails closed: when Unleash can't be reached or answers nonsense, every feature is off.
  * Once read, it reports their use in the background (see reportFlagMetrics).
  */
 export async function loadFeatureFlags(deps: {
@@ -27,6 +28,8 @@ export async function loadFeatureFlags(deps: {
   token: string;
   appName: string;
   appVersion: string;
+  platform: string;
+  arch: string;
   logger: Logger;
   timeoutMs?: number;
 }): Promise<FeatureFlags> {
@@ -34,6 +37,8 @@ export async function loadFeatureFlags(deps: {
   const query = new URLSearchParams({
     appName: deps.appName,
     'properties[appVersion]': deps.appVersion,
+    'properties[platform]': deps.platform,
+    'properties[arch]': deps.arch,
   });
   try {
     const json = await requestJson(deps.fetch, joinUrl(deps.url, `/api/frontend?${query}`), {

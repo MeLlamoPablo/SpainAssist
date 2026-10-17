@@ -570,6 +570,8 @@ Main reads the flags once per launch from Unleash's frontend API (`remote/flags.
 `PRODUCTION_SERVICES.flagsUrl` and a public frontend token from `flagsTokens`), so a change
 applies at the next launch. Packaged builds read Unleash's `production` environment and
 development builds its `development` one, so a flag can be tried in development first.
+The request sends the app version, OS and CPU as the `appVersion`, `platform` and `arch` context
+properties, so a flag can target a version range, one OS or one CPU.
 After reading them, main reports to Unleash's metrics endpoint that each flag was checked once
 (on or off), with a random id per launch, so Unleash shows which flags are in use. It fails closed: when Unleash can't be reached, every flag is
 off. They reach the renderer as `appInfo.features` (`FeatureFlags` in `@sa/shared`), but main
