@@ -42,6 +42,16 @@ const BUILD_ONLY = new Set([
   'vite',
 ]);
 
+/**
+ * Dependencies of bundled packages that the bundle never reaches: only entry points the app
+ * doesn't import use them, so they and their own dependencies don't ship.
+ */
+const NOT_BUNDLED = new Set([
+  // @sentry/node's build-tool plugins (`@sentry/node/bundler-plugin/*`), with the Sentry CLI
+  // (FSL-1.1) under them. The app imports only `@sentry/electron/main` and `/renderer` (D29).
+  '@sentry/bundler-plugins',
+]);
+
 /** SPDX ids that ask only for their notice to be kept. */
 const PERMISSIVE = new Set([
   '0BSD',
@@ -180,6 +190,7 @@ export function collectPackages(appDir = APP_DIR): Component[] {
   const missing: string[] = [];
 
   const visit = (fromDir: string, name: string, required: boolean) => {
+    if (NOT_BUNDLED.has(name)) return;
     const dir = resolvePackage(fromDir, name);
     if (!dir) {
       if (required) missing.push(`${name} (from ${path.relative(appDir, fromDir) || '.'})`);

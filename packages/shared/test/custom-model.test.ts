@@ -34,6 +34,7 @@ describe('custom endpoint capabilities', () => {
       language: 'es',
       onboardingCompleted: true,
       shareLearnings: false,
+      errorReports: true,
       provider: { ...custom, reasoning: true },
       browser: { headless: false },
     });

@@ -82,6 +82,7 @@ export class SettingsStore {
         ? { onboardingCompleted: patch.onboardingCompleted }
         : {}),
       ...(patch.shareLearnings !== undefined ? { shareLearnings: patch.shareLearnings } : {}),
+      ...(patch.errorReports !== undefined ? { errorReports: patch.errorReports } : {}),
       browser: { ...s.browser, ...stripUndefined(patch.browser) },
     }));
   }
@@ -161,7 +162,7 @@ export function normalizeSettings(
   if (!raw || typeof raw !== 'object') return out;
   const r = raw as Record<string, unknown>;
   const shape = Settings.shape;
-  const keys = ['language', 'onboardingCompleted', 'shareLearnings'] as const;
+  const keys = ['language', 'onboardingCompleted', 'shareLearnings', 'errorReports'] as const;
   for (const key of keys) {
     if (r[key] === undefined) continue;
     const parsed = shape[key].safeParse(r[key]);

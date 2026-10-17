@@ -53,6 +53,7 @@ import { createMainServices, type MainServices } from './app/services';
 import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
+import { startErrorReports } from './errors/reports';
 import { catastro } from './places/catastro';
 import { noBiometric } from './ports';
 import { chatgptLoginPages } from './providers/login-pages';
@@ -119,6 +120,15 @@ app.setPath(
   'userData',
   env.userDataDir ? resolve(env.userDataDir) : join(app.getPath('appData'), 'SpainAssistant'),
 );
+// Error reports (D29): started before `ready` (the SDK registers its IPC scheme), sending nothing
+// until main() opens the gate with the flag and the setting.
+const errorReports = env.errorReportsDsn
+  ? startErrorReports({
+      dsn: env.errorReportsDsn,
+      release: `spain-assist@${app.getVersion()}`,
+      environment: app.isPackaged ? 'production' : 'development',
+    })
+  : undefined;
 protocol.registerSchemesAsPrivileged([APP_SCHEME_PRIVILEGES]);
 
 let services: MainServices | undefined;
@@ -341,6 +351,7 @@ async function main(): Promise<void> {
     isDev,
     isE2E: env.e2e,
     features: await features,
+    errorReports: !!errorReports,
   };
   log.info('feature flags', appInfo.features);
 
@@ -417,6 +428,8 @@ async function main(): Promise<void> {
     isTrustedSender: (ctx) => ctx.isMainFrame && isAppUrl(ctx.senderUrl, devUrl),
   });
   const s = services;
+  // Read per event: turning the setting off stops reports at once; the flag applies per launch.
+  errorReports?.setGate(() => appInfo.features.errorReports && s.settings.get().errorReports);
 
   if (!devUrl) {
     protocol.handle(

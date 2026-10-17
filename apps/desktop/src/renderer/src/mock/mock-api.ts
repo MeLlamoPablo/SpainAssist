@@ -817,7 +817,13 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       platform: 'darwin',
       isDev: true,
       isE2E: false,
-      features: { feedbackServer: params.get('feedback') === '1', dniePhone, mustUpdate },
+      features: {
+        feedbackServer: params.get('feedback') === '1',
+        dniePhone,
+        mustUpdate,
+        errorReports: params.get('errors') === '1',
+      },
+      errorReports: false,
     }),
     'updates.status': () => updates,
     'app.reveal': () => {},
@@ -840,6 +846,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
           ? { onboardingCompleted: patch.onboardingCompleted }
           : {}),
         ...(patch.shareLearnings !== undefined ? { shareLearnings: patch.shareLearnings } : {}),
+        ...(patch.errorReports !== undefined ? { errorReports: patch.errorReports } : {}),
         browser: { ...s.browser, ...patch.browser },
       };
       emit({ type: 'settings.changed', settings: state.settings });

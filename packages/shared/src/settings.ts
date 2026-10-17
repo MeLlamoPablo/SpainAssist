@@ -184,6 +184,11 @@ export const Settings = z.object({
   onboardingCompleted: z.boolean(),
   /** Share anonymous, PII-scrubbed learnings with the community feedback server. */
   shareLearnings: z.boolean(),
+  /**
+   * Send PII-scrubbed error reports (crashes, uncaught errors) to our GlitchTip server, when the
+   * `error-reports` flag is on (D29).
+   */
+  errorReports: z.boolean(),
   provider: ProviderConfig.optional(),
   browser: z.object({
     /** Run the agent's browser without a visible window. */
@@ -196,6 +201,7 @@ export const SettingsPatch = z.object({
   language: Language.optional(),
   onboardingCompleted: z.boolean().optional(),
   shareLearnings: z.boolean().optional(),
+  errorReports: z.boolean().optional(),
   browser: Settings.shape.browser.partial().optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;
@@ -203,8 +209,7 @@ export type SettingsPatch = z.infer<typeof SettingsPatch>;
 /**
  * Backend URLs, built into the app: they are not settings. Packaged builds always use these;
  * development builds accept SA_KEY_SERVER_URL / SA_FEEDBACK_SERVER_URL / SA_MAPS_SERVER_URL /
- * SA_RELAY_SERVER_URL (e2e tests,
- * `corepack pnpm dev:local`). Released versions before the move to spainassist.es call
+ * SA_RELAY_SERVER_URL / SA_ERROR_REPORTS_DSN (e2e tests, `corepack pnpm dev:local`). Released versions before the move to spainassist.es call
  * `<name>.2-31-6-160.sslip.io`, which the server keeps serving (infra/terraform/hetzner.tf).
  */
 export const PRODUCTION_SERVICES = {
@@ -216,6 +221,12 @@ export const PRODUCTION_SERVICES = {
   relayServerUrl: 'https://relay.spainassist.es',
   /** Unleash, for feature flags (infra/terraform/unleash.tf). */
   flagsUrl: 'https://flags.spainassist.es',
+  /**
+   * Where packaged builds send error reports: the `desktop` project of our GlitchTip, which
+   * speaks Sentry's protocol (infra/terraform/glitchtip.tf, D29). Public by design: a DSN can
+   * only send events.
+   */
+  errorReportsDsn: 'https://55d88ac9618e485a917b33ddb359ec0b@errors.spainassist.es/1',
   /**
    * Unleash frontend tokens (`./tf.sh output -json unleash_frontend_tokens`), one per Unleash
    * environment: packaged builds read `production`, development builds `development`. Public by
@@ -246,6 +257,11 @@ export interface FeatureFlags {
    * the app sends; without a constraint the flag would block every version, the newest included.
    */
   mustUpdate: boolean;
+  /**
+   * Error reports to GlitchTip (D29), a kill switch: off, nothing is sent whatever the setting
+   * says, and Settings hides the toggle.
+   */
+  errorReports: boolean;
 }
 
 /** Unleash flag name of each feature flag. */
@@ -253,17 +269,20 @@ export const FEATURE_FLAG_NAMES: Record<keyof FeatureFlags, string> = {
   feedbackServer: 'feedback-server',
   dniePhone: 'dnie-phone',
   mustUpdate: 'must-update',
+  errorReports: 'error-reports',
 };
 
 export const FEATURES_OFF: FeatureFlags = {
   feedbackServer: false,
   dniePhone: false,
   mustUpdate: false,
+  errorReports: false,
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   language: 'es',
   onboardingCompleted: false,
   shareLearnings: true,
+  errorReports: true,
   browser: { headless: false },
 };

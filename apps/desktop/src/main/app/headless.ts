@@ -230,6 +230,7 @@ export async function createHeadlessApp(opts: HeadlessOptions): Promise<Headless
     isDev: !!opts.capture,
     isE2E: true,
     features: { ...FEATURES_OFF, ...opts.features },
+    errorReports: false,
   };
 
   await ensurePrivateDir(userData);

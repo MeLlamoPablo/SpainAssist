@@ -24,7 +24,12 @@ describe('loadFeatureFlags', () => {
     const { fetch, flags } = load(() =>
       jsonResponse(200, { toggles: [{ name: 'feedback-server', enabled: true }] }),
     );
-    expect(await flags).toEqual({ feedbackServer: true, dniePhone: false, mustUpdate: false });
+    expect(await flags).toEqual({
+      feedbackServer: true,
+      dniePhone: false,
+      mustUpdate: false,
+      errorReports: false,
+    });
     const request = fetch.requests[0];
     expect(request?.url.pathname).toBe('/api/frontend');
     // The version is a context property, so Unleash constraints can compare it (SEMVER_LT).
@@ -68,7 +73,12 @@ describe('loadFeatureFlags', () => {
         ? jsonResponse(200, { toggles: [{ name: 'feedback-server', enabled: true }] })
         : jsonResponse(500, {}),
     );
-    expect(await flags).toEqual({ feedbackServer: true, dniePhone: false, mustUpdate: false });
+    expect(await flags).toEqual({
+      feedbackServer: true,
+      dniePhone: false,
+      mustUpdate: false,
+      errorReports: false,
+    });
     await vi.waitFor(() => expect(fetch.requests).toHaveLength(2));
   });
 
@@ -76,7 +86,12 @@ describe('loadFeatureFlags', () => {
     const on = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
     ).flags;
-    expect(await on).toEqual({ feedbackServer: false, dniePhone: true, mustUpdate: false });
+    expect(await on).toEqual({
+      feedbackServer: false,
+      dniePhone: true,
+      mustUpdate: false,
+      errorReports: false,
+    });
     const off = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: false }] }),
     ).flags;
@@ -87,7 +102,19 @@ describe('loadFeatureFlags', () => {
     const on = load(() =>
       jsonResponse(200, { toggles: [{ name: 'must-update', enabled: true }] }),
     ).flags;
-    expect(await on).toEqual({ feedbackServer: false, dniePhone: false, mustUpdate: true });
+    expect(await on).toEqual({
+      feedbackServer: false,
+      dniePhone: false,
+      mustUpdate: true,
+      errorReports: false,
+    });
+  });
+
+  it('reads error-reports as errorReports', async () => {
+    const on = load(() =>
+      jsonResponse(200, { toggles: [{ name: 'error-reports', enabled: true }] }),
+    ).flags;
+    expect((await on).errorReports).toBe(true);
   });
 
   it('turns off every feature Unleash does not list', async () => {

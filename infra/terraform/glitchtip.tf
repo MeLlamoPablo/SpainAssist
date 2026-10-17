@@ -16,6 +16,8 @@ locals {
           DATABASE_URL     = "$${DATABASE_URL}"
           SECRET_KEY       = "$${SECRET_KEY}"
           GLITCHTIP_DOMAIN = "https://${local.hosts.errors}"
+          # Its public host, and loopback for the health check below.
+          ALLOWED_HOSTS = "${local.hosts.errors},127.0.0.1,localhost"
           # Web server and worker in one process; the task queue in Postgres (no Valkey).
           GLITCHTIP_EMBED_WORKER = "true"
           VALKEY_URL             = ""

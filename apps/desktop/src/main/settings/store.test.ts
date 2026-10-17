@@ -54,6 +54,15 @@ describe('SettingsStore', () => {
     expect(s.provider).toBeUndefined();
   });
 
+  it('turns error reports on for files from versions without the setting', async () => {
+    await writeFile(file, JSON.stringify({ language: 'en', shareLearnings: false }));
+    const store = await SettingsStore.open(file, { logger: silentLogger });
+    expect(store.get().errorReports).toBe(true);
+    expect((await store.update({ errorReports: false })).errorReports).toBe(false);
+    const reopened = await SettingsStore.open(file, { logger: silentLogger });
+    expect(reopened.get().errorReports).toBe(false);
+  });
+
   it('drops the model an older version stored for a voucher', async () => {
     const voucher = { kind: 'voucher', secretId: 'provider.voucher', limitUsd: 5 };
     await writeFile(file, JSON.stringify({ provider: { ...voucher, model: 'openai/gpt-6-luna' } }));

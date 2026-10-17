@@ -927,3 +927,25 @@ decisions that shape it:
 - **Typed secrets and personal data.** Secrets typed in a run are registered and masked in every
   artifact; the personas are synthetic. Browser captures keep personal data (D27), which is why
   runs only use synthetic accounts.
+
+## D29 — Error reports: the Sentry SDK and a self-hosted GlitchTip (2026-10-17)
+
+The desktop app reports crashes and uncaught errors so we can fix them before users write in.
+
+- **Sentry's protocol, GlitchTip's server.** The app uses the official `@sentry/electron` SDK.
+  Self-hosted Sentry needs about 16 GB of memory and a dozen services, more than our 4 GB VM.
+  GlitchTip (MIT) accepts the same protocol and runs all-in-one in a few hundred MB, on the
+  existing Coolify server, with its database in the shared Postgres
+  (`infra/terraform/glitchtip.tf`). Moving to Sentry later only changes the DSN.
+- **On by default, with two off switches.** Reports go out unless the user turns off "Enviar
+  informes de errores" in Settings, or we turn off the `error-reports` flag (a kill switch, read
+  at launch). Main checks both for every event, renderer events included.
+- **Privacy before detail.** Only error events. There are no breadcrumbs, local variables,
+  minidumps, sessions, tracing, IPs or machine names. Every string is scrubbed with `@sa/pii` and
+  home folders become `~` before an event leaves the device. Data is kept 90 days on our own
+  server, and no third party sees it.
+- **The Sentry CLI doesn't ship.** `@sentry/node` depends on `@sentry/bundler-plugins`, which
+  depends on the Sentry CLI (FSL-1.1, not permissive). Only its build-tool entry points use it,
+  and the app doesn't import them, so nothing of it reaches the bundles. `scripts/notices.ts`
+  leaves that subtree out (`NOT_BUNDLED`).
+

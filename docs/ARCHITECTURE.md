@@ -580,6 +580,7 @@ hand in Unleash's UI (project `default`), not in Terraform.
 | --- | --- |
 | `feedback-server` (`feedbackServer`) | Agents search and rate community learnings but don't share them: no `feedback_submit`, no sharing setting |
 | `dnie-phone` (`dniePhone`), type experiment | No DNIe with the phone (D14, D15): see below |
+| `error-reports` (`errorReports`), type kill switch | No error reports and no setting for them (D29, "Error reports") |
 
 Without `dnie-phone` the app behaves as if the DNIe with the phone didn't exist. Main never
 creates `CompanionService`, so nothing pairs or connects to the relay. `companion.*` and
@@ -595,9 +596,34 @@ stays in the vault. `companion.unlock` fails too.
 Development builds can skip Unleash with `SA_FEATURE_FLAGS` (comma-separated Unleash names;
 `dev:local` turns on both). E2e runs set it too, and main-process tests pass `features` to the
 test harness (every flag on by default). In the web preview, `?feedback=1` and `?dnie=1` turn
-the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`).
+the flags on (`?companion`, `?dnieSaved` and the playground imply `?dnie=1`), and `?errors=1`
+shows the error-reports setting.
 `?dnieSaved=1` adds a saved DNIe to Mis datos (`?dnieSaved=pin`: with its PIN saved). The playground shows the CAN and PIN step
 (`?playground=1&example=dnie-unlock`, and `dnie-unlock-wrong-pin`).
+
+### Error reports
+
+Packaged builds report crashes and uncaught errors with the Sentry SDK (`@sentry/electron`) to
+our GlitchTip, which speaks Sentry's protocol (D29, `infra/README.md`, "Error reports"). The DSN
+is `PRODUCTION_SERVICES.errorReportsDsn`. Development builds send nothing unless
+`SA_ERROR_REPORTS_DSN` names one, and e2e runs never do.
+
+- **Main owns it** (`main/errors/reports.ts`). The SDK starts before `ready`, because it registers
+  the `sentry-ipc` scheme (allowed in the renderer's CSP). The renderer starts its own SDK
+  (`renderer/src/lib/error-reports.ts`) only when `appInfo.errorReports` says main runs one. It
+  hands its events to main through that scheme, so every event passes main's `beforeSend`.
+- **Gate, per event.** Main sends an event only when the `error-reports` flag is on and the user's
+  `errorReports` setting is on (default on; Settings shows the toggle while the flag is on).
+  Until the flags load, nothing is sent. Turning the setting off stops reports at once. There is
+  no offline queue, so nothing waits on disk to be sent later.
+- **Only errors, scrubbed.** Uncaught exceptions and rejections in main and the renderer, and
+  renderer or GPU process crashes as events. There is no tracing, no sessions, no breadcrumbs
+  (URLs, console lines, clicked text), no local variables and no minidumps (process memory).
+  `scrubReport` (`main/errors/scrub.ts`) drops user, request, machine and module fields. In every
+  other string it turns the home folder into `~` and runs `@sa/pii` over it. GlitchTip doesn't
+  store IP addresses either.
+- **Not covered yet.** The agent host and `sa-sidecar` processes log their failures but don't
+  report them. Source maps aren't uploaded, so the renderer's stack traces are minified.
 
 ### Browser capture (development)
 

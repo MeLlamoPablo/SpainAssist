@@ -264,6 +264,19 @@ describe('env', () => {
     ).toBe(PRODUCTION_SERVICES.mapsServerUrl);
   });
 
+  it('sends error reports from packaged builds, and from development builds only when asked', () => {
+    const dsn = 'https://abc@errors.example.com/1';
+    expect(parseEnv({}, { packaged: true }).errorReportsDsn).toBe(
+      PRODUCTION_SERVICES.errorReportsDsn,
+    );
+    expect(parseEnv({ SA_ERROR_REPORTS_DSN: dsn }, { packaged: true }).errorReportsDsn).toBe(
+      PRODUCTION_SERVICES.errorReportsDsn,
+    );
+    expect(parseEnv({}).errorReportsDsn).toBeUndefined();
+    expect(parseEnv({ SA_ERROR_REPORTS_DSN: dsn }).errorReportsDsn).toBe(dsn);
+    expect(parseEnv({ SA_ERROR_REPORTS_DSN: dsn, SA_E2E: '1' }).errorReportsDsn).toBeUndefined();
+  });
+
   it('rejects malformed SA_PROVIDER', () => {
     const env = parseEnv({ SA_PROVIDER: 'openai|x' });
     expect(env.provider).toBeUndefined();

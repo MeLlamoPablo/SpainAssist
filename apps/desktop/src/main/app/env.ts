@@ -20,6 +20,10 @@ import type { UserKey } from '../providers/manager';
  *   SA_RELAY_SERVER_URL      development only: relay server for DNIe signatures with the phone
  *                            (same). A loopback URL is shown to the phone with this machine's
  *                            LAN address. E2e runs have none unless this points at one
+ *   SA_ERROR_REPORTS_DSN     development only: send error reports to this Sentry-compatible DSN
+ *                            (packaged builds use PRODUCTION_SERVICES.errorReportsDsn). Without
+ *                            it, development builds send none. The `error-reports` flag and the
+ *                            setting still apply (SA_FEATURE_FLAGS=error-reports turns it on)
  *   SA_FEATURE_FLAGS         development only: comma-separated Unleash flag names to turn on,
  *                            instead of asking Unleash (e.g. "feedback-server,dnie-phone");
  *                            "" = all off. E2e runs never ask Unleash: without it, every
@@ -53,6 +57,8 @@ export interface SaEnv {
   e2e: boolean;
   keyServerUrl?: string;
   feedbackServerUrl?: string;
+  /** Sentry DSN for error reports; none in development builds unless SA_ERROR_REPORTS_DSN. */
+  errorReportsDsn?: string;
   /** Unleash flag names turned on by SA_FEATURE_FLAGS, instead of asking Unleash. */
   featureFlags?: string[];
   /** Unleash frontend token: the production environment's in packaged builds, else development's. */
@@ -138,6 +144,7 @@ const DEV_ONLY = [
   'SA_MAPS_SERVER_URL',
   'SA_RELAY_SERVER_URL',
   'SA_FEATURE_FLAGS',
+  'SA_ERROR_REPORTS_DSN',
   'SA_DEV_USER_KEY',
 ] as const;
 
@@ -185,6 +192,11 @@ export function parseEnv(input: NodeJS.ProcessEnv, opts: { packaged?: boolean } 
   out.relayServerUrl =
     parseUrl('SA_RELAY_SERVER_URL', env.SA_RELAY_SERVER_URL, warnings) ??
     (out.e2e ? undefined : PRODUCTION_SERVICES.relayServerUrl);
+  out.errorReportsDsn = opts.packaged
+    ? PRODUCTION_SERVICES.errorReportsDsn
+    : out.e2e
+      ? undefined
+      : parseUrl('SA_ERROR_REPORTS_DSN', env.SA_ERROR_REPORTS_DSN, warnings);
   const deciderUrl = parseUrl('SA_DECIDER_URL', env.SA_DECIDER_URL, warnings);
   if (out.e2e) {
     // Test runners may only send a supplied dummy key to a loopback mock.

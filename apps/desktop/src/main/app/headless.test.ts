@@ -88,7 +88,8 @@ describe('defaults', () => {
       platform: process.platform,
       isDev: false,
       isE2E: true,
-      features: { feedbackServer: false, dniePhone: false, mustUpdate: false },
+      features: { feedbackServer: false, dniePhone: false, mustUpdate: false, errorReports: false },
+      errorReports: false,
     });
     expect((await app.invoke('settings.get')).language).toBe('es');
     expect(app.services.companion).toBeUndefined();
@@ -126,6 +127,7 @@ describe('defaults', () => {
       feedbackServer: false,
       dniePhone: false,
       mustUpdate: false,
+      errorReports: false,
     });
     expect(credentialAllowedOn('clave_permanente', 'https://localhost/')).toBe(false);
     expect(existsSync(join(root, 'elsewhere'))).toBe(false);

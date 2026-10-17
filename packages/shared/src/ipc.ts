@@ -45,6 +45,11 @@ export interface AppInfo {
   /** True when running under the e2e test harness. */
   isE2E: boolean;
   features: FeatureFlags;
+  /**
+   * The main process runs the error-report SDK (packaged builds, or SA_ERROR_REPORTS_DSN in
+   * development), so the renderer starts its own, which hands its events to main.
+   */
+  errorReports: boolean;
 }
 
 export interface SendMessageInput {

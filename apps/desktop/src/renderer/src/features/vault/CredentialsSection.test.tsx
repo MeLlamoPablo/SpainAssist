@@ -20,6 +20,7 @@ const info = (dniePhone: boolean): AppInfo => ({
   isDev: true,
   isE2E: false,
   features: { ...FEATURES_OFF, dniePhone },
+  errorReports: false,
 });
 
 const DNIE = {

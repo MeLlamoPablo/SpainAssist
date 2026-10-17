@@ -55,6 +55,7 @@
     "@sa/sidecar": "workspace:*",
     "@sa/signer": "workspace:*",
     "@sa/vault": "workspace:*",
+    "@sentry/electron": "^8.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/leaflet": "^1.9.22",
     "@types/react": "^19.3.0",

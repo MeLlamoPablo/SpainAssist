@@ -12,7 +12,7 @@ export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
 /** Same policy as the <meta> tag in src/renderer/index.html. */
 export const RENDERER_CSP =
-  "default-src 'self'; script-src 'self'; worker-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; font-src 'self' data:; connect-src 'self'";
+  "default-src 'self'; script-src 'self'; worker-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tile.openstreetmap.org; font-src 'self' data:; connect-src 'self' sentry-ipc:";
 
 export const APP_SCHEME_PRIVILEGES = {
   scheme: APP_SCHEME,
