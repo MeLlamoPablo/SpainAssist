@@ -50,10 +50,12 @@ provider "coolify" {
   retry_max = 5
 }
 
-# Unleash's admin API at https://flags.<domain>, with the admin token Unleash seeds on its first
-# start (unleash.tf).
+# Unleash's admin API, with the admin token Unleash seeds on its first start (unleash.tf). It
+# goes through the server's sslip.io name, which works without DNS and keeps its certificate when
+# var.domain changes: on https://flags.<domain>, the plan of that change would fail before the
+# apply gets the new host its certificate.
 provider "unleash" {
-  base_url      = "https://${local.hosts.flags}"
+  base_url      = "https://${local.legacy_hosts.flags}"
   authorization = var.unleash_admin_token
 }
 
