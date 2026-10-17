@@ -131,7 +131,8 @@ export interface LedgerSummary {
   /** Of the replays, those that were not an exact replay of their recording. */
   looseReplays: number;
   requests: { forward: number; replay: number; reject: number };
-  codex: { requestsLast5h: number; requestsLastDay: number; total: number };
+  /** Forwarded Codex requests, all time (informational: Codex use is not capped). */
+  codex: { total: number };
   /** Reserved and not settled yet: in flight now, or left by a process that died. */
   pending: { requests: number; usd: number; oldest?: string };
   /** The last `x-litellm-key-*` headers seen. */
@@ -140,9 +141,6 @@ export interface LedgerSummary {
 }
 
 const MAX_ERROR_CHARS = 400;
-const WINDOW_5H_MS = 5 * 3_600_000;
-const WINDOW_DAY_MS = 24 * 3_600_000;
-const CODEX_HISTORY_MS = 2 * WINDOW_DAY_MS;
 
 export class Ledger {
   private readonly offsets = new Map<string, { offset: number; tail: string }>();
@@ -158,7 +156,6 @@ export class Ledger {
   private replayedUsd = 0;
   private looseReplays = 0;
   private readonly requests = { forward: 0, replay: 0, reject: 0 };
-  private codexTimes: number[] = [];
   private codexTotal = 0;
   private lastKey: LedgerSummary['lastKey'];
   private lastEpochAt: string | undefined;
@@ -276,14 +273,14 @@ export class Ledger {
         provider: entry.provider,
         day: entry.ts.slice(0, 10),
       });
-      if (entry.provider === 'codex') this.countCodex(atMs);
+      if (entry.provider === 'codex') this.codexTotal++;
       return;
     }
     if (entry.type === 'release') {
       const released = this.pending.get(entry.rid);
       if (!released) return;
       this.pending.delete(entry.rid);
-      if (released.provider === 'codex') this.uncountCodex(released.atMs);
+      if (released.provider === 'codex') this.codexTotal--;
       return;
     }
     if (entry.type !== 'request') return;
@@ -332,24 +329,11 @@ export class Ledger {
       this.byModel.set(entry.model, model);
     }
     // A Codex request was counted when it was reserved.
-    if (entry.provider === 'codex' && !reserved) this.countCodex(Date.parse(entry.ts));
+    if (entry.provider === 'codex' && !reserved) this.codexTotal++;
     const key = entry.litellm;
     if (key?.keySpendUsd !== undefined && key.keyMaxBudgetUsd !== undefined) {
       this.lastKey = { spendUsd: key.keySpendUsd, maxBudgetUsd: key.keyMaxBudgetUsd, at: entry.ts };
     }
-  }
-
-  private countCodex(atMs: number): void {
-    this.codexTotal++;
-    if (Number.isFinite(atMs) && atMs > this.clock().getTime() - CODEX_HISTORY_MS) {
-      this.codexTimes.push(atMs);
-    }
-  }
-
-  private uncountCodex(atMs: number): void {
-    this.codexTotal--;
-    const index = this.codexTimes.indexOf(atMs);
-    if (index !== -1) this.codexTimes.splice(index, 1);
   }
 
   /** Real USD since the last epoch (call `refresh()` first for other processes' lines). */
@@ -387,12 +371,6 @@ export class Ledger {
     return this.pendingUsd(this.lastEpochMs !== undefined ? { sinceMs: this.lastEpochMs } : {});
   }
 
-  /** Forwarded Codex requests in the last `windowMs` (a request counts from its reservation). */
-  codexRequestsWithin(windowMs: number): number {
-    const since = this.clock().getTime() - windowMs;
-    return this.codexTimes.filter((at) => at > since).length;
-  }
-
   private pendingSummary(): LedgerSummary['pending'] {
     let oldest: string | undefined;
     for (const reservation of this.pending.values()) {
@@ -416,16 +394,10 @@ export class Ledger {
       replayedUsd: this.replayedUsd,
       looseReplays: this.looseReplays,
       requests: { ...this.requests },
-      codex: {
-        requestsLast5h: this.codexRequestsWithin(WINDOW_5H_MS),
-        requestsLastDay: this.codexRequestsWithin(WINDOW_DAY_MS),
-        total: this.codexTotal,
-      },
+      codex: { total: this.codexTotal },
       pending: this.pendingSummary(),
       ...(this.lastKey ? { lastKey: this.lastKey } : {}),
       ...(this.lastEpochAt ? { lastEpochAt: this.lastEpochAt } : {}),
     };
   }
 }
-
-export { WINDOW_5H_MS, WINDOW_DAY_MS };

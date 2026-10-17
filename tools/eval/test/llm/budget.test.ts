@@ -119,11 +119,7 @@ describe('budgetStatus', () => {
     expect(status.ledger.sinceEpochUsd).toBeCloseTo(0.0123, 12);
     expect(status.ledger.byDay).toEqual({ '2026-10-17': 0.0123 });
     // The reserve is the floor a run enforces (VOUCHER_FLOOR_USD), not a smaller number.
-    expect(status.limits.voucher).toMatchObject({ perRunUsd: 0.2, reserveUsd: 1, dailyUsd: 1 });
-    expect(status.limits.codex).toMatchObject({
-      perRunRequests: 120,
-      codex: { requestsPer5h: 150, requestsPerDay: 400 },
-    });
+    expect(status.limits).toMatchObject({ perRunUsd: 0.2, reserveUsd: 1, dailyUsd: 1 });
     const text = formatBudgetStatus(status);
     expect(text).toContain('balance $5.00 left');
     expect(text).toContain('since the last epoch $0.0123');
@@ -284,7 +280,7 @@ describe('budgetStatus', () => {
     expect(text).toContain('KILL SWITCH ON');
     expect(text).toContain('logged in; access token valid for 40 min');
     expect(text).not.toContain('dev@example.test');
-    expect(text).toContain('4 requests in the last 5 hours (cap 150)');
+    expect(text).toContain('used: 4 requests in total');
     expect(text).toContain('USAGE LIMIT: paused until 2026-10-17T11:00:00.000Z');
     expect(JSON.stringify(status)).not.toContain('secret-token');
     expect(text).not.toContain('secret-token');

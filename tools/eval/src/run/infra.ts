@@ -54,7 +54,7 @@ export type CapEnding = 'limit:cost' | 'limit:requests' | 'limit:budget';
  * an agent that loops or bloats its context: the agent's doing, so they are scored limits (`run_budget`
  * is the fixture's own cost limit; `requests_cap` counts the whole run). Caps of the simulated user
  * (the `answerer` agent, a few cents) are the harness's. So are the key's reserve, the daily and
- * lifetime caps, the kill switch and the Codex plan windows.
+ * lifetime caps, the kill switch and a Codex usage limit.
  */
 export function classifyCap(reason: CapReason, agent: string): CapEnding {
   const answerer = agent === 'answerer';
@@ -67,13 +67,11 @@ export function classifyCap(reason: CapReason, agent: string): CapEnding {
       return answerer ? 'limit:budget' : 'limit:requests';
     case 'agent_budget':
     case 'input_too_large':
-    case 'codex_tokens':
       return answerer ? 'limit:budget' : 'limit:cost';
     case 'stopped':
     case 'lifetime':
     case 'daily':
     case 'key_reserve':
-    case 'codex_window':
     case 'codex_cooldown':
       return 'limit:budget';
   }

@@ -212,7 +212,8 @@ model gateway, or nothing; what each guard covers is below.
   answer has one (before the answer is validated: a bad answer must not lose it) and the whole login before
   it is used; a write that fails keeps the login in memory and says so. The eval never reads the app's own
   vault credential.
-- Codex runs are metered by request count and rolling windows (not dollars); WebSocket upgrades are
+- Codex runs have no eval cap of their own (the plan has no price per call; only the per-run and per-agent
+  request caps every run gets apply, and a usage limit of the plan pauses them); WebSocket upgrades are
   refused with 426 so the SSE path (hashable, meterable) is used. The research stub overrides the
   backend, so Codex runs never spend plan usage on hosted web search.
 - The answerer is a cheap model (default `anthropic/claude-haiku-5.5`, low reasoning), tweakable per
@@ -423,7 +424,7 @@ corepack pnpm eval run vida-laboral-sin-datos --from <runId>#1 --cache replay   
 corepack pnpm eval suite --scenario oracle   # the full run (six fixtures) one after the other: lines, table, mean (exit 1 on error/abort or a mean under --min-score)
 corepack pnpm eval runs                      # run folders, newest first
 corepack pnpm eval report <runId>            # report.md; --json for result.json, --rules for the rule tables
-corepack pnpm eval budget                    # key balance, ledger per day, the caps and run limits a run gets, Codex window
+corepack pnpm eval budget                    # key balance, ledger per day, the caps and run limits a run gets, Codex requests
 corepack pnpm eval login codex --codex-consent   # development only; also: whoami, logout codex
 ```
 

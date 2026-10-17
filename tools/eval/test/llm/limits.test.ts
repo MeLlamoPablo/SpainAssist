@@ -11,10 +11,8 @@ import {
 } from '../../src/llm/limits';
 
 describe('meter limits', () => {
-  it('has conservative defaults, and a lower request cap per run for Codex', () => {
-    expect(resolveLimits('voucher')).toEqual(DEFAULT_LIMITS);
-    expect(resolveLimits('mock')).toEqual(DEFAULT_LIMITS);
-    expect(resolveLimits('codex').perRunRequests).toBe(120);
+  it('has conservative defaults', () => {
+    expect(resolveLimits()).toEqual(DEFAULT_LIMITS);
     expect(DEFAULT_LIMITS).toMatchObject({
       reserveUsd: 1,
       perRunUsd: 0.5,
@@ -22,27 +20,23 @@ describe('meter limits', () => {
       perAgentUsd: 0.35,
       dailyUsd: 1,
       perAgentUsdByRole: { answerer: 0.05 },
-      codex: { requestsPer5h: 150, requestsPerDay: 400 },
     });
     expect(DEFAULT_LIMITS.lifetimeUsd).toBeUndefined();
   });
 
   it('layers overrides without touching the defaults, merging the nested ones', () => {
     const limits = resolveLimits(
-      'voucher',
-      { perRunUsd: 2, perAgentUsdByRole: { assistant: 0.5 }, codex: { requestsPer5h: 10 } },
-      { perRunRequests: 7, perRunUsd: undefined, codex: { inputTokensPerRun: 99 } },
+      { perRunUsd: 2, perAgentUsdByRole: { assistant: 0.5 } },
+      { perRunRequests: 7, perRunUsd: undefined },
       undefined,
     );
     expect(limits).toMatchObject({
       perRunUsd: 2,
       perRunRequests: 7,
       perAgentUsdByRole: { answerer: 0.05, assistant: 0.5 },
-      codex: { requestsPer5h: 10, requestsPerDay: 400, inputTokensPerRun: 99 },
     });
     expect(DEFAULT_LIMITS.perRunUsd).toBe(0.5);
     expect(DEFAULT_LIMITS.perAgentUsdByRole).toEqual({ answerer: 0.05 });
-    expect(DEFAULT_LIMITS.codex).toEqual({ requestsPer5h: 150, requestsPerDay: 400 });
   });
 
   it('answers caps with a non-retryable 402 that says "out of budget"', () => {

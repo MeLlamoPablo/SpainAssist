@@ -1,4 +1,4 @@
-import type { EvalProvider, MeterBudget } from '../contracts';
+import type { MeterBudget } from '../contracts';
 
 /**
  * The meter's caps and the answers it gives when one is hit. Budget and cap refusals are HTTP 402
@@ -18,32 +18,21 @@ export type CapReason =
   | 'key_reserve'
   | 'run_budget'
   | 'agent_budget'
-  | 'codex_window'
-  | 'codex_tokens'
   /** A Codex usage limit was observed; answered locally with the same 429 until it resets. */
   | 'codex_cooldown';
-
-interface CodexLimits {
-  /** Forwarded Codex requests in any rolling five hours, across all runs (default 150). */
-  requestsPer5h: number;
-  /** ... and in any rolling 24 hours (default 400). */
-  requestsPerDay: number;
-  /** Input tokens one run may send to Codex (default: no cap). */
-  inputTokensPerRun?: number;
-}
 
 /**
  * Every cap of the meter, and what refuses a request first: a request is checked, in this order,
  * against the kill switch, the requests of the run and of the agent, its estimated input size,
  * then (voucher) the lifetime ceiling and the day, the key's balance (`reserveUsd`), the cost of
- * the run and of the agent; (Codex) the rolling windows and the input tokens of the run. The
- * ledger's figures (lifetime, day, Codex windows) and the key's balance count every reservation
- * in it, those of other processes and of requests in flight included.
+ * the run and of the agent. Codex use has no cap of its own beyond the request counts: the plan
+ * has no price per call, and its own usage limit is honoured as a cooldown. The ledger's figures
+ * (lifetime, day) and the key's balance count every reservation in it, those of other processes
+ * and of requests in flight included.
  *
  * `reserveUsd`, `perRunUsd` and `perRunRequests` are `MeterBudget` (contracts.ts): stop real calls
  * when the key's remaining balance would drop below the reserve, and cap one run's spend and
- * request count. A cap that is not a number of dollars for Codex runs (the plan has no price per
- * call) is the request counts.
+ * request count. For Codex runs (the plan has no price per call) only the request counts apply.
  *
  * The defaults are what a voucher run enforces, with one exception: the run loop gives each run
  * the cost limit of its fixture as `perRunUsd` (`RunLimits.maxCostUsd`, `--max-cost`; $1.50 for
@@ -63,12 +52,9 @@ export interface MeterLimits extends MeterBudget {
   lifetimeUsd?: number;
   /** Real voucher spend per UTC day. */
   dailyUsd: number;
-  codex: CodexLimits;
 }
 
-export type MeterLimitsInput = Partial<Omit<MeterLimits, 'codex'>> & {
-  codex?: Partial<CodexLimits>;
-};
+export type MeterLimitsInput = Partial<MeterLimits>;
 
 export const DEFAULT_LIMITS: MeterLimits = {
   // The user's rule for the voucher: no real call when the key would be left with less than $1.
@@ -81,36 +67,21 @@ export const DEFAULT_LIMITS: MeterLimits = {
   perAgentRequests: 200,
   maxInputTokensPerRequest: 400_000,
   dailyUsd: 1,
-  codex: { requestsPer5h: 150, requestsPerDay: 400 },
 };
 
-/** Codex runs are metered by requests: a lower default per run than for dollars. */
-const DEFAULT_CODEX_RUN_REQUESTS = 120;
-
-export function resolveLimits(
-  provider: EvalProvider,
-  ...layers: (MeterLimitsInput | undefined)[]
-): MeterLimits {
+export function resolveLimits(...layers: (MeterLimitsInput | undefined)[]): MeterLimits {
   const out: MeterLimits = {
     ...DEFAULT_LIMITS,
-    perRunRequests:
-      provider === 'codex' ? DEFAULT_CODEX_RUN_REQUESTS : DEFAULT_LIMITS.perRunRequests,
     perAgentUsdByRole: { ...DEFAULT_LIMITS.perAgentUsdByRole },
-    codex: { ...DEFAULT_LIMITS.codex },
   };
   for (const layer of layers) {
     if (!layer) continue;
-    const { codex, perAgentUsdByRole, ...rest } = layer;
+    const { perAgentUsdByRole, ...rest } = layer;
     for (const [key, value] of Object.entries(rest)) {
       if (value !== undefined) (out as unknown as Record<string, unknown>)[key] = value;
     }
     if (perAgentUsdByRole)
       out.perAgentUsdByRole = { ...out.perAgentUsdByRole, ...perAgentUsdByRole };
-    if (codex) {
-      for (const [key, value] of Object.entries(codex)) {
-        if (value !== undefined) (out.codex as unknown as Record<string, unknown>)[key] = value;
-      }
-    }
   }
   return out;
 }

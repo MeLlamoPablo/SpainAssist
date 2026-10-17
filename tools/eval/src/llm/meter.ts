@@ -22,7 +22,7 @@ import {
   resolveCost,
 } from './cost';
 import { homePaths } from './home';
-import { Ledger, type LedgerRecord, WINDOW_5H_MS, WINDOW_DAY_MS } from './ledger';
+import { Ledger, type LedgerRecord } from './ledger';
 import {
   type CapReason,
   capAnswer,
@@ -260,7 +260,7 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
         token: randomBytes(16).toString('hex'),
         provider,
         cache: cacheMode,
-        limits: resolveLimits(provider, options.limits, runOptions.limits),
+        limits: resolveLimits(options.limits, runOptions.limits),
         basePath: upstreamUrl ? basePathOf(upstreamUrl) : REPLAY_BASE_PATH[provider],
         upstream: upstreamUrl ? new URL(upstreamUrl) : undefined,
         totals: new UsageTotals(runOptions.baseline),
@@ -400,9 +400,8 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
     ledger.refresh();
     const nowMs = clock().getTime();
     const codex = run.provider === 'codex';
-    // The ledger counts the voucher's dollars and Codex's requests only.
+    // The ledger counts the voucher's dollars only.
     const ownUsd = reserved && run.provider === 'voucher' ? reserveUsd : 0;
-    const ownRequests = reserved ? 1 : 0;
 
     if (codex) {
       const cooldown = readCooldown(paths.codexCooldown, nowMs);
@@ -435,33 +434,7 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
         codex,
       );
     }
-    if (codex) {
-      const used5h = ledger.codexRequestsWithin(WINDOW_5H_MS) - ownRequests;
-      if (used5h >= limits.codex.requestsPer5h) {
-        return refuse(
-          'codex_window',
-          `${used5h} of ${limits.codex.requestsPer5h} Codex requests used in the last 5 hours`,
-          true,
-        );
-      }
-      const usedDay = ledger.codexRequestsWithin(WINDOW_DAY_MS) - ownRequests;
-      if (usedDay >= limits.codex.requestsPerDay) {
-        return refuse(
-          'codex_window',
-          `${usedDay} of ${limits.codex.requestsPerDay} Codex requests used in the last 24 hours`,
-          true,
-        );
-      }
-      const tokenCap = limits.codex.inputTokensPerRun;
-      if (tokenCap !== undefined && run.totals.promptTokens() >= tokenCap) {
-        return refuse(
-          'codex_tokens',
-          `this run sent ${run.totals.promptTokens()} of ${tokenCap} allowed input tokens`,
-          true,
-        );
-      }
-      return undefined;
-    }
+    if (codex) return undefined;
 
     if (run.provider === 'voucher') {
       if (limits.lifetimeUsd !== undefined) {

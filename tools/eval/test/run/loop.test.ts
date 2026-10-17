@@ -667,7 +667,7 @@ describe('the meter stops the run', () => {
     ['key_reserve', 'the key is nearly empty'],
     ['daily', 'the daily cap'],
     ['lifetime', 'the lifetime cap'],
-    ['codex_window', 'the plan window'],
+    ['codex_cooldown', 'the plan usage limit'],
   ] as const)(
     'a %s cap is the harness running out of budget: aborted, no score',
     async (reason, message) => {

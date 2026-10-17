@@ -34,7 +34,7 @@ export interface BudgetStatus {
   stopped: boolean;
   voucher: VoucherBalance;
   ledger: LedgerSummary;
-  limits: { voucher: MeterLimits; codex: MeterLimits };
+  limits: MeterLimits;
   codex: CodexStatus & { cooldownUntil?: string };
 }
 
@@ -110,10 +110,7 @@ export async function budgetStatus(options: BudgetStatusOptions = {}): Promise<B
     stopped: existsSync(paths.stopFile),
     voucher: await voucherBalance(options),
     ledger: ledger.summary(),
-    limits: {
-      voucher: resolveLimits('voucher', options.limits),
-      codex: resolveLimits('codex', options.limits),
-    },
+    limits: resolveLimits(options.limits),
     codex: {
       ...codex,
       ...(cooldown ? { cooldownUntil: new Date(cooldown.untilMs).toISOString() } : {}),
@@ -175,7 +172,7 @@ export function formatBudgetStatus(status: BudgetStatus): string {
     );
   }
 
-  const v = limits.voucher;
+  const v = limits;
   lines.push('', 'Caps (voucher runs)');
   lines.push(
     `  per run ${v.perRunRequests} requests and the cost limit of its fixture (--max-cost overrides it; ${usd(v.perRunUsd)} for a run without one)`,
@@ -184,8 +181,7 @@ export function formatBudgetStatus(status: BudgetStatus): string {
     '  A request is refused by the first cap it reaches; each one counts the worst case of the requests in flight, its own included.',
   );
 
-  const c = limits.codex;
-  lines.push('', 'Codex (ChatGPT plan, metered by request)');
+  lines.push('', 'Codex (ChatGPT plan, no eval cap)');
   if (codex.loggedIn) {
     lines.push(
       `  logged in; access token ${(codex.expiresInMs ?? 0) > 0 ? `valid for ${Math.round((codex.expiresInMs ?? 0) / 60_000)} min` : 'expired (refreshed on use)'}`,
@@ -194,8 +190,7 @@ export function formatBudgetStatus(status: BudgetStatus): string {
     lines.push('  not logged in (eval login codex)');
   }
   lines.push(
-    `  used: ${ledger.codex.requestsLast5h} requests in the last 5 hours (cap ${c.codex.requestsPer5h}), ${ledger.codex.requestsLastDay} in the last day (cap ${c.codex.requestsPerDay}), ${ledger.codex.total} in total`,
-    `  per run ${c.perRunRequests} requests`,
+    `  used: ${ledger.codex.total} requests in total; a run gets the per-run and per-agent request caps above`,
   );
   if (codex.cooldownUntil) lines.push(`  USAGE LIMIT: paused until ${codex.cooldownUntil}`);
   return lines.join('\n');

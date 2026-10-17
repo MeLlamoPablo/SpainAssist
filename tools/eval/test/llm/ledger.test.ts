@@ -146,24 +146,16 @@ describe('spend ledger', () => {
     expect(new Ledger(dir, now).spentSinceEpochUsd()).toBeCloseTo(0.01, 12);
   });
 
-  it('counts Codex requests in rolling windows and remembers the last key headers', () => {
+  it('counts Codex requests and remembers the last key headers', () => {
     const ledger = new Ledger(dir, now);
-    for (const hoursAgo of [30, 10, 4, 2, 0.5]) {
-      clock = new Date(Date.parse('2026-10-17T10:00:00.000Z') - hoursAgo * 3_600_000);
-      ledger.append({ ...base, provider: 'codex', cost: undefined });
-    }
-    clock = new Date('2026-10-17T10:00:00.000Z');
-    expect(ledger.codexRequestsWithin(5 * 3_600_000)).toBe(3);
-    expect(ledger.codexRequestsWithin(24 * 3_600_000)).toBe(4);
-    expect(ledger.summary().codex).toEqual({ requestsLast5h: 3, requestsLastDay: 4, total: 5 });
-    clock = new Date('2026-10-17T16:00:00.000Z');
-    expect(ledger.codexRequestsWithin(5 * 3_600_000)).toBe(0);
+    for (let i = 0; i < 5; i++) ledger.append({ ...base, provider: 'codex', cost: undefined });
+    expect(ledger.summary().codex).toEqual({ total: 5 });
 
     ledger.append({ ...base, litellm: { keySpendUsd: 1.5, keyMaxBudgetUsd: 5 } });
     expect(ledger.summary().lastKey).toEqual({
       spendUsd: 1.5,
       maxBudgetUsd: 5,
-      at: '2026-10-17T16:00:00.000Z',
+      at: '2026-10-17T10:00:00.000Z',
     });
   });
 
@@ -228,19 +220,18 @@ describe('spend ledger', () => {
       expect(ledger.pendingUsd()).toBe(0);
     });
 
-    it('counts a pending Codex request in the rolling windows once, and not at all once released', () => {
+    it('counts a pending Codex request once, and not at all once released', () => {
       const ledger = new Ledger(dir, now);
       ledger.reserve(reservation('c1', 0, { provider: 'codex' }));
       ledger.reserve(reservation('c2', 0, { provider: 'codex' }));
-      expect(ledger.codexRequestsWithin(5 * 3_600_000)).toBe(2);
+      expect(ledger.summary().codex).toEqual({ total: 2 });
       ledger.append({ ...base, provider: 'codex', rid: 'c1', cost: undefined });
-      expect(ledger.codexRequestsWithin(5 * 3_600_000)).toBe(2);
+      expect(ledger.summary().codex).toEqual({ total: 2 });
       ledger.release('c2');
-      expect(ledger.codexRequestsWithin(5 * 3_600_000)).toBe(1);
-      expect(ledger.summary().codex).toMatchObject({ requestsLast5h: 1, total: 1 });
+      expect(ledger.summary().codex).toEqual({ total: 1 });
       // A forward line of an older version has no rid and counts as before.
       ledger.append({ ...base, provider: 'codex', cost: undefined });
-      expect(ledger.codexRequestsWithin(5 * 3_600_000)).toBe(2);
+      expect(ledger.summary().codex).toEqual({ total: 2 });
     });
 
     it('keeps reservations out of the lifetime total of an earlier epoch', () => {

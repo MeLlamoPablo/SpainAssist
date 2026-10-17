@@ -324,7 +324,7 @@ describe('eval budget', () => {
     expect(out).toMatch(
       /Budget of the harness[^\n]*\n {2}the key reserve, the daily and lifetime caps/,
     );
-    expect(out).toMatch(/Codex \(ChatGPT plan, metered by request\)\n {2}not logged in/);
+    expect(out).toMatch(/Codex \(ChatGPT plan, no eval cap\)\n {2}not logged in/);
     noSecrets(out);
     expect(server.options).toEqual([{ home: cli.home, limits: { reserveUsd: 1, perRunUsd: 0.3 } }]);
     expect(server.calls).toEqual([

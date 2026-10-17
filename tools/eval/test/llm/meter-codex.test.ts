@@ -285,28 +285,11 @@ describe('meter: Codex (ChatGPT plan)', () => {
       expect(env.llm.requests()).toHaveLength(3);
     });
 
-    it('defaults to 120 requests per run, and dollars never block a Codex run', async () => {
+    it('never blocks a Codex run on dollars or on the requests of other runs', async () => {
       env = await startCodex();
-      // Dollar limits that would stop any voucher run mean nothing for a plan.
-      const run = env.openRun({ limits: { perRunUsd: 0, dailyUsd: 0, reserveUsd: 1000 } });
-      for (let i = 0; i < 120; i++) {
-        const res = await codexPost(run, 'p', responsesBody(`request ${i}`));
-        expect(res.status).toBe(200);
-        await drain(res);
-      }
-      const res = await codexPost(run, 'p', responsesBody('one too many'));
-      expect(res.status).toBe(402);
-      expect(((await res.json()) as { error: { message: string } }).error.message).toContain(
-        'this run used 120 of 120 allowed Codex requests',
-      );
-    });
-
-    it('counts rolling windows across runs and processes from the ledger', async () => {
-      env = await startCodex({
-        meter: { codexConsent: true, limits: { codex: { requestsPer5h: 3, requestsPerDay: 6 } } },
-      });
+      // Codex requests of other runs and processes, however many, do not count against this one.
       const ledger = new Ledger(env.t.paths.ledgerDir);
-      const seed = (hoursAgo: number) =>
+      for (let i = 0; i < 500; i++) {
         ledger.append({
           runId: 'other-process',
           agent: 'p',
@@ -314,108 +297,16 @@ describe('meter: Codex (ChatGPT plan)', () => {
           kind: 'forward',
           path: '/backend-api/codex/responses',
           status: 200,
-          ts: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
         });
-      seed(8);
-      seed(7);
-      seed(6); // three requests in the last day, none in the last 5 hours
-      const run = env.openRun();
+      }
+      // Dollar limits that would stop any voucher run mean nothing for a plan.
+      const run = env.openRun({ limits: { perRunUsd: 0, dailyUsd: 0, reserveUsd: 1000 } });
       for (let i = 0; i < 3; i++) {
-        const res = await codexPost(run, 'p', responsesBody(`n${i}`));
+        const res = await codexPost(run, 'p', responsesBody(`request ${i}`));
         expect(res.status).toBe(200);
         await drain(res);
       }
-      const fifth = await codexPost(run, 'p', responsesBody('n3'));
-      expect(fifth.status).toBe(402);
-      expect(((await fifth.json()) as { error: { message: string } }).error.message).toBe(
-        'Eval cap reached: quota exceeded (out of budget): 3 of 3 Codex requests used in the last 5 hours',
-      );
-      // The 24-hour window is counted separately: six requests in the last day stop a fresh meter.
-      const dayMeter = await startCodex({
-        meter: { codexConsent: true, limits: { codex: { requestsPer5h: 100, requestsPerDay: 6 } } },
-      });
-      try {
-        const dayLedger = new Ledger(dayMeter.t.paths.ledgerDir);
-        for (let i = 0; i < 6; i++) {
-          dayLedger.append({
-            runId: 'o',
-            agent: 'p',
-            provider: 'codex',
-            kind: 'forward',
-            path: '/x',
-            status: 200,
-            ts: new Date(Date.now() - 2 * 3_600_000).toISOString(),
-          });
-        }
-        const res = await codexPost(dayMeter.openRun(), 'p', responsesBody('x'));
-        expect(res.status).toBe(402);
-        expect(((await res.json()) as { error: { message: string } }).error.message).toContain(
-          'in the last 24 hours',
-        );
-      } finally {
-        await dayMeter.close();
-      }
-    });
-
-    it('counts a request from the moment it starts, across processes (several evals at once)', async () => {
-      const limits = { codex: { requestsPer5h: 2, requestsPerDay: 100 } };
-      env = await startCodex({
-        meter: { codexConsent: true, limits },
-        mock: {
-          scenario: {
-            rules: [],
-            fallback: {
-              text: 'lento',
-              delayMs: 250,
-              usage: { promptTokens: 100, completionTokens: 5 },
-            },
-          },
-        },
-      });
-      // Two more processes on the same home and the same backend: all read the ledger before any
-      // of the long requests ends, so counting only what has finished would admit two each.
-      const others = await Promise.all(
-        [1, 2].map(() =>
-          createMeter({
-            home: env.t.home,
-            upstreams: { codex: `${env.llm.url}/backend-api` },
-            codexConsent: true,
-            limits,
-          }),
-        ),
-      );
-      try {
-        const runs = [
-          env.openRun(),
-          ...others.map((meter, i) => meter.openRun({ runId: `other-${i}`, provider: 'codex' })),
-        ];
-        const results = await Promise.all(
-          runs.flatMap((run, i) =>
-            [0, 1].map((n) => codexPost(run, `p${n}`, responsesBody(`parallel ${i}-${n}`))),
-          ),
-        );
-        const statuses = results.map((res) => res.status).sort();
-        expect(statuses.filter((status) => status === 200)).toHaveLength(2);
-        expect(statuses.filter((status) => status === 402)).toHaveLength(4);
-        expect(env.llm.requests()).toHaveLength(2);
-        // A request that was counted when it started and then ended is one request, not two.
-        const ledger = new Ledger(env.t.paths.ledgerDir);
-        expect(ledger.summary().codex).toMatchObject({ requestsLast5h: 2, total: 2 });
-        expect(ledger.summary().pending.requests).toBe(0);
-      } finally {
-        await Promise.all(others.map((meter) => meter.close()));
-      }
-    });
-
-    it('caps the input tokens a run sends', async () => {
-      env = await startCodex();
-      const run = env.openRun({ limits: { codex: { inputTokensPerRun: 3000 } } });
-      for (let i = 0; i < 2; i++) await drain(await codexPost(run, 'p', responsesBody(`n${i}`)));
-      const res = await codexPost(run, 'p', responsesBody('n2'));
-      expect(res.status).toBe(402);
-      expect(((await res.json()) as { error: { message: string } }).error.message).toContain(
-        '4000 of 3000 allowed input tokens',
-      );
+      expect(new Ledger(env.t.paths.ledgerDir).summary().codex).toEqual({ total: 503 });
     });
   });
 
