@@ -1,5 +1,5 @@
 # One Hetzner Cloud VM with reserved IPs. cloud-init installs Coolify on first boot; Coolify
-# then runs everything else (coolify.tf, litellm.tf). Secrets never go into cloud-init: the
+# then runs everything else (coolify.tf, litellm.tf, unleash.tf, glitchtip.tf). Secrets never go into cloud-init: the
 # server's metadata service is readable from every container on it. bootstrap.tf delivers
 # them over SSH instead.
 
@@ -8,7 +8,7 @@ locals {
 
   ipv4 = hcloud_primary_ip.ipv4.ip_address
   # One host per service, <subdomain>.<domain>; dns.tf has their records.
-  subdomains = ["coolify", "keys", "feedback", "maps", "relay", "llm", "flags"]
+  subdomains = ["coolify", "keys", "feedback", "maps", "relay", "llm", "flags", "errors"]
   hosts      = { for name in local.subdomains : name => "${name}.${var.domain}" }
   # Released desktop apps call these hosts on the server's sslip.io name, which resolves to the
   # IPv4 without any DNS: they keep answering there too. Never release the reserved IPv4 (the

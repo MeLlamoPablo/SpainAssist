@@ -19,6 +19,7 @@ output "urls" {
     litellm         = "https://${local.hosts.llm}"
     litellm_ui      = "https://${local.hosts.llm}/ui"
     unleash         = "https://${local.hosts.flags}"
+    glitchtip       = "https://${local.hosts.errors}"
   }
 }
 

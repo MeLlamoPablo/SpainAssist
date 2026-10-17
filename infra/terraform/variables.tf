@@ -173,12 +173,13 @@ variable "postgres_password" {
 }
 
 variable "service_db_passwords" {
-  description = "Passwords of the per-service database roles: key_server, feedback, litellm and unleash (URL-safe)."
+  description = "Passwords of the per-service database roles: key_server, feedback, litellm, unleash and glitchtip (URL-safe)."
   type = object({
     key_server = string
     feedback   = string
     litellm    = string
     unleash    = string
+    glitchtip  = string
   })
   sensitive = true
 
@@ -361,5 +362,33 @@ variable "unleash_admin_token" {
   validation {
     condition     = can(regex("^\\*:\\*\\.[A-Za-z0-9]{32,}$", var.unleash_admin_token))
     error_message = "unleash_admin_token must look like *:*. followed by at least 32 letters and digits."
+  }
+}
+
+variable "glitchtip_image" {
+  description = "GlitchTip server image (error reports, glitchtip.tf)."
+  type        = string
+  default     = "glitchtip/glitchtip:6.2.6"
+}
+
+variable "glitchtip_secret_key" {
+  description = "GlitchTip's Django SECRET_KEY (sessions, tokens). Changing it logs everybody out."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.glitchtip_secret_key) >= 50
+    error_message = "glitchtip_secret_key must be at least 50 characters."
+  }
+}
+
+variable "glitchtip_admin_password" {
+  description = "Password of GlitchTip's superuser admin@<domain> at https://errors.<domain>. Re-applied when it changes."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.glitchtip_admin_password) >= 16
+    error_message = "glitchtip_admin_password must be at least 16 characters."
   }
 }

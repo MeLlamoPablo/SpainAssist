@@ -1,6 +1,6 @@
 # Everything that runs inside Coolify: one Postgres (a database and a role per service), the
-# key server and the feedback server (built by Coolify from GitHub), LiteLLM (litellm.tf) and
-# Unleash (unleash.tf).
+# key server and the feedback server (built by Coolify from GitHub), LiteLLM (litellm.tf),
+# Unleash (unleash.tf) and GlitchTip (glitchtip.tf).
 
 data "coolify_servers" "localhost" {
   filter {
@@ -25,7 +25,7 @@ resource "coolify_project" "main" {
 
 resource "coolify_database_postgresql" "main" {
   name              = "postgres"
-  description       = "Databases keyserver, feedback, litellm and unleash (one role each)"
+  description       = "Databases keyserver, feedback, litellm, unleash and glitchtip (one role each)"
   project_uuid      = coolify_project.main.uuid
   server_uuid       = local.server_uuid
   environment_name  = "production"
@@ -46,6 +46,7 @@ locals {
     feedback   = { database = "feedback", role = "feedback" }
     litellm    = { database = "litellm", role = "litellm" }
     unleash    = { database = "unleash", role = "unleash" }
+    glitchtip  = { database = "glitchtip", role = "glitchtip" }
   }
   database_urls = {
     for k, db in local.databases :

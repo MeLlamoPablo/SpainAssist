@@ -30,6 +30,7 @@ service_db_passwords = {
   feedback   = "..."
   litellm    = "..."
   unleash    = "..."
+  glitchtip  = "..."
 }
 
 github_webhook_secret = "..." # >= 32 letters and digits
@@ -48,6 +49,9 @@ litellm_ui_password = "..."
 
 unleash_admin_password = "..."     # only applied on Unleash's first start
 unleash_admin_token    = "*:*...." # *:*. + >= 32 letters and digits; only seeded on Unleash's first start
+
+glitchtip_secret_key     = "..." # >= 50 characters
+glitchtip_admin_password = "..." # admin@<domain> at https://errors.<domain>
 
 openrouter_api_key = "" # https://openrouter.ai/settings/keys
 parallel_api_key   = "" # https://platform.parallel.ai

@@ -1,6 +1,6 @@
 # Infrastructure
 
-Two small, isolated backends, Postgres, a LiteLLM gateway and Unleash:
+Two small, isolated backends, Postgres, a LiteLLM gateway, Unleash and GlitchTip:
 
 | Service | Port | Database | What |
 | --- | --- | --- | --- |
@@ -10,6 +10,7 @@ Two small, isolated backends, Postgres, a LiteLLM gateway and Unleash:
 | `postgres` | internal | – | Postgres 17, one database and one role per service |
 | `litellm` (production only) | 4000 | `litellm` (role `litellm`) | LLM and search gateway: OpenRouter and Parallel behind budget-capped virtual keys |
 | `unleash` (production only) | 4242 | `unleash` (role `unleash`) | Feature flags |
+| `glitchtip` (production only) | 8000 | `glitchtip` (role `glitchtip`) | The desktop app's error reports (Sentry protocol) |
 
 Production runs on one Hetzner VM managed by Coolify, all declared in Terraform (see
 [Production](#production-hetzner--coolify-terraform)). The app has the production URLs built in
@@ -80,7 +81,8 @@ Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443 (+ ICMP)
 └─ cx23 (2 vCPU, 4 GB), Ubuntu 26.04, 2 GB swap, daily Hetzner backups
    └─ Coolify 4.3.23: dashboard https://coolify.<domain>, Traefik + Let's Encrypt
       └─ project "SpainAssistant" / production
-         ├─ postgres          Postgres 17: databases keyserver, feedback, litellm, unleash
+         ├─ postgres          Postgres 17: databases keyserver, feedback, litellm, unleash,
+                              glitchtip
                               (one role each)
          ├─ key-server        https://keys.<domain>      vouchers → capped LiteLLM keys
          ├─ feedback-server   https://feedback.<domain>  anonymous learnings
@@ -88,7 +90,9 @@ Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443 (+ ICMP)
          │                                               Mapbox secret token)
          ├─ litellm           https://llm.<domain>       LiteLLM proxy: holds the OpenRouter
          │                                               and Parallel keys
-         └─ unleash           https://flags.<domain>     Unleash: feature flags
+         ├─ unleash           https://flags.<domain>     Unleash: feature flags
+         └─ glitchtip         https://errors.<domain>    GlitchTip: the desktop app's error
+                                                         reports (Sentry protocol)
 ```
 
 `<domain>` is `spainassist.es` (`var.domain`). It is registered with Route 53 Domains, and its
@@ -109,6 +113,7 @@ the reserved IPv4: the old names are the IP. The relay and the dashboard are on 
 | `coolify.tf` + `templates/databases.sql.tftpl` | Project, Postgres and its per-service roles, GitHub deploy key, both services, their env vars and deployments |
 | `litellm.tf` | LiteLLM's compose file, `config.yaml` (models, search tools), env vars, restart on change |
 | `unleash.tf` | Unleash's compose file, env vars, restart on change, the desktop app's frontend tokens |
+| `glitchtip.tf` | GlitchTip's compose file, env vars, restart on change, its admin user |
 | `dns.tf` | Route 53: the registered domain (name servers, auto-renew), its hosted zone, the service records and the website's (Framer) |
 | `aws_iam.tf` | The IAM user Terraform manages AWS with: only `dns.tf`'s resources, never deleting or transferring a domain |
 | `tf.sh` | Runs Terraform with an SSH tunnel to Coolify's API |
@@ -193,10 +198,28 @@ UI). Terraform manages Unleash's API tokens with `unleash_admin_token`, which Un
 its first start. The app has two frontend tokens built in (`PRODUCTION_SERVICES.flagsTokens`):
 `desktop` for the `production` environment (packaged builds) and `api-key-default-development`
 for `development` (development builds; created in Unleash's UI and added to the state by hand).
-The flags themselves are created by hand in Unleash's UI (project `default`): `feedback-server`
-and `dnie-phone` (type experiment, off until the phone app is published). The desktop reads
+The flags themselves are created by hand in Unleash's UI (project `default`): `feedback-server`,
+`dnie-phone` (type experiment, off until the phone app is published) and `error-reports`
+(type kill switch, on in production). The desktop reads
 them at start-up, and every flag is off when Unleash can't be reached (`docs/ARCHITECTURE.md`,
 "Feature flags").
+
+### Error reports (GlitchTip)
+
+The desktop app reports errors with the official Sentry SDK to GlitchTip at
+`https://errors.<domain>` (D29), which speaks Sentry's protocol. Self-hosted Sentry needs about
+16 GB of memory; GlitchTip runs all-in-one (web server and worker in one process, its queue in
+Postgres, no Valkey) in a few hundred MB. Pointing the app at another Sentry-compatible server
+only changes its DSN.
+
+- Log in as `admin@<domain>` with `glitchtip_admin_password` (Terraform creates that superuser
+  and resets its password when the variable changes). Sign-up is closed and there is no mail
+  server, so nobody else gets an account and alerts aren't e-mailed.
+- The organization `spain-assist` and its project `desktop` (platform Electron) were created
+  once in the UI. The project's DSN (*Settings → Client Keys*) is built into the app as
+  `PRODUCTION_SERVICES.errorReportsDsn`. DSNs are public by design: they can only send events.
+  Set a rate limit on the key there if a flood ever fills the database.
+- Events are kept 90 days (`GLITCHTIP_RETENTION_DAYS`).
 
 ### Day to day
 
