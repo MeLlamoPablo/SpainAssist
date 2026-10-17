@@ -80,10 +80,11 @@ client-certificate login), maps-server 8793, relay-server 8794.
   desktop's).
 - ESM everywhere. Internal packages export TypeScript source (`"exports": "./src/index.ts"`);
   bundlers/tsx/vitest consume it directly. Import siblings by package name (`@sa/shared`).
-- Contracts live in `@sa/shared`. The app is not in production yet: change contracts whenever
-  that's the right design, and update every consumer in the same change. Don't work around a
-  contract (e.g. `custom.*` keys for fields the app knows), and don't add compatibility shims or
-  migrations for old data. Mention contract changes in your final summary.
+- Contracts live in `@sa/shared`. Change contracts whenever that's the right design, and update
+  every consumer in the same change. Don't work around a contract (e.g. `custom.*` keys for
+  fields the app knows). The app is released, so users have data from older versions: when a
+  change touches what the app stores (settings, procedures, transcripts, the vault), migrate that
+  data so it isn't dropped. Mention contract changes in your final summary.
 - Remove unused code in the same change that makes it unused: functions, exports, types, files,
   tests, docs mentions and dependencies. Don't keep dead code "for later", and don't ask before
   removing it.
