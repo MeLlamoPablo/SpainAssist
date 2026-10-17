@@ -17,6 +17,7 @@ import { BenchTargetError } from '../src/bench';
 import { UnknownFixtureError } from '../src/fixtures';
 import { DEFAULT_ANSWERER_MODEL, DEFAULT_CODEX_ANSWERER_MODEL } from '../src/llm';
 import { CodexAuthError, CodexConsentError } from '../src/llm/codex-auth';
+import { PLACEHOLDER_API_KEY } from '../src/llm/credentials';
 import { EvalHomeError } from '../src/llm/home';
 import { CheckpointError } from '../src/run';
 import { VOUCHER_FLOOR_USD } from '../src/run/caps';
@@ -105,6 +106,7 @@ describe('small decisions', () => {
     expect(defaultCache('mock')).toBe('off');
     expect(defaultCache('voucher')).toBe('auto');
     expect(defaultCache('codex')).toBe('auto');
+    expect(defaultCache('local')).toBe('off');
   });
 
   it('picks the answerer model of the provider, and lets the caller choose every model', () => {
@@ -172,6 +174,27 @@ describe('prepareEvaluation refuses before anything starts', () => {
     await expect(prepareEvaluation(request({ provider: 'voucher' }))).rejects.toThrow(
       /A scenario is the script of the mock model: it does not apply to the voucher provider/,
     );
+    none();
+  });
+
+  it('a local run without a usable base URL or without a model for every role', async () => {
+    const models = { assistantModel: 'm', procedureModel: 'm', answererModel: 'm' };
+    const local = (overrides: Partial<EvaluationRequest>) => {
+      const { scenario: _scenario, ...bare } = request({ provider: 'local', models, ...overrides });
+      return prepareEvaluation(bare);
+    };
+    await expect(local({})).rejects.toThrow(/needs the base URL of the model server/);
+    await expect(local({ localBaseUrl: 'localhost:1234' })).rejects.toThrow(/not an http\(s\) URL/);
+    await expect(local({ localBaseUrl: 'nope' })).rejects.toThrow(/is not a URL/);
+    await expect(local({ localBaseUrl: 'http://u:p@localhost:1234/v1' })).rejects.toThrow(
+      /must not have a user name/,
+    );
+    await expect(
+      local({ localBaseUrl: 'http://localhost:1234/v1', models: { assistantModel: 'm' } }),
+    ).rejects.toThrow(/needs a model for every role \(missing: procedureModel, answererModel/);
+    await expect(
+      prepareEvaluation(request({ localBaseUrl: 'http://localhost:1234/v1' })),
+    ).rejects.toThrow(/does not apply to the mock provider/);
     none();
   });
 
@@ -321,6 +344,22 @@ describe('prepareEvaluation decides what the run starts with', () => {
     expect(plan.keyRemainingUsd).toBeUndefined();
     expect(plan.voucherBaseUrl).toBeUndefined();
     expect(await plan.credentials.credential('litellm')).toMatchObject({ type: 'api_key' });
+  });
+
+  it('for a local model: no cache, the server URL, and a placeholder key (never a real one)', async () => {
+    const { scenario: _scenario, ...bare } = request({
+      provider: 'local',
+      localBaseUrl: 'http://localhost:1234/v1/',
+      models: { assistantModel: 'm', procedureModel: 'm', answererModel: 'm' },
+    });
+    const plan = await prepareEvaluation(bare);
+    expect(plan.cache).toBe('off');
+    expect(plan.localBaseUrl).toBe('http://localhost:1234/v1');
+    expect(plan.voucherBaseUrl).toBeUndefined();
+    expect(await plan.credentials.credential('litellm')).toEqual({
+      type: 'api_key',
+      key: PLACEHOLDER_API_KEY,
+    });
   });
 
   it('takes the credentials home from SPAINBENCH_DATA_DIR of the environment it was given', async () => {

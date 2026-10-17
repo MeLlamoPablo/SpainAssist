@@ -169,7 +169,7 @@ export interface RunManifest {
   resume?: { runDir: string; runId: string; checkpoint: number; atSeq: number };
 }
 
-const ProviderSchema = z.enum(['voucher', 'codex', 'mock']);
+const ProviderSchema = z.enum(['voucher', 'codex', 'mock', 'local']);
 const LimitsSchema = z.object({
   wallClockMs: z.number(),
   maxToolCalls: z.number(),
@@ -585,12 +585,13 @@ function seconds(ms: number): string {
 }
 
 /**
- * What a run cost, for a person: dollars for a voucher key; a scripted model charges nothing, and a
+ * What a run cost, for a person: dollars for a voucher key; a scripted or local model charges nothing, and a
  * ChatGPT plan is metered by requests.
  */
 function costLabel(result: RunResult): string {
   const dollars = `$${result.usage.costUsd.toFixed(4)}`;
   if (result.provider === 'mock') return `${dollars} (mock, not charged)`;
+  if (result.provider === 'local') return `${dollars} (local model, not charged)`;
   if (result.provider === 'codex') return `${result.usage.requests} requests (ChatGPT plan)`;
   return dollars;
 }

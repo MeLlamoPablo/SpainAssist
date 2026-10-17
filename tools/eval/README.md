@@ -921,7 +921,7 @@ The provider is turned on through the app's real flow, so the real `ProviderMana
 
 | Provider | Flow | pi provider, gateway |
 | --- | --- | --- |
-| `voucher`, `mock` | `providers.redeemVoucher` with `redeemVoucher` stubbed: it returns the credential of `deps.credentials` and the meter (`agentBaseUrl('app')`) as the gateway; `getVoucherCredit` reports the meter's spend | `litellm`; each host's `model.baseUrl` is the meter's URL for its own agent key (`assistant`, `procedure-<id>`) |
+| `voucher`, `mock`, `local` | `providers.redeemVoucher` with `redeemVoucher` stubbed: it returns the credential of `deps.credentials` and the meter (`agentBaseUrl('app')`) as the gateway; `getVoucherCredit` reports the meter's spend | `litellm`; each host's `model.baseUrl` is the meter's URL for its own agent key (`assistant`, `procedure-<id>`) |
 | `codex` | `providers.loginCodexDevice` with the app's development Codex lib stubbed: `login` answers with the stored Codex login, `refresh` with `refreshCredential` (rotated and persisted by the source) | `openai-codex`, same meter URL |
 
 Models are the product's (`ASSISTANT_MODELS`, `DEFAULT_MODELS`): the assistant runs at thinking level
@@ -1606,14 +1606,16 @@ unknown option, a missing value or a stray argument is a usage error (exit 2) th
 
 | Option | Meaning |
 | --- | --- |
-| `--provider mock\|voucher\|codex` | Default `mock` when `--scenario` is given, else `voucher` |
+| `--provider mock\|voucher\|codex\|local` | Default `mock` when `--scenario` is given, else `voucher`. `local` is a model server of your own (LM Studio, llama.cpp...): pi provider `litellm` through the meter with a placeholder key, $0 prices for its models, so only request, tool-call and time limits stop it |
+| `--base-url <url>` | `local` only, and required by it: the server's OpenAI-compatible `/v1` URL (`checkLocalProvider`) |
 | `--scenario <name>` | The mock model's script, a name of `src/scenarios` (asked of `mockScenario(fixtureId, name)`; a name it rejects is a usage error). `--provider mock` needs one, a real provider refuses one |
-| `--cache off\|record\|replay\|auto` | Default `auto` for real providers, `off` for `mock` (`defaultCache`). Repeated runs under `auto` or `replay` are copies of the recording, not new samples (the summary and the report say `N of M requests replayed (K loose)`); `--cache record --cache-variant <x>` or `--cache off` takes a fresh one. `replay` needs no voucher key and no gateway |
+| `--cache off\|record\|replay\|auto` | Default `auto` for paid providers, `off` for `mock` and `local` (`defaultCache`). Repeated runs under `auto` or `replay` are copies of the recording, not new samples (the summary and the report say `N of M requests replayed (K loose)`); `--cache record --cache-variant <x>` or `--cache off` takes a fresh one. `replay` needs no voucher key and no gateway |
 | `--cache-variant <x>` | Independent samples of one conversation in the cache (with `record`, a new `x` is a new sample) |
 | `--from <runDir>#<n>` | Continue checkpoint `n` (without `#n`: the last) of an earlier run of the same fixture; the run folder may be a bare run id |
 | `--runs-root <dir>`, `--run-id <id>` | Where run folders live (default `runs` in the credentials home, `spainbench` in the OS's folder for app data unless `SPAINBENCH_DATA_DIR` says otherwise: `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows, `$XDG_DATA_HOME` or `~/.local/share` elsewhere; outside the checkout); the run's name (`[A-Za-z0-9_-]{1,64}`, the folder's name: the SpainBench world has an id of its own; default `<fixture>-<provider>-<yyyymmdd-hhmmss>-<4 hex>`) |
 | `--allow-fixture-change` | With `--from`: continue a checkpoint although the fixture's rules, answers, prompt or limits changed since (what was latched stays latched). Without it such a checkpoint is refused; a changed world or seed never goes through |
 | `--max-cost <usd>`, `--max-tool-calls <n>`, `--max-requests <n>`, `--wall-clock <minutes>` | Override the fixture's `RunLimits` (cost 0.30, 400 tool calls, 150 requests, 20 minutes: `eval budget` shows them). A run that reaches one ends `limit:cost`, `limit:tool-calls`, `limit:requests` or `limit:wall-clock` and the rules judge it; the meter's per-agent and per-run caps stay in force above them (`eval budget`) |
+| `--model <id>` | The model of every role unless its own option below says otherwise. `local` needs a model for every role: the product's defaults are gateway ids |
 | `--assistant-model`, `--procedure-model`, `--answerer-model <id>` | Override the models (`defaultModels` fills in the answerer) |
 | `--capture-browser`, `--keep-world` | As `EvaluationRequest` |
 | `--codex-consent` | Consent to use the Codex login (or `SA_EVAL_CODEX_CONSENT=1`) |

@@ -427,10 +427,11 @@ corepack pnpm eval budget                    # key balance, ledger per day, the 
 corepack pnpm eval login codex --codex-consent   # development only; also: whoami, logout codex
 ```
 
-`run` options: `--provider mock|voucher|codex` (default `mock` when `--scenario` is given, else `voucher`), `--scenario`,
-`--cache off|record|replay|auto` (default `auto` for real providers, `off` for `mock`; repeated runs under `auto` and `replay` are copies, see "Models, budget, Codex"), `--cache-variant`, `--from
+`run` options: `--provider mock|voucher|codex|local` (default `mock` when `--scenario` is given, else `voucher`), `--scenario`,
+`--base-url` (`local` only: the OpenAI-compatible `/v1` URL of a model server of your own, such as LM Studio; it gets a
+placeholder key and costs $0), `--cache off|record|replay|auto` (default `auto` for paid providers, `off` for `mock` and `local`; repeated runs under `auto` and `replay` are copies, see "Models, budget, Codex"), `--cache-variant`, `--from
 <runDir>#<n>` (a checkpoint of a changed fixture is refused unless `--allow-fixture-change`), `--runs-root`, `--run-id`,
-`--max-cost`, `--max-tool-calls`, `--max-requests`, `--wall-clock <minutes>`, `--assistant-model`,
+`--max-cost`, `--max-tool-calls`, `--max-requests`, `--wall-clock <minutes>`, `--model` (every role; `local` needs it), `--assistant-model`,
 `--procedure-model`, `--answerer-model`, `--capture-browser`, `--keep-world`, `--codex-consent`, `--min-score <0..1>`,
 `--json`. An option given empty or blank is a usage error, never "not given". Progress goes to stderr while the run
 works; stdout gets the one-line summary and the path of `report.md` (the whole `result.json` with `--json`). Ctrl-C ends

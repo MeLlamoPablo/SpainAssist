@@ -111,6 +111,7 @@ const IN_FLIGHT_MS = 30 * 60_000;
 const REPLAY_BASE_PATH: Record<EvalProvider, string> = {
   voucher: '/v1',
   mock: '/v1',
+  local: '/v1',
   codex: '/backend-api',
 };
 

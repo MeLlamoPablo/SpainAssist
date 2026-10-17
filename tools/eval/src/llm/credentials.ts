@@ -14,7 +14,7 @@ import { loadVoucherCredential } from './home';
 /** pi provider ids of the agent hosts: the app's voucher runs use `litellm`, never `custom`. */
 export const LITELLM_PROVIDER_ID = 'litellm';
 
-/** What replay and mock runs hand the hosts instead of a key: nothing real is ever sent. */
+/** What replay, mock and local runs hand the hosts instead of a key: nothing real is ever sent. */
 export const PLACEHOLDER_API_KEY = 'sk-eval-placeholder-not-a-key';
 
 /**
@@ -52,6 +52,7 @@ export function createCredentialSource(options: CredentialSourceOptions): Creden
   const replay = options.cache === 'replay';
   switch (options.provider) {
     case 'mock':
+    case 'local':
       return fixed(LITELLM_PROVIDER_ID, { type: 'api_key', key: PLACEHOLDER_API_KEY });
     case 'voucher': {
       if (replay) {

@@ -1,4 +1,4 @@
-import type { MeterUsage } from '../contracts';
+import type { EvalProvider, MeterUsage } from '../contracts';
 import { type TokenCounts, uncachedInputTokens } from './cost';
 
 /**
@@ -53,7 +53,7 @@ export class UsageTotals {
     this.forwarded = Math.max(0, this.usage.requests - this.usage.cacheHits);
   }
 
-  add(outcome: RequestOutcome, provider: 'voucher' | 'codex' | 'mock'): void {
+  add(outcome: RequestOutcome, provider: EvalProvider): void {
     const u = this.usage;
     u.requests++;
     if (outcome.kind === 'forward') this.forwarded++;

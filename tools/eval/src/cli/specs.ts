@@ -38,8 +38,16 @@ const PROVIDER_OPTION: OptionSpec = {
   type: 'string',
   arg: 'name',
   description:
-    'Who answers the agents: mock, voucher or codex. Default: mock when --scenario is given, ' +
-    'otherwise voucher.',
+    'Who answers the agents: mock, voucher, codex or local (a model server of your own, see ' +
+    '--base-url). Default: mock when --scenario is given, otherwise voucher.',
+};
+const BASE_URL_OPTION: OptionSpec = {
+  name: 'base-url',
+  type: 'string',
+  arg: 'url',
+  description:
+    "The OpenAI-compatible /v1 URL of the model server (--provider local needs one), e.g. LM Studio's " +
+    'http://localhost:1234/v1. It gets a placeholder key, never a real one.',
 };
 const SCENARIO_OPTION: OptionSpec = {
   name: 'scenario',
@@ -100,6 +108,14 @@ const LIMIT_OPTIONS: readonly OptionSpec[] = [
   },
 ];
 const MODEL_OPTIONS: readonly OptionSpec[] = [
+  {
+    name: 'model',
+    type: 'string',
+    arg: 'id',
+    description:
+      'Model of every role (orchestrator, procedure agents and answerer) unless its own option ' +
+      'says otherwise. --provider local needs it (or all three).',
+  },
   {
     name: 'assistant-model',
     type: 'string',
@@ -163,6 +179,7 @@ export const RUN_SPEC: CommandSpec = {
   options: [
     PROVIDER_OPTION,
     SCENARIO_OPTION,
+    BASE_URL_OPTION,
     CACHE_OPTION,
     CACHE_VARIANT_OPTION,
     {
@@ -246,6 +263,7 @@ export const SUITE_SPEC: CommandSpec = {
   options: [
     PROVIDER_OPTION,
     SCENARIO_OPTION,
+    BASE_URL_OPTION,
     CACHE_OPTION,
     CACHE_VARIANT_OPTION,
     RUNS_ROOT_OPTION,
@@ -272,6 +290,11 @@ export const SUITE_SPEC: CommandSpec = {
     {
       command: 'corepack pnpm eval suite --provider voucher --min-score 0.9',
       comment: 'a real model on all six, capped by the voucher budget',
+    },
+    {
+      command:
+        'corepack pnpm eval suite --provider local --base-url http://localhost:1234/v1 --model qwen3-8b',
+      comment: 'a model on your own server (LM Studio here), free',
     },
     {
       command:

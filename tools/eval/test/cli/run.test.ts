@@ -215,6 +215,32 @@ describe('eval run: arguments become the request', () => {
     ]);
   });
 
+  it('runs a local model server: its URL, and --model for every role a role option does not set', async () => {
+    const harness = runCli();
+    cli = harness.cli;
+    await cli.run(
+      'run',
+      'vida-laboral-sin-datos',
+      '--provider',
+      'local',
+      '--base-url',
+      'http://localhost:1234/v1',
+      '--model',
+      'm',
+      '--answerer-model',
+      'u',
+    );
+    const request = harness.requests[0] as EvaluationRequest;
+    expect(request.provider).toBe('local');
+    expect(request.localBaseUrl).toBe('http://localhost:1234/v1');
+    expect(request.models).toEqual({
+      assistantModel: 'm',
+      procedureModel: 'm',
+      answererModel: 'u',
+    });
+    expect(request.runId).toMatch(/^vida-laboral-sin-datos-local-/);
+  });
+
   it('turns --from <runId>#<n> and <runDir>#<n> into a checkpoint of that run folder', async () => {
     const harness = runCli();
     cli = harness.cli;
@@ -320,7 +346,36 @@ describe('eval run: usage errors (exit 2, nothing started)', () => {
   it('refuses an unknown provider', () =>
     refused(
       ['vida-laboral-sin-datos', '--provider', 'gpt'],
-      /--provider must be one of mock, voucher, codex/,
+      /--provider must be one of mock, voucher, codex, local/,
+    ));
+  it('refuses the local provider without a base URL or without a model for every role', async () => {
+    await refused(
+      ['vida-laboral-sin-datos', '--provider', 'local', '--model', 'm'],
+      /--provider local needs --base-url <url>/,
+    );
+    await refused(
+      ['vida-laboral-sin-datos', '--provider', 'local', '--base-url', 'http://localhost:1234/v1'],
+      /--provider local needs --model <id>/,
+    );
+    await refused(
+      [
+        'vida-laboral-sin-datos',
+        '--provider',
+        'local',
+        '--base-url',
+        'http://localhost:1234/v1',
+        '--assistant-model',
+        'a',
+        '--procedure-model',
+        'p',
+      ],
+      /--provider local needs --model <id>/,
+    );
+  });
+  it('refuses a base URL for another provider', () =>
+    refused(
+      ['vida-laboral-sin-datos', '--base-url', 'http://localhost:1234/v1'],
+      /--base-url is the local model server's: it cannot be used with --provider voucher/,
     ));
   it('refuses an unknown cache mode', () =>
     refused(

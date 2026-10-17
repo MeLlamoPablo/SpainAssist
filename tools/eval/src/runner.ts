@@ -1,7 +1,7 @@
 /**
  * `runEvaluation`: the one place that joins the parts of the suite for a real run: SpainBench
  * (launched or connected), the meter and its credential, the mock LLM when the provider is
- * `mock`, the composed app, the follower and the artifacts of the bench, and the run loop. The
+ * `mock` (or the developer's own server when it is `local`), the composed app, the follower and the artifacts of the bench, and the run loop. The
  * CLI calls it, and so do the end-to-end tests, so what the tests prove is what `eval run` does.
  *
  * It is two steps. `prepareEvaluation` decides everything that can be decided without starting a
@@ -79,6 +79,12 @@ export interface EvaluationRequest {
   codexConsent?: boolean;
   /** The script of the model when `provider` is `mock` (and only then). */
   scenario?: ScenarioInput;
+  /**
+   * The OpenAI-compatible base URL of the model server when `provider` is `local` (and only then),
+   * e.g. LM Studio's `http://localhost:1234/v1`. The run needs every role's model then: the
+   * product's defaults are gateway ids such a server does not have.
+   */
+  localBaseUrl?: string;
   /** SpainBench's environment (`SPAINBENCH_DIR`, `SPAINBENCH_URL`...); default `process.env`. */
   env?: Record<string, string | undefined>;
   /** Base of a relative `SPAINBENCH_DIR` and `runsRoot` (default: the process' directory). */
@@ -119,9 +125,12 @@ export class EvaluationRefused extends Error {
   override readonly name = 'EvaluationRefused';
 }
 
-/** Default cache mode: real providers record and replay, the mock has nothing worth caching. */
+/**
+ * Default cache mode: paid providers record and replay; the mock and a local model cost nothing,
+ * so a run of them is always a new sample.
+ */
 export function defaultCache(provider: EvalProvider): CacheMode {
-  return provider === 'mock' ? 'off' : 'auto';
+  return provider === 'mock' || provider === 'local' ? 'off' : 'auto';
 }
 
 export function defaultModels(
@@ -173,6 +182,8 @@ export interface PreparedEvaluation {
   keyRemainingUsd?: number;
   voucherBaseUrl?: string;
   voucherFloorUsd: number;
+  /** The `local` provider's server (`EvaluationRequest.localBaseUrl`, checked). */
+  localBaseUrl?: string;
 }
 
 /**
@@ -192,6 +203,7 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
       `A scenario is the script of the mock model: it does not apply to the ${provider} provider`,
     );
   }
+  const localBaseUrl = checkLocalProvider(request);
   const cache: CacheMode = request.cache ?? defaultCache(provider);
   const env = request.env ?? process.env;
   const cwd = request.cwd ?? process.cwd();
@@ -264,8 +276,57 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
     ...(keyRemainingUsd !== undefined ? { keyRemainingUsd } : {}),
     ...(voucherBaseUrl !== undefined ? { voucherBaseUrl } : {}),
     voucherFloorUsd,
+    ...(localBaseUrl !== undefined ? { localBaseUrl } : {}),
   };
 }
+
+/**
+ * The `local` provider's base URL, checked: an http(s) URL, given with `local` only, and a model
+ * for every role. Undefined for the other providers.
+ */
+function checkLocalProvider(request: EvaluationRequest): string | undefined {
+  if (request.provider !== 'local') {
+    if (request.localBaseUrl !== undefined) {
+      throw new EvaluationRefused(
+        `A base URL is the local model server's: it does not apply to the ${request.provider} provider`,
+      );
+    }
+    return undefined;
+  }
+  const text = request.localBaseUrl;
+  if (!text) {
+    throw new EvaluationRefused(
+      'The local provider needs the base URL of the model server (see --base-url)',
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    throw new EvaluationRefused(`The base URL "${text}" is not a URL`);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new EvaluationRefused(`The base URL "${text}" is not an http(s) URL`);
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new EvaluationRefused(
+      `The base URL "${text}" must not have a user name, password, query or fragment`,
+    );
+  }
+  const models = request.models ?? {};
+  const missing = (['assistantModel', 'procedureModel', 'answererModel'] as const).filter(
+    (role) => !models[role],
+  );
+  if (missing.length > 0) {
+    throw new EvaluationRefused(
+      `The local provider needs a model for every role (missing: ${missing.join(', ')}; see --model)`,
+    );
+  }
+  return url.href.replace(/\/+$/, '');
+}
+
+/** What a local model costs: nothing, so the dollar caps never stop it and the report says $0. */
+const FREE = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 // ---------------------------------------------------------------------------------------------
 // The log of a launched SpainBench
@@ -354,10 +415,23 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
         ? `${llm!.url}/v1`
         : provider === 'voucher'
           ? plan.voucherBaseUrl
-          : CODEX_BASE_URL;
+          : provider === 'local'
+            ? plan.localBaseUrl
+            : CODEX_BASE_URL;
+    const models = defaultModels(provider, request.models);
     meter = await createMeter({
       home: plan.home,
       upstreams: upstream ? { [provider]: upstream } : {},
+      ...(provider === 'local'
+        ? {
+            prices: Object.fromEntries(
+              [models.assistantModel, models.procedureModel, models.answererModel].map((id) => [
+                id,
+                FREE,
+              ]),
+            ),
+          }
+        : {}),
       limits: {
         ...(provider === 'voucher' ? { reserveUsd: plan.voucherFloorUsd } : {}),
         ...request.meterLimits,
@@ -371,7 +445,7 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
     return await runFixture({
       fixture: plan.fixture,
       provider,
-      models: defaultModels(provider, request.models),
+      models,
       cache: plan.cache,
       bench: server.api,
       benchInfo: describeBench(server.version) as unknown as Record<string, unknown>,

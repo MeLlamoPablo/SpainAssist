@@ -27,9 +27,11 @@ import type { CredentialSource, MeterRun } from './llm';
 /**
  * Which LLM provider the evaluated agents use. `voucher` = pi provider `litellm` through the
  * meter proxy (what voucher users get); `codex` = `openai-codex` with the eval's own device-auth
- * credential (dev only); `mock` = tools/mock-llm (free, scripted; harness development and tests).
+ * credential (dev only); `mock` = tools/mock-llm (free, scripted; harness development and tests);
+ * `local` = an OpenAI-compatible server the developer runs (LM Studio, llama.cpp...), as pi
+ * provider `litellm` with a placeholder key: free, and no real credential goes there.
  */
-export type EvalProvider = 'voucher' | 'codex' | 'mock';
+export type EvalProvider = 'voucher' | 'codex' | 'mock' | 'local';
 
 /** `anthropic/claude-haiku-5.5` for voucher runs: the same models the product uses. */
 export interface EvalModelChoice {

@@ -315,6 +315,7 @@ function validate(fields: Field[], text: string): AnswererResult {
 const PI_PROVIDER: Record<EvalProvider, string> = {
   voucher: 'litellm',
   mock: 'litellm',
+  local: 'litellm',
   codex: 'openai-codex',
 };
 
