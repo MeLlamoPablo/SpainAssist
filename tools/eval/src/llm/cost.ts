@@ -53,7 +53,10 @@ const sol: PriceEntry = {
 const sol61: PriceEntry = { ...sol, cacheRead: 0.1 };
 /** InclusionAI's Ling 3.0 Flash VL on OpenRouter (no cache write charge). */
 const lingFlashVl: PriceEntry = { input: 0.06, output: 0.18, cacheRead: 0.012, cacheWrite: 0.06 };
-/** GPT-4o mini (2024-07-18) on OpenRouter: an older model, to test injection resistance. */
+/**
+ * GPT-4o mini on OpenRouter (its only snapshot, 2024-07-18): an older model, to test injection
+ * resistance. The gateway serves it under the undated id only.
+ */
 const gpt4oMini: PriceEntry = { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0.15 };
 /**
  * DeepSeek V4.1 Flash (1017) on OpenRouter at its weekday peak price (off-peak is half), so the
@@ -82,7 +85,7 @@ export const DEFAULT_PRICES: PriceTable = {
   'openai/gpt-6.1-sol': sol61,
   'openai/gpt-6-astra': astra,
   'inclusionai/ling-3.0-flash-vl': lingFlashVl,
-  'openai/gpt-4o-mini-2024-07-18': gpt4oMini,
+  'openai/gpt-4o-mini': gpt4oMini,
   'deepseek/deepseek-v4.1-flash-1017': deepseekV41Flash,
   'gpt-6-luna': luna,
   'gpt-6-sol': sol,
