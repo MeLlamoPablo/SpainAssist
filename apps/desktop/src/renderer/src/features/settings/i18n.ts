@@ -32,7 +32,7 @@ export const settingsDict = defineDict({
         title: 'Tengo un código',
         /** With a voucher connected: another code adds its credit to the same balance. */
         addTitle: 'Añadir otro código',
-        body: 'Un código de Spain Assist con saldo incluido. Tus conversaciones pasan por nuestro servidor, que no las guarda.',
+        body: 'Un código de Spain Assist con saldo incluido.',
         placeholder: 'XXXXXX',
         label: 'Tu código: las 6 letras o números que van después de SA-',
         button: 'Canjear',
@@ -168,7 +168,7 @@ export const settingsDict = defineDict({
       voucher: {
         title: 'I have a code',
         addTitle: 'Add another code',
-        body: 'A Spain Assist code with credit included. Your conversations go through our server, which doesn’t keep them.',
+        body: 'A Spain Assist code with credit included.',
         placeholder: 'XXXXXX',
         label: 'Your code: the 6 letters or numbers after SA-',
         button: 'Redeem',
