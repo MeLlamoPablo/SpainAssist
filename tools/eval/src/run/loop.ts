@@ -89,6 +89,11 @@ export interface RunOptions {
   benchInfo?: Record<string, unknown>;
   meter: MeterHandle;
   credentials: CredentialSource;
+  /**
+   * The answerer's own provider, when it is not the agents' (a local run with a voucher answerer):
+   * its calls go through a meter run of their own, opened the first time the answerer is needed.
+   */
+  answerer?: { provider: EvalProvider; credentials: CredentialSource };
   /** Where run folders go (default `defaultRunsRoot()`). */
   runsRoot?: string;
   /** `<fixtureId>-<provider>-<yyyymmdd-hhmmss>-<4 hex>` unless given. */
@@ -276,6 +281,8 @@ class FixtureRun {
   private meterRun: MeterRun | undefined;
   private meterSummary: MeterRunSummary | undefined;
   private offMeter: (() => void) | undefined;
+  private answererMeterRun: MeterRun | undefined;
+  private offAnswererMeter: (() => void) | undefined;
   private follower: ReturnType<FollowBench> | undefined;
   private simulator: UserSimulator | undefined;
   private worldCreated = false;
@@ -457,6 +464,9 @@ class FixtureRun {
     try {
       const credential = await options.credentials.credential(options.credentials.providerId);
       if (credential) this.secrets.addAll(credentialSecrets(credential));
+      const own = options.answerer?.credentials;
+      const answererCredential = await own?.credential(own.providerId);
+      if (answererCredential) this.secrets.addAll(credentialSecrets(answererCredential));
     } catch (error) {
       this.notes.push(
         `credentials: could not read the model credential early: ${messageOf(error)}`,
@@ -628,14 +638,21 @@ class FixtureRun {
 
   private createAnswerer(): Promise<Answerer> {
     const { options } = this;
-    const meterRun = this.meterRun;
+    let meterRun = this.meterRun;
     if (!meterRun) return Promise.reject(new Error('The meter run is not open'));
+    if (options.answerer) {
+      try {
+        meterRun = this.openAnswererMeterRun(options.answerer.provider);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
     const secrets = this.secrets.list();
     const make = options.createAnswerer ?? createLlmAnswerer;
     return make({
-      provider: options.provider,
+      provider: options.answerer?.provider ?? options.provider,
       run: meterRun,
-      credentials: options.credentials,
+      credentials: options.answerer?.credentials ?? options.credentials,
       model: options.models.answererModel,
       thinking: options.models.answererThinking,
       sink: createDirectorySink(join(this.paths.dir, 'answerer'), secrets),
@@ -644,9 +661,25 @@ class FixtureRun {
     });
   }
 
+  private openAnswererMeterRun(provider: EvalProvider): MeterRun {
+    if (this.answererMeterRun) return this.answererMeterRun;
+    const run = this.options.meter.openRun({
+      runId: this.runId,
+      provider,
+      cache: this.options.cache,
+      ...(this.options.cacheVariant ? { variant: this.options.cacheVariant } : {}),
+      volatile: this.volatilePatterns(),
+    });
+    for (const secret of this.secrets.list()) run.addSecret(secret);
+    this.answererMeterRun = run;
+    this.offAnswererMeter = run.on((event) => this.onMeter(event));
+    return run;
+  }
+
   private addSecret(value: string): void {
     this.secrets.add(value);
     this.app?.addSecret(value);
+    this.answererMeterRun?.addSecret(value);
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1073,6 +1106,15 @@ class FixtureRun {
   }
 
   private closeMeter(): void {
+    this.offAnswererMeter?.();
+    this.offAnswererMeter = undefined;
+    if (this.answererMeterRun) {
+      const { usage } = this.answererMeterRun.close();
+      this.notes.push(
+        `answerer (${this.answererMeterRun.provider}, not in the run's cost): ${usage.requests} requests, $${usage.costUsd.toFixed(4)}`,
+      );
+      this.answererMeterRun = undefined;
+    }
     this.offMeter?.();
     this.offMeter = undefined;
     if (this.meterSummary || !this.meterRun) return;

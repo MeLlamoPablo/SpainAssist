@@ -430,7 +430,8 @@ corepack pnpm eval login codex --codex-consent   # development only; also: whoam
 
 `run` options: `--provider mock|voucher|codex|local` (default `mock` when `--scenario` is given, else `voucher`), `--scenario`,
 `--base-url` (`local` only: the OpenAI-compatible `/v1` URL of a model server of your own, such as LM Studio; it gets a
-placeholder key and costs $0), `--cache off|record|replay|auto` (default `auto` for paid providers, `off` for `mock` and `local`; repeated runs under `auto` and `replay` are copies, see "Models, budget, Codex"), `--cache-variant`, `--from
+placeholder key and costs $0), `--answerer-provider voucher` (`local` only: the answerer goes through the voucher key; a run note
+gives its cost, which the run's cost leaves out), `--cache off|record|replay|auto` (default `auto` for paid providers, `off` for `mock` and `local`; repeated runs under `auto` and `replay` are copies, see "Models, budget, Codex"), `--cache-variant`, `--from
 <runDir>#<n>` (a checkpoint of a changed fixture is refused unless `--allow-fixture-change`), `--runs-root`, `--run-id`,
 `--max-cost`, `--max-tool-calls`, `--max-requests`, `--wall-clock <minutes>`, `--model` (every role; `local` needs it), `--assistant-model`,
 `--procedure-model`, `--answerer-model`, `--capture-browser`, `--keep-world`, `--codex-consent`, `--min-score <0..1>`,

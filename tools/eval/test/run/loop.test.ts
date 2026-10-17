@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { AnswerGroup, RunResult } from '../../src/contracts';
 import { getFixture } from '../../src/fixtures';
 import { CLAVE_PASSWORD } from '../../src/fixtures/persona';
+import type { CredentialSource } from '../../src/llm/credentials';
 import { credentialRequest, methodsPrompt } from '../fixtures/support/play';
 import { prompt } from '../rules/support/run';
 import {
@@ -825,6 +826,44 @@ describe('prompts nobody scripted', () => {
       run: env.meter.last,
     });
     expect(options.signal).toBe(env.apps[0]!.spec.signal);
+  });
+
+  it('an answerer with a provider of its own gets its own meter run, closed with the run', async () => {
+    env = createEnv();
+    const answerer = fakeAnswerer([
+      () => ({ type: 'values', values: { correo: 'lucia@example.com' }, skipped: [] }),
+    ]);
+    const voucherCredentials: CredentialSource = {
+      providerId: 'litellm',
+      credential: async () => ({ type: 'api_key', key: 'sk-voucher-answerer-key' }),
+      refreshCredential: async () => null,
+    };
+    const outcome = await env.run(
+      miniFixture({ unexpectedPrompt: 'answerer' }),
+      async (ctx) => {
+        ctx.tool('procedure', 'do_it');
+        ctx.state.form = await ctx.ask(
+          prompt({
+            itemId: 'f1',
+            title: 'Tu correo',
+            fields: [{ key: 'correo', type: 'email', label: 'Correo' }],
+          }),
+        );
+      },
+      {
+        createAnswerer: answerer,
+        answerer: { provider: 'voucher', credentials: voucherCredentials },
+      },
+    );
+    expect(outcome.result.status).toBe('completed');
+    expect(env.meter.runs.map((run) => run.provider)).toEqual(['mock', 'voucher']);
+    expect(answerer.state.options[0]).toMatchObject({
+      provider: 'voucher',
+      run: env.meter.runs[1],
+      credentials: voucherCredentials,
+    });
+    expect(outcome.result.notes).toContainEqual(expect.stringMatching(/^answerer \(voucher, /));
+    expectReleased();
   });
 
   it('never creates the answerer when no prompt needs it', async () => {

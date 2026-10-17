@@ -49,6 +49,14 @@ const BASE_URL_OPTION: OptionSpec = {
     "The OpenAI-compatible /v1 URL of the model server (--provider local needs one), e.g. LM Studio's " +
     'http://localhost:1234/v1. It gets a placeholder key, never a real one.',
 };
+const ANSWERER_PROVIDER_OPTION: OptionSpec = {
+  name: 'answerer-provider',
+  type: 'string',
+  arg: 'name',
+  description:
+    'With --provider local: who answers the answerer instead of the local server. Only voucher ' +
+    "(the answerer then defaults to the product's answerer model, through the voucher key).",
+};
 const SCENARIO_OPTION: OptionSpec = {
   name: 'scenario',
   type: 'string',
@@ -180,6 +188,7 @@ export const RUN_SPEC: CommandSpec = {
     PROVIDER_OPTION,
     SCENARIO_OPTION,
     BASE_URL_OPTION,
+    ANSWERER_PROVIDER_OPTION,
     CACHE_OPTION,
     CACHE_VARIANT_OPTION,
     {
@@ -264,6 +273,7 @@ export const SUITE_SPEC: CommandSpec = {
     PROVIDER_OPTION,
     SCENARIO_OPTION,
     BASE_URL_OPTION,
+    ANSWERER_PROVIDER_OPTION,
     CACHE_OPTION,
     CACHE_VARIANT_OPTION,
     RUNS_ROOT_OPTION,

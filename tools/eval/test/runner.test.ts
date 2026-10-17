@@ -36,7 +36,12 @@ import {
   runEvaluation,
   settleBenchLog,
 } from '../src/runner';
-import { makeHome, type TestHome, writeLitellmFile } from './llm/helpers/tmp-home';
+import {
+  makeHome,
+  TEST_VOUCHER_KEY,
+  type TestHome,
+  writeLitellmFile,
+} from './llm/helpers/tmp-home';
 
 let home: TestHome;
 let root: string;
@@ -195,6 +200,9 @@ describe('prepareEvaluation refuses before anything starts', () => {
     await expect(
       prepareEvaluation(request({ localBaseUrl: 'http://localhost:1234/v1' })),
     ).rejects.toThrow(/does not apply to the mock provider/);
+    await expect(prepareEvaluation(request({ answererProvider: 'voucher' }))).rejects.toThrow(
+      /An answerer provider is for local runs: it does not apply to the mock provider/,
+    );
     none();
   });
 
@@ -359,6 +367,27 @@ describe('prepareEvaluation decides what the run starts with', () => {
     expect(await plan.credentials.credential('litellm')).toEqual({
       type: 'api_key',
       key: PLACEHOLDER_API_KEY,
+    });
+  });
+
+  it('for a local model with a voucher answerer: the voucher key for the answerer only', async () => {
+    writeLitellmFile(home.home, { keyServerUrl: 'http://127.0.0.1:1' });
+    const { scenario: _scenario, ...bare } = request({
+      provider: 'local',
+      localBaseUrl: 'http://localhost:1234/v1',
+      answererProvider: 'voucher',
+      models: { assistantModel: 'm', procedureModel: 'm' },
+      offlineBudget: true,
+    });
+    const plan = await prepareEvaluation(bare);
+    expect(plan.voucherBaseUrl).toBeDefined();
+    expect(await plan.credentials.credential('litellm')).toEqual({
+      type: 'api_key',
+      key: PLACEHOLDER_API_KEY,
+    });
+    expect(await plan.answerer?.credentials.credential('litellm')).toEqual({
+      type: 'api_key',
+      key: TEST_VOUCHER_KEY,
     });
   });
 

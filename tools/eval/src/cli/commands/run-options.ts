@@ -37,6 +37,7 @@ export interface SharedOptions {
     | 'keepWorld'
     | 'codexConsent'
     | 'localBaseUrl'
+    | 'answererProvider'
   >;
 }
 
@@ -77,6 +78,18 @@ export function readSharedOptions(parsed: ParsedArgs, command: string): SharedOp
     );
   }
 
+  const answererProviderText = text('answerer-provider');
+  const answererProvider =
+    answererProviderText !== undefined
+      ? choiceOption('answerer-provider', answererProviderText, ['voucher'] as const)
+      : undefined;
+  if (answererProvider !== undefined && provider !== 'local') {
+    throw new UsageError(
+      `--answerer-provider is for local runs: it cannot be used with --provider ${provider}.`,
+      command,
+    );
+  }
+
   const cacheText = text('cache');
   const cache: CacheMode | undefined =
     cacheText !== undefined ? choiceOption('cache', cacheText, CACHE_MODES) : undefined;
@@ -105,7 +118,7 @@ export function readSharedOptions(parsed: ParsedArgs, command: string): SharedOp
   if (procedure !== undefined) models.procedureModel = procedure;
   const answerer = text('answerer-model') ?? every;
   if (answerer !== undefined) models.answererModel = answerer;
-  if (provider === 'local' && !(assistant && procedure && answerer)) {
+  if (provider === 'local' && !(assistant && procedure && (answerer || answererProvider))) {
     throw new UsageError(
       '--provider local needs --model <id> (or --assistant-model, --procedure-model and ' +
         "--answerer-model): the product's defaults are gateway models a local server does not have.",
@@ -125,6 +138,7 @@ export function readSharedOptions(parsed: ParsedArgs, command: string): SharedOp
       ...(cache ? { cache } : {}),
       ...(cacheVariant !== undefined ? { cacheVariant } : {}),
       ...(baseUrl !== undefined ? { localBaseUrl: baseUrl } : {}),
+      ...(answererProvider !== undefined ? { answererProvider } : {}),
       ...(Object.keys(limits).length > 0 ? { limits } : {}),
       ...(Object.keys(models).length > 0 ? { models } : {}),
       ...(flag(parsed, 'capture-browser') ? { captureBrowser: true } : {}),

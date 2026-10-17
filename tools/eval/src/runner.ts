@@ -85,6 +85,11 @@ export interface EvaluationRequest {
    * product's defaults are gateway ids such a server does not have.
    */
   localBaseUrl?: string;
+  /**
+   * `local` only: the answerer goes to this provider instead of the local server (its model then
+   * defaults to the product's answerer), through a meter run of its own.
+   */
+  answererProvider?: 'voucher';
   /** SpainBench's environment (`SPAINBENCH_DIR`, `SPAINBENCH_URL`...); default `process.env`. */
   env?: Record<string, string | undefined>;
   /** Base of a relative `SPAINBENCH_DIR` and `runsRoot` (default: the process' directory). */
@@ -184,6 +189,8 @@ export interface PreparedEvaluation {
   voucherFloorUsd: number;
   /** The `local` provider's server (`EvaluationRequest.localBaseUrl`, checked). */
   localBaseUrl?: string;
+  /** `EvaluationRequest.answererProvider` and its credential. */
+  answerer?: { provider: 'voucher'; credentials: CredentialSource };
 }
 
 /**
@@ -240,10 +247,22 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
   if (target.mode === 'none') throw new EvaluationRefused(NO_BENCH_MESSAGE);
   if (!(request.chromiumPath ?? cachedChromium)()) throw new EvaluationRefused(NO_CHROMIUM_MESSAGE);
 
+  const answerer = request.answererProvider
+    ? {
+        provider: request.answererProvider,
+        credentials: createCredentialSource({
+          provider: request.answererProvider,
+          cache,
+          home,
+          env,
+        }),
+      }
+    : undefined;
+
   const voucherFloorUsd = request.voucherFloorUsd ?? VOUCHER_FLOOR_USD;
   let keyRemainingUsd: number | undefined;
   let voucherBaseUrl: string | undefined;
-  if (provider === 'voucher' && cache !== 'replay') {
+  if ((provider === 'voucher' || answerer?.provider === 'voucher') && cache !== 'replay') {
     const voucher = loadVoucherCredential({ home });
     voucherBaseUrl = voucher.baseUrl;
     const expired = expiryRefusal(voucher.expiresAt);
@@ -277,6 +296,7 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
     ...(voucherBaseUrl !== undefined ? { voucherBaseUrl } : {}),
     voucherFloorUsd,
     ...(localBaseUrl !== undefined ? { localBaseUrl } : {}),
+    ...(answerer ? { answerer } : {}),
   };
 }
 
@@ -289,6 +309,11 @@ function checkLocalProvider(request: EvaluationRequest): string | undefined {
     if (request.localBaseUrl !== undefined) {
       throw new EvaluationRefused(
         `A base URL is the local model server's: it does not apply to the ${request.provider} provider`,
+      );
+    }
+    if (request.answererProvider !== undefined) {
+      throw new EvaluationRefused(
+        `An answerer provider is for local runs: it does not apply to the ${request.provider} provider`,
       );
     }
     return undefined;
@@ -315,7 +340,7 @@ function checkLocalProvider(request: EvaluationRequest): string | undefined {
   }
   const models = request.models ?? {};
   const missing = (['assistantModel', 'procedureModel', 'answererModel'] as const).filter(
-    (role) => !models[role],
+    (role) => !models[role] && !(role === 'answererModel' && request.answererProvider),
   );
   if (missing.length > 0) {
     throw new EvaluationRefused(
@@ -419,21 +444,26 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
             ? plan.localBaseUrl
             : CODEX_BASE_URL;
     const models = defaultModels(provider, request.models);
+    const answererUpstream =
+      plan.answerer?.provider === 'voucher' ? { voucher: plan.voucherBaseUrl } : {};
     meter = await createMeter({
       home: plan.home,
-      upstreams: upstream ? { [provider]: upstream } : {},
+      upstreams: { ...answererUpstream, ...(upstream ? { [provider]: upstream } : {}) },
       ...(provider === 'local'
         ? {
             prices: Object.fromEntries(
-              [models.assistantModel, models.procedureModel, models.answererModel].map((id) => [
-                id,
-                FREE,
-              ]),
+              [
+                models.assistantModel,
+                models.procedureModel,
+                ...(plan.answerer ? [] : [models.answererModel]),
+              ].map((id) => [id, FREE]),
             ),
           }
         : {}),
       limits: {
-        ...(provider === 'voucher' ? { reserveUsd: plan.voucherFloorUsd } : {}),
+        ...(provider === 'voucher' || plan.answerer?.provider === 'voucher'
+          ? { reserveUsd: plan.voucherFloorUsd }
+          : {}),
         ...request.meterLimits,
       },
       ...(plan.keyRemainingUsd !== undefined ? { keyRemainingUsd: plan.keyRemainingUsd } : {}),
@@ -451,6 +481,7 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
       benchInfo: describeBench(server.version) as unknown as Record<string, unknown>,
       meter,
       credentials: plan.credentials,
+      ...(plan.answerer ? { answerer: plan.answerer } : {}),
       runsRoot: plan.runsRoot,
       runId: plan.runId,
       ...(request.limits ? { limits: request.limits } : {}),

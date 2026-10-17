@@ -241,6 +241,28 @@ describe('eval run: arguments become the request', () => {
     expect(request.runId).toMatch(/^vida-laboral-sin-datos-local-/);
   });
 
+  it('sends the answerer of a local run to the voucher with --answerer-provider', async () => {
+    const harness = runCli();
+    cli = harness.cli;
+    await cli.run(
+      'run',
+      'vida-laboral-sin-datos',
+      '--provider',
+      'local',
+      '--base-url',
+      'http://localhost:1234/v1',
+      '--assistant-model',
+      'm',
+      '--procedure-model',
+      'm',
+      '--answerer-provider',
+      'voucher',
+    );
+    const request = harness.requests[0] as EvaluationRequest;
+    expect(request.answererProvider).toBe('voucher');
+    expect(request.models).toEqual({ assistantModel: 'm', procedureModel: 'm' });
+  });
+
   it('turns --from <runId>#<n> and <runDir>#<n> into a checkpoint of that run folder', async () => {
     const harness = runCli();
     cli = harness.cli;
@@ -377,6 +399,16 @@ describe('eval run: usage errors (exit 2, nothing started)', () => {
       ['vida-laboral-sin-datos', '--base-url', 'http://localhost:1234/v1'],
       /--base-url is the local model server's: it cannot be used with --provider voucher/,
     ));
+  it('refuses an answerer provider that is not the voucher, or without a local run', async () => {
+    await refused(
+      ['vida-laboral-sin-datos', '--answerer-provider', 'codex'],
+      /--answerer-provider must be one of voucher/,
+    );
+    await refused(
+      ['vida-laboral-sin-datos', '--answerer-provider', 'voucher'],
+      /--answerer-provider is for local runs: it cannot be used with --provider voucher/,
+    );
+  });
   it('refuses an unknown cache mode', () =>
     refused(
       ['vida-laboral-sin-datos', '--cache', 'sometimes'],
