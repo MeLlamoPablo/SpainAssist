@@ -144,7 +144,7 @@ export interface AnswererOptions {
   sink?: TranscriptSink;
   /** Values that must never reach the model or a transcript (passwords, PINs). */
   secrets?: readonly string[];
-  /** Per model call; default 60 s. */
+  /** Per model call; default 60 s, and 10 minutes for a local model (`LOCAL_TIMEOUT_MS`). */
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -312,6 +312,13 @@ function validate(fields: Field[], text: string): AnswererResult {
 // The answerer
 // ---------------------------------------------------------------------------------------------
 
+const DEFAULT_TIMEOUT_MS = 60_000;
+/**
+ * A model on the developer's own machine reads a long conversation slowly (over a minute per
+ * request for a small quantized model on a laptop): a gateway's timeout would end the run.
+ */
+const LOCAL_TIMEOUT_MS = 10 * 60_000;
+
 const PI_PROVIDER: Record<EvalProvider, string> = {
   voucher: 'litellm',
   mock: 'litellm',
@@ -376,11 +383,13 @@ export async function createAnswerer(options: AnswererOptions): Promise<Answerer
   // What the model supports decides the level (pi would clamp it too, but an unsupported `off`
   // would be sent as no reasoning parameter at all, which the gateway may treat differently).
   const thinking = clampThinkingLevel(model, options.thinking ?? DEFAULT_ANSWERER_THINKING);
+  const timeoutMs =
+    options.timeoutMs ?? (options.provider === 'local' ? LOCAL_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
   let answers = 0;
 
   const call = (system: string, messages: Message[]): Promise<AssistantMessage> => {
     const signal = AbortSignal.any(
-      [AbortSignal.timeout(options.timeoutMs ?? 60_000), options.signal].filter(
+      [AbortSignal.timeout(timeoutMs), options.signal].filter(
         (s): s is AbortSignal => !!s,
       ),
     );
