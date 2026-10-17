@@ -76,8 +76,7 @@ cd apps/mobile
 
 ## Before publishing
 
-- **Licence.** Every APK must come with its complete source (see "Licence" below and
-  `PRODUCTION_CHECKLIST.md`).
+- **Licence.** Every APK must come with its complete source (see "Licence" below).
 - **App Links.** Set `ANDROID_CERT_SHA256` on the relay to the Play App Signing and upload key
   fingerprints. Without them, links open the relay's `/p` page, which offers "Abrir en la app".
 - **Play Store.** The listing ("Spain Assist", `es.spainassist.firma`), the

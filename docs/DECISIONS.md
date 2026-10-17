@@ -462,7 +462,7 @@ TLS 1.2 renegotiation. There is no USB reader or PKCS#11 path in this implementa
 Offline tests cover Chromium → sidecar → mock-sede, with `.p12` and an encrypted simulated
 phone, plus Kotlin controller and transport interoperability. Real DNIe/NFC timing, real-host
 resumption and WAF compatibility remain unverified. Packaging builds and ships the helper for
-each OS and CPU (D17); signing and notarizing it are in `PRODUCTION_CHECKLIST.md`.
+each OS and CPU (D17); `apps/desktop/electron-builder.ts` documents how to sign and notarize it.
 
 **Behind a feature flag (D14 and D15, 2026-10-11).** Signatures and logins with the DNIe in the
 phone are behind the Unleash flag `dnie-phone` (type experiment, off in production) until the
@@ -585,7 +585,7 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
   `CSC_LINK`/`CSC_NAME` switch to Developer ID, the hardened runtime and the
   `packaging/entitlements.mac*.plist` files. The notarytool variables then add notarization.
   Windows uses Azure Artifact Signing (`SA_AZURE_SIGNING_*`) or a `.pfx` (`WIN_CSC_LINK`), and
-  is unsigned otherwise. `PRODUCTION_CHECKLIST.md` has the steps.
+  is unsigned otherwise. `apps/desktop/electron-builder.ts` lists the variables.
 - **Auto-update: D19.** Windows first; Squirrel.Mac only updates signed apps, and the macOS zip
   is already built for it.
 

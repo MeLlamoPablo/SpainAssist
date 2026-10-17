@@ -414,8 +414,8 @@ first and pass `--publish never`.
   right-click the app and choose Open. On macOS 15 and later, where that shortcut no longer
   works, they open System Settings → Privacy & Security → Open Anyway. They do this once per
   installed version. With an ad-hoc signature the Keychain may also ask again after each update
-  before it releases the vault key (UNVERIFIED). Steps to turn signing on:
-  `PRODUCTION_CHECKLIST.md`.
+  before it releases the vault key (UNVERIFIED). The variables that turn signing on are
+  listed in `apps/desktop/electron-builder.ts`.
 - **Auto-update: not yet** (`publish: null`). electron-updater on macOS needs a signed app.
   The zip target and the blockmaps are already built for it.
 - **Measured on macOS arm64 (2026-10-11).** `Spain Assist.app` is 428 MB: Electron

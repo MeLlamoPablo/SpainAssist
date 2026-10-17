@@ -232,7 +232,7 @@ deploy key and Coolify's view of the env vars). They are committed encrypted wit
   everyday unlocks don't ask for the card. To recover, restore it from that commit and unlock
   with the YubiKey:
   `git checkout yubikey-recovery -- .git-crypt/keys/default/0/93C1AE6AA35C5B388955984612BF2F12483FD814.gpg`.
-  Never drop that commit when rewriting history (see `PRODUCTION_CHECKLIST.md`).
+  Never drop that commit when rewriting history.
 - Check `git-crypt status` before committing a new secret file, and add it to `.gitattributes`
   first: without the filter git stores it in plain text.
 

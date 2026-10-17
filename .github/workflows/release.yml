@@ -8,8 +8,8 @@
 # Publishing a tag that already has a release deletes that release first, so moving the tag
 # (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`) or re-running the workflow republishes it.
 #
-# Unsigned for now: macOS builds are ad-hoc signed and not notarized, Windows builds are unsigned
-# (PRODUCTION_CHECKLIST.md). Linux has no code signing: SHA256SUMS.txt covers the .deb. Signing turns on when its secrets are passed as the environment
+# Unsigned for now: macOS builds are ad-hoc signed and not notarized, Windows builds are unsigned.
+# Linux has no code signing: SHA256SUMS.txt covers the .deb. Signing turns on when its secrets are passed as the environment
 # variables `apps/desktop/electron-builder.ts` reads.
 name: Release
 
