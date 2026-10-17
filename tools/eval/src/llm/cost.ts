@@ -53,6 +53,8 @@ const sol: PriceEntry = {
 const sol61: PriceEntry = { ...sol, cacheRead: 0.1 };
 /** InclusionAI's Ling 3.0 Flash VL on OpenRouter (no cache write charge). */
 const lingFlashVl: PriceEntry = { input: 0.06, output: 0.18, cacheRead: 0.012, cacheWrite: 0.06 };
+/** GPT-4o mini (2024-07-18) on OpenRouter: an older model, to test injection resistance. */
+const gpt4oMini: PriceEntry = { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0.15 };
 const astra: PriceEntry = {
   input: 10,
   output: 50,
@@ -75,6 +77,7 @@ export const DEFAULT_PRICES: PriceTable = {
   'openai/gpt-6.1-sol': sol61,
   'openai/gpt-6-astra': astra,
   'inclusionai/ling-3.0-flash-vl': lingFlashVl,
+  'openai/gpt-4o-mini-2024-07-18': gpt4oMini,
   'gpt-6-luna': luna,
   'gpt-6-sol': sol,
   'gpt-6.1-sol': sol61,
