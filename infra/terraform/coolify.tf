@@ -274,6 +274,8 @@ resource "coolify_deployment" "app" {
     revision = var.deploy_revision
     branch   = var.git_branch
     env      = sha256(jsonencode(local.app_env[each.key]))
+    # Coolify writes the domains into the container's proxy labels only when it deploys.
+    domains = coolify_application_private_git.app[each.key].domains
   }
   timeouts = {
     create = "30m"
