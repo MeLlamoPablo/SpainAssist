@@ -6,12 +6,13 @@ description: Build or change the desktop app's UI from the Framer designs, and k
 # Framer designs
 
 The UI is designed in the Framer project "Spain Assistant"
-(https://framer.com/projects/Spain-Assistant--pUjYAa19YnbwN3svySUn-5RLSE). Two pages matter:
+(https://framer.com/projects/Spain-Assistant--pUjYAa19YnbwN3svySUn-5RLSE). Three pages matter:
 
 | Page | What | May agents edit it? |
 | --- | --- | --- |
 | App Explorations v2 | The design source of truth: what the UI should become | No, read only |
 | App Screens | A generated copy of every screen of the real app, as built | Yes, when asked |
+| Mobile Screens | The same for the phone app (`apps/mobile`) | Yes, when asked |
 
 - **Access.** Load the `framer` skill: run `npx @framer/agent@latest setup` once, then create one
   `session new <project>` and reuse its session id for the whole task. The CLI needs network
@@ -66,7 +67,7 @@ Paths are under `apps/desktop/src/renderer/src/`.
 | Buttons, controls | `components/ui` |
 
 Phone screens (`apps/mobile`) are frames named `Móvil · …` at 411×914 (the emulator screen in dp),
-in a row below the desktop frames. They follow the phone app's Material 3 UI in
+on their own page, "Mobile Screens", not on App Screens. They follow the phone app's Material 3 UI in
 `apps/mobile/shared`.
 
 ## Colors
