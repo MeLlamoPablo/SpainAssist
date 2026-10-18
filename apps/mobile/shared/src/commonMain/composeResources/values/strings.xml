@@ -34,11 +34,15 @@
     <string name="home_unpair">Desvincular</string>
 
     <!-- Review -->
-    <string name="review_title">%1$s te pide firmar</string>
-    <string name="review_title_certificate">%1$s quiere ver tu certificado</string>
+    <string name="review_title">Firmar documento</string>
+    <string name="review_title_documents">Firmar documentos</string>
+    <string name="review_unknown_sign">No reconocemos este sitio. Firma solo si confías en él.</string>
+    <string name="review_unknown_login">No reconocemos este sitio. Entra solo si confías en él.</string>
+    <string name="review_unknown_certificate">No reconocemos este sitio. Compártelo solo si confías en él.</string>
+    <string name="review_open_pdf">Abrir el PDF</string>
+    <string name="review_title_certificate">Compartir tu certificado con</string>
     <string name="review_certificate_body">No se firma nada: solo comparte qué certificado tienes.</string>
     <string name="review_signatures">%1$d firmas</string>
-    <string name="review_checked">Este móvil comprueba que la firma corresponde exactamente a este documento.</string>
     <string name="review_unchecked">La firma la prepara tu ordenador: este móvil no puede comprobar que corresponde exactamente a este documento.</string>
     <string name="review_no_data">El documento es demasiado grande para enseñarlo aquí.</string>
     <string name="doc_pdf">Documento PDF</string>
@@ -85,9 +89,8 @@
     <string name="result_timeout">El ordenador ha tardado demasiado. Vuelve a intentarlo.</string>
     <string name="result_failed">No se ha podido firmar. Vuelve a intentarlo desde el ordenador.</string>
     <string name="result_ok">Vale</string>
-    <string name="review_title_login">Entrar en %1$s</string>
-    <string name="review_login_body">Tu DNIe se usará para entrar en esta web. Mantén la tarjeta cerca del móvil.</string>
-    <string name="review_login">Entrar</string>
+    <string name="review_title_login">Entrar en</string>
+    <string name="review_login">Entrar con mi DNIe</string>
     <string name="working_login">Mantén el DNIe cerca</string>
     <string name="result_login">Uso del DNIe terminado</string>
     <string name="result_login_declined">No has aprobado el acceso.</string>

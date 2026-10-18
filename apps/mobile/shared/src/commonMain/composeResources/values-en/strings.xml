@@ -34,11 +34,15 @@
     <string name="home_unpair">Unpair</string>
 
     <!-- Review -->
-    <string name="review_title">%1$s asks you to sign</string>
-    <string name="review_title_certificate">%1$s wants to see your certificate</string>
+    <string name="review_title">Sign document</string>
+    <string name="review_title_documents">Sign documents</string>
+    <string name="review_unknown_sign">We don’t recognise this site. Only sign if you trust it.</string>
+    <string name="review_unknown_login">We don’t recognise this site. Only log in if you trust it.</string>
+    <string name="review_unknown_certificate">We don’t recognise this site. Only share it if you trust it.</string>
+    <string name="review_open_pdf">Open the PDF</string>
+    <string name="review_title_certificate">Share your certificate with</string>
     <string name="review_certificate_body">Nothing is signed: it only shares which certificate you have.</string>
     <string name="review_signatures">%1$d signatures</string>
-    <string name="review_checked">This phone checks that the signature matches exactly this document.</string>
     <string name="review_unchecked">Your computer prepares the signature: this phone can’t check that it matches exactly this document.</string>
     <string name="review_no_data">The document is too large to show here.</string>
     <string name="doc_pdf">PDF document</string>
@@ -85,9 +89,8 @@
     <string name="result_timeout">The computer took too long. Try again.</string>
     <string name="result_failed">Couldn’t sign. Try again from your computer.</string>
     <string name="result_ok">OK</string>
-    <string name="review_title_login">Log in to %1$s</string>
-    <string name="review_login_body">Your DNIe will log in to this website. Keep the card near your phone.</string>
-    <string name="review_login">Log in</string>
+    <string name="review_title_login">Log in to</string>
+    <string name="review_login">Log in with my DNIe</string>
     <string name="working_login">Keep your DNIe nearby</string>
     <string name="result_login">DNIe use ended</string>
     <string name="result_login_declined">You did not approve login.</string>

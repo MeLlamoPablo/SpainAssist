@@ -167,6 +167,16 @@ class FirmaControllerTest {
     }
 
     @Test
+    fun warnsAboutSitesTheDesktopDoesNotRecogniseOnly() = runTest {
+        for ((official, shown) in listOf(true to true, false to false, null to true)) {
+            val h = Harness(this)
+            h.pairAndConnect()
+            h.link.deliver(h.request().copy(official = official))
+            assertEquals(shown, (h.screen as Screen.Signing).request.official, "official=$official")
+        }
+    }
+
+    @Test
     fun signsNoMoreThanTheSignaturesTheReviewShowed() = runTest {
         val h = Harness(this)
         h.pairAndConnect()

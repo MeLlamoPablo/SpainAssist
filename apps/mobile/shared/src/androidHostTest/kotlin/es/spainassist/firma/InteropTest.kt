@@ -146,6 +146,8 @@ class InteropTest {
             @Composable
             override fun PdfPreview(pdf: ByteArray) = Unit
 
+            override fun openPdf(pdf: ByteArray) = Unit
+
             override val licenses = Licenses(eupl = false, groups = emptyList(), proprietary = emptyList())
 
             override fun bundledNotices() = emptyList<Pair<String, String>>()

@@ -27,6 +27,7 @@ import {
   type CompanionNeed,
   type CompanionPurpose,
   type CompanionStage,
+  credentialAllowedOn,
   type DesktopToPhone,
   type PhoneToDesktop,
 } from '@sa/shared';
@@ -222,6 +223,7 @@ export class PhoneSigner {
         documents,
         verifiable,
         ...(req.signatures ? { signatures: req.signatures } : {}),
+        official: credentialAllowedOn('dnie', req.origin),
         expiresAt: new Date(Date.now() + reviewMs).toISOString(),
         can: req.can,
         ...(req.pin ? { pin: req.pin } : {}),

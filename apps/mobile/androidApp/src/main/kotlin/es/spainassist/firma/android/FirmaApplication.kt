@@ -80,6 +80,8 @@ class AndroidPlatform(private val app: Application) : Platform {
     @Composable
     override fun PdfPreview(pdf: ByteArray) = es.spainassist.firma.android.PdfPreview(pdf)
 
+    override fun openPdf(pdf: ByteArray) = es.spainassist.firma.android.openPdf(app, pdf)
+
     override val licenses = ANDROID_LICENSES
 
     override fun bundledNotices() = googleNotices(app.assets)

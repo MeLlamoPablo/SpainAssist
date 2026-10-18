@@ -1,5 +1,8 @@
 package es.spainassist.firma.android
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -26,6 +29,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import es.spainassist.firma.app.LogArea
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -58,6 +63,24 @@ fun PdfPreview(pdf: ByteArray) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Hands the PDF under review to the phone's PDF viewer: a copy in the cache (replaced by the next
+ * one, never backed up), shared read-only through the app's FileProvider.
+ */
+fun openPdf(context: Context, pdf: ByteArray) {
+    val file = File(context.cacheDir, "review/documento.pdf")
+    file.parentFile?.mkdirs()
+    file.writeBytes(pdf)
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.documents", file)
+    val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/pdf")
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(view)
+    } catch (_: ActivityNotFoundException) {
+        firmaLog(LogArea.Flow, "no app opens PDFs")
     }
 }
 

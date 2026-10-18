@@ -3,6 +3,7 @@ package es.spainassist.firma.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -49,13 +50,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -451,15 +460,12 @@ private fun SigningScreen(s: Screen.Signing, actions: FirmaActions, platform: Pl
 private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, platform: Platform, away: @Composable () -> Unit) {
     val certificateOnly = r.purpose == Purpose.Certificate
     val login = r.purpose == Purpose.Login
-    val title = stringResource(if (login) Res.string.review_title_login else if (certificateOnly) Res.string.review_title_certificate else Res.string.review_title, r.host)
+    val unknown = stringResource(if (login) Res.string.review_unknown_login else if (certificateOnly) Res.string.review_unknown_certificate else Res.string.review_unknown_sign)
     val buttons: @Composable ColumnScope.() -> Unit = {
         Actions {
             away()
             NfcBanner(nfc, actions)
-            if (!login && !certificateOnly) {
-                if (r.verifiable) Banner(stringResource(Res.string.review_checked), Tone.Done)
-                else Banner(stringResource(Res.string.review_unchecked), Tone.Info)
-            }
+            if (!login && !certificateOnly && !r.verifiable) Banner(stringResource(Res.string.review_unchecked), Tone.Info)
             Primary(
                 stringResource(if (login) Res.string.review_login else if (certificateOnly) Res.string.review_share else Res.string.review_sign),
                 onClick = actions::approve,
@@ -468,11 +474,15 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
         }
     }
     if (login || certificateOnly) {
-        // Nothing to read: it looks like the pairing question.
+        // Nothing to read: the wordmark, and the site at the bottom.
         Layout(hero = { Wordmark() }) {
-            Words {
-                Title(title)
-                Body(stringResource(if (login) Res.string.review_login_body else Res.string.review_certificate_body))
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                Text(
+                    stringResource(if (login) Res.string.review_title_login else Res.string.review_title_certificate),
+                    fontSize = 16.sp, fontWeight = FontWeight.Medium, color = colors.fgSubtle, lineHeight = 22.sp,
+                )
+                Site(r.host, r.official, unknown)
+                if (certificateOnly) Body(stringResource(Res.string.review_certificate_body))
             }
             buttons()
         }
@@ -483,9 +493,9 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
         top = 32.dp,
         hero = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Words {
-                    Title(title)
-                    Body(r.description)
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Title(stringResource(if (r.documents.size > 1) Res.string.review_title_documents else Res.string.review_title))
+                    Site(r.host, r.official, unknown)
                     r.signatures?.takeIf { it > 1 }?.let { Body(stringResource(Res.string.review_signatures, it)) }
                 }
                 r.documents.forEach { DocumentPreview(it, platform) }
@@ -495,34 +505,98 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
     )
 }
 
+/**
+ * The site that asks: its host with a lock when it's an official administration, else dashed, in
+ * the warning colour, with [unknown] below.
+ */
+@Composable
+private fun Site(host: String, official: Boolean, unknown: String) {
+    val shape = RoundedCornerShape(12.dp)
+    val tone = if (official) colors.doneFg else colors.blockedFg
+    val frame = if (official) {
+        Modifier.background(colors.fg.copy(alpha = 0.06f), shape).border(1.dp, colors.fg.copy(alpha = 0.16f), shape)
+    } else {
+        Modifier.background(tone.copy(alpha = 0.10f), shape).dashedBorder(tone.copy(alpha = 0.55f), 12.dp)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            frame.padding(start = 12.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(if (official) LineIcons.Lock else LineIcons.Question, contentDescription = null, tint = tone, modifier = Modifier.size(18.dp))
+            Text(host, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp)
+        }
+        if (!official) Text(unknown, fontSize = 14.sp, color = tone, lineHeight = 20.sp)
+    }
+}
+
+/** A 1 dp dashed outline with rounded corners. */
+private fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawBehind {
+    val width = 1.dp.toPx()
+    val dash = 4.dp.toPx()
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(width / 2, width / 2),
+        size = Size(size.width - width, size.height - width),
+        cornerRadius = CornerRadius(radius.toPx() - width / 2),
+        style = Stroke(width, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash))),
+    )
+}
+
+/**
+ * The top of a document, fading into the page, with its name and size. A PDF opens in the
+ * phone's PDF viewer when tapped.
+ */
 @Composable
 private fun DocumentPreview(d: ReviewDocument, platform: Platform) {
-    Column(
-        Modifier.fillMaxWidth().border(1.dp, colors.line, RoundedCornerShape(12.dp)).background(colors.surface2, RoundedCornerShape(12.dp)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        val kind = when {
-            d.mimeType == "application/pdf" -> Res.string.doc_pdf
-            d.mimeType.endsWith("xml") -> Res.string.doc_xml
-            d.mimeType.startsWith("text/") -> Res.string.doc_text
-            else -> Res.string.doc_other
-        }
-        Text(d.name ?: stringResource(kind), fontWeight = FontWeight.SemiBold, color = colors.fg)
-        Text(formatSize(d.size), color = colors.fgSubtle, fontSize = 13.sp)
-        val data = d.data
+    val kind = when {
+        d.mimeType == "application/pdf" -> Res.string.doc_pdf
+        d.mimeType.endsWith("xml") -> Res.string.doc_xml
+        d.mimeType.startsWith("text/") -> Res.string.doc_text
+        else -> Res.string.doc_other
+    }
+    val data = d.data
+    val pdf = data?.takeIf { d.mimeType == "application/pdf" }
+    val openLabel = stringResource(Res.string.review_open_pdf)
+    Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
+        val page = Modifier.fillMaxSize().background(colors.surface2).padding(16.dp)
         when {
-            data == null -> {
+            data == null -> Column(page, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Body(stringResource(Res.string.review_no_data))
                 Text("SHA-256 ${d.sha256}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.fgSubtle)
             }
-            d.mimeType == "application/pdf" -> Box(Modifier.fillMaxWidth().heightIn(max = 420.dp)) { platform.PdfPreview(data) }
+            pdf != null -> platform.PdfPreview(pdf)
             d.mimeType.startsWith("text/") || d.mimeType.endsWith("xml") -> {
-                val text = remember(d.sha256) { data.decodeToString().take(6000) }
-                Box(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                    Text(text, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = colors.fg)
-                }
+                val text = remember(d.sha256) { data.decodeToString().take(2000) }
+                Text(text, page, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = colors.fg)
             }
-            else -> Text("SHA-256 ${d.sha256}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.fgSubtle)
+            else -> Text("SHA-256 ${d.sha256}", page, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.fgSubtle)
+        }
+        Box(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(110.dp)
+                .background(Brush.verticalGradient(listOf(colors.surface.copy(alpha = 0f), colors.surface)))
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    d.name ?: stringResource(kind), Modifier.weight(1f, fill = false),
+                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(formatSize(d.size), fontSize = 13.sp, color = colors.fgSubtle, lineHeight = 24.sp)
+            }
+        }
+        if (pdf != null) {
+            // On top of the preview: a tap opens the PDF instead of scrolling its pages.
+            Box(Modifier.matchParentSize().clickable(onClickLabel = openLabel, role = Role.Button) { platform.openPdf(pdf) })
+            Box(
+                Modifier.align(Alignment.TopEnd).padding(12.dp).background(colors.fgSubtle, CircleShape)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                Icon(LineIcons.OpenOutside, contentDescription = openLabel, tint = colors.surface, modifier = Modifier.size(14.dp))
+            }
         }
     }
 }

@@ -115,6 +115,8 @@ data class SignRequest(
     val documents: List<CompanionDocument>,
     val verifiable: Boolean,
     val signatures: Int? = null,
+    /** The origin is an official administration site; null from older desktops (no warning). */
+    val official: Boolean? = null,
     val expiresAt: String,
     /** The DNI's CAN (6 digits), typed on the desktop. The phone never stores it. */
     val can: String,

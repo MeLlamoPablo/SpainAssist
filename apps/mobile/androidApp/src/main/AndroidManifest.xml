@@ -47,5 +47,16 @@
                 <data android:scheme="sa-firma" android:host="pair" />
             </intent-filter>
         </activity>
+
+        <!-- The document under review, read-only, for the PDF viewer the user opens it in. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/document_paths" />
+        </provider>
     </application>
 </manifest>

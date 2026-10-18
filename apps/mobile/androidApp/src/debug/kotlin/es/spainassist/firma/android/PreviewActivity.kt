@@ -55,6 +55,11 @@ class PreviewActivity : ComponentActivity() {
         val ready = NfcAvailability.Ready
         val document = review(Purpose.Document)
         val login = review(Purpose.Login)
+        val pdf = samplePdf()
+        val several = document.copy(
+            documents = listOf("Modelo 030.pdf", "Justificante de domicilio.pdf").map { ReviewDocument(it, "application/pdf", pdf.size.toLong(), "0".repeat(64), pdf) },
+            signatures = 2,
+        )
         fun signing(r: Review, step: Step) = Preview(Screen.Signing(ready, r, step, connected = true))
         return mapOf(
             "inicio" to Preview(Screen.Start(ready)),
@@ -67,6 +72,10 @@ class PreviewActivity : ComponentActivity() {
             "conectado" to Preview(Screen.Home(ready, LinkStatus.Connected(Welcome("welcome", 1, "desktop", "2026-10-15T09:41:00Z")))),
             "ordenador-desconectado" to Preview(Screen.Home(ready, LinkStatus.DesktopAway)),
             "revisar" to signing(document, Step.Review),
+            "revisar-desconocido" to signing(document.copy(official = false), Step.Review),
+            "revisar-sin-comprobar" to signing(document.copy(verifiable = false), Step.Review),
+            "revisar-varios" to signing(several, Step.Review),
+            "certificado-revisar" to signing(review(Purpose.Certificate), Step.Review),
             "pin" to signing(document, Step.WaitForComputer(Need.Pin, refused = true, triesLeft = 2)),
             "acerca" to signing(document, Step.HoldCard(moved = false)),
             "movido" to signing(document, Step.HoldCard(moved = true)),
@@ -76,6 +85,7 @@ class PreviewActivity : ComponentActivity() {
             "sin-nfc" to signing(document, Step.Result(Outcome.Failed(ErrorCode.NfcUnavailable))),
             "tiempo" to signing(document, Step.Result(Outcome.Expired)),
             "entrar-revisar" to signing(login, Step.Review),
+            "entrar-revisar-desconocido" to signing(login.copy(official = false), Step.Review),
             "entrar-acerca" to signing(login, Step.HoldCard(moved = false)),
             "entrar-cerca" to signing(login, Step.Working(reading = false, signed = 0)),
             "entrar-terminado" to signing(login, Step.Result(Outcome.Signed)),
@@ -91,10 +101,9 @@ class PreviewActivity : ComponentActivity() {
             requestId = "preview",
             purpose = purpose,
             host = "sede.agenciatributaria.gob.es",
-            description = "Firmar un documento PDF (${pdf.size} bytes) en formato PAdES. Lo pide https://sede.agenciatributaria.gob.es.",
             format = "pades",
             documents = if (purpose == Purpose.Document) listOf(ReviewDocument(null, "application/pdf", pdf.size.toLong(), "0".repeat(64), pdf)) else emptyList(),
-            verifiable = true,
+            verifiable = purpose == Purpose.Document,
             signatures = 1,
         )
     }

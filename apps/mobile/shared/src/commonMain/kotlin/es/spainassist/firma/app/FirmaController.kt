@@ -480,11 +480,11 @@ class FirmaController(
             requestId = request.requestId,
             purpose = request.purpose,
             host = hostOf(request.origin),
-            description = request.description,
             format = request.format,
             documents = documents,
             verifiable = request.verifiable,
             signatures = request.signatures,
+            official = request.official != false,
         )
         // Reading the certificate needs no PIN.
         val pin = request.pin?.takeIf { request.purpose != Purpose.Certificate }

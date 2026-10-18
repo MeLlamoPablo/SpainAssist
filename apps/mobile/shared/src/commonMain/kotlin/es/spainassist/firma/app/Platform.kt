@@ -66,6 +66,9 @@ interface Platform {
     @Composable
     fun PdfPreview(pdf: ByteArray)
 
+    /** Opens a PDF under review in the phone's PDF viewer, read-only (Android: a FileProvider URI). */
+    fun openPdf(pdf: ByteArray)
+
     /** The licences of what this build ships, for the licences screen. */
     val licenses: Licenses
 

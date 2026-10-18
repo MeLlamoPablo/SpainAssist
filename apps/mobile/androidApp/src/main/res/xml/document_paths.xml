@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the copy of the document under review that openPdf (PdfPreview.kt) hands to a viewer. -->
+<paths>
+    <cache-path name="review" path="review/" />
+</paths>

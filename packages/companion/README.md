@@ -92,6 +92,9 @@ sign.done ───────────────────────�
   XAdES, triphase formats, precalculated hashes, cosignatures and countersignatures are not
   verifiable: the phone says so before the user approves. Documents over 12 MB are sent without
   their bytes, which also makes the request not verifiable.
+- **The site.** `official` says whether the origin is on the app's list of official
+  administration sites (`credentialAllowedOn('dnie', origin)`). The phone shows the host with a
+  lock, or warns that it doesn't recognise the site; a request without the field gets no warning.
 - **Reconnects.** `PhoneSigner` keeps the request and every unanswered `sign.toBeSigned` in an
   outbox, and sends them again when a new session starts. The phone sends its last progress, the
   certificate and every signature again. Both sides ignore duplicates (same request id, same seq),

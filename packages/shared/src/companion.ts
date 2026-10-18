@@ -125,6 +125,12 @@ export const CompanionSignRequest = z.strictObject({
   verifiable: z.boolean(),
   /** How many signatures follow, when known (batches). */
   signatures: z.number().int().min(1).max(500).optional(),
+  /**
+   * The origin is an official administration site (`credentialAllowedOn('dnie', origin)`): the
+   * phone shows its host with a lock. False: "we don't recognise this site". Older desktops
+   * leave it out; the phone then shows no warning.
+   */
+  official: z.boolean().optional(),
   /** The desktop gives up after this (ISO 8601). */
   expiresAt: z.iso.datetime(),
   /**

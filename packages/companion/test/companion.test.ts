@@ -343,6 +343,17 @@ describe('PhoneSigner', () => {
     expect(DesktopToPhone.safeParse({ ...base, pin: '1234567890123456' }).success).toBe(true);
   });
 
+  it('tells the phone whether the site is an official one', async () => {
+    const t = setup();
+    const { seen } = autoPhone(t);
+    (await t.signer.request(request)).finish(true);
+    (await t.signer.request({ ...request, origin: 'https://sede.example.com' })).finish(true);
+    await until(() => seen.filter((m) => m.type === 'sign.request').length === 2);
+    const [official, other] = seen.filter((m) => m.type === 'sign.request');
+    expect(official).toMatchObject({ official: true });
+    expect(other).toMatchObject({ official: false });
+  });
+
   it('asks for a new PIN when the card refuses it, and sends it once', async () => {
     const t = setup();
     const phone = t.connectPhone();

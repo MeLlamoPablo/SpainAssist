@@ -67,12 +67,13 @@ data class Review(
     val requestId: String,
     val purpose: Purpose,
     val host: String,
-    val description: String,
     val format: String,
     val documents: List<ReviewDocument>,
     /** The phone checks every signature against the documents. */
     val verifiable: Boolean,
     val signatures: Int?,
+    /** An official administration site; false: the app warns it doesn't recognise it. */
+    val official: Boolean = true,
 )
 
 data class ReviewDocument(
