@@ -16,6 +16,7 @@ import {
   type SaEvent,
   setExtraTrustedHosts,
 } from '@sa/shared';
+import type { Sidecar } from '@sa/sidecar';
 import { createTestKeyProvider, Vault } from '@sa/vault';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { silentLogger } from '../core/logger';
@@ -115,6 +116,19 @@ describe('defaults', () => {
     });
     expect((await app.invoke('settings.get')).language).toBe('en');
     expect(app.services.companion).toBeDefined();
+  });
+
+  it("keeps the sidecar's error pages in the app's language", async () => {
+    const languages: string[] = [];
+    const sidecar = {
+      setLanguage: (language: string) => languages.push(language),
+      close: async () => {},
+    } as unknown as Sidecar;
+    const { app } = await open({ language: 'en', startSidecar: async () => sidecar });
+    expect(languages).toEqual(['en']);
+    await app.invoke('settings.update', { language: 'es' });
+    await app.invoke('settings.update', { onboardingCompleted: true });
+    expect(languages).toEqual(['en', 'es']);
   });
 
   it('reads nothing from process.env', async () => {

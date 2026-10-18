@@ -164,7 +164,7 @@ func (id *identity) fail(w http.ResponseWriter, r *http.Request, err error) {
 		Type: "event", Event: "upstream_error", Session: id.session, Identity: id.spec.ID,
 		Host: hostname, Code: ce.code, Message: ce.detail,
 	})
-	writeCertError(w, hostname, ce)
+	writeCertError(w, id.p.language(), hostname, ce)
 }
 
 func (id *identity) lock(addr string) *sync.Mutex {

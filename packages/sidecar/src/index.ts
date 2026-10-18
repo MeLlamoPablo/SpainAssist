@@ -11,6 +11,7 @@ export {
   type SidecarEvent,
   type SidecarHash,
   type SidecarIdentity,
+  type SidecarLanguage,
   type SidecarLogger,
   type SidecarOptions,
 } from './sidecar';

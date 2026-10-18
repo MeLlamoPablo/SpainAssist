@@ -50,37 +50,82 @@ func classify(err error) *certError {
 	return &certError{code: "failed", detail: message}
 }
 
-var reasons = map[string]string{
-	"declined":           "No se ha aprobado el inicio de sesión con el certificado.",
-	"cancelled":          "Se ha cancelado el inicio de sesión con el certificado.",
-	"unavailable":        "El certificado no está disponible para esta web ahora mismo.",
-	"timeout":            "El certificado no respondió a tiempo.",
-	"rejected":           "La web no ha aceptado el certificado.",
-	"server_certificate": "El certificado de seguridad de esta web no es válido. No sigas.",
-	"unreachable":        "No se pudo conectar con la web.",
+// pageText is the error page in one of the app's languages ("es", "en").
+type pageText struct {
+	lang     string
+	title    string
+	fallback string
+	site     string
+	reasons  map[string]string
 }
 
+var pages = map[string]pageText{
+	"es": {
+		lang:     "es",
+		title:    "No se pudo usar el certificado",
+		fallback: "No se pudo iniciar sesión con el certificado.",
+		site:     "Web",
+		reasons: map[string]string{
+			"declined":           "No se ha aprobado el inicio de sesión con el certificado.",
+			"cancelled":          "Se ha cancelado el inicio de sesión con el certificado.",
+			"unavailable":        "El certificado no está disponible para esta web ahora mismo.",
+			"timeout":            "El certificado no respondió a tiempo.",
+			"rejected":           "La web no ha aceptado el certificado.",
+			"server_certificate": "El certificado de seguridad de esta web no es válido. No sigas.",
+			"unreachable":        "No se pudo conectar con la web.",
+		},
+	},
+	"en": {
+		lang:     "en",
+		title:    "The certificate couldn't be used",
+		fallback: "Couldn't log in with the certificate.",
+		site:     "Website",
+		reasons: map[string]string{
+			"declined":           "The login with the certificate wasn't approved.",
+			"cancelled":          "The login with the certificate was cancelled.",
+			"unavailable":        "The certificate isn't available for this website right now.",
+			"timeout":            "The certificate didn't answer in time.",
+			"rejected":           "The website didn't accept the certificate.",
+			"server_certificate": "This website's security certificate isn't valid. Don't continue.",
+			"unreachable":        "Couldn't connect to the website.",
+		},
+	},
+}
+
+// pageFor is the page text in lang, Spanish when the app sent no language or an unknown one.
+func pageFor(lang string) pageText {
+	if t, ok := pages[lang]; ok {
+		return t
+	}
+	return pages["es"]
+}
+
+// The last line is for the app (packages/browser reads it): keep it in English and unchanged.
 const errorPage = `<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><title>No se pudo usar el certificado</title></head>
+<html lang="%s"><head><meta charset="utf-8"><title>%s</title></head>
 <body style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; line-height: 1.5">
-<h1>No se pudo usar el certificado</h1>
+<h1>%s</h1>
 <p>%s</p>
-<p>Web: %s</p>
+<p>%s: %s</p>
 <p style="color: #666">SpainAssist certificate error (%s): %s</p>
 </body></html>
 `
 
-func writeCertError(w http.ResponseWriter, hostname string, ce *certError) {
-	reason, ok := reasons[ce.code]
+// writeCertError answers the browser with a page in lang ("es", "en") that says why.
+func writeCertError(w http.ResponseWriter, lang, hostname string, ce *certError) {
+	t := pageFor(lang)
+	reason, ok := t.reasons[ce.code]
 	if !ok {
-		reason = "No se pudo iniciar sesión con el certificado."
+		reason = t.fallback
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Language", t.lang)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Sa-Certificate-Error", ce.code)
 	w.WriteHeader(http.StatusBadGateway)
-	fmt.Fprintf(w, errorPage, html.EscapeString(reason), html.EscapeString(hostname),
-		html.EscapeString(ce.code), html.EscapeString(truncate(ce.detail, 300)))
+	title := html.EscapeString(t.title)
+	fmt.Fprintf(w, errorPage, t.lang, title, title, html.EscapeString(reason), html.EscapeString(t.site),
+		html.EscapeString(hostname), html.EscapeString(ce.code), html.EscapeString(truncate(ce.detail, 300)))
 }
 
 // netErrorCode names a failed connection the way Chromium does, so the app can explain it as if

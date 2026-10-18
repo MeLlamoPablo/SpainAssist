@@ -20,6 +20,7 @@ import (
 	"net/http/httputil"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -43,6 +44,16 @@ type proxy struct {
 
 	mitm  *connListener
 	plain *httputil.ReverseProxy
+
+	// lang: the app's language for error pages ("es", "en"), from config and "language" messages.
+	lang atomic.Value
+}
+
+func (p *proxy) setLanguage(lang string) { p.lang.Store(lang) }
+
+func (p *proxy) language() string {
+	lang, _ := p.lang.Load().(string)
+	return lang
 }
 
 func newProxy(cfg inMessage, desk desktop) (*proxy, error) {
@@ -77,6 +88,7 @@ func newProxy(cfg inMessage, desk desktop) (*proxy, error) {
 		sessions: map[string]*session{},
 		mitm:     newConnListener(),
 	}
+	p.setLanguage(cfg.Language)
 	if len(cfg.Roots) > 0 {
 		p.roots = x509.NewCertPool()
 		for _, pem := range cfg.Roots {
@@ -296,7 +308,7 @@ func (p *proxy) handleIntercepted(w http.ResponseWriter, r *http.Request) {
 		id = s.identityFor(mc.target)
 	}
 	if id == nil {
-		writeCertError(w, hostname, &certError{code: "unavailable", detail: "the certificate is no longer enabled for this site"})
+		writeCertError(w, p.language(), hostname, &certError{code: "unavailable", detail: "the certificate is no longer enabled for this site"})
 		return
 	}
 	id.proxy.ServeHTTP(w, r)

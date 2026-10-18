@@ -405,6 +405,63 @@ func TestDeclinedLoginShowsAnErrorPage(t *testing.T) {
 	}
 }
 
+func TestErrorPageFollowsTheAppLanguage(t *testing.T) {
+	up := newUpstream(t, 0)
+	h := newHarness(t, up.roots)
+	ca := newCA(t)
+	key := rsaKey(t)
+	cert := newClient(t, ca, "PRUEBA DNIE", key)
+	h.desk.prepare = func(outMessage) inMessage { return inMessage{Error: "declined", Message: "the user said no"} }
+	h.configure(t, "s1", []string{up.target}, &identitySpec{ID: "dnie-1", Chain: []string{b64(cert.der)}})
+
+	h.p.setLanguage("en")
+	resp, _, body := h.client("s1", password).fetch(t, up.URL+"/")
+	if resp.StatusCode != http.StatusBadGateway || resp.Header.Get("Content-Language") != "en" {
+		t.Fatalf("got %d %q", resp.StatusCode, resp.Header.Get("Content-Language"))
+	}
+	for _, want := range []string{`<html lang="en">`, "The certificate couldn&#39;t be used",
+		"The login with the certificate wasn&#39;t approved.", "SpainAssist certificate error (declined): the user said no"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q in: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "No se ha aprobado") {
+		t.Fatalf("Spanish in the English page: %s", body)
+	}
+}
+
+func TestErrorPageTranslatesEveryReason(t *testing.T) {
+	es, en := pages["es"], pages["en"]
+	if len(es.reasons) != len(en.reasons) {
+		t.Fatalf("es has %d reasons, en has %d", len(es.reasons), len(en.reasons))
+	}
+	for code := range es.reasons {
+		if en.reasons[code] == "" || en.reasons[code] == es.reasons[code] {
+			t.Errorf("no English reason for %q", code)
+		}
+	}
+	for _, c := range []struct{ lang, want, title string }{
+		{"es", "La web no ha aceptado el certificado.", "No se pudo usar el certificado"},
+		{"en", "The website didn&#39;t accept the certificate.", "The certificate couldn&#39;t be used"},
+		{"", "La web no ha aceptado el certificado.", "No se pudo usar el certificado"},   // not sent yet
+		{"fr", "La web no ha aceptado el certificado.", "No se pudo usar el certificado"}, // unknown
+	} {
+		w := httptest.NewRecorder()
+		writeCertError(w, c.lang, "sede.example", &certError{code: "rejected", detail: "remote error: tls: <bad>"})
+		body := w.Body.String()
+		if !strings.Contains(body, c.want) || !strings.Contains(body, "<h1>"+c.title+"</h1>") ||
+			!strings.Contains(body, "sede.example") ||
+			!strings.Contains(body, "SpainAssist certificate error (rejected): remote error: tls: &lt;bad&gt;") {
+			t.Errorf("%q: %s", c.lang, body)
+		}
+	}
+	w := httptest.NewRecorder()
+	writeCertError(w, "en", "sede.example", &certError{code: "something_new", detail: "x"})
+	if !strings.Contains(w.Body.String(), "Couldn&#39;t log in with the certificate.") {
+		t.Errorf("fallback: %s", w.Body.String())
+	}
+}
+
 func TestSignatureFromAnotherKeyFails(t *testing.T) {
 	up := newUpstream(t, 0)
 	h := newHarness(t, up.roots)

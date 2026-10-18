@@ -24,7 +24,8 @@ holding the key (`docs/research/dnie.md` §2).
   and TLS sessions are resumed when the server allows it. Each full handshake is one card
   operation.
 - Failures become a 502 page that says why, with an `X-Sa-Certificate-Error` header the browser
-  service turns into a note for the agent.
+  service turns into a note for the agent. The page is in the app's language (`es`, `en`): the
+  desktop sends it at start and calls `setLanguage` when the setting changes.
 
 ## Secrets and lifetime
 

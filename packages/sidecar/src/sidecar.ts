@@ -18,6 +18,9 @@ import { z } from 'zod';
 
 export type SidecarHash = 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512';
 
+/** The language of the sidecar's error pages: the app's (`@sa/shared`'s Language). */
+export type SidecarLanguage = 'es' | 'en';
+
 /** A failure with a code the sidecar shows the browser (`go/errors.go`): "declined", "unavailable"... */
 export class SidecarError extends Error {
   constructor(
@@ -80,6 +83,8 @@ export interface SidecarOptions {
   insecureUpstream?: boolean;
   /** Tests: trust only these CAs upstream (PEM). Default: the platform's verifier. */
   roots?: string[];
+  /** The language of the error pages the browser shows (default "es"). See `setLanguage`. */
+  language?: SidecarLanguage;
   logger?: SidecarLogger;
   onEvent?(event: SidecarEvent): void;
 }
@@ -136,6 +141,7 @@ export class Sidecar {
   /** Base64 SHA-256 of the key the browser sees for intercepted hosts. */
   readonly spki: string;
   private readonly key: KeyObject;
+  private language: SidecarLanguage;
   private child?: ChildProcess;
   private ready: Promise<void> = Promise.resolve();
   private onReady?: (spki: string) => void;
@@ -150,6 +156,7 @@ export class Sidecar {
   private constructor(private readonly options: SidecarOptions) {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
     this.key = privateKey;
+    this.language = options.language ?? 'es';
     this.spki = crypto
       .createHash('sha256')
       .update(publicKey.export({ type: 'spki', format: 'der' }))
@@ -212,6 +219,13 @@ export class Sidecar {
     await this.send(session, state);
   }
 
+  /** The app's language changed: later error pages use it (it survives restarts too). */
+  setLanguage(language: SidecarLanguage): void {
+    if (language === this.language) return;
+    this.language = language;
+    this.write({ type: 'language', language });
+  }
+
   /** The browser context is gone: its port closes. */
   endSession(session: string): void {
     this.sessions.delete(session);
@@ -272,6 +286,7 @@ export class Sidecar {
       key: this.key.export({ type: 'pkcs8', format: 'der' }).toString('base64'),
       ...(this.options.insecureUpstream ? { insecureUpstream: true } : {}),
       ...(this.options.roots?.length ? { roots: this.options.roots } : {}),
+      language: this.language,
     });
     return this.ready;
   }

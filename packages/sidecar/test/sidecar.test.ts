@@ -1,6 +1,12 @@
 import type { ChildProcess } from 'node:child_process';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { Sidecar, SidecarError, type SidecarEvent, type SidecarHash } from '../src/sidecar';
+import {
+  Sidecar,
+  SidecarError,
+  type SidecarEvent,
+  type SidecarHash,
+  type SidecarOptions,
+} from '../src/sidecar';
 import {
   getThrough,
   makePki,
@@ -31,11 +37,15 @@ afterAll(async () => {
   await site?.close();
 });
 
-async function start(events?: SidecarEvent[]): Promise<Sidecar> {
+async function start(
+  events?: SidecarEvent[],
+  options: Partial<SidecarOptions> = {},
+): Promise<Sidecar> {
   const sidecar = await Sidecar.start({
     binaryPath,
     roots: [pki.caPem],
     onEvent: (e) => events?.push(e),
+    ...options,
   });
   running.push(sidecar);
   return sidecar;
@@ -117,6 +127,32 @@ describe('Sidecar', () => {
     expect(events).toContainEqual(
       expect.objectContaining({ event: 'upstream_error', code: 'declined', message: 'not now' }),
     );
+  });
+
+  it("shows the error page in the app's language, also after a restart", async () => {
+    const sidecar = await start(undefined, { language: 'en' });
+    await sidecar.configure('s1', [site.hostPort], {
+      id: 'dnie-1',
+      chain: [pki.client.certDer],
+      key: phoneKey([], { decline: true }),
+    });
+    const page = async () => (await getThrough(sidecar, 's1', `${site.url}/`)).body;
+    let body = await page();
+    expect(body).toContain('The login with the certificate wasn&#39;t approved.');
+    expect(body).toContain('SpainAssist certificate error (declined): not now');
+
+    sidecar.setLanguage('es');
+    expect(await page()).toContain('No se ha aprobado');
+
+    sidecar.setLanguage('en');
+    const child = (sidecar as unknown as { child: ChildProcess }).child;
+    child.kill('SIGKILL');
+    body = '';
+    for (let i = 0; i < 50 && !body.includes('certificate error'); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      body = await page().catch(() => '');
+    }
+    expect(body).toContain('The certificate couldn&#39;t be used');
   });
 
   it('rejects a bad identity', async () => {

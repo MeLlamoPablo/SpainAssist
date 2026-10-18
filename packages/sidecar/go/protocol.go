@@ -5,10 +5,11 @@ package main
 //
 // App → sidecar:
 //
-//	{"type":"config", "password", "key", "insecureUpstream", "roots"}   (first line)
+//	{"type":"config", "password", "key", "insecureUpstream", "roots", "language"?}   (first line)
 //	{"type":"session", "id", "session", "listen"?, "hosts", "identity"}
 //	    → {"type":"ack", "id", "port", "error"?}   (the first one opens the session's port)
 //	{"type":"end", "session"}
+//	{"type":"language", "language"}   (the app's language changed: "es" or "en", for error pages)
 //	{"type":"reply", "id", "signature"? | "error", "message"}  (answers a "call")
 //
 // Sidecar → app:
@@ -31,6 +32,9 @@ type inMessage struct {
 	Key              string   `json:"key,omitempty"`
 	InsecureUpstream bool     `json:"insecureUpstream,omitempty"`
 	Roots            []string `json:"roots,omitempty"`
+
+	// config, language: the app's language for error pages ("es", "en"; default "es").
+	Language string `json:"language,omitempty"`
 
 	// session, end. Listen: the port to reopen after a restart ("127.0.0.1:<port>").
 	Session  string        `json:"session,omitempty"`

@@ -323,6 +323,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const certificates = await deps.startSidecar?.().then(
     (sidecar) => {
       logger.info('sa-sidecar started');
+      // Its error pages (a failed certificate login) are shown in the browser: in the app's language.
+      sidecar.setLanguage(lang());
       return sidecar;
     },
     (err) => {
@@ -465,7 +467,9 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   });
 
   settings.onChange((next, prev) => {
-    if (next.language !== prev.language) void agents.stopAll();
+    if (next.language === prev.language) return;
+    certificates?.setLanguage(next.language);
+    void agents.stopAll();
   });
 
   async function deleteProcedure(id: string): Promise<void> {

@@ -45,6 +45,8 @@ func main() {
 			p.configure(m)
 		case "end":
 			p.endSession(m.Session)
+		case "language":
+			p.setLanguage(m.Language)
 		case "reply":
 			h.reply(m)
 		default:
