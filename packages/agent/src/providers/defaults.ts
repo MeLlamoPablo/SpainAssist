@@ -4,23 +4,12 @@ import type { ThinkingLevel } from '@sa/shared';
  * The procedure agents' models of ChatGPT (also Codex in development builds) and vouchers. The app
  * uses them as is and never stores them, so a new app version changes the model for every
  * install. ChatGPT: the best model of the current Plus/Pro generation; a ChatGPT account whose
- * plan does not offer it gets the first model of CHATGPT_MODELS it lists. Voucher: OpenRouter id.
+ * plan does not offer it gets the model OpenAI ranks first for it. Voucher: OpenRouter id.
  */
 export const DEFAULT_MODELS: { chatgpt: string; voucher: string } = {
   chatgpt: 'gpt-6.1-sol',
   voucher: 'anthropic/claude-haiku-5.5',
 };
-
-/**
- * The procedure agents' ChatGPT models, best first. Plans offer different models (Plus has no
- * gpt-6.1-sol), so the app uses the first one the account lists. gpt-6-luna comes before
- * gpt-5.6-terra: it is the newer generation and already the ChatGPT assistant's model.
- */
-export const CHATGPT_MODELS: readonly string[] = [
-  DEFAULT_MODELS.chatgpt,
-  'gpt-6-luna',
-  'gpt-5.6-terra',
-];
 
 /** A fixed agent model and its reasoning effort. */
 export interface FixedModel {

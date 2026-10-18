@@ -2,7 +2,7 @@ import { findEnvKeys } from '@earendil-works/pi-ai/compat';
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 import type { ModelOption, ProviderOption } from '@sa/shared';
 
-export { ASSISTANT_MODELS, CHATGPT_MODELS, DEFAULT_MODELS, type FixedModel } from './defaults';
+export { ASSISTANT_MODELS, DEFAULT_MODELS, type FixedModel } from './defaults';
 
 /** Providers that are not plain "bring your own API key" options. */
 const NOT_BYOK = new Set(['openai-codex', 'radius', 'typesafe', 'github-copilot']);

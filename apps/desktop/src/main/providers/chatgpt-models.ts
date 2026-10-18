@@ -24,15 +24,19 @@ const ModelList = z.object({
       visibility: z.string().optional(),
       supported_in_api: z.boolean().optional(),
       input_modalities: z.array(z.string()).optional(),
+      model_specialty: z.unknown().optional(),
+      // OpenAI's rank (lower first, as ChatGPT's own picker shows them); an odd value is no rank.
+      priority: z.number().optional().catch(undefined),
     }),
   ),
 });
 
 /**
- * Ids of the models a ChatGPT account may run agents on. A model is dropped only when a field
- * says so (hidden, not in the API, or no images): a missing field keeps it, so a smaller answer
- * does not send every account back to a model its plan refuses. Requests carry only the bearer
- * token and never follow redirects; the token and the answer never go into errors.
+ * Ids of the models a ChatGPT account may run agents on, best first by OpenAI's `priority` (ties
+ * and unranked models keep OpenAI's order, unranked last). A model is dropped only when a field
+ * says so (hidden, not in the API, no images, or a specialty model): a missing field keeps it, so
+ * a smaller answer does not send every account back to a model its plan refuses. Requests carry
+ * only the bearer token and never follow redirects; the token and the answer never go into errors.
  */
 export async function fetchChatGPTModels(
   fetchFn: FetchFn,
@@ -66,15 +70,25 @@ export async function fetchChatGPTModels(
       (m) =>
         (m.visibility === undefined || m.visibility === 'list') &&
         m.supported_in_api !== false &&
-        (m.input_modalities === undefined || m.input_modalities.includes('image')),
+        (m.input_modalities === undefined || m.input_modalities.includes('image')) &&
+        (m.model_specialty === undefined || m.model_specialty === null),
     )
+    .sort((a, b) => rankOf(a.priority) - rankOf(b.priority))
     .map((m) => m.slug);
 }
 
-/** The first of `preferred` (best first) that the account lists, if any. */
+const rankOf = (priority: number | undefined) => priority ?? Number.MAX_SAFE_INTEGER;
+
+/**
+ * The model to run from `available` (best first): `preferred` when the account lists it, else the
+ * best one pi's catalog `known`s, else the best one (procedures run on a guessed template rather
+ * than on a model the plan refuses). Undefined from an empty list.
+ */
 export function pickChatGPTModel(
   available: readonly string[],
-  preferred: readonly string[],
+  preferred: string,
+  known: (id: string) => boolean,
 ): string | undefined {
-  return preferred.find((id) => available.includes(id));
+  if (available.includes(preferred)) return preferred;
+  return available.find(known) ?? available[0];
 }

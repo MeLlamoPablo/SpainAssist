@@ -883,9 +883,10 @@ export class ProviderManager {
   }
 
   /**
-   * The ChatGPT procedure model: the first of `chatgptModels` the account's plan offers (Plus has
-   * no gpt-6.1-sol). Kept for an hour and shared by callers at the same time. When OpenAI can't
-   * say, the account's last pick or the app's default model, without asking again for a minute.
+   * The ChatGPT procedure model: the app's default when the account's plan offers it (Plus has no
+   * gpt-6.1-sol), else the plan's best model pi's catalog knows with images, else its best model.
+   * Kept for an hour and shared by callers at the same time. When OpenAI can't say, the account's
+   * last pick or the app's default model, without asking again for a minute.
    */
   private async chatgptModel(): Promise<string> {
     const now = this.deps.clock().getTime();
@@ -906,8 +907,13 @@ export class ProviderManager {
         const access = credential?.access;
         if (typeof access === 'string' && access) {
           const ids = await fetchChatGPTModels(this.deps.fetch, access);
-          const picked = pickChatGPTModel(ids, this.deps.lib.chatgptModels);
-          if (!picked) this.deps.logger.warn('chatgpt model list has no known model');
+          const withImages = new Set(
+            this.catalog('openai')
+              .filter((m) => m.supportsImages)
+              .map((m) => m.id),
+          );
+          const picked = pickChatGPTModel(ids, fallback, (id) => withImages.has(id));
+          if (!picked) this.deps.logger.warn('chatgpt model list has no eligible model');
           const id = picked ?? fallback;
           // Signed in again meanwhile: the list was the old account's, so ask for the new one.
           if (!current()) return this.chatgptModel();

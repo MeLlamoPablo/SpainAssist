@@ -109,8 +109,6 @@ export interface ProviderLib {
   getVoucherCredit(keyServerUrl: string, apiKey: string): Promise<VoucherCreditResponse>;
   /** The procedure agents' model of ChatGPT (and Codex) and of vouchers: fixed per app version. */
   defaultModels: { chatgpt: string; voucher: string };
-  /** The procedure agents' ChatGPT models, best first: the first one the account lists wins. */
-  chatgptModels: readonly string[];
   /** The assistant's (orchestrator's) model and effort of ChatGPT/Codex and vouchers: same rules. */
   assistantModels: { chatgpt: FixedModel; voucher: FixedModel };
   /** Legacy Codex device-code login. Development builds only: undefined when packaged. */

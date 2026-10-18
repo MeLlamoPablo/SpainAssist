@@ -668,17 +668,6 @@ describe('provider catalogue', () => {
     expect(new Set(codex.map((m) => m.provider))).toEqual(new Set(['openai-codex']));
     expect(listProviderModels('no-such-provider')).toEqual([]);
   });
-
-  it("prefers the app's ChatGPT model, then models that lower plans offer", () => {
-    const [first, ...rest] = agent.CHATGPT_MODELS;
-    // Accounts that offer the default model keep it.
-    expect(first).toBe(DEFAULT_MODELS.chatgpt);
-    // Plus: the assistant's model already runs there, so it comes next.
-    expect(rest[0]).toBe(agent.ASSISTANT_MODELS.chatgpt.id);
-    // Every one is a ChatGPT model pi knows, with images for screenshots and scans.
-    const known = new Map(listProviderModels('openai').map((m) => [m.id, m]));
-    for (const id of agent.CHATGPT_MODELS) expect(known.get(id)?.supportsImages).toBe(true);
-  });
 });
 
 describe('BYOK catalogue', () => {

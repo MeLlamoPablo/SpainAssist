@@ -947,11 +947,12 @@ describe('custom endpoint capabilities', () => {
 describe('ChatGPT plan models', () => {
   const MODELS_URL = 'https://api.openai.com/v1/models';
 
-  /** OpenAI's model list for a ChatGPT sign-in (synthetic, real shape). */
+  /** OpenAI's model list for a ChatGPT sign-in (synthetic, real shape), best ranked first. */
   const modelList = (slugs: string[]) =>
     Response.json({
-      models: slugs.map((slug) => ({
+      models: slugs.map((slug, i) => ({
         slug,
+        priority: i + 1,
         display_name: slug,
         visibility: 'list',
         supported_in_api: true,
@@ -970,14 +971,27 @@ describe('ChatGPT plan models', () => {
   const listRequests = (fetch: { requests: { url: URL }[] }) =>
     fetch.requests.filter((r) => r.url.href === MODELS_URL).length;
 
+  /** pi's openai catalog knows gpt-test-luna (with images) and a text-only model. */
+  const chatgptLib = () =>
+    createFakeProviderLib({
+      listProviderModels: (provider) =>
+        provider === 'openai'
+          ? [
+              { provider, id: 'gpt-test-luna', name: 'Luna', supportsImages: true },
+              { provider, id: 'gpt-text-only', name: 'Text', supportsImages: false },
+            ]
+          : [],
+    });
+
   it("runs ChatGPT procedures on the best model the account's plan offers", async () => {
-    let slugs = ['gpt-other', 'gpt-test-luna'];
+    // OpenAI ranks first a model pi does not know: the best one it knows wins.
+    let slugs = ['gpt-unknown-top', 'gpt-text-only', 'gpt-test-luna'];
     const fetch = openai(() => modelList(slugs));
-    app = await createTestApp({ fetch });
+    app = await createTestApp({ fetch, providerLib: chatgptLib() });
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
 
-    // No gpt-test (a Plus account without sol): the next model of the list.
+    // No gpt-test (a Plus account without sol): the best model pi knows with images.
     expect(await providers.agentModel()).toEqual({ provider: 'openai', id: 'gpt-test-luna' });
     expect(fetch.requests[0]?.headers.get('authorization')).toBe('Bearer acc-token-1');
     expect(await providers.agentAuthor()).toBe(agentAuthor('gpt-test-luna', 'medium'));
@@ -993,7 +1007,7 @@ describe('ChatGPT plan models', () => {
       status: { model: 'gpt-test-luna' },
     });
 
-    // Another account that has the app's model (Pro) keeps it.
+    // Another account that has the app's model (Pro) keeps it, even ranked lower.
     slugs = ['gpt-test-luna', 'gpt-test'];
     await app.invoke('providers.logout');
     await app.invoke('providers.loginChatGPT');
@@ -1008,7 +1022,7 @@ describe('ChatGPT plan models', () => {
     const fetch = openai(() =>
       fail ? new Response('', { status: 503 }) : modelList(['gpt-test-luna']),
     );
-    app = await createTestApp({ fetch, clock: () => new Date(now) });
+    app = await createTestApp({ fetch, providerLib: chatgptLib(), clock: () => new Date(now) });
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
 
@@ -1035,7 +1049,7 @@ describe('ChatGPT plan models', () => {
     let now = Date.parse('2026-10-18T09:00:00.000Z');
     let answer = () => new Response('{"error":"server_error"}', { status: 500 });
     const fetch = openai(() => answer());
-    app = await createTestApp({ fetch, clock: () => new Date(now) });
+    app = await createTestApp({ fetch, providerLib: chatgptLib(), clock: () => new Date(now) });
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
 
@@ -1063,7 +1077,7 @@ describe('ChatGPT plan models', () => {
           answers.push(resolve);
         }),
     );
-    app = await createTestApp({ fetch });
+    app = await createTestApp({ fetch, providerLib: chatgptLib() });
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
 
@@ -1082,6 +1096,22 @@ describe('ChatGPT plan models', () => {
     expect(answers).toHaveLength(2);
   });
 
+  it('runs on the best listed model pi does not know, and on the default when none is listed', async () => {
+    let slugs = ['gpt-unknown-top', 'gpt-text-only'];
+    const fetch = openai(() => modelList(slugs));
+    app = await createTestApp({ fetch, providerLib: chatgptLib() });
+    await app.invoke('providers.loginChatGPT');
+    const providers = app.services.providers;
+    // A guessed template beats a default model the plan refuses.
+    expect((await providers.agentModel()).id).toBe('gpt-unknown-top');
+
+    slugs = [];
+    await app.invoke('providers.loginChatGPT');
+    expect((await providers.agentModel()).id).toBe('gpt-test');
+    expect(app.logLines.join('\n')).toContain('chatgpt model list has no eligible model');
+    expect(listRequests(fetch)).toBe(2);
+  });
+
   it("asks the new account when the previous account's lookup fails", async () => {
     const answers: ((res: Response) => void)[] = [];
     const fetch = openai(
@@ -1090,7 +1120,7 @@ describe('ChatGPT plan models', () => {
           answers.push(resolve);
         }),
     );
-    app = await createTestApp({ fetch });
+    app = await createTestApp({ fetch, providerLib: chatgptLib() });
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
 
@@ -1108,7 +1138,7 @@ describe('ChatGPT plan models', () => {
 
   it('keeps the default model without a usable credential, and asks nothing', async () => {
     const fetch = openai(() => modelList(['gpt-test-luna']));
-    app = await createTestApp({ fetch });
+    app = await createTestApp({ fetch, providerLib: chatgptLib() });
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
     const stored = JSON.parse((await app.vault.getSecret(SECRET_IDS.chatgpt))!);

@@ -16,19 +16,19 @@ function model(slug: string, fields: Record<string, unknown> = {}) {
     default_reasoning_level: 'medium',
     supported_reasoning_levels: [{ effort: 'low', description: 'Fast' }],
     shell_type: 'shell_command',
-    priority: 1,
+    model_specialty: null,
     ...fields,
   };
 }
 
-/** A Plus account's list: no gpt-6.1-sol, two hidden models. */
+/** A Plus account's list as OpenAI ranks it (`priority`), in another order: no gpt-6.1-sol. */
 const PLUS = {
   models: [
-    model('gpt-6-luna'),
-    model('gpt-5.6-terra'),
-    model('gpt-5.6-luna'),
-    model('gpt-reserve', { visibility: 'hide' }),
-    model('codex-auto-review', { visibility: 'hide' }),
+    model('gpt-5.6-terra', { priority: 8 }),
+    model('codex-auto-review', { priority: 43, visibility: 'hide' }),
+    model('gpt-5.6-luna', { priority: 9 }),
+    model('gpt-reserve', { priority: 4, visibility: 'hide' }),
+    model('gpt-6-luna', { priority: 4 }),
   ],
 };
 
@@ -51,7 +51,7 @@ function fakeFetch(answer: (sent: Sent) => Response | Promise<Response>): FetchF
 }
 
 describe('fetchChatGPTModels', () => {
-  it("lists the account's models with only the bearer token, on api.openai.com", async () => {
+  it("lists the account's models as OpenAI ranks them, with only the bearer token", async () => {
     const fetch = fakeFetch(() => Response.json(PLUS));
     expect(await fetchChatGPTModels(fetch, TOKEN)).toEqual([
       'gpt-6-luna',
@@ -78,11 +78,35 @@ describe('fetchChatGPTModels', () => {
           // Missing fields keep the model: a smaller answer must not drop every model.
           { slug: 'bare' },
           model('api-unknown', { supported_in_api: undefined }),
+          model('specialty', { model_specialty: 'code_review' }),
           model('listed'),
         ],
       }),
     );
     expect(await fetchChatGPTModels(fetch, TOKEN)).toEqual(['bare', 'api-unknown', 'listed']);
+  });
+
+  it('ranks by priority, keeps OpenAI order for ties, and puts unranked models last', async () => {
+    const fetch = fakeFetch(() =>
+      Response.json({
+        models: [
+          model('unranked-a', { priority: undefined }),
+          model('tie-first', { priority: 5 }),
+          model('worst', { priority: 20 }),
+          model('odd-rank', { priority: 'high' }),
+          model('tie-second', { priority: 5 }),
+          model('best', { priority: 1 }),
+        ],
+      }),
+    );
+    expect(await fetchChatGPTModels(fetch, TOKEN)).toEqual([
+      'best',
+      'tie-first',
+      'tie-second',
+      'worst',
+      'unranked-a',
+      'odd-rank',
+    ]);
   });
 
   it('throws on an answer that is not a model list, without the token or the body', async () => {
@@ -128,20 +152,33 @@ describe('fetchChatGPTModels', () => {
 });
 
 describe('pickChatGPTModel', () => {
-  const preferred = ['gpt-6.1-sol', 'gpt-6-luna', 'gpt-5.6-terra'];
+  const all = () => true;
 
-  it('picks the first preferred model the account lists', () => {
-    // Plus: no sol.
-    expect(pickChatGPTModel(['gpt-5.6-terra', 'gpt-6-luna', 'gpt-5.6-luna'], preferred)).toBe(
-      'gpt-6-luna',
+  it("keeps the app's model when the account lists it, even ranked lower", () => {
+    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-6.1-sol'], 'gpt-6.1-sol', all)).toBe('gpt-6.1-sol');
+    // Even when pi's catalog does not know it.
+    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-6.1-sol'], 'gpt-6.1-sol', () => false)).toBe(
+      'gpt-6.1-sol',
     );
-    // Pro: sol first, whatever the list order.
-    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-6.1-sol'], preferred)).toBe('gpt-6.1-sol');
-    expect(pickChatGPTModel(['gpt-5.6-luna', 'gpt-5.6-terra'], preferred)).toBe('gpt-5.6-terra');
   });
 
-  it('picks nothing when the account lists none of them', () => {
-    expect(pickChatGPTModel(['gpt-5.6-luna'], preferred)).toBeUndefined();
-    expect(pickChatGPTModel([], preferred)).toBeUndefined();
+  it('otherwise picks the model OpenAI ranks first', async () => {
+    const plus = await fetchChatGPTModels(
+      fakeFetch(() => Response.json(PLUS)),
+      TOKEN,
+    );
+    expect(pickChatGPTModel(plus, 'gpt-6.1-sol', all)).toBe('gpt-6-luna');
+  });
+
+  it('prefers a model pi knows, then any listed model, over the default', () => {
+    const listed = ['gpt-7-luna', 'gpt-6-luna', 'gpt-5.6-terra'];
+    const known = (id: string) => id !== 'gpt-7-luna';
+    expect(pickChatGPTModel(listed, 'gpt-6.1-sol', known)).toBe('gpt-6-luna');
+    // None known: the best-ranked one still beats a default the plan refuses.
+    expect(pickChatGPTModel(listed, 'gpt-6.1-sol', () => false)).toBe('gpt-7-luna');
+  });
+
+  it('picks nothing from an empty list', () => {
+    expect(pickChatGPTModel([], 'gpt-6.1-sol', all)).toBeUndefined();
   });
 });
