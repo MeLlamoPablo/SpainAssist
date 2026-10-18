@@ -86,15 +86,23 @@ async function bindingVectors() {
 
   const pdf = minimalPdf();
   const pades = recordingSigner();
-  await createPades({
-    pdf,
-    algorithm,
-    signer: pades,
-    chain: [cert],
-    params: {},
-    signingTime,
-    document: 0,
-  });
+  // The PDF's /M date is written in local time: pin UTC so every machine (and CI) builds the same file.
+  const tz = process.env.TZ;
+  process.env.TZ = 'UTC';
+  try {
+    await createPades({
+      pdf,
+      algorithm,
+      signer: pades,
+      chain: [cert],
+      params: {},
+      signingTime,
+      document: 0,
+    });
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
   const padesCall = pades.calls[0];
   const padesBinding = padesCall?.binding;
   if (padesBinding?.kind !== 'pades') throw new Error('No PAdES binding');
