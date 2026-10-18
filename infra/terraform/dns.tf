@@ -83,3 +83,34 @@ resource "aws_route53_record" "website_www" {
   ttl     = 300
   records = ["sites.framer.app"]
 }
+
+# E-mail on Google Workspace. The root's TXT set holds Google's domain verification and SPF
+# (Route 53 allows one TXT set per name). DKIM's key comes from the Admin console once Gmail
+# is active (Apps > Google Workspace > Gmail > Authenticate email).
+resource "aws_route53_record" "mx" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.domain
+  type    = "MX"
+  ttl     = 3600
+  records = ["1 smtp.google.com"]
+}
+
+resource "aws_route53_record" "root_txt" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = var.domain
+  type    = "TXT"
+  ttl     = 300
+  records = [
+    "google-site-verification=O0XAvPSrUnLiXTYCiAroLUpj9kYthvy0iiAnTiMzsYs",
+    "v=spf1 include:_spf.google.com ~all",
+  ]
+}
+
+# Report-only for now: tighten to p=quarantine once DKIM is on and mail flows.
+resource "aws_route53_record" "dmarc" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = "_dmarc.${var.domain}"
+  type    = "TXT"
+  ttl     = 3600
+  records = ["v=DMARC1; p=none"]
+}
