@@ -514,9 +514,9 @@ private fun Site(host: String, official: Boolean, unknown: String) {
     val shape = RoundedCornerShape(12.dp)
     val tone = if (official) colors.doneFg else colors.blockedFg
     val frame = if (official) {
-        Modifier.background(colors.fg.copy(alpha = 0.06f), shape).border(1.dp, colors.fg.copy(alpha = 0.16f), shape)
+        Modifier.background(colors.surface3, shape).border(1.dp, colors.lineStrong, shape)
     } else {
-        Modifier.background(tone.copy(alpha = 0.10f), shape).dashedBorder(tone.copy(alpha = 0.55f), 12.dp)
+        Modifier.background(colors.blockedBg, shape).dashedBorder(colors.blockedLine, 12.dp)
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
