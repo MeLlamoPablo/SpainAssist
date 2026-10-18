@@ -8,6 +8,13 @@
 # Publishing a tag that already has a release deletes that release first, so moving the tag
 # (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`) or re-running the workflow republishes it.
 #
+# Windows also builds the Microsoft Store MSIX (`SpainAssist-win-x64.msix`) in the same run. It
+# isn't part of the release: it is the workflow artifact `store-msix`, which is uploaded to Partner
+# Center by hand (Apps and games > Spain Assist > new submission > Packages). Submit only stable
+# tags: the Store needs a higher version each time, and `vX.Y.Z-suffix` builds as X.Y.Z.0 too.
+# A prerelease's MSIX is for sideload testing (signed locally with a certificate for the
+# `appx.publisher` subject). The Store signs the package it ships.
+#
 # Unsigned for now: macOS builds are ad-hoc signed and not notarized, Windows builds are unsigned.
 # Linux has no code signing: SHA256SUMS.txt covers the .deb. Signing turns on when its secrets are passed as the environment
 # variables `apps/desktop/electron-builder.ts` reads.
@@ -134,6 +141,14 @@ jobs:
             apps/desktop/dist/latest-linux.yml
           if-no-files-found: error
           retention-days: 7
+      - if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-msix
+          path: apps/desktop/dist/*.msix
+          if-no-files-found: error
+          # Long enough to upload to Partner Center after a release.
+          retention-days: 30
 
   release:
     name: Publish the release

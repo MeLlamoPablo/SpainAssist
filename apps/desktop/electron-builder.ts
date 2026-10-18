@@ -19,8 +19,9 @@
  *   ad-hoc signed (no notarization: Gatekeeper warns once) and Windows builds are unsigned.
  * - Updates: `publish` points the app at this repo's GitHub Releases (electron-updater).
  *   The Microsoft Store package (`appx`) updates through the Store instead.
- * - Windows ships twice: the NSIS installer on GitHub Releases (`win.target`, release.yml)
- *   and an MSIX for the Microsoft Store (`package:msix`, the `appx` options).
+ * - Windows ships twice from one pack (`win.target`, release.yml): the NSIS installer on GitHub
+ *   Releases and an MSIX for the Microsoft Store (the `appx` options; `package:msix` builds
+ *   only the MSIX).
  * - Linux ships as a .deb, the only Linux target.
  */
 import { existsSync } from 'node:fs';
@@ -174,12 +175,13 @@ const config: Configuration = {
     },
   },
   win: {
-    // The GitHub Releases installer. `package:msix` overrides it with `appx` (`--win appx`).
-    target: ['nsis'],
+    // NSIS for GitHub Releases, appx for the Store. `package:msix` builds only the appx.
+    target: ['nsis', 'appx'],
     ...(azure ? { azureSignOptions: azure } : {}),
   },
-  // The Microsoft Store package. The Store signs it on submission; a local test build needs a
-  // certificate whose subject is `publisher` (sideloading). Tiles: packaging/appx/
+  // The Microsoft Store package. The Store signs it on submission, so CI leaves it unsigned
+  // (Azure signing would sign it too, with a publisher that doesn't match, and fail); a local
+  // test build needs a certificate whose subject is `publisher` (sideloading). Tiles: packaging/appx/
   // (packaging/render-icon.mjs). The Store updates it, and uninstalling it removes its data.
   appx: {
     ...STORE_IDENTITY,

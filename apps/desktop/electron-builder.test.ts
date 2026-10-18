@@ -103,7 +103,7 @@ describe('electron-builder config', () => {
 
   it('builds the Microsoft Store package with its identity, versioned X.Y.Z.0', async () => {
     const config = await loadConfig();
-    expect(config.win?.target).toEqual(['nsis']);
+    expect(config.win?.target).toEqual(['nsis', 'appx']);
     expect(config.appx).toMatchObject({
       identityName: '28203PabloCaballero.SpainAssist',
       publisher: 'CN=DC37CBF9-416F-4E91-807A-3F218DB76817',
