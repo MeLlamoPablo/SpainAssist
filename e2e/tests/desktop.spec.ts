@@ -301,7 +301,8 @@ test('secret answers stay out of model requests and saved transcripts; stopping 
         when: {
           hasTool: PROCEDURE,
           lastTool: 'browser_click',
-          lastToolResult: 'textbox "Contraseña[^"]*"[^\\n]*?\\[ref=(?<secretRef>[^\\]]+)\\]',
+          // Not the Cl@ve password: browser_fill_from_user refuses it (browser_login_clave types it).
+          lastToolResult: 'textbox "DNI o NIE[^"]*"[^\\n]*?\\[ref=(?<secretRef>[^\\]]+)\\]',
         },
         reply: {
           toolCalls: [
