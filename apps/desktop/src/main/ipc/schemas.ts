@@ -39,6 +39,11 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'app.reveal': none,
   'app.exportTranscripts': none,
   'updates.status': none,
+  'dataImport.status': none,
+  'dataImport.accept': none,
+  'dataImport.decline': none,
+  'dataImport.dismiss': none,
+  'dataImport.openAppsSettings': none,
 
   'settings.get': none,
   'settings.update': z.tuple([SettingsPatch]),

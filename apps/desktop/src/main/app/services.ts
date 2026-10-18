@@ -25,6 +25,7 @@ import { exportTranscripts } from '../export/transcripts';
 import { registerIpcHandlers } from '../ipc/handlers';
 import { type IpcCallContext, IpcRouter } from '../ipc/router';
 import { MediaStore } from '../media/store';
+import { type DataImport, noDataImport } from '../migrate/nsis-import';
 import { CallTranscriber } from '../phone/transcriber';
 import { createMaps, type Maps } from '../places/maps';
 import { pendingFormPins } from '../places/resolve-form';
@@ -77,6 +78,8 @@ export interface MainDeps {
   places?: Pick<Maps, 'place' | 'home'>;
   /** The app's own updates (`updates/updater.ts`); unsupported when absent (tests, dev). */
   updates?: Updates;
+  /** The Microsoft Store build's import of the GitHub (NSIS) install's data; none elsewhere. */
+  dataImport?: DataImport;
   openExternal(url: string): Promise<void>;
   /**
    * The pages of the ChatGPT sign-in's loopback listener. A dependency, not an import of
@@ -555,6 +558,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       },
     },
     updates,
+    dataImport: deps.dataImport ?? noDataImport,
     openExternal: deps.openExternal,
     revealWindow: deps.revealWindow,
     exportTranscripts: () =>

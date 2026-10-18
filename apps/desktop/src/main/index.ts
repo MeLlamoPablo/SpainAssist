@@ -54,6 +54,7 @@ import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
 import { startErrorReports } from './errors/reports';
+import { applyStagedLocalState, defaultUserData, openDataImport } from './migrate/nsis-import';
 import { catastro } from './places/catastro';
 import { noBiometric } from './ports';
 import { chatgptLoginPages } from './providers/login-pages';
@@ -114,12 +115,17 @@ const devUrl = isDev ? process.env.ELECTRON_RENDERER_URL : undefined;
 const devIcon = isDev ? join(app.getAppPath(), 'packaging/icon.png') : undefined;
 
 // Internal name (also the macOS safeStorage keychain item and the userData folder): renaming it
-// would orphan existing vaults. UI-facing copy uses "Spain Assist".
+// would orphan existing vaults. UI-facing copy uses "Spain Assist". The Microsoft Store build has
+// its own folder (`migrate/nsis-import.ts`).
 app.setName('SpainAssistant');
 app.setPath(
   'userData',
-  env.userDataDir ? resolve(env.userDataDir) : join(app.getPath('appData'), 'SpainAssistant'),
+  env.userDataDir
+    ? resolve(env.userDataDir)
+    : defaultUserData(app.getPath('appData'), process.platform, process.windowsStore),
 );
+// Before Chromium reads it: the vault key of data imported from the NSIS install.
+applyStagedLocalState(app.getPath('userData'));
 // Error reports (D29): started before `ready` (the SDK registers its IPC scheme), sending nothing
 // until main() opens the gate with the flag and the setting.
 const errorReports = env.errorReportsDsn
@@ -371,9 +377,25 @@ async function main(): Promise<void> {
     urgent: appInfo.features.mustUpdate,
   });
 
+  // Decided before the services create this userData's files.
+  const dataImport = await openDataImport({
+    platform: process.platform,
+    windowsStore: process.windowsStore,
+    appData: app.getPath('appData'),
+    userData: paths.userData,
+    stop: async () => services?.shutdown(),
+    relaunch: () => {
+      app.relaunch();
+      app.exit(0);
+    },
+    openAppsSettings: () => shell.openExternal('ms-settings:appsfeatures'),
+    logger: log,
+  });
+
   services = await createMainServices({
     env,
     paths,
+    dataImport,
     documentDownloadsDir: env.e2e
       ? join(paths.userData, 'exported-downloads')
       : app.getPath('downloads'),

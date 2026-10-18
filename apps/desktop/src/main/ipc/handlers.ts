@@ -8,6 +8,7 @@ import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import { errorMessage } from '../core/util';
 import type { MediaStore } from '../media/store';
+import type { DataImport } from '../migrate/nsis-import';
 import type { Maps } from '../places/maps';
 import type { ProcedureService } from '../procedures/service';
 import type { ProviderManager } from '../providers/manager';
@@ -42,6 +43,8 @@ export interface IpcServices {
   };
   /** The app's own updates. */
   updates: Pick<Updates, 'status'>;
+  /** The Microsoft Store build's offer to import the GitHub (NSIS) install's data. */
+  dataImport: DataImport;
   openExternal(url: string): Promise<void>;
   revealWindow(): void;
   /** Saves every stored transcript in a zip in Downloads; returns its file name. */
@@ -73,6 +76,13 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('app.reveal', S['app.reveal'], () => s.revealWindow());
   router.register('app.exportTranscripts', S['app.exportTranscripts'], () => s.exportTranscripts());
   router.register('updates.status', S['updates.status'], () => s.updates.status());
+  router.register('dataImport.status', S['dataImport.status'], () => s.dataImport.status());
+  router.register('dataImport.accept', S['dataImport.accept'], () => s.dataImport.accept());
+  router.register('dataImport.decline', S['dataImport.decline'], () => s.dataImport.decline());
+  router.register('dataImport.dismiss', S['dataImport.dismiss'], () => s.dataImport.dismiss());
+  router.register('dataImport.openAppsSettings', S['dataImport.openAppsSettings'], () =>
+    s.dataImport.openAppsSettings(),
+  );
 
   router.register('settings.get', S['settings.get'], () => s.settings.get());
   router.register('settings.update', S['settings.update'], (patch) => s.settings.update(patch));

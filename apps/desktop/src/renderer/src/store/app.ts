@@ -1,4 +1,11 @@
-import type { AppInfo, CompanionStatus, ProviderStatus, Settings, UpdateStatus } from '@sa/shared';
+import type {
+  AppInfo,
+  CompanionStatus,
+  DataImportStatus,
+  ProviderStatus,
+  Settings,
+  UpdateStatus,
+} from '@sa/shared';
 import { create } from 'zustand';
 
 export type VaultTab = 'personal' | 'documents' | 'credentials';
@@ -29,6 +36,8 @@ interface AppState {
   companion: CompanionStatus;
   /** The app's own updates; the must-update screen shows them. */
   updates: UpdateStatus;
+  /** The Microsoft Store build's offer to bring in the GitHub install's data. */
+  dataImport: DataImportStatus;
   view: View;
   showArchived: boolean;
   /** The procedure card to bring into view and highlight (e.g. from a procedure event in the chat). */
@@ -54,6 +63,7 @@ export const useAppStore = create<AppState>()((set) => ({
   loginProgress: null,
   companion: { state: 'off' },
   updates: { state: 'unsupported' },
+  dataImport: { state: 'none' },
   view: { kind: 'procedures' },
   showArchived: false,
   focusedProcedure: null,

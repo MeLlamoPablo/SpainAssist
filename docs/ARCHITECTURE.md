@@ -116,6 +116,12 @@
   action tries again. E2e runs never download; the development-only `SA_BROWSER_EXECUTABLE`
   override launches a given Chromium instead. The development-only `SA_BROWSER_CAPTURE=1`
   records each procedure's browsing for mock sites (see "Browser capture (development)").
+- **Microsoft Store build data** (`apps/desktop/src/main/migrate/nsis-import.ts`). The MSIX
+  build keeps its data in `%APPDATA%\SpainAssistantStore`, which MSIX virtualizes into the
+  package; the NSIS build keeps `%APPDATA%\SpainAssistant`. On its first start, when the NSIS
+  install left data on the same Windows account, the Store build offers to copy it in (settings,
+  app state, vault, conversation, procedures, and Chromium's `Local State`, whose os_crypt key
+  wraps the vault key), then restarts. The answer is kept in `nsis-import.json`.
 - **Packaged app** (D17, `apps/desktop/electron-builder.ts`). app.asar holds `out/` (main,
   preload, renderer), the agent host as `agent-host/host.js`, and the node_modules of
   `dependencies`, which include the host's external imports. Agent processes run that host as

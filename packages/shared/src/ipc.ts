@@ -138,6 +138,16 @@ export interface SaMethods {
   'app.exportTranscripts': [[], string];
   /** The app's own updates (see UpdateStatus); changes arrive as `updates.status` events. */
   'updates.status': [[], UpdateStatus];
+  /** Data of the GitHub (NSIS) install, for the Microsoft Store build (see DataImportStatus). */
+  'dataImport.status': [[], DataImportStatus];
+  /** Copies that data into this app's own folder and restarts the app; never resolves then. */
+  'dataImport.accept': [[], void];
+  /** The user starts from scratch: never offered again. */
+  'dataImport.decline': [[], void];
+  /** Closes the "your data is here" notice for good. */
+  'dataImport.dismiss': [[], void];
+  /** Opens Windows Settings > Apps, where the user can uninstall the other version. */
+  'dataImport.openAppsSettings': [[], void];
 
   'settings.get': [[], Settings];
   'settings.update': [[patch: SettingsPatch], Settings];
@@ -285,6 +295,17 @@ export type UpdateStatus =
   | { state: 'unsupported' | 'idle' | 'checking' | 'upToDate' | 'error' }
   | { state: 'downloading'; version: string; percent: number }
   | { state: 'ready'; version: string };
+
+/**
+ * The Microsoft Store (MSIX) build's offer to bring in the data that the GitHub (NSIS) install
+ * left on the same Windows account (`apps/desktop/src/main/migrate/`):
+ * - `none`: nothing to offer (other builds, no old data, or already answered);
+ * - `offer`: ask before anything else, on the first start;
+ * - `imported`: the data came in; say so once, until `dataImport.dismiss`.
+ */
+export interface DataImportStatus {
+  state: 'none' | 'offer' | 'imported';
+}
 
 /**
  * The desktop's pairing with the phone app (`@sa/companion`):

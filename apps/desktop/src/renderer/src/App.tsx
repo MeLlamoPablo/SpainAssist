@@ -3,6 +3,7 @@ import { PreviewTrafficLights } from './components/PreviewChrome';
 import { Toaster } from './components/ui/toaster';
 import { TooltipProvider } from './components/ui/tooltip';
 import { Onboarding } from './features/onboarding/Onboarding';
+import { DataImportDone, DataImportOffer } from './features/shell/DataImport';
 import { MustUpdate } from './features/shell/MustUpdate';
 import { Shell } from './features/shell/Shell';
 import { useT } from './i18n';
@@ -21,6 +22,8 @@ export function App() {
   const lang = useAppStore((s) => s.settings?.language ?? 'es');
   // This version may no longer be used: nothing else of the app shows.
   const mustUpdate = useAppStore((s) => s.info?.features.mustUpdate ?? false);
+  // The Store build's first start offers the GitHub install's data before anything else.
+  const dataImport = useAppStore((s) => s.dataImport.state);
   // Keep the onboarding on top of the freshly mounted app while it plays its exit.
   const [onboardingShown, setOnboardingShown] = useState(false);
   if (!onboardingDone && !onboardingShown) setOnboardingShown(true);
@@ -39,6 +42,8 @@ export function App() {
         </Suspense>
       ) : mustUpdate ? (
         <MustUpdate />
+      ) : dataImport === 'offer' ? (
+        <DataImportOffer />
       ) : (
         <div className="relative h-full">
           {onboardingDone ? (
@@ -54,6 +59,7 @@ export function App() {
           ) : null}
         </div>
       )}
+      {!playground && !mustUpdate && dataImport === 'imported' && <DataImportDone />}
       {!playground && <PreviewTrafficLights />}
       <Toaster closeLabel={t.close} />
     </TooltipProvider>

@@ -68,22 +68,32 @@ export async function reloadProcedures(): Promise<void> {
 export async function startSync(): Promise<() => void> {
   const unsubscribe = api.on(applyEvent);
   const appInfo = api.invoke('app.info');
-  const [info, settings, provider, procedures, state, companion, updates] = await Promise.all([
-    appInfo,
-    api.invoke('settings.get'),
-    api.invoke('providers.status'),
-    api.invoke('procedures.list'),
-    api.invoke('chat.state'),
-    // Without the DNIe feature flag, main refuses the pairing calls.
-    appInfo.then((i): Promise<CompanionStatus> | CompanionStatus =>
-      i.features.dniePhone ? api.invoke('companion.status') : { state: 'unavailable' },
-    ),
-    api.invoke('updates.status'),
-  ]);
+  const [info, settings, provider, procedures, state, companion, updates, dataImport] =
+    await Promise.all([
+      appInfo,
+      api.invoke('settings.get'),
+      api.invoke('providers.status'),
+      api.invoke('procedures.list'),
+      api.invoke('chat.state'),
+      // Without the DNIe feature flag, main refuses the pairing calls.
+      appInfo.then((i): Promise<CompanionStatus> | CompanionStatus =>
+        i.features.dniePhone ? api.invoke('companion.status') : { state: 'unavailable' },
+      ),
+      api.invoke('updates.status'),
+      api.invoke('dataImport.status'),
+    ]);
   document.documentElement.dataset.platform = info.platform;
   useProcedureStore.getState().setAll(procedures);
   useChatStore.getState().setState(state);
-  useAppStore.setState({ info, settings, provider, companion, updates, ready: true });
+  useAppStore.setState({
+    info,
+    settings,
+    provider,
+    companion,
+    updates,
+    dataImport,
+    ready: true,
+  });
   void reloadVault();
   void loadConversation();
   return unsubscribe;

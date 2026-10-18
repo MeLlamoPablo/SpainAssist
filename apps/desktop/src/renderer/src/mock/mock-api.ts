@@ -5,6 +5,7 @@ import {
   type CompanionStatus,
   type ConversationState,
   type CredentialSummary,
+  type DataImportStatus,
   DEFAULT_SETTINGS,
   type DocumentMeta,
   maskValue,
@@ -92,7 +93,14 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const latency = Number(params.get('latency') ?? 60);
   const freeze = params.has('freeze') || params.has('playground');
   const initialLang: Lang = params.get('lang') === 'en' ? 'en' : 'es';
-  const onboarding = params.has('onboarding') && params.get('onboarding') !== '0';
+  // The Microsoft Store build's import of the GitHub install's data (on Windows):
+  // `?dataImport=offer` (first start, before the onboarding) or `=imported` (after the restart).
+  const dataImportParam = params.get('dataImport');
+  let dataImport: DataImportStatus = {
+    state: dataImportParam === 'offer' || dataImportParam === 'imported' ? dataImportParam : 'none',
+  };
+  const onboarding =
+    (params.has('onboarding') && params.get('onboarding') !== '0') || dataImport.state === 'offer';
   const chatgptIneligible = params.get('chatgpt') === 'ineligible';
   const dnieSaved = params.has('dnieSaved');
   const dniePhone =
@@ -814,7 +822,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'app.info': () => ({
       name: 'Spain Assist',
       version: '0.2.1',
-      platform: 'darwin',
+      platform: dataImportParam ? 'win32' : 'darwin',
       isDev: true,
       isE2E: false,
       features: {
@@ -826,6 +834,24 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       errorReports: false,
     }),
     'updates.status': () => updates,
+    'dataImport.status': () => dataImport,
+    'dataImport.accept': async () => {
+      await sleep(1500);
+      // The real app restarts into the imported data.
+      const next = new URLSearchParams(params);
+      next.set('dataImport', 'imported');
+      location.search = next.toString();
+      await new Promise<never>(() => {});
+    },
+    'dataImport.decline': () => {
+      dataImport = { state: 'none' };
+    },
+    'dataImport.dismiss': () => {
+      dataImport = { state: 'none' };
+    },
+    'dataImport.openAppsSettings': () => {
+      toast.info(tr('Configuración de Windows', 'Windows Settings'), 'ms-settings:appsfeatures');
+    },
     'app.reveal': () => {},
     'app.exportTranscripts': () => 'SpainAssist-transcripts-2026-10-12.zip',
     'app.openExternal': (url) => {
