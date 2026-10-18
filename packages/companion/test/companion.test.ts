@@ -669,3 +669,133 @@ describe('PhoneSigner timing', () => {
     t.away();
   });
 });
+
+describe('PhoneClient retry on missing room', () => {
+  it('retries on not_found with expiresAt until pairing expires', async () => {
+    const relay = new MemoryRelay();
+    const baseTime = Date.now();
+    let currentTime = baseTime;
+    const now = () => currentTime;
+    const expiresAt = baseTime + 100; // Expires in 100ms
+    const qr = decodePairingLink(encodePairingLink({
+      relayUrl: RELAY,
+      room: crypto.randomBytes(16),
+      secret: crypto.randomBytes(32),
+      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+    }));
+    const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
+    const phoneStatuses: PhoneStatus[] = [];
+    const phone = new PhoneClient({
+      link: otherRoom,
+      hello: { app: '1.0.0', platform: 'test', device: 'Test phone' },
+      socket: { WebSocket: relay.WebSocket, backoffMs: () => 5 },
+      onStatus: (s) => phoneStatuses.push(s),
+      now,
+      expiresAt,
+      missingBackoffMs: () => 10, // Very fast for testing
+      roomMissingMaxMs: 50_000, // 50 seconds (longer than pairing lifetime)
+    });
+    cleanups.push(() => phone.close());
+    // Wait for pairing to expire
+    await new Promise((r) => setTimeout(r, 120));
+    // Advance time to trigger expiry check
+    currentTime = baseTime + 150;
+    await new Promise((r) => setTimeout(r, 20));
+    const ended = phoneStatuses.find((s) => s.state === 'ended');
+    expect(ended).toEqual({ state: 'ended', reason: 'expired' });
+  });
+
+  it('retries on not_found until 24 hours timeout', async () => {
+    const relay = new MemoryRelay();
+    const baseTime = Date.now();
+    let currentTime = baseTime;
+    const now = () => currentTime;
+    const expiresAt = baseTime + 72 * 60 * 60 * 1000; // 72 hours (longer than timeout)
+    const qr = decodePairingLink(encodePairingLink({
+      relayUrl: RELAY,
+      room: crypto.randomBytes(16),
+      secret: crypto.randomBytes(32),
+      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+    }));
+    const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
+    const phoneStatuses: PhoneStatus[] = [];
+    const phone = new PhoneClient({
+      link: otherRoom,
+      hello: { app: '1.0.0', platform: 'test', device: 'Test phone' },
+      socket: { WebSocket: relay.WebSocket, backoffMs: () => 5 },
+      onStatus: (s) => phoneStatuses.push(s),
+      now,
+      expiresAt,
+      missingBackoffMs: () => 1, // Minimal backoff for testing
+      roomMissingMaxMs: 50, // 50ms (short for test)
+    });
+    cleanups.push(() => phone.close());
+    // Wait for initial not_found
+    await new Promise((r) => setTimeout(r, 50));
+    // Advance time beyond the timeout
+    currentTime = baseTime + 100;
+    await new Promise((r) => setTimeout(r, 50));
+    const ended = phoneStatuses.find((s) => s.state === 'ended');
+    expect(ended).toEqual({ state: 'ended', reason: 'not_found' });
+  });
+
+  it('continues retrying while both timeouts are not exceeded', async () => {
+    const relay = new MemoryRelay();
+    const baseTime = Date.now();
+    let currentTime = baseTime;
+    const now = () => currentTime;
+    const expiresAt = baseTime + 500; // 500ms lifetime
+    const qr = decodePairingLink(encodePairingLink({
+      relayUrl: RELAY,
+      room: crypto.randomBytes(16),
+      secret: crypto.randomBytes(32),
+      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+    }));
+    const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
+    const phoneStatuses: PhoneStatus[] = [];
+    const phone = new PhoneClient({
+      link: otherRoom,
+      hello: { app: '1.0.0', platform: 'test', device: 'Test phone' },
+      socket: { WebSocket: relay.WebSocket, backoffMs: () => 5 },
+      onStatus: (s) => phoneStatuses.push(s),
+      now,
+      expiresAt,
+      missingBackoffMs: () => 5,
+      roomMissingMaxMs: 1000, // 1 second
+    });
+    cleanups.push(() => phone.close());
+    // Wait for initial not_found
+    await new Promise((r) => setTimeout(r, 50));
+    // Advance time to 200ms - still within both timeouts
+    currentTime = baseTime + 200;
+    await new Promise((r) => setTimeout(r, 30));
+    // Should still be retrying (no ended status)
+    const ended = phoneStatuses.filter((s) => s.state === 'ended');
+    expect(ended).toHaveLength(0);
+    // Check that it's showing retry status
+    const hasDesktopAway = phoneStatuses.some((s) => s.state === 'desktop_away');
+    expect(hasDesktopAway).toBe(true);
+  });
+
+  it('ends immediately on not_found if expiresAt is not provided (backward compatibility)', async () => {
+    const relay = new MemoryRelay();
+    const qr = decodePairingLink(encodePairingLink({
+      relayUrl: RELAY,
+      room: crypto.randomBytes(16),
+      secret: crypto.randomBytes(32),
+      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+    }));
+    const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
+    const phoneStatuses: PhoneStatus[] = [];
+    const phone = new PhoneClient({
+      link: otherRoom,
+      hello: { app: '1.0.0', platform: 'test', device: 'Test phone' },
+      socket: { WebSocket: relay.WebSocket, backoffMs: () => 5 },
+      onStatus: (s) => phoneStatuses.push(s),
+      // Note: no expiresAt provided
+    });
+    cleanups.push(() => phone.close());
+    await until(() => phoneStatuses.some((s) => s.state === 'ended'), 1000);
+    expect(phoneStatuses.find((s) => s.state === 'ended')).toEqual({ state: 'ended', reason: 'not_found' });
+  });
+});

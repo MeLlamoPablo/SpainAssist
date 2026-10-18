@@ -1,6 +1,6 @@
 /**
  * Phone side of the channel, in TypeScript: the reference the Kotlin app follows, and the
- * transport of the mock phone used by tests (`tools/mock-phone`).
+ * transport of the mock phone used by tests.
  */
 import crypto from 'node:crypto';
 import {
@@ -44,6 +44,14 @@ export interface PhoneClientOptions {
   onSession?(): void;
   log?: (message: string, fields?: Record<string, unknown>) => void;
   socket?: Pick<RelaySocketOptions, 'WebSocket' | 'pingIntervalMs' | 'pongTimeoutMs' | 'backoffMs'>;
+  /** Clock for timeouts (default: Date.now). */
+  now?: () => number;
+  /** Pairing expiry time in ms since epoch. If not provided, pairing never expires. */
+  expiresAt?: number;
+  /** Backoff for retrying a missing room (longer than normal backoff; default: missingBackoff). */
+  missingBackoffMs?: (attempt: number) => number;
+  /** Max time to wait for a missing room before ending (default: 24 hours). */
+  roomMissingMaxMs?: number;
 }
 
 interface Pending {
@@ -62,6 +70,8 @@ export class PhoneClient {
   private pending?: Pending;
   private session?: Session;
   private status: PhoneStatus = { state: 'connecting' };
+  private roomMissingStart?: number;
+  private roomMissingAttempt = 0;
 
   constructor(private readonly opts: PhoneClientOptions) {
     this.pairing = decodePairingLink(opts.link);
@@ -120,6 +130,35 @@ export class PhoneClient {
   private onRelayState(state: RelayState): void {
     if (this.status.state === 'ended') return;
     if (state.status === 'closed') {
+      // Handle not_found specially: keep retrying until pairing expires or 24h timeout if expiresAt is provided.
+      if (state.reason === 'not_found' && this.opts.expiresAt !== undefined) {
+        const now = this.opts.now?.() ?? Date.now();
+        // Check if pairing has expired.
+        if (now > this.opts.expiresAt) {
+          this.finish({ state: 'ended', reason: 'expired' });
+          return;
+        }
+        // Check if we've been missing this room for too long.
+        const roomMissingMaxMs = this.opts.roomMissingMaxMs ?? 24 * 60 * 60 * 1000;
+        if (this.roomMissingStart === undefined) {
+          this.roomMissingStart = now;
+        }
+        if (now - this.roomMissingStart > roomMissingMaxMs) {
+          this.finish({ state: 'ended', reason: 'not_found' });
+          return;
+        }
+        // Keep retrying: schedule a reconnect with the missing backoff.
+        const missingBackoff = this.opts.missingBackoffMs ?? defaultMissingBackoff;
+        const delay = missingBackoff(this.roomMissingAttempt++);
+        setTimeout(() => {
+          if (this.status.state !== 'ended') {
+            this.socket.start();
+          }
+        }, delay).unref?.();
+        this.setStatus({ state: 'desktop_away' });
+        return;
+      }
+      // Other close reasons end the pairing immediately.
       this.finish({
         state: 'ended',
         reason: state.reason === 'expired' ? 'expired' : 'not_found',
@@ -129,6 +168,11 @@ export class PhoneClient {
     if (state.status === 'stopped') return;
     this.session = undefined;
     this.pending = undefined;
+    // Reset the missing room timer when the relay is back.
+    if (state.status === 'open') {
+      this.roomMissingStart = undefined;
+      this.roomMissingAttempt = 0;
+    }
     if (state.status === 'connecting') this.setStatus({ state: 'connecting' });
     else if (!state.peer) this.setStatus({ state: 'desktop_away' });
     // With the desktop present, wait for its CHALLENGE.
@@ -213,4 +257,10 @@ export class PhoneClient {
     }
     this.opts.onMessage?.(parsed.data);
   }
+}
+
+/** Default backoff for retrying a missing room: 1–2 s, 2–4 s… up to 30–60 s. */
+function defaultMissingBackoff(attempt: number): number {
+  const base = Math.min(60_000, 2_000 << Math.min(attempt, 5));
+  return base / 2 + Math.random() * (base / 2);
 }

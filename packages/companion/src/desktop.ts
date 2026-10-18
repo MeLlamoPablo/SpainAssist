@@ -176,7 +176,7 @@ export class DesktopPairing {
   private onRelayState(state: RelayState): void {
     if (this.ended) return;
     if (state.status === 'closed') {
-      this.end('relay_refused');
+      this.end(state.reason === 'expired' ? 'expired' : 'relay_refused');
       return;
     }
     if (state.status === 'stopped') return;
