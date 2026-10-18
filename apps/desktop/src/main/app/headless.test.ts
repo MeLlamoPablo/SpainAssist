@@ -86,6 +86,7 @@ describe('defaults', () => {
       name: 'Spain Assist',
       version: '0.0.0-headless',
       platform: process.platform,
+      installChannel: 'dev',
       isDev: false,
       isE2E: true,
       features: { feedbackServer: false, dniePhone: false, mustUpdate: false, errorReports: false },

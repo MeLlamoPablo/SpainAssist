@@ -44,6 +44,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'dataImport.decline': none,
   'dataImport.dismiss': none,
   'dataImport.openAppsSettings': none,
+  'updates.openStore': none,
 
   'settings.get': none,
   'settings.update': z.tuple([SettingsPatch]),

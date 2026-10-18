@@ -27,12 +27,11 @@ export interface BrowserServiceOptions {
   startHidden?: boolean;
   /** Use a system browser instead of Playwright's Chromium. */
   channel?: 'chrome' | 'msedge';
-  executablePath?: string;
   /**
-   * Download Playwright's Chromium before the first launch when it is missing (see
-   * `ensureChromium`). Ignored with `channel` or `executablePath`.
+   * The Chromium to launch, such as the one an app ships with. Without it (and `channel`),
+   * Playwright's own build from its cache; this package never downloads one.
    */
-  installBrowser?: boolean;
+  executablePath?: string;
   /** Staging directory for downloads (files left there are deleted after onDownload resolves). */
   downloadsDir: string;
   /** Persist a UI screenshot (JPEG) and return its media id. */

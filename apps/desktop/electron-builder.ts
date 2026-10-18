@@ -3,17 +3,24 @@
  *
  *   corepack pnpm --filter @sa/desktop package       # installers for this OS and CPU
  *   corepack pnpm --filter @sa/desktop package:dir   # only the unpacked app, to check it
+ *   corepack pnpm --filter @sa/desktop package:msix  # the Microsoft Store package (Windows x64)
  *
  * - Package on the OS and CPU you ship for (one CI runner each): native modules such as
  *   @napi-rs/canvas are installed for this machine only, so `beforePack` refuses other targets.
  * - `beforePack` builds sa-sidecar for the target with Go (`vendor/<platform>-<arch>/`), and
  *   `extraResources` copies it to `<resources>/vendor/`, where the app looks for it
  *   (`sidecarBinaryPath` in @sa/sidecar). It stays outside the ASAR, executable.
+ * - `beforePack` also stages playwright-core's pinned Chromium (scripts/chromium.ts), which
+ *   `extraResources` copies to `<resources>/chromium/`: every build bundles the agent's browser,
+ *   and the app never downloads one (the Microsoft Store forbids it, policy 10.2.2).
  * - The agent host (`packages/agent/dist/host.js`) goes into app.asar as `agent-host/host.js`,
  *   next to the node_modules that hold its external imports (`dependencies`).
  * - Signing only happens when its environment variables are set. Without them, macOS builds are
  *   ad-hoc signed (no notarization: Gatekeeper warns once) and Windows builds are unsigned.
  * - Updates (D19): `publish` points the app at this repo's GitHub Releases (electron-updater).
+ *   The Microsoft Store package (`appx`) updates through the Store instead.
+ * - Windows ships twice (D17): the NSIS installer on GitHub Releases (`win.target`, release.yml)
+ *   and an MSIX for the Microsoft Store (`package:msix`, the `appx` options).
  * - Linux ships as a .deb, the only Linux target (D17).
  */
 import { existsSync } from 'node:fs';
@@ -21,6 +28,8 @@ import path from 'node:path';
 import { buildSidecar } from '@sa/sidecar/build';
 // The beforePack context has the same type as afterPack's (`PackContext`, not exported).
 import { type AfterPackContext, Arch, type Configuration } from 'electron-builder';
+import { stageChromium } from './scripts/chromium';
+import { BUNDLED_CHROMIUM_DIR } from './src/main/browser/bundled';
 
 const env = process.env;
 
@@ -84,7 +93,15 @@ async function beforePack(context: AfterPackContext): Promise<void> {
         : `sa-sidecar did not build: ${e.stderr || e.message}`,
     );
   }
+  stageChromium(path.join(projectDir, 'vendor', `${platform}-${arch}`, BUNDLED_CHROMIUM_DIR));
 }
+
+/** Microsoft Store identity of the app (Partner Center, Store ID 9ND5MF94VKGC). */
+const STORE_IDENTITY = {
+  identityName: '28203PabloCaballero.SpainAssist',
+  publisher: 'CN=DC37CBF9-416F-4E91-807A-3F218DB76817',
+  publisherDisplayName: 'Pablo Caballero',
+};
 
 const config: Configuration = {
   appId: 'es.spainassist.desktop',
@@ -105,6 +122,9 @@ const config: Configuration = {
   extraResources: [
     // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder macros
     { from: 'vendor/${platform}-${arch}', to: 'vendor', filter: ['sa-sidecar', 'sa-sidecar.exe'] },
+    // The agent's browser, staged by beforePack (scripts/chromium.ts, src/main/browser/bundled.ts).
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder macros
+    { from: 'vendor/${platform}-${arch}/chromium', to: BUNDLED_CHROMIUM_DIR },
     // Outside the ASAR, so users can read them (DECISIONS D16). electron-builder adds Electron's
     // LICENSE.electron.txt and Chromium's LICENSES.chromium.html (in Resources on macOS).
     { from: '../../LICENSE', to: 'LICENSE.txt' },
@@ -117,8 +137,8 @@ const config: Configuration = {
   electronLanguages: ['en', 'es'],
   beforePack,
   electronFuses: {
-    // The agent host and Playwright's browser download run this binary as Node
-    // (ELECTRON_RUN_AS_NODE). Turn it off when the host moves to utilityProcess (D2).
+    // The agent host runs this binary as Node (ELECTRON_RUN_AS_NODE). Turn it off when the host
+    // moves to utilityProcess (D2).
     runAsNode: true,
     enableCookieEncryption: true,
     // Also gates NODE_EXTRA_CA_CERTS, which the agent host inherits behind corporate proxies.
@@ -154,8 +174,25 @@ const config: Configuration = {
     },
   },
   win: {
+    // The GitHub Releases installer. `package:msix` overrides it with `appx` (`--win appx`).
     target: ['nsis'],
     ...(azure ? { azureSignOptions: azure } : {}),
+  },
+  // The Microsoft Store package (D17). The Store signs it on submission; a local test build needs a
+  // certificate whose subject is `publisher` (sideloading). Tiles: packaging/appx/
+  // (packaging/render-icon.mjs). The Store updates it (D19), and uninstalling it removes its data.
+  appx: {
+    ...STORE_IDENTITY,
+    applicationId: 'SpainAssist',
+    displayName: 'Spain Assist',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder macros
+    artifactName: 'SpainAssist-${os}-${arch}.msix',
+    // runFullTrust is always added. The scanner uses the camera; call recordings the microphone.
+    capabilities: ['webcam', 'microphone'],
+    languages: ['es-ES', 'en'],
+    backgroundColor: 'transparent',
+    // Version X.Y.Z.0: the Store reserves the fourth part, so never take CI's build number.
+    setBuildNumber: false,
   },
   // A .deb only (D17): no AppImage, snap or apt repository. Installed apps update themselves from
   // `latest-linux.yml` (D19): electron-builder writes `package-type` (`deb`) next to

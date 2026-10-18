@@ -33,7 +33,6 @@ import type {
   AgentLib,
   Biometric,
   BrowserFactory,
-  BrowserInstaller,
   PiiLib,
   ProviderLib,
   SignerLib,
@@ -63,8 +62,11 @@ export interface MainDeps {
   providerLib: ProviderLib;
   browserFactory: BrowserFactory;
   startSidecar?: () => Promise<Sidecar>;
-  /** Downloads Playwright's Chromium when it is missing (started at startup, in the background). */
-  ensureBrowser?: BrowserInstaller;
+  /**
+   * The Chromium the packaged app ships with (`browser/bundled.ts`). Without it, Playwright's
+   * cache (development, tests); SA_BROWSER_EXECUTABLE overrides both.
+   */
+  browserExecutable?: string;
   certificateOrigins: readonly string[];
   signer?: SignerLib;
   pii: PiiLib;
@@ -319,8 +321,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       })
     : undefined;
 
-  // E2e runs and SA_BROWSER_EXECUTABLE use a browser that is already there: never download one.
-  const installBrowser = !!deps.ensureBrowser && !env.e2e && !env.browserExecutable;
   const certificates = await deps.startSidecar?.().then(
     (sidecar) => {
       logger.info('sa-sidecar started');
@@ -347,8 +347,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     certificates,
     certificateLoginsAvailable: !deps.startSidecar || !!certificates,
     factory: deps.browserFactory,
-    executablePath: env.browserExecutable,
-    installBrowser,
+    executablePath: env.browserExecutable ?? deps.browserExecutable,
     ignoreHTTPSErrors: env.e2e,
     headless: env.e2e || deps.appInfo.isDev ? env.browserHeadless : undefined,
     ...(capture ? { capture } : {}),
@@ -369,9 +368,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     logger.warn(
       'browser capture is on: procedures/<id>/capture/ gets HARs, traces and HTML with personal data (typed secrets scrubbed). Use synthetic accounts only.',
     );
-  // Download the browser now, not at the first browser action. Browser actions wait for it.
-  // Failures are logged by the installer; the next browser action tries again.
-  if (installBrowser) deps.ensureBrowser?.(logger.child('browser')).catch(() => {});
   // Temporary downloads never outlive the run that made them.
   await browser.downloads
     .reset()

@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { scrubPii } from '@sa/pii';
+import type { InstallChannel } from '@sa/shared';
 import * as Sentry from '@sentry/electron/main';
 import { scrubReport } from './scrub';
 
@@ -24,6 +25,8 @@ export function startErrorReports(opts: {
   dsn: string;
   release: string;
   environment: string;
+  /** Tagged on every event (`installChannel`), to tell the Store build's errors apart. */
+  installChannel: InstallChannel;
 }): ErrorReports {
   let allowed = () => false;
   const homeDir = homedir();
@@ -31,6 +34,7 @@ export function startErrorReports(opts: {
     dsn: opts.dsn,
     release: opts.release,
     environment: opts.environment,
+    initialScope: { tags: { installChannel: opts.installChannel } },
     ipcMode: Sentry.IPCMode.Protocol,
     transport: Sentry.makeElectronTransport,
     dataCollection: { userInfo: false },

@@ -37,10 +37,22 @@ export interface DnieUnlockValues {
   pin?: string;
 }
 
+/**
+ * How this copy of the app was installed (DECISIONS D17):
+ * - `msix`: the Microsoft Store package, which the Store updates;
+ * - `nsis`: the Windows installer from GitHub Releases (or another packaged Windows build);
+ * - `dmg`: macOS (the dmg or the zip);
+ * - `deb`: the Linux package;
+ * - `unpacked`: a packaged Linux build without an installer (`package:dir`);
+ * - `dev`: development and test runs.
+ */
+export type InstallChannel = 'msix' | 'nsis' | 'dmg' | 'deb' | 'unpacked' | 'dev';
+
 export interface AppInfo {
   name: string;
   version: string;
   platform: 'darwin' | 'win32' | 'linux';
+  installChannel: InstallChannel;
   isDev: boolean;
   /** True when running under the e2e test harness. */
   isE2E: boolean;
@@ -148,6 +160,8 @@ export interface SaMethods {
   'dataImport.dismiss': [[], void];
   /** Opens Windows Settings > Apps, where the user can uninstall the other version. */
   'dataImport.openAppsSettings': [[], void];
+  /** Opens the app's Microsoft Store page, where the Store build updates (`installChannel` msix). */
+  'updates.openStore': [[], void];
 
   'settings.get': [[], Settings];
   'settings.update': [[patch: SettingsPatch], Settings];
@@ -286,7 +300,8 @@ export type SaEvent =
  * install when the app quits; with the `must-update` flag, main installs one as soon as it's
  * downloaded and restarts.
  * - `unsupported`: this build can't update itself (development, e2e, macOS until builds are
- *   signed, Linux); `idle`: no check yet;
+ *   signed, Linux without the .deb, the Microsoft Store build, which the Store updates); `idle`: no
+ *   check yet;
  * - `checking`, `upToDate`;
  * - `downloading` the new `version`, `percent` 0–100; `ready`: downloaded, installs on quit;
  * - `error`: the last check or download failed (it retries on the next check).

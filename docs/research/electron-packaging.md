@@ -385,8 +385,10 @@ first and pass `--publish never`.
   `@napi-rs/canvas`) are in `apps/desktop` `dependencies` for that reason, and a test keeps
   their versions equal to `@sa/agent`'s. smartUnpack moves native files to
   `app.asar.unpacked` (`@napi-rs/canvas-darwin-arm64` 28 MB, esbuild 21 MB, pi-tui,
-  quickjs-wasi). Chromium is not bundled: `ensureChromium` downloads it on first use into
-  Playwright's cache (6.5 option C).
+  quickjs-wasi). Chromium was not bundled then: it downloaded on first use into
+  Playwright's cache (6.5 option C). Since the Microsoft Store build (D17), every package bundles
+  it in `<resources>/chromium/` (`scripts/chromium.ts`); the bundled Chrome for Testing .app was
+  ad-hoc signed with the rest and launched, headed and headless.
 - **Collecting node_modules.** electron-builder spawns `pnpm list` from PATH. On this machine
   that is the global pnpm 7, which fails, and electron-builder falls back to walking
   node_modules (the same 121 packages here). `scripts/package.mjs` therefore puts a Corepack

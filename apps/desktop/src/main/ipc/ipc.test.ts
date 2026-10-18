@@ -63,6 +63,11 @@ describe('IPC router', () => {
     expect(app.opened).toEqual(['https://sede.policia.gob.es/', 'tel:+34900822010']);
   });
 
+  it('opens the Microsoft Store page only in the Store build', async () => {
+    await expect(app.invoke('updates.openStore')).rejects.toThrow(t('es', 'notStoreBuild'));
+    expect(app.opened).toEqual([]);
+  });
+
   it('manages procedures: rename, archive, markRead, log, delete', async () => {
     const created = await app.services.procedures.create('Empadronarme en Madrid');
     expect((await app.invoke('procedures.rename', created.id, '  Padrón  ')).title).toBe('Padrón');

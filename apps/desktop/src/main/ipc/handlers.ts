@@ -13,7 +13,7 @@ import type { Maps } from '../places/maps';
 import type { ProcedureService } from '../procedures/service';
 import type { ProviderManager } from '../providers/manager';
 import type { SettingsStore } from '../settings/store';
-import type { Updates } from '../updates/updater';
+import { STORE_PAGE_URL, type Updates } from '../updates/updater';
 import type { VaultService } from '../vault/service';
 import type { IpcRouter } from './router';
 import { SA_ARG_SCHEMAS as S } from './schemas';
@@ -83,6 +83,11 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('dataImport.openAppsSettings', S['dataImport.openAppsSettings'], () =>
     s.dataImport.openAppsSettings(),
   );
+  router.register('updates.openStore', S['updates.openStore'], async () => {
+    if (s.appInfo.installChannel !== 'msix')
+      throw new UserError(t(lang(), 'notStoreBuild'), 'unavailable');
+    await s.openExternal(STORE_PAGE_URL);
+  });
 
   router.register('settings.get', S['settings.get'], () => s.settings.get());
   router.register('settings.update', S['settings.update'], (patch) => s.settings.update(patch));

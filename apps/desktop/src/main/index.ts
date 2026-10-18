@@ -1,5 +1,4 @@
-import { writeFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join, resolve } from 'node:path';
 import {
@@ -30,11 +29,11 @@ import { type CameraAccess, SCANNER_CHANNEL } from '../scanner';
 import { resolveAgentHostScript } from './agents/host';
 import { devCodexLib } from './app/codex-dev';
 import { parseEnv } from './app/env';
+import { installChannel } from './app/install-channel';
 import {
   agentLib,
   browserFactory,
   certificateOrigins,
-  ensureBrowser,
   openVault,
   piiLib,
   providerLib,
@@ -50,6 +49,7 @@ import {
   isAppUrl,
 } from './app/protocol';
 import { createMainServices, type MainServices } from './app/services';
+import { bundledChromiumPath } from './browser/bundled';
 import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
@@ -64,7 +64,7 @@ import { OpenRouterFrameGate } from './scanner/decider';
 import { DocumentScanner } from './scanner/service';
 import { prepareScanStorage } from './scanner/transcript';
 import { languageForLocales } from './settings/store';
-import { createUpdates, updatesSupported } from './updates/updater';
+import { createUpdates, STORE_PAGE_URL, updatesSupported } from './updates/updater';
 import { createSafeStorageKeyProvider, createTouchIdBiometric } from './vault/keyProvider';
 
 // ---------------------------------------------------------------------------------------------
@@ -128,11 +128,19 @@ app.setPath(
 applyStagedLocalState(app.getPath('userData'));
 // Error reports (D29): started before `ready` (the SDK registers its IPC scheme), sending nothing
 // until main() opens the gate with the flag and the setting.
+// How this copy was installed (D17): the Microsoft Store's MSIX updates through the Store.
+const channel = installChannel({
+  packaged: app.isPackaged,
+  platform: process.platform,
+  windowsStore: process.windowsStore === true,
+  linuxPackageType: linuxPackageType(),
+});
 const errorReports = env.errorReportsDsn
   ? startErrorReports({
       dsn: env.errorReportsDsn,
       release: `spain-assist@${app.getVersion()}`,
       environment: app.isPackaged ? 'production' : 'development',
+      installChannel: channel,
     })
   : undefined;
 protocol.registerSchemesAsPrivileged([APP_SCHEME_PRIVILEGES]);
@@ -312,6 +320,7 @@ async function main(): Promise<void> {
           appVersion: app.getVersion(),
           platform: process.platform,
           arch: process.arch,
+          installChannel: channel,
           logger: log,
         });
 
@@ -356,6 +365,7 @@ async function main(): Promise<void> {
     name: 'Spain Assist',
     version: app.getVersion(),
     platform: process.platform as AppInfo['platform'],
+    installChannel: channel,
     isDev,
     isE2E: env.e2e,
     features: await features,
@@ -365,12 +375,7 @@ async function main(): Promise<void> {
 
   const updatesLog = log.child('updates');
   const updates = createUpdates({
-    backend: updatesSupported({
-      packaged: app.isPackaged,
-      platform: process.platform,
-      e2e: env.e2e,
-      linuxPackageType: await linuxPackageType(),
-    })
+    backend: updatesSupported({ channel, e2e: env.e2e })
       ? await loadAutoUpdater(updatesLog)
       : undefined,
     logger: updatesLog,
@@ -423,14 +428,16 @@ async function main(): Promise<void> {
         logger: log.child('sidecar'),
         ...(env.e2e ? { insecureUpstream: true } : {}),
       }),
-    ensureBrowser,
+    browserExecutable: bundledBrowser(log),
     certificateOrigins,
     signer: signerLib,
     pii: piiLib,
     fetch,
     signerFetch: net.fetch as unknown as typeof fetch,
     openExternal: async (url) => {
-      if (!url.startsWith('https://')) throw new Error('Only https URLs can be opened');
+      // https pages, and the Store page the Store build updates from (`updates.openStore`).
+      if (!url.startsWith('https://') && url !== STORE_PAGE_URL)
+        throw new Error('Only https URLs can be opened');
       await shell.openExternal(url);
     },
     revealWindow: () => revealWindow(mainWindow),
@@ -555,12 +562,28 @@ async function main(): Promise<void> {
  * How a packaged Linux app was installed: electron-builder writes `deb` (or `rpm`, `pacman`) to
  * `<resources>/package-type` for those packages, and electron-updater picks its updater from it.
  */
-async function linuxPackageType(): Promise<string | undefined> {
+function linuxPackageType(): string | undefined {
   if (process.platform !== 'linux' || !app.isPackaged) return undefined;
-  return readFile(join(process.resourcesPath, 'package-type'), 'utf8').then(
-    (type) => type.trim(),
-    () => undefined,
-  );
+  try {
+    return readFileSync(join(process.resourcesPath, 'package-type'), 'utf8').trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The Chromium the packaged app ships with (`browser/bundled.ts`); development uses Playwright's
+ * cache. A packaged build without it can't browse: logged, and browser actions then fail.
+ */
+function bundledBrowser(log: Logger): string | undefined {
+  if (!app.isPackaged) return undefined;
+  const bundled = bundledChromiumPath(process.resourcesPath);
+  if ('reason' in bundled) {
+    log.error('the bundled browser is missing', { reason: bundled.reason });
+    return undefined;
+  }
+  log.info('bundled browser', { version: bundled.version });
+  return bundled.executable;
 }
 
 /**

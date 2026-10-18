@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 
 /**
  * Where playwright-core keeps a browser it already downloaded (the registry is internal API, as in
- * `@sa/browser`'s install.ts). Never installs anything: undefined when the browser is not cached.
+ * `apps/desktop/scripts/chromium.ts`). Never installs anything: undefined when the browser is not cached.
  */
 export function cachedBrowser(name: 'chromium' | 'chromium-headless-shell'): string | undefined {
   try {

@@ -226,6 +226,7 @@ export async function createHeadlessApp(opts: HeadlessOptions): Promise<Headless
     name: 'Spain Assist',
     version: opts.version ?? '0.0.0-headless',
     platform: process.platform as AppInfo['platform'],
+    installChannel: 'dev',
     // Only development builds may record browsing (see the capture option).
     isDev: !!opts.capture,
     isE2E: true,

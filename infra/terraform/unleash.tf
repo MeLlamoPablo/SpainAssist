@@ -141,3 +141,21 @@ resource "unleash_context_field" "arch" {
 
   depends_on = [coolify_resource_action.unleash]
 }
+
+# How the desktop app was installed (`InstallChannel`, sent as `properties[installChannel]`, D17),
+# so a flag can target the Microsoft Store build.
+resource "unleash_context_field" "install_channel" {
+  name        = "installChannel"
+  description = "Spain Assist desktop install channel"
+  stickiness  = false
+  legal_values = [
+    { value = "msix", description = "Microsoft Store (MSIX)" },
+    { value = "nsis", description = "Windows installer from GitHub Releases" },
+    { value = "dmg", description = "macOS" },
+    { value = "deb", description = "Linux .deb" },
+    { value = "unpacked", description = "Packaged Linux build without an installer" },
+    { value = "dev", description = "Development and test runs" },
+  ]
+
+  depends_on = [coolify_resource_action.unleash]
+}

@@ -30,7 +30,6 @@ export {
   normalizeOrigin,
 } from './certificates';
 export { BrowserError, type BrowserErrorCode } from './errors';
-export { type ChromiumRegistry, ensureChromium } from './install';
 export { type RenderOptions, type RenderResult, renderSnapshot } from './snapshot';
 export type {
   BrowserService,

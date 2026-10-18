@@ -1,4 +1,4 @@
-import type { UpdateStatus } from '@sa/shared';
+import type { InstallChannel, UpdateStatus } from '@sa/shared';
 import type { Logger } from '../core/logger';
 import { errorMessage } from '../core/util';
 
@@ -21,22 +21,18 @@ export interface Updates {
 }
 
 /**
- * Packaged Windows builds update themselves, and Linux installs from the .deb: electron-builder
- * writes `deb` to `<resources>/package-type` there (`linuxPackageType`), and electron-updater then
- * installs the new .deb with `dpkg -i`, asking for the password through pkexec. Other Linux runs
- * (an unpacked `package:dir` build) have nothing to update. macOS waits for signed builds
- * (Squirrel.Mac only installs updates signed by the same Developer ID).
+ * Where the app updates itself from GitHub Releases (D19), by how it was installed
+ * (`installChannel`): the NSIS installer's builds, and the Linux .deb, which electron-updater
+ * reinstalls with `dpkg -i`, asking for the password through pkexec. Not the Microsoft Store's
+ * MSIX: the Store updates it. Not macOS until builds are signed (Squirrel.Mac only installs updates
+ * signed by the same Developer ID), and not development, e2e or unpacked builds.
  */
-export function updatesSupported(opts: {
-  packaged: boolean;
-  platform: NodeJS.Platform;
-  e2e: boolean;
-  linuxPackageType?: string;
-}): boolean {
-  if (!opts.packaged || opts.e2e) return false;
-  if (opts.platform === 'win32') return true;
-  return opts.platform === 'linux' && opts.linuxPackageType === 'deb';
+export function updatesSupported(opts: { channel: InstallChannel; e2e: boolean }): boolean {
+  return !opts.e2e && (opts.channel === 'nsis' || opts.channel === 'deb');
 }
+
+/** The Store's page of the app: the Microsoft Store build updates there (`updates.openStore`). */
+export const STORE_PAGE_URL = 'ms-windows-store://pdp/?productid=9ND5MF94VKGC';
 
 const FIRST_CHECK_MS = 30_000;
 const CHECK_EVERY_MS = 4 * 60 * 60_000;

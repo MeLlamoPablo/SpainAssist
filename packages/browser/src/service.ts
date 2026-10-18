@@ -48,7 +48,6 @@ import {
   staleRefError,
   toActionError,
 } from './errors';
-import { ensureChromium } from './install';
 import { NetworkTracker } from './network';
 import {
   afirmaPageNote,
@@ -790,8 +789,6 @@ export class PlaywrightBrowserService implements BrowserService {
 
   private async launch(): Promise<Browser> {
     const headless = !!this.opts.headless;
-    if (this.opts.installBrowser && !this.opts.executablePath && !this.opts.channel)
-      await ensureChromium({ logger: this.log });
     const options: LaunchOptions = {
       headless,
       args: [

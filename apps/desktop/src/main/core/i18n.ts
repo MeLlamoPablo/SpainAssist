@@ -313,6 +313,10 @@ const STRINGS = {
     es: 'Solo se pueden abrir enlaces seguros (https).',
     en: 'Only secure (https) links can be opened.',
   },
+  notStoreBuild: {
+    es: 'Esta versión no es la de Microsoft Store.',
+    en: 'This isn’t the Microsoft Store version.',
+  },
   transcriptionUnavailable: {
     es: 'Con tu forma de conexión a la IA no puedo transcribir llamadas. Escribe lo que te dijeron.',
     en: 'I can’t transcribe calls with the way you connect to the AI. Write down what they told you.',

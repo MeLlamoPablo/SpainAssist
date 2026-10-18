@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 
 /**
  * Where playwright-core keeps the Chromium that `@sa/browser` launches (its registry is internal
- * API, as in `@sa/browser`'s install.ts). Never installs anything: undefined when it is missing.
+ * API, as in `apps/desktop/scripts/chromium.ts`). Never installs anything: undefined when it is missing.
  */
 export function cachedChromium(): string | undefined {
   try {

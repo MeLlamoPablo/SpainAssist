@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { UpdateStatus } from '@sa/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installChannel } from '../app/install-channel';
 import { createLogger } from '../core/logger';
 import { createUpdates, type UpdaterBackend, updatesSupported } from './updater';
 
@@ -40,21 +41,36 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe('updatesSupported', () => {
-  it('is only on for packaged Windows builds outside e2e', () => {
-    expect(updatesSupported({ packaged: true, platform: 'win32', e2e: false })).toBe(true);
-    expect(updatesSupported({ packaged: false, platform: 'win32', e2e: false })).toBe(false);
-    expect(updatesSupported({ packaged: true, platform: 'win32', e2e: true })).toBe(false);
-    // macOS needs signed builds first.
-    expect(updatesSupported({ packaged: true, platform: 'darwin', e2e: false })).toBe(false);
+  const supported = (
+    opts: Partial<Parameters<typeof installChannel>[0]> & { e2e?: boolean } = {},
+  ) =>
+    updatesSupported({
+      channel: installChannel({ packaged: true, platform: 'win32', windowsStore: false, ...opts }),
+      e2e: opts.e2e ?? false,
+    });
+
+  it('is on for the NSIS installer’s Windows builds outside e2e', () => {
+    expect(supported()).toBe(true);
+    expect(supported({ packaged: false })).toBe(false);
+    expect(supported({ e2e: true })).toBe(false);
+  });
+
+  it('is off for the Microsoft Store build: the Store updates it', () => {
+    expect(installChannel({ packaged: true, platform: 'win32', windowsStore: true })).toBe('msix');
+    expect(supported({ windowsStore: true })).toBe(false);
+  });
+
+  it('is off on macOS, which needs signed builds first', () => {
+    expect(supported({ platform: 'darwin' })).toBe(false);
   });
 
   it('is on for Linux only when installed from the .deb', () => {
-    const linux = { packaged: true, platform: 'linux', e2e: false } as const;
-    expect(updatesSupported({ ...linux, linuxPackageType: 'deb' })).toBe(true);
-    expect(updatesSupported(linux)).toBe(false);
-    expect(updatesSupported({ ...linux, linuxPackageType: 'rpm' })).toBe(false);
-    expect(updatesSupported({ ...linux, linuxPackageType: 'deb', e2e: true })).toBe(false);
-    expect(updatesSupported({ ...linux, linuxPackageType: 'deb', packaged: false })).toBe(false);
+    const linux = { platform: 'linux' } as const;
+    expect(supported({ ...linux, linuxPackageType: 'deb' })).toBe(true);
+    expect(supported(linux)).toBe(false);
+    expect(supported({ ...linux, linuxPackageType: 'rpm' })).toBe(false);
+    expect(supported({ ...linux, linuxPackageType: 'deb', e2e: true })).toBe(false);
+    expect(supported({ ...linux, linuxPackageType: 'deb', packaged: false })).toBe(false);
   });
 });
 

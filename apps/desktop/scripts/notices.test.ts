@@ -54,5 +54,6 @@ describe('the desktop app’s third-party components', () => {
     );
     expect(text).toContain('PDF.js (bundled in unpdf): Apache-2.0');
     expect(text).toContain('Instrument Serif (font): OFL-1.1');
+    expect(text).toMatch(/Chrome for Testing .*@\d+\.\d+\.\d+\.\d+: LicenseRef-Chrome-for-Testing/);
   });
 });

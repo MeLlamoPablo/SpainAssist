@@ -554,7 +554,21 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
 (`research/electron-packaging.md` §6.2–6.3). `corepack pnpm --filter @sa/desktop package`.
 
 - **Targets.** macOS dmg + zip, arm64 and x64 as separate builds (a universal app would carry two
-  copies of every native helper). Windows NSIS x64, per-user, no admin rights. Linux: a `.deb` x64
+  copies of every native helper). Windows x64 in two channels (2026-10-18):
+  - an **MSIX for the Microsoft Store**, the one we advertise (`package:msix`, electron-builder's
+    `appx` target). Store ID `9ND5MF94VKGC`; identity `28203PabloCaballero.SpainAssist`,
+    publisher `CN=DC37CBF9-416F-4E91-807A-3F218DB76817` ("Pablo Caballero"), PFN
+    `28203PabloCaballero.SpainAssist_vg2gnr8kxx5y2`, display name "Spain Assist". Version
+    `X.Y.Z.0` (the Store reserves the fourth part), languages es-ES and en, capabilities
+    `runFullTrust`, `webcam` (the document scanner) and `microphone` (call recordings). Tiles and
+    logos in `packaging/appx/`, rendered from `icon.svg` by `packaging/render-icon.mjs`. The Store
+    signs it; a sideloaded test build needs a certificate with that publisher as subject. Its data
+    lives in its own userData folder and goes away when it's uninstalled (accepted); it offers to
+    import an NSIS install's data on first start. Not in `release.yml` yet.
+  - the **NSIS installer** on GitHub Releases, kept indefinitely but no longer advertised:
+    per-user, no admin rights, updating itself (D19).
+  The app tells them apart at runtime with `installChannel` (`process.windowsStore`), which also
+  goes to Unleash and to error reports. Linux: a `.deb` x64
   only, package `spain-assist` (no AppImage, snap or apt repository; users download it from the
   release). Its maintainer is `pablo@rodriguezcaballero.me`. App id
   `es.spainassist.desktop`, product name "Spain Assist". The internal name stays
@@ -574,9 +588,29 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
 - **What main needs at runtime.** `out/` and the agent host (`agent-host/host.js`) go in
   app.asar. The host's external imports (pi, `typebox`, `@napi-rs/canvas`) are `dependencies`,
   collected into `app.asar/node_modules`. The host runs from the ASAR as Electron-as-Node.
-  Native files are unpacked automatically. Chromium is not bundled: the app downloads it on
-  first use into Playwright's cache, as in development.
-- **Fuses.** `runAsNode` stays on: the agent host and Playwright's browser download need it.
+  Native files are unpacked automatically.
+- **Chromium is bundled, in every package** (2026-10-18). `beforePack` stages playwright-core's
+  pinned build (Chrome for Testing) from Playwright's cache (`scripts/chromium.ts`, which runs
+  `playwright-core install --no-shell` when it's missing) with a `chromium.json` manifest, and
+  `extraResources` copies it to `<resources>/chromium/`. Main passes it to `@sa/browser` as
+  `executablePath` (`main/browser/bundled.ts`); the app never downloads a browser. The Store
+  requires it (policy 10.2.2 forbids downloading code at runtime), and doing the same on NSIS,
+  macOS and Linux keeps one code path: the runtime download (`ensureChromium`) and its startup
+  prefetch are gone. It also means no 150 MB wait on first use, no dependence on Playwright's
+  CDN being reachable (proxies, offline), and a browser that is signed and shipped with the
+  release it was tested with. The cost: about 370 MB more unpacked (measured, macOS arm64) and
+  roughly 150 MB more per installer and per full update (the macOS zip and the .deb; NSIS's
+  differential update skips unchanged files). The weekly playwright-core bump changes the build
+  anyway, which the download path also re-fetched. The ad-hoc signed macOS app with the nested
+  Chrome for Testing .app passes `codesign --verify --deep --strict`, and its Chromium launches
+  headed and headless; notarization with a Developer ID is unverified.
+  **Licence, to confirm before the first Store submission:** Chrome for Testing is a Google
+  build, "Copyright Google LLC. All rights reserved", pointing at Chrome's terms; the macOS build
+  also carries the Widevine CDM. `scripts/notices.ts` lists it under
+  `LicenseRef-Chrome-for-Testing`, allowed only by this decision. If Google's terms don't allow
+  redistributing it, switch the staged build to an open-source Chromium (Playwright's
+  `chromium-tip-of-tree`, or our own build); `scripts/chromium.ts` is the only place to change.
+- **Fuses.** `runAsNode` stays on: the agent host needs it.
   `NODE_OPTIONS` also stays on, because the same fuse gates `NODE_EXTRA_CA_CERTS` behind
   corporate proxies. Both go off when the host moves to `utilityProcess`. Everything else is
   hardened: cookie encryption, ASAR integrity, app only from the ASAR, no `--inspect`, no extra
@@ -588,7 +622,7 @@ not Forge: it supports pnpm's isolated `node_modules` and is what electron-vite 
   `packaging/entitlements.mac*.plist` files. The notarytool variables then add notarization.
   Windows uses Azure Artifact Signing (`SA_AZURE_SIGNING_*`) or a `.pfx` (`WIN_CSC_LINK`), and
   is unsigned otherwise. `apps/desktop/electron-builder.ts` lists the variables.
-- **Auto-update: D19.** Windows first; Squirrel.Mac only updates signed apps, and the macOS zip
+- **Auto-update: D19.** NSIS first; Squirrel.Mac only updates signed apps, and the macOS zip
   is already built for it.
 
 ## D18 — The DNIe PIN as a desktop credential, sent only to the paired phone (2026-10-12)
@@ -650,9 +684,10 @@ may hold the PIN, and the desktop gives it to the phone with the request.
   and writes `latest.yml` next to the Windows installer. The release workflow uploads
   `latest.yml` and the installer's blockmap (differential downloads) with the installers. The app
   needs no token.
-- **Windows and the Linux .deb, for now** (`updatesSupported` in
-  `apps/desktop/src/main/updates/updater.ts`: packaged, not e2e, and `win32` or Linux with
-  `<resources>/package-type` = `deb`). Unsigned NSIS updates work: electron-updater checks the
+- **The NSIS installer and the Linux .deb, for now** (`updatesSupported` in
+  `apps/desktop/src/main/updates/updater.ts`: not e2e, and `installChannel` `nsis`, or `deb` from
+  `<resources>/package-type`). The Microsoft Store's MSIX (`msix`, `process.windowsStore`) never
+  runs electron-updater: the Store updates it. Unsigned NSIS updates work: electron-updater checks the
   installer's SHA-512 from `latest.yml`, and a publisher signature only once one is configured.
   macOS waits for Developer ID signing, because Squirrel.Mac refuses an update that isn't signed by
   the same identity. It then needs the arm64 and x64 `latest-mac.yml` merged into one in CI.
@@ -666,17 +701,20 @@ may hold the PIN, and the desktop gives it to the phone with the request.
   reaches the renderer (`updates.status`, `UpdateStatus`) for the must-update screen. Stable
   versions never get prereleases (`vX.Y.Z-suffix` tags); a prerelease install keeps getting
   them (electron-updater's default).
-- **Unleash knows the version, OS and CPU.** The flags request sends `properties[appVersion]`,
-  `properties[platform]` (`process.platform`: `darwin`, `win32`, `linux`) and `properties[arch]`
-  (`process.arch`: `arm64`, `x64`), so a flag can be constrained by version (`SEMVER_LT`), OS or
-  CPU. Unleash's `appVersion`, `platform` and `arch` context fields are in Terraform
+- **Unleash knows the version, OS, CPU and install channel.** The flags request sends
+  `properties[appVersion]`, `properties[platform]` (`process.platform`: `darwin`, `win32`,
+  `linux`), `properties[arch]` (`process.arch`: `arm64`, `x64`) and `properties[installChannel]`
+  (`msix`, `nsis`, `dmg`, `deb`, `unpacked`, `dev`), so a flag can be constrained by version
+  (`SEMVER_LT`), OS, CPU or channel. Unleash's `appVersion`, `platform`, `arch` and
+  `installChannel` context fields are in Terraform
   (`unleash_context_field.*`, `infra/terraform/unleash.tf`); the flags themselves are made in
   Unleash's UI, since the provider can't manage them.
 - **`must-update`.** When it's on for this version, the app shows only the must-update screen
   (`MustUpdate.tsx`), not the onboarding and not the shell. Where the app updates itself, main
   checks at once and installs the update as soon as it's downloaded, restarting the app.
-  Elsewhere (macOS), and when the update fails, the screen links to the latest
-  release. The flag fails open like every flag: if Unleash can't be reached, the app works. Always
+  Elsewhere (macOS), and when the update fails, the screen links to the website. The
+  Microsoft Store build's screen opens the app's Store page instead
+  (`ms-windows-store://pdp/?productid=9ND5MF94VKGC`, `updates.openStore`). The flag fails open like every flag: if Unleash can't be reached, the app works. Always
   give it a version constraint: on its own it would block every version, the newest included.
 - **Trust.** Unsigned, whoever can publish a release on the repo can ship code to every Windows
   install, and every .deb install (Linux has no code signing; electron-updater checks only the

@@ -140,6 +140,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
       name: 'Spain Assist',
       version: '0.0.0-test',
       platform: 'darwin',
+      installChannel: 'dev',
       isDev: true,
       isE2E: true,
       features: {

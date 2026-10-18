@@ -15,9 +15,9 @@
   },
   "scripts": {
     "build:agent": "corepack pnpm --filter @sa/agent build",
-    "dev": "corepack pnpm --filter @sa/sidecar build && corepack pnpm build:agent && install-electron && node scripts/run-electron-vite.mjs dev",
+    "dev": "corepack pnpm --filter @sa/sidecar build && corepack pnpm build:agent && install-electron && corepack pnpm install:chromium && node scripts/run-electron-vite.mjs dev",
     "build": "corepack pnpm --filter @sa/sidecar build && corepack pnpm build:agent && electron-vite build",
-    "preview": "corepack pnpm --filter @sa/sidecar build && install-electron && node scripts/run-electron-vite.mjs preview",
+    "preview": "corepack pnpm --filter @sa/sidecar build && install-electron && corepack pnpm install:chromium && node scripts/run-electron-vite.mjs preview",
     "preview:web": "vite --config vite.renderer.config.ts",
     "build:web": "vite build --config vite.renderer.config.ts",
     "serve:web": "vite preview --config vite.renderer.config.ts",
@@ -31,9 +31,11 @@
     "package:mac": "corepack pnpm build && node scripts/package.mjs --mac --publish never",
     "package:win": "corepack pnpm build && node scripts/package.mjs --win --x64 --publish never",
     "package:linux": "corepack pnpm build && node scripts/package.mjs --linux --x64 --publish never",
+    "package:msix": "corepack pnpm build && node scripts/package.mjs --win appx --x64 --publish never",
     "smoke": "corepack pnpm --filter @sa/sidecar build && install-electron && node scripts/smoke.mjs",
     "reset:dev": "install-electron && node scripts/reset-dev.mjs",
-    "reset:dev:onboarding": "install-electron && node scripts/reset-dev.mjs src/main/dev/resetOnboarding.ts"
+    "reset:dev:onboarding": "install-electron && node scripts/reset-dev.mjs src/main/dev/resetOnboarding.ts",
+    "install:chromium": "playwright-core install --no-shell --no-remove chromium"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^1.1.0",

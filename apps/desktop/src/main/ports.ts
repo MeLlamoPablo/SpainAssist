@@ -13,7 +13,7 @@ import type {
   PromptImage,
 } from '@sa/agent';
 import type { CodexLoginCallbacks } from '@sa/agent/codex';
-import type { BrowserService, BrowserServiceOptions, Logger } from '@sa/browser';
+import type { BrowserService, BrowserServiceOptions } from '@sa/browser';
 import type { ScrubOptions, ScrubResult } from '@sa/pii';
 import type {
   AfirmaHandler,
@@ -61,8 +61,6 @@ export type VaultPort = Pick<
 
 export type BrowserPort = BrowserService;
 export type BrowserFactory = (opts: BrowserServiceOptions) => BrowserPort;
-/** Makes sure Playwright's Chromium exists (downloads it once) and returns its path. */
-export type BrowserInstaller = (logger: Logger) => Promise<string>;
 
 /** One agent process (PiRpcClient). The app never sends pi's `bash` RPC command. */
 export interface AgentClientPort {

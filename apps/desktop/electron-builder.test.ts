@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { sidecarBinaryPath } from '@sa/sidecar';
 import type { Configuration, FileSet } from 'electron-builder';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BUNDLED_CHROMIUM_DIR } from './src/main/browser/bundled';
 
 async function loadConfig(env: Record<string, string> = {}): Promise<Configuration> {
   vi.resetModules();
@@ -90,5 +91,33 @@ describe('electron-builder config', () => {
         certificateProfileName: 'public',
       },
     });
+  });
+
+  it('ships the Chromium beforePack stages to where the packaged app looks for it', async () => {
+    const resources = (await loadConfig()).extraResources as FileSet[];
+    expect(resources).toContainEqual({
+      from: `vendor/\${platform}-\${arch}/${BUNDLED_CHROMIUM_DIR}`,
+      to: BUNDLED_CHROMIUM_DIR,
+    });
+  });
+
+  it('builds the Microsoft Store package with its identity, versioned X.Y.Z.0', async () => {
+    const config = await loadConfig();
+    expect(config.win?.target).toEqual(['nsis']);
+    expect(config.appx).toMatchObject({
+      identityName: '28203PabloCaballero.SpainAssist',
+      publisher: 'CN=DC37CBF9-416F-4E91-807A-3F218DB76817',
+      publisherDisplayName: 'Pablo Caballero',
+      displayName: 'Spain Assist',
+      capabilities: ['webcam', 'microphone'],
+      languages: ['es-ES', 'en'],
+      setBuildNumber: false,
+    });
+  });
+
+  it('has every Store tile and logo, at scale 100 and 200', () => {
+    const files = readdirSync(path.join(import.meta.dirname, 'packaging/appx'));
+    for (const logo of ['StoreLogo', 'Square44x44Logo', 'Square150x150Logo', 'Wide310x150Logo'])
+      for (const scale of [100, 200]) expect(files).toContain(`${logo}.scale-${scale}.png`);
   });
 });

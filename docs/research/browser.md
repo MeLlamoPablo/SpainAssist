@@ -390,7 +390,7 @@ await page.getByLabel('Adjuntar documento').setInputFiles({ name: 'dni.pdf', mim
 
 | Option | Pros | Cons |
 |---|---|---|
-| **Playwright's Chrome for Testing** (`chromium`, r1243 = 153.0.8010.12) — **recommended** | The exact build 1.63 is tested against; same on every OS. Headed works on F5-protected sites `[live]`. | About 360 MB on disk (measured, macOS arm64); download at first run. Shows as a separate "Google Chrome for Testing" app/window. |
+| **Playwright's Chrome for Testing** (`chromium`, r1243 = 153.0.8010.12) — **recommended** | The exact build 1.63 is tested against; same on every OS. Headed works on F5-protected sites `[live]`. | About 360 MB on disk (measured, macOS arm64). The app bundles it (DECISIONS D17); Google's redistribution terms are still to be confirmed. Shows as a separate "Google Chrome for Testing" app/window. |
 | `channel: 'chrome' \| 'msedge'` | No download; real branded Chrome. Worked, with certificates, on this Mac with Chrome 154 `[lab]`. | Not installed everywhere. Version drift (1.63 tested with Chrome 153). Enterprise policies can interfere (Playwright docs). |
 | Electron's own Chromium (e.g. a `WebContentsView` + `webContents.debugger` CDP, or `connectOverCDP` to the app's own `--remote-debugging-port`) | Nothing to download; true in-app view. | Loses the Playwright API or `clientCertificates`. A debugging port lets any local process take over the app. Not recommended for the MVP. |
 
@@ -405,6 +405,12 @@ Headless variants against `icp.administracionelectronica.gob.es` `[live]`:
 So install only `chromium` (`--no-shell`).
 
 ### 5.2 Installing programmatically into a custom path
+
+> **Superseded for the app (2026-10-18, DECISIONS D17).** The app no longer downloads Chromium at
+> runtime: every package bundles playwright-core's build in `<resources>/chromium/`
+> (`apps/desktop/scripts/chromium.ts` stages it at packaging time) and main passes it as
+> `executablePath`. The Microsoft Store forbids downloading code (policy 10.2.2). The notes below
+> still describe how the registry and `PLAYWRIGHT_BROWSERS_PATH` work.
 
 - `PLAYWRIGHT_BROWSERS_PATH` is read **once, when `playwright-core` is first required** (`registry/index.ts → registryDirectory`). Set it before any `require`/`import`.
   - `"0"` means `node_modules/playwright-core/.local-browsers`.
@@ -465,7 +471,7 @@ Other revisions, for reference:
 - **Packaging:**
   - Keep `playwright-core` **external** to the Vite bundle (`dependencies` + electron-vite's externalized deps). It loads files relative to its package root: `browsers.json`, `lib/entry/oopBrowserDownload.js` (forked), `lib/server/electron/loader.js`, `webp_codec.wasm` `[src]`.
   - No `asarUnpack` needed: forking `oopBrowserDownload.js` from inside `app.asar` works, and so does the first-run download (verified in the packaged macOS app, `electron-packaging.md` §6.11).
-- **Code signing.** Downloading Chrome for Testing at runtime into `userData` avoids re-signing or notarizing a bundled Chrome (UNVERIFIED for macOS Gatekeeper and quarantine behavior).
+- **Code signing.** The bundled Chrome for Testing .app is signed with the rest of the macOS app: ad-hoc, it passes `codesign --verify --deep --strict` and launches `[lab]`. Developer ID signing and notarization of it are UNVERIFIED.
 - **Startup checks.** `playwright-core` requires Node ≥ 20 (`lib/bootstrap.js`). Playwright installs SIGINT/SIGTERM handlers by default, so call `browser.close()` on `app.on('before-quit')`.
 
 ---

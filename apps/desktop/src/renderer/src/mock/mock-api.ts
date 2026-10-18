@@ -224,11 +224,14 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   };
 
   // The must-update screen: `?mustUpdate=1` plays a Windows update (checking, downloading, ready);
-  // a state name shows that one (`downloading` at 42 %).
+  // a state name shows that one (`downloading` at 42 %). `?store=1`: the Microsoft Store build,
+  // which never updates itself (the screen opens the Store instead).
+  const store = params.get('store') === '1';
   const mustUpdateParam = params.get('mustUpdate');
   const mustUpdate = mustUpdateParam !== null && mustUpdateParam !== '0';
-  let updates: UpdateStatus =
-    mustUpdateParam === 'downloading'
+  let updates: UpdateStatus = store
+    ? { state: 'unsupported' }
+    : mustUpdateParam === 'downloading'
       ? { state: 'downloading', version: '0.3.0', percent: 42 }
       : mustUpdateParam === 'ready'
         ? { state: 'ready', version: '0.3.0' }
@@ -239,7 +242,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
           : mustUpdateParam === '1'
             ? { state: 'checking' }
             : { state: 'unsupported' };
-  if (mustUpdateParam === '1' && !freeze) {
+  if (mustUpdateParam === '1' && !freeze && !store) {
     const setUpdates = (next: UpdateStatus) => {
       updates = next;
       emit({ type: 'updates.status', status: next });
@@ -822,7 +825,8 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'app.info': () => ({
       name: 'Spain Assist',
       version: '0.2.1',
-      platform: dataImportParam ? 'win32' : 'darwin',
+      platform: dataImportParam || store ? 'win32' : 'darwin',
+      installChannel: dataImportParam || store ? 'msix' : 'dev',
       isDev: true,
       isE2E: false,
       features: {
@@ -851,6 +855,9 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     },
     'dataImport.openAppsSettings': () => {
       toast.info(tr('Configuración de Windows', 'Windows Settings'), 'ms-settings:appsfeatures');
+    },
+    'updates.openStore': () => {
+      toast.info(tr('Microsoft Store de ejemplo', 'Example Microsoft Store'));
     },
     'app.reveal': () => {},
     'app.exportTranscripts': () => 'SpainAssist-transcripts-2026-10-12.zip',

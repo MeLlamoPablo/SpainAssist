@@ -28,10 +28,8 @@ export interface BrowserHolderDeps {
   factory: BrowserFactory;
   certificates?: CertificateProxy;
   certificateLoginsAvailable?: boolean;
-  /** Development/e2e override of the Chromium executable. */
+  /** The Chromium to launch; Playwright's cache without it (development, e2e). */
   executablePath?: string;
-  /** Download Playwright's Chromium before the first launch when it is missing. */
-  installBrowser?: boolean;
   /** Headless override for development/test runs only. */
   headless?: boolean;
   /** Staging directory for browser downloads; temporary downloads live in its `kept` folder. */
@@ -174,7 +172,6 @@ export class BrowserHolder {
       headless: deps.headless ?? false,
       startHidden: true,
       executablePath: deps.executablePath,
-      installBrowser: deps.installBrowser,
       ignoreHTTPSErrors: deps.ignoreHTTPSErrors ?? false,
       ...(deps.capture ? { capture: deps.capture } : {}),
       downloadsDir: deps.downloadsDir,

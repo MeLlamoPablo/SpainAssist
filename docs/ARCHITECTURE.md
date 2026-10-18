@@ -108,13 +108,13 @@
   session. Settings and procedure menus do not offer browser visibility controls; main gates
   `browser.show` on the pending help request. The legacy shared `browser.headless` settings
   field is retained for compatibility and ignored by browser creation. A development/e2e-only
-  `SA_BROWSER_HEADLESS` override supports fully headless test runs. At startup main checks that
-  the Chromium revision playwright-core needs is in the Playwright cache and, when it is missing,
-  downloads it in the background (about 150 MB, once) with playwright-core's own installer
-  (`ensureChromium` in `@sa/browser`, `gc: false` so other Playwright browsers stay). Browser
-  actions wait for that download; when it fails, they return an actionable error and the next
-  action tries again. E2e runs never download; the development-only `SA_BROWSER_EXECUTABLE`
-  override launches a given Chromium instead. The development-only `SA_BROWSER_CAPTURE=1`
+  `SA_BROWSER_HEADLESS` override supports fully headless test runs. The browser is
+  playwright-core's pinned Chromium (Chrome for Testing). Packaged builds ship it in
+  `<resources>/chromium/` and main passes it to `@sa/browser` as `executablePath`
+  (`browser/bundled.ts`, D17); development and e2e runs launch the same build from Playwright's
+  cache (`dev` and `preview` run `install:chromium`, a no-op when it's there). The app never
+  downloads a browser: the Microsoft Store forbids downloading code. The development-only
+  `SA_BROWSER_EXECUTABLE` override launches a given Chromium instead. The development-only `SA_BROWSER_CAPTURE=1`
   records each procedure's browsing for mock sites (see "Browser capture (development)").
 - **Microsoft Store build data** (`apps/desktop/src/main/migrate/nsis-import.ts`). The MSIX
   build keeps its data in `%APPDATA%\SpainAssistantStore`, which MSIX virtualizes into the
@@ -126,9 +126,15 @@
   preload, renderer), the agent host as `agent-host/host.js`, and the node_modules of
   `dependencies`, which include the host's external imports. Agent processes run that host as
   Electron-as-Node, so the `runAsNode` fuse stays on. `sa-sidecar` sits in `<resources>/vendor/`,
-  outside the ASAR. Chromium is not bundled: it downloads on first use, as described above.
-- **Updates** (D19, `apps/desktop/src/main/updates/`). Packaged Windows builds and .deb installs
-  update themselves silently from GitHub Releases (electron-updater) and install on quit. The `must-update` flag,
+  outside the ASAR, and the agent's Chromium in `<resources>/chromium/` (staged by
+  `scripts/chromium.ts` in `beforePack`). Windows ships twice: the NSIS installer on GitHub
+  Releases and an MSIX for the Microsoft Store (`package:msix`), told apart at runtime by
+  `installChannel` (`app/install-channel.ts`: `msix`, `nsis`, `dmg`, `deb`, `unpacked`, `dev`),
+  which goes to Unleash and error reports.
+- **Updates** (D19, `apps/desktop/src/main/updates/`). NSIS installs and .deb installs
+  update themselves silently from GitHub Releases (electron-updater) and install on quit. The
+  Microsoft Store build is updated by the Store; its must-update screen opens the app's Store page
+  (`updates.openStore`). The `must-update` flag,
   which Unleash targets by the version the app sends, replaces the whole UI with the
   must-update screen.
 - **Browser updates** (`.github/workflows/browser-update.yml`). The app's Chromium is the
@@ -583,8 +589,9 @@ Main reads the flags once per launch from Unleash's frontend API (`remote/flags.
 `PRODUCTION_SERVICES.flagsUrl` and a public frontend token from `flagsTokens`), so a change
 applies at the next launch. Packaged builds read Unleash's `production` environment and
 development builds its `development` one, so a flag can be tried in development first.
-The request sends the app version, OS and CPU as the `appVersion`, `platform` and `arch` context
-properties, so a flag can target a version range, one OS or one CPU.
+The request sends the app version, OS, CPU and install channel as the `appVersion`, `platform`,
+`arch` and `installChannel` context properties, so a flag can target a version range, one OS, one
+CPU or one way of installing (the Microsoft Store build is `msix`).
 After reading them, main reports to Unleash's metrics endpoint that each flag was checked once
 (on or off), with a random id per launch, so Unleash shows which flags are in use. It fails closed: when Unleash can't be reached, every flag is
 off. They reach the renderer as `appInfo.features` (`FeatureFlags` in `@sa/shared`), but main
@@ -637,6 +644,8 @@ is `PRODUCTION_SERVICES.errorReportsDsn`. Development builds send nothing unless
   `scrubReport` (`main/errors/scrub.ts`) drops user, request, machine and module fields. In every
   other string it turns the home folder into `~` and runs `@sa/pii` over it. GlitchTip doesn't
   store IP addresses either.
+- **Tagged with the install channel.** Every event carries the `installChannel` tag (`msix`,
+  `nsis`, `dmg`, `deb`, `unpacked`, `dev`), so the Microsoft Store build's errors can be told apart.
 - **Not covered yet.** The agent host and `sa-sidecar` processes log their failures but don't
   report them. Source maps aren't uploaded, so the renderer's stack traces are minified.
 

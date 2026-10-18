@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { FEATURE_FLAG_NAMES, FEATURES_OFF, type FeatureFlags } from '@sa/shared';
+import {
+  FEATURE_FLAG_NAMES,
+  FEATURES_OFF,
+  type FeatureFlags,
+  type InstallChannel,
+} from '@sa/shared';
 import { z } from 'zod';
 import type { Logger } from '../core/logger';
 import { type FetchFn, joinUrl, requestJson } from './http';
@@ -17,9 +22,12 @@ export function featuresFromNames(enabled: Iterable<string>): FeatureFlags {
 
 /**
  * Reads the feature flags from Unleash's frontend API, which lists only the flags that are on.
- * The app version, OS and CPU go along as the `appVersion`, `platform` and `arch` context
- * properties, so a flag can target versions (`must-update` with SEMVER_LT, for example), one OS
- * (`process.platform`: darwin, win32, linux) or one CPU (`process.arch`: arm64, x64). Fails closed: when Unleash can't be reached or answers nonsense, every feature is off.
+ * The app version, OS, CPU and install channel go along as the `appVersion`, `platform`, `arch`
+ * and `installChannel` context properties, so a flag can target versions (`must-update` with
+ * SEMVER_LT, for example), one OS (`process.platform`: darwin, win32, linux), one CPU
+ * (`process.arch`: arm64, x64) or one way of installing (`InstallChannel`: msix for the Microsoft
+ * Store, nsis, dmg, deb…). Fails closed: when Unleash can't be reached or answers nonsense, every
+ * feature is off.
  * Once read, it reports their use in the background (see reportFlagMetrics).
  */
 export async function loadFeatureFlags(deps: {
@@ -30,6 +38,7 @@ export async function loadFeatureFlags(deps: {
   appVersion: string;
   platform: string;
   arch: string;
+  installChannel: InstallChannel;
   logger: Logger;
   timeoutMs?: number;
 }): Promise<FeatureFlags> {
@@ -39,6 +48,7 @@ export async function loadFeatureFlags(deps: {
     'properties[appVersion]': deps.appVersion,
     'properties[platform]': deps.platform,
     'properties[arch]': deps.arch,
+    'properties[installChannel]': deps.installChannel,
   });
   try {
     const json = await requestJson(deps.fetch, joinUrl(deps.url, `/api/frontend?${query}`), {

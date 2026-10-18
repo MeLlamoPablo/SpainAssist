@@ -11,7 +11,9 @@
  * - the app's `dependencies` (kept external and copied into the app by the packager);
  * - everything the build bundles: the runtime `devDependencies`, and the `dependencies` of the
  *   workspace packages (`@sa/*`, our own MIT code), all followed transitively;
- * - Electron, the bundled Instrument Serif font and the Go standard library in `sa-sidecar`.
+ * - Electron, the bundled Instrument Serif font and the Go standard library in `sa-sidecar`;
+ * - the agent's browser: playwright-core's Chrome for Testing build, in `<resources>/chromium`
+ *   (scripts/chromium.ts).
  * Chromium's notices are Electron's own `LICENSES.chromium.html`.
  *
  * Fails, and writes nothing, when a licence isn't permissive: copyleft or proprietary code needs
@@ -69,6 +71,20 @@ const PERMISSIVE = new Set([
   // Fonts: bundling them with software is allowed; only a modified font must stay OFL.
   'OFL-1.1',
 ]);
+
+/**
+ * Licences that aren't permissive but ship by a recorded decision. Keep the reason with each.
+ */
+const DECIDED: Record<string, string> = {
+  // The agent's browser (DECISIONS D17): Google's Chrome for Testing build of Chromium, which
+  // playwright-core pins. Its redistribution terms are still to be confirmed (D17).
+  'LicenseRef-Chrome-for-Testing': 'D17',
+};
+
+/** Whether a component's licence may ship: permissive, or allowed by a decision. */
+function mayShip(license: string): boolean {
+  return isPermissive(license) || license in DECIDED;
+}
 
 /** Packages that bundle another project's code without shipping its notice. */
 const EMBEDDED: Record<string, Component> = {
@@ -229,7 +245,10 @@ export function collectPackages(appDir = APP_DIR): Component[] {
   );
 }
 
-/** Electron itself, the bundled font and the Go standard library compiled into sa-sidecar. */
+/**
+ * Electron itself, the bundled font, the Go standard library compiled into sa-sidecar and the
+ * agent's browser.
+ */
 export function collectOthers(appDir = APP_DIR): Component[] {
   const electronDir = resolvePackage(appDir, 'electron');
   if (!electronDir) throw new Error('electron is not installed');
@@ -248,6 +267,12 @@ export function collectOthers(appDir = APP_DIR): Component[] {
       files: [{ name: 'OFL.txt', text: readFileSync(font, 'utf8').trim() }],
     },
   ];
+  others.push({
+    name: "Chrome for Testing (the agent's browser, a Chromium build by Google)",
+    version: pinnedChromiumVersion(appDir),
+    license: 'LicenseRef-Chrome-for-Testing',
+    files: [{ name: 'ABOUT', text: CHROME_FOR_TESTING }],
+  });
   const go = goLicense();
   if (go) {
     others.push({
@@ -260,6 +285,27 @@ export function collectOthers(appDir = APP_DIR): Component[] {
   }
   return others;
 }
+
+/** The Chrome for Testing version playwright-core pins (scripts/chromium.ts ships that build). */
+function pinnedChromiumVersion(appDir: string): string {
+  const dir = resolvePackage(appDir, 'playwright-core');
+  if (!dir) throw new Error('playwright-core is not installed');
+  const { browsers } = JSON.parse(readFileSync(path.join(dir, 'browsers.json'), 'utf8')) as {
+    browsers: { name: string; browserVersion?: string }[];
+  };
+  const version = browsers.find((b) => b.name === 'chromium')?.browserVersion;
+  if (!version) throw new Error('playwright-core pins no Chromium');
+  return version;
+}
+
+/** Chrome for Testing ships no licence file: its ABOUT file, and where its notices are. */
+const CHROME_FOR_TESTING = `Google Chrome for Testing. Copyright Google LLC.
+
+Chrome for Testing is made possible by the Chromium open source project
+(https://www.chromium.org/, BSD-3-Clause: https://chromium.googlesource.com/chromium/src/+/main/LICENSE)
+and other open source software. Their notices are at chrome://credits in that browser; the
+Chromium components it shares with Electron are also in LICENSES.chromium.html.
+Distributed by Google at https://googlechromelabs.github.io/chrome-for-testing/.`;
 
 function goLicense(): Component['files'][number] | undefined {
   let goroot: string;
@@ -339,7 +385,7 @@ function main() {
     outIndex >= 0 ? args[outIndex + 1]! : path.join(APP_DIR, 'THIRD_PARTY_NOTICES.txt'),
   );
   const components = [...collectPackages(), ...collectOthers()];
-  const blocked = components.filter((c) => !isPermissive(c.license));
+  const blocked = components.filter((c) => !mayShip(c.license));
   if (blocked.length) {
     console.error(
       'notices: these licences are not permissive; decide on them first (DECISIONS D16):\n' +

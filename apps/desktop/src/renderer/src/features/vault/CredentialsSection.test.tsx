@@ -17,6 +17,7 @@ const info = (dniePhone: boolean): AppInfo => ({
   name: 'Spain Assist',
   version: '0.0.0-test',
   platform: 'darwin',
+  installChannel: 'dev',
   isDev: true,
   isE2E: false,
   features: { ...FEATURES_OFF, dniePhone },
