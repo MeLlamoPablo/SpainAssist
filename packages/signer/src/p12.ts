@@ -14,6 +14,7 @@ import crypto, { type KeyObject } from 'node:crypto';
 import type { CertificateInfo } from '@sa/shared';
 import forge from 'node-forge';
 import { certificateInfo } from './certificate';
+import { issuedBy } from './chain';
 import {
   type Asn1,
   bmp,
@@ -505,22 +506,14 @@ function publicKeyDer(key: KeyObject): Buffer {
   return crypto.createPublicKey(key).export({ type: 'spki', format: 'der' });
 }
 
-function sameIssuerSubject(child: crypto.X509Certificate, parent: crypto.X509Certificate): boolean {
-  try {
-    return child.checkIssued(parent) && child.verify(parent.publicKey);
-  } catch {
-    return false;
-  }
-}
-
 /** Orders `certs` as a path starting at `leaf` (only certificates that chain are kept). */
 function buildChain(leaf: Buffer, certs: Buffer[]): Buffer[] {
   const chain = [leaf];
   const pool = certs.filter((c) => !c.equals(leaf));
   let current = new crypto.X509Certificate(leaf);
   for (let i = 0; i < 10; i++) {
-    if (current.subject === current.issuer && sameIssuerSubject(current, current)) break;
-    const idx = pool.findIndex((c) => sameIssuerSubject(current, new crypto.X509Certificate(c)));
+    if (current.subject === current.issuer && issuedBy(current, current)) break;
+    const idx = pool.findIndex((c) => issuedBy(current, new crypto.X509Certificate(c)));
     if (idx < 0) break;
     const [next] = pool.splice(idx, 1);
     chain.push(next);

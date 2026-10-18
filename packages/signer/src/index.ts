@@ -24,6 +24,7 @@ export {
   createCades,
 } from './cades';
 export { certificateInfo, parseHolder } from './certificate';
+export { type CompleteChainOptions, completeChain } from './chain';
 export { AfirmaError, CANCELLED_TYPE, GENERIC_TYPE } from './errors';
 export { type ExtraParams, parseExtraParams, storeExtraParams } from './extra-params';
 export {

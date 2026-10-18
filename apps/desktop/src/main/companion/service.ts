@@ -39,6 +39,7 @@ import type { Logger } from '../core/logger';
 import { errorMessage, formatBytes, hostOf } from '../core/util';
 import type { SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
+import { dnieChain } from './dnie-chain';
 
 export interface CompanionDeps {
   /** ws(s):// or http(s):// base URL of the relay; undefined = DNIe signing unavailable. */
@@ -457,7 +458,7 @@ export class CompanionService {
     return {
       kind: 'external',
       credentialId: credential.id,
-      certificates: key.certificates,
+      certificates: dnieChain(key.certificates, 'signature'),
       sign: (data, digest, binding) =>
         key.sign(data, ALGORITHMS[digest], toCheck(binding), !!login).then(
           async (signature) => {
@@ -567,7 +568,7 @@ export class CompanionService {
       this.loginNews(procedureId).notes.push(
         `The user approved the DNIe login for ${label} on their phone.`,
       );
-      chain = key.certificates;
+      chain = dnieChain(key.certificates.slice(0, 1), 'tls');
       active = key;
       currentOrigin = site;
       this.endLogin = end;
