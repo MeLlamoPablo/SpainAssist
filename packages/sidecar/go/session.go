@@ -14,7 +14,7 @@ type session struct {
 
 	mu     sync.Mutex
 	server *http.Server
-	addr   net.Addr
+	ln     net.Listener
 	hosts  map[string]bool
 	ident  *identity
 	conns  map[*tracked]struct{}
@@ -36,31 +36,35 @@ func newSession(id string) *session {
 	return &session{id: id, hosts: map[string]bool{}, conns: map[*tracked]struct{}{}}
 }
 
-func (s *session) setServer(server *http.Server, addr net.Addr) {
+func (s *session) setServer(server *http.Server, ln net.Listener) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.server = server
-	s.addr = addr
+	s.ln = ln
 }
 
 // port is the session's proxy port, 0 before it listens.
 func (s *session) port() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.addr == nil {
+	if s.ln == nil {
 		return 0
 	}
-	return s.addr.(*net.TCPAddr).Port
+	return s.ln.Addr().(*net.TCPAddr).Port
 }
 
 func (s *session) closeServer() {
 	s.mu.Lock()
-	server := s.server
-	s.server = nil
-	s.addr = nil
+	server, ln := s.server, s.ln
+	s.server, s.ln = nil, nil
 	s.mu.Unlock()
 	if server != nil {
 		_ = server.Close()
+	}
+	// server.Close only closes listeners its Serve goroutine has started on: close the port
+	// here too, so it is shut when this returns.
+	if ln != nil {
+		_ = ln.Close()
 	}
 }
 

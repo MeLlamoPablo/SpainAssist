@@ -123,7 +123,7 @@ func (p *proxy) listen(s *session, addr string) (int, error) {
 		ReadHeaderTimeout: 30 * time.Second,
 		ErrorLog:          quiet,
 	}
-	s.setServer(server, ln.Addr())
+	s.setServer(server, ln)
 	go func() { _ = server.Serve(ln) }()
 	return ln.Addr().(*net.TCPAddr).Port, nil
 }
