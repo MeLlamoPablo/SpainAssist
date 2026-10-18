@@ -1,0 +1,173 @@
+# Weekly Chromium update. The app's browser is the Chromium revision that the pinned
+# playwright-core names in its browsers.json (the Windows MSIX bundles it), so Chromium security
+# fixes reach users only when we bump playwright-core. Every Monday, or when run by hand, this
+# checks npm for a newer playwright-core, bumps it (and the Playwright packages that must match
+# it) in every workspace package.json with scripts/bump-playwright.mjs, updates the lockfile,
+# runs the typecheck and the tests of the packages that use playwright-core, and opens or
+# updates one pull request from the `automation/playwright-core` branch. When a check fails the
+# pull request is a draft and the run fails, so a person picks it up.
+#
+# Needs the repository setting "Allow GitHub Actions to create and approve pull requests".
+# Pull requests opened with GITHUB_TOKEN don't trigger other workflows; the checks run here.
+name: Browser update
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-update
+  cancel-in-progress: false
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+  BRANCH: automation/playwright-core
+
+jobs:
+  update:
+    name: Bump playwright-core
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: master
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          # It would look for pnpm before Corepack is set up; the pnpm store is cached below.
+          package-manager-cache: false
+      # The tests of @sa/browser build sa-sidecar.
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+      # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
+      - name: Install Corepack
+        run: |
+          npm install --global --force corepack@latest
+          echo "$(npm prefix --global)/bin" >> "$GITHUB_PATH"
+      - id: pnpm-store
+        name: Find the pnpm store
+        run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - id: versions
+        name: Look for a newer playwright-core
+        run: |
+          old=$(node -p "require('./apps/desktop/package.json').dependencies['playwright-core']")
+          new=$(npm view playwright-core@latest version)
+          echo "Pinned $old, latest $new"
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          newer=$(node -e "
+            const [a, b] = process.argv.slice(1).map((v) => v.split('.').map(Number));
+            const i = a.findIndex((n, k) => n !== b[k]);
+            console.log(String(i >= 0 && b[i] > a[i]));
+          " "$old" "$new")
+          echo "newer=$newer" >> "$GITHUB_OUTPUT"
+          echo "old-chromium=$(node -p "
+            const b = require('./apps/desktop/node_modules/playwright-core/browsers.json').browsers
+              .find((b) => b.name === 'chromium');
+            b.browserVersion + ' (revision ' + b.revision + ')'
+          ")" >> "$GITHUB_OUTPUT"
+
+      - name: Bump playwright-core
+        if: steps.versions.outputs.newer == 'true'
+        env:
+          NEW: ${{ steps.versions.outputs.new }}
+        run: |
+          node scripts/bump-playwright.mjs "$NEW"
+          corepack pnpm install --no-frozen-lockfile
+          git diff --stat
+
+      - id: chromium
+        name: Read the new Chromium version
+        if: steps.versions.outputs.newer == 'true'
+        run: |
+          node -p "
+            const b = require('./apps/desktop/node_modules/playwright-core/browsers.json').browsers
+              .find((b) => b.name === 'chromium');
+            'version=' + b.browserVersion + '\nrevision=' + b.revision
+          " >> "$GITHUB_OUTPUT"
+
+      # The tests that launch a browser need the new revision (`chromium` also installs the
+      # headless shell). Tests skip browsers that aren't installed, so this keeps them running.
+      - name: Install the new Chromium
+        if: steps.versions.outputs.newer == 'true'
+        run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
+
+      - id: checks
+        name: Typecheck and test the packages that use playwright-core
+        if: steps.versions.outputs.newer == 'true'
+        continue-on-error: true
+        run: |
+          corepack pnpm typecheck
+          corepack pnpm --workspace-concurrency=1 \
+            --filter @sa/browser --filter @sa/signer --filter @sa/mock-sede \
+            --filter @sa/eval --filter @sa/desktop test
+
+      - name: Open or update the pull request
+        if: steps.versions.outputs.newer == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD: ${{ steps.versions.outputs.old }}
+          NEW: ${{ steps.versions.outputs.new }}
+          OLD_CHROMIUM: ${{ steps.versions.outputs.old-chromium }}
+          NEW_CHROMIUM_VERSION: ${{ steps.chromium.outputs.version }}
+          NEW_CHROMIUM_REVISION: ${{ steps.chromium.outputs.revision }}
+          CHECKS: ${{ steps.checks.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Browser: playwright-core $NEW (Chromium $NEW_CHROMIUM_VERSION)"
+          major=${NEW_CHROMIUM_VERSION%%.*}
+          if [[ "$CHECKS" == success ]]; then
+            checks="Typecheck and the tests of @sa/browser, @sa/signer, @sa/mock-sede, @sa/eval and @sa/desktop passed."
+          else
+            checks="**The checks failed**: see [the run]($RUN_URL). This pull request is a draft until they are fixed."
+          fi
+          cat > "$RUNNER_TEMP/body.md" <<EOF
+          Bumps Playwright, and with it the Chromium the app drives (and bundles in the Windows MSIX).
+
+          | | playwright-core | Chromium (Chrome for Testing) |
+          | --- | --- | --- |
+          | Before | $OLD | $OLD_CHROMIUM |
+          | After | $NEW | $NEW_CHROMIUM_VERSION (revision $NEW_CHROMIUM_REVISION) |
+
+          - Playwright release notes: https://github.com/microsoft/playwright/releases/tag/v$NEW
+          - Chrome $major security fixes: https://chromereleases.googleblog.com/search?q=Chrome+$major
+            (the "Security Fixes" list of the stable release for Chrome $major)
+
+          $checks Not run here: the Electron e2e suite and a packaged build. Check a certificate login
+          and a signature in the app before releasing.
+
+          Opened by [the browser update workflow]($RUN_URL).
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C "$BRANCH"
+          git commit -am "$title"
+          git push --force origin "$BRANCH"
+          if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            if [[ "$CHECKS" == success ]]; then gh pr ready "$BRANCH"; else gh pr ready --undo "$BRANCH"; fi
+          else
+            gh pr create --base master --head "$BRANCH" --title "$title" \
+              --body-file "$RUNNER_TEMP/body.md" $([[ "$CHECKS" == success ]] || echo --draft)
+          fi
+
+      - name: Fail when the checks failed
+        if: steps.checks.outcome == 'failure'
+        run: exit 1

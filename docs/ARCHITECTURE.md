@@ -125,6 +125,12 @@
   update themselves silently from GitHub Releases (electron-updater) and install on quit. The `must-update` flag,
   which Unleash targets by the version the app sends, replaces the whole UI with the
   must-update screen.
+- **Browser updates** (`.github/workflows/browser-update.yml`). The app's Chromium is the
+  revision the pinned playwright-core names in its `browsers.json`, so Chromium security fixes
+  arrive only with a playwright-core bump. A weekly workflow (also run by hand) bumps
+  playwright-core and the Playwright packages that must match it (`scripts/bump-playwright.mjs`),
+  updates the lockfile, runs the typecheck and the tests of the packages that use it, and opens
+  or updates one pull request naming the old and new playwright-core and Chromium versions.
 
 ## 3. Key flows
 
