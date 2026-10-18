@@ -10,6 +10,10 @@ coverage/
 !.env.example
 *.tsbuildinfo
 
+# Signing keys (upload keystores, etc.)
+*.jks
+*.keystore
+
 # local data (dev databases, app profiles, test artifacts)
 .data/
 test-results/
