@@ -1,5 +1,6 @@
 package es.spainassist.firma.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -245,7 +246,14 @@ private fun MoreMenu(openLicenses: () -> Unit, modifier: Modifier) {
                 for (x in listOf(5, 12, 19)) drawCircle(fg, r, Offset(x.dp.toPx(), 12.dp.toPx()))
             }
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // Raised and outlined: on the dark theme the menu's shadow doesn't show against the page.
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(12.dp),
+            containerColor = colors.surface3,
+            border = BorderStroke(1.dp, colors.lineStrong),
+        ) {
             DropdownMenuItem(
                 text = { Text(stringResource(Res.string.licenses_open), fontSize = 16.sp, color = colors.fg) },
                 onClick = {
