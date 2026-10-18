@@ -10,9 +10,10 @@
  * and the PIN, as the user types them on the desktop: the card's, except for PAdES, which carries
  * a wrong CAN and a wrong PIN. The phone tries each wrong one once and asks the desktop for a new
  * one (`sign.need`), answered as if the user typed it (`sign.unlock`). Before the login, the
- * relay restarts (as on a deploy, losing its rooms), and the desktop stays away until the relay
- * has refused the phone's room (4404): the phone must keep its pairing and sign the login once the
- * desktop recreates the room. Needs JDK 17 and the Android SDK (apps/mobile); offline once Gradle
+ * relay restarts (as on a deploy, losing its rooms) right after the last signature, and the
+ * desktop stays away until the relay has refused the phone's room (4404): the phone must keep its
+ * pairing and sign the login once the desktop recreates the room (and re-sends the `sign.done` the
+ * restart may have lost). Needs JDK 17 and the Android SDK (apps/mobile); offline once Gradle
  * has its dependencies.
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -232,10 +233,9 @@ async function main(): Promise<void> {
       console.log(`desktop: ${c.args[2]} failed: ${reply.errorMessage}`);
     }
   }
-  // A deploy: the relay restarts and forgets the room. The phone comes back first and is refused.
-  // First let the last `sign.done` reach the phone: one lost in the restart leaves the phone's
-  // request open, and it would answer the login with `busy`.
-  await new Promise((r) => setTimeout(r, 1_000));
+  // A deploy: the relay restarts and forgets the room, right after the last signature, so the
+  // last `sign.done` may be lost: the desktop sends it again before the login. The phone comes
+  // back first and is refused.
   desktopAway = true;
   await relay.close();
   const refused = new Promise<void>((resolve, reject) => {

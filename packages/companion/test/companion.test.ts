@@ -668,6 +668,81 @@ describe('PhoneSigner timing', () => {
     await expect(pending).resolves.toMatchObject({ certificates: [Buffer.from('cert')] });
     t.away();
   });
+
+  it('sends the end again on new sessions until the phone answers a later request', async () => {
+    const t = fakeLink();
+    t.connect();
+    const pending = t.signer.request(request);
+    const first = (t.requestOf() as { requestId: string }).requestId;
+    t.signer.onMessage({
+      type: 'sign.certificate',
+      requestId: first,
+      certificates: [Buffer.from('cert').toString('base64')],
+    });
+    (await pending).finish(true);
+    expect(t.link.sent.at(-1)).toEqual({ type: 'sign.done', requestId: first });
+    // A relay restart may have dropped it: the next session carries it again, before the next
+    // request, which waits for the phone meanwhile.
+    t.away();
+    const next = t.signer.request(request);
+    t.link.sent.length = 0;
+    t.connect();
+    expect(t.link.sent.map((m) => m.type)).toEqual(['sign.done', 'sign.request']);
+    expect(t.link.sent[0]).toEqual({ type: 'sign.done', requestId: first });
+    // Still unanswered: again on the next session.
+    t.link.sent.length = 0;
+    t.connect();
+    expect(t.link.sent.map((m) => m.type)).toEqual(['sign.done', 'sign.request']);
+    // The phone took the next request, so it had the end: no more re-sending.
+    const second = (t.requestOf() as { requestId: string }).requestId;
+    t.signer.onMessage({ type: 'sign.progress', requestId: second, stage: 'reviewing' });
+    t.link.sent.length = 0;
+    t.connect();
+    expect(t.link.sent.map((m) => m.type)).toEqual(['sign.request']);
+    // Answers about the ended request don't count as having the end.
+    t.signer.onMessage({
+      type: 'sign.certificate',
+      requestId: second,
+      certificates: [Buffer.from('cert').toString('base64')],
+    });
+    (await next).finish(false);
+    t.signer.onMessage({ type: 'sign.progress', requestId: second, stage: 'signing' });
+    t.link.sent.length = 0;
+    t.connect();
+    expect(t.link.sent).toEqual([{ type: 'sign.cancel', requestId: second, reason: 'failed' }]);
+  });
+
+  it('sends a cancel again until the phone ends the request itself, or the pairing ends', async () => {
+    const t = fakeLink();
+    t.connect();
+    const abort = new AbortController();
+    const pending = t.signer.request({ ...request, signal: abort.signal });
+    const failed = expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+    const { requestId } = t.requestOf() as { requestId: string };
+    abort.abort();
+    await failed;
+    const cancel = { type: 'sign.cancel', requestId, reason: 'cancelled' };
+    expect(t.link.sent.at(-1)).toEqual(cancel);
+    t.link.sent.length = 0;
+    t.connect();
+    expect(t.link.sent).toEqual([cancel]);
+    // The phone timed the request out on its own: it has nothing open any more.
+    t.signer.onMessage({ type: 'sign.error', requestId, code: 'timeout' });
+    t.link.sent.length = 0;
+    t.connect();
+    expect(t.link.sent).toEqual([]);
+
+    // Another cancel, then the pairing ends: nothing is kept for a later pairing.
+    const abort2 = new AbortController();
+    const again = t.signer.request({ ...request, signal: abort2.signal });
+    const second = expect(again).rejects.toMatchObject({ code: 'cancelled' });
+    abort2.abort();
+    await second;
+    t.signer.onEnded('unpaired');
+    t.link.sent.length = 0;
+    t.connect();
+    expect(t.link.sent).toEqual([]);
+  });
 });
 
 describe('PhoneClient retry on missing room', () => {

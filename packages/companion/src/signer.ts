@@ -10,7 +10,11 @@
  *
  * Connections drop (phone asleep, network change, app restarted): everything the phone hasn't
  * answered stays in an outbox and is sent again when the next session starts. Both sides
- * ignore duplicates (same request id, same seq), so re-sending is always safe.
+ * ignore duplicates (same request id, same seq), so re-sending is always safe. The message that
+ * ends a request (`sign.done` or `sign.cancel`) has no answer: it is sent again on every new
+ * session until the phone answers a later request (it got the end first, since a session keeps the
+ * order) or the pairing ends. One lost in a relay restart would otherwise leave the phone's request
+ * open, and the phone would answer the next request with `busy`.
  *
  * The phone gets requests only while its app is open. Until the request reaches it, the request
  * waits for the user to open the app (`awayTimeoutMs`, then `phone_away`); the time to review
@@ -163,6 +167,8 @@ function dropSecrets(active: Active, message: PhoneToDesktop): void {
 
 export class PhoneSigner {
   private active?: Active;
+  /** How the last request ended, until the phone shows it has it (see the file comment). */
+  private ending?: DesktopToPhone & { type: 'sign.done' | 'sign.cancel' };
 
   constructor(private readonly link: PhoneLinkPort) {}
 
@@ -234,8 +240,15 @@ export class PhoneSigner {
 
   /** Messages from the phone. */
   onMessage(message: PhoneToDesktop): void {
+    if (message.type === 'bye') return;
+    // The phone answers a later request (or ended the last one itself): it has the end.
+    if (
+      this.ending &&
+      (message.requestId !== this.ending.requestId || message.type === 'sign.error')
+    )
+      this.ending = undefined;
     const active = this.active;
-    if (!active || message.type === 'bye' || message.requestId !== active.id) return;
+    if (!active || message.requestId !== active.id) return;
     // The phone has the request (and any unlock): the PIN goes once.
     dropSecrets(active, message);
     active.answered = true;
@@ -283,6 +296,8 @@ export class PhoneSigner {
 
   /** A new session with the phone: send again whatever it hasn't answered. */
   onSession(): void {
+    // The last request's end first: the phone takes a new request only once the last one ended.
+    if (this.ending && !this.link.send(this.ending)) return;
     const active = this.active;
     if (!active) return;
     for (const [key, message] of active.outbox) {
@@ -305,6 +320,7 @@ export class PhoneSigner {
   /** The pairing ended: nothing more can arrive. */
   onEnded(reason: 'unpaired' | 'expired' | 'relay_refused'): void {
     if (this.active) this.fail(this.active.id, new PhoneSignError(reason));
+    this.ending = undefined;
   }
 
   /** Asks `onNeed` with the timers stopped, then sends `sign.unlock` and starts them again. */
@@ -414,7 +430,7 @@ export class PhoneSigner {
       finish: (ok) => {
         if (this.active !== active) return;
         this.clear(active);
-        this.link.send(
+        this.end(
           ok
             ? { type: 'sign.done', requestId: active.id }
             : { type: 'sign.cancel', requestId: active.id, reason: 'failed' },
@@ -428,13 +444,19 @@ export class PhoneSigner {
     const active = this.active;
     if (!active || active.id !== id) return;
     this.clear(active);
-    if (cancel) this.link.send({ type: 'sign.cancel', requestId: id, reason: cancel });
+    if (cancel) this.end({ type: 'sign.cancel', requestId: id, reason: cancel });
     if (!active.certificates) active.certificate.reject(error);
     for (const waiter of active.signatures.values()) {
       clearTimeout(waiter.timer);
       waiter.reject(error);
     }
     active.signatures.clear();
+  }
+
+  /** Tells the phone the request ended, and keeps it for the next sessions. */
+  private end(message: DesktopToPhone & { type: 'sign.done' | 'sign.cancel' }): void {
+    this.ending = message;
+    this.link.send(message);
   }
 
   private clear(active: Active): void {

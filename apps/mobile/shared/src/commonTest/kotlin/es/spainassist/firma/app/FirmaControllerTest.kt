@@ -550,6 +550,31 @@ class FirmaControllerTest {
     }
 
     @Test
+    fun takesTheNextRequestWhenTheDesktopSendsTheLostDoneAgain() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val first = h.request()
+        h.link.deliver(first)
+        h.approveWith(FakeCard())
+        h.link.deliver(ToBeSigned(first.requestId, 1, Algorithm.Sha256, "AQID"))
+        // A relay restart loses `sign.done`: the next session carries it again, before the next request.
+        h.link.drop()
+        h.link.connect()
+        val second = h.request(id = "cf1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e")
+        h.link.deliver(SignDone(first.requestId))
+        h.link.deliver(second)
+        assertTrue(h.link.sentOf<SignError>().none { it.code == ErrorCode.Busy })
+        assertEquals(second.requestId, (h.screen as Screen.Signing).request.requestId)
+        // Until the desktop sees an answer to the new request it sends the end on every session:
+        // an end for a request that is over changes nothing.
+        h.link.deliver(SignDone(first.requestId))
+        h.link.deliver(SignCancel(first.requestId, CancelReason.Failed))
+        assertEquals(Step.Review, h.screen.step())
+        assertEquals(second.requestId, (h.screen as Screen.Signing).request.requestId)
+        assertTrue(h.link.sentOf<SignError>().isEmpty())
+    }
+
+    @Test
     fun cancelsDeclinesAndExpires() = runTest {
         val h = Harness(this)
         h.pairAndConnect()
