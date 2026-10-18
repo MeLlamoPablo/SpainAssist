@@ -78,6 +78,14 @@ export const companionDict = defineDict({
     pairLead:
       'El móvil lee tu DNIe por NFC y firma con él. La vinculación dura 72 horas o hasta que cierres la app.',
     noPhone: 'Ningún móvil vinculado',
+    /** Why the last pairing ended, when the user didn't unpair on the desktop. */
+    ended: {
+      phone_unpaired: 'Se ha desvinculado desde el móvil.',
+      expired: 'La vinculación ha caducado (dura 72 horas). Vuelve a escanear el código.',
+      relay_refused:
+        'El servidor de enlace ha rechazado la conexión. Inténtalo de nuevo más tarde.',
+    },
+    pairAgain: 'Volver a vincular',
     done: 'Hecho',
   },
   en: {
@@ -153,6 +161,12 @@ export const companionDict = defineDict({
     pairLead:
       'The phone reads your DNIe over NFC and signs with it. The pairing lasts 72 hours or until you quit the app.',
     noPhone: 'No phone paired',
+    ended: {
+      phone_unpaired: 'It was unpaired from the phone.',
+      expired: 'The pairing expired (it lasts 72 hours). Scan the code again.',
+      relay_refused: 'The link server refused the connection. Try again later.',
+    },
+    pairAgain: 'Pair again',
     done: 'Done',
   },
 });

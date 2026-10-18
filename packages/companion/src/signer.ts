@@ -26,7 +26,8 @@ import {
   type PhoneToDesktop,
 } from '@sa/shared';
 
-export type PhoneSignErrorCode = CompanionErrorCode | 'unpaired' | 'expired';
+/** `unpaired`, `expired` and `relay_refused`: the pairing ended while the request was active. */
+export type PhoneSignErrorCode = CompanionErrorCode | 'unpaired' | 'expired' | 'relay_refused';
 
 export class PhoneSignError extends Error {
   constructor(
@@ -256,7 +257,7 @@ export class PhoneSigner {
   }
 
   /** The pairing ended: nothing more can arrive. */
-  onEnded(reason: 'unpaired' | 'expired'): void {
+  onEnded(reason: 'unpaired' | 'expired' | 'relay_refused'): void {
     if (this.active) this.fail(this.active.id, new PhoneSignError(reason));
   }
 

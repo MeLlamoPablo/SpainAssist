@@ -60,12 +60,42 @@ export function PairingPanel({
       toast.error(errorMessage(err));
     }
   };
+  const pairAgain = async () => {
+    try {
+      useAppStore.setState({ companion: await api.invoke('companion.pair') });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
   if (status.state === 'unavailable')
     return (
       <p className={cn('flex items-start gap-2 text-[13.5px] text-fg-muted', className)}>
         <TriangleAlert size={16} className="mt-0.5 shrink-0 text-st-attention-fg" aria-hidden />
         {t.unavailable}
       </p>
+    );
+  // The pairing ended on its own (from the phone, its 72 hours, the relay): say why.
+  if (status.state === 'off' && status.reason)
+    return (
+      <div
+        className={cn('flex items-start gap-2', className)}
+        data-testid="companion-ended"
+        data-reason={status.reason}
+      >
+        <TriangleAlert size={16} className="mt-0.5 shrink-0 text-st-attention-fg" aria-hidden />
+        <div className="min-w-0">
+          <p className="text-[13.5px] text-fg">{t.ended[status.reason]}</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={Smartphone}
+            className="mt-3"
+            onClick={() => void pairAgain()}
+          >
+            {t.pairAgain}
+          </Button>
+        </div>
+      </div>
     );
   if (status.state === 'connected')
     return (

@@ -62,7 +62,8 @@ import {
  * ?latency=ms (per-call delay) · ?chatgpt=ineligible (ChatGPT login fails: free account) ·
  * ?phone=1 (the DNI card asks for a phone call) · ?dnie=1 (feature flag: DNIe with the phone on;
  * ?companion, ?dnieSaved and the playground imply it) · ?companion=waiting|away|connected (phone
- * pairing for DNIe signatures; the playground starts connected) · ?dnieSaved=1|pin (a saved
+ * pairing for DNIe signatures; the playground starts connected; =phone_unpaired|expired|
+ * relay_refused: no pairing, the last one ended for that reason) · ?dnieSaved=1|pin (a saved
  * DNIe in Mis datos; =pin with its PIN saved).
  */
 
@@ -217,7 +218,11 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         ? { state: 'away', device: 'Pixel 8', expiresAt: pairedUntil }
         : companionParam === 'waiting'
           ? { state: 'waiting', link: demoLink, expiresAt: pairedUntil }
-          : { state: 'off' };
+          : companionParam === 'phone_unpaired' ||
+              companionParam === 'expired' ||
+              companionParam === 'relay_refused'
+            ? { state: 'off', reason: companionParam }
+            : { state: 'off' };
   const setCompanion = (next: CompanionStatus) => {
     companion = next;
     emit({ type: 'companion.changed', status: next });

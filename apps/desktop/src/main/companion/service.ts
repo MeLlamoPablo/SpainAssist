@@ -2,6 +2,7 @@ import { networkInterfaces } from 'node:os';
 import { certificateSite } from '@sa/browser';
 import {
   DesktopPairing,
+  type PairingEndReason,
   type PairingStatus,
   type PhoneKey,
   type PhoneNeed,
@@ -14,6 +15,7 @@ import {
   type AfirmaSignatureSummary,
   type CompanionAlgorithm,
   type CompanionCheck,
+  type CompanionEndReason,
   type CompanionStatus,
   type CredentialSummary,
   DniAccessNumber,
@@ -90,6 +92,7 @@ const NOTICES: Partial<Record<PhoneSignErrorCode, StringKey>> = {
   busy: 'dnieError_busy',
   unpaired: 'dnieError_unpaired',
   expired: 'dnieError_expired',
+  relay_refused: 'dnieError_relay_refused',
 };
 
 /** Why a DNIe login wasn't approved, for the agent. */
@@ -101,6 +104,7 @@ const LOGIN_REFUSALS: Partial<Record<PhoneSignErrorCode, string>> = {
   wrong_card: 'a different DNIe was held to the phone',
   unpaired: 'the phone was unpaired',
   expired: 'the phone pairing expired',
+  relay_refused: 'the relay server refused the phone connection',
 };
 
 /** `promise`, or a `declined` error once `signal` aborts (the browser dropped the connection). */
@@ -135,6 +139,11 @@ function lanRelayUrl(relayUrl: string): string {
   return relayUrl;
 }
 
+/** What the user reads about an ending: nothing when they unpaired on the desktop. */
+function endReason(reason: PairingEndReason): CompanionEndReason | undefined {
+  return reason === 'unpaired' ? undefined : reason;
+}
+
 function toCheck(binding: SignatureBinding | undefined): CompanionCheck | undefined {
   if (!binding) return undefined;
   if (binding.kind === 'cms') return binding;
@@ -154,6 +163,8 @@ function toCheck(binding: SignatureBinding | undefined): CompanionCheck | undefi
 export class CompanionService {
   private pairing?: DesktopPairing;
   private endLogin?: () => void;
+  /** Why the last pairing ended on its own, until the user pairs again or unpairs. */
+  private ended?: CompanionEndReason;
   private readonly signer: PhoneSigner;
   private readonly relayUrl?: string;
   /** The CAN the user typed, while the app runs. */
@@ -172,7 +183,7 @@ export class CompanionService {
   status(): CompanionStatus {
     if (!this.relayUrl) return { state: 'unavailable' };
     const pairing = this.pairing;
-    if (!pairing) return { state: 'off' };
+    if (!pairing) return this.ended ? { state: 'off', reason: this.ended } : { state: 'off' };
     return this.describe(pairing, pairing.status);
   }
 
@@ -201,6 +212,7 @@ export class CompanionService {
     this.endLogin?.();
     const pairing = this.pairing;
     this.pairing = undefined;
+    this.ended = undefined;
     pairing?.unpair();
     this.signer.onEnded('unpaired');
     this.emit();
@@ -734,7 +746,9 @@ export class CompanionService {
         if (this.pairing !== pairing) return;
         if (status.state === 'ended') {
           this.pairing = undefined;
-          this.signer.onEnded(status.reason === 'expired' ? 'expired' : 'unpaired');
+          this.ended = endReason(status.reason);
+          // A signature in progress fails with the reason (the phone's unpairing reads as one).
+          this.signer.onEnded(status.reason === 'phone_unpaired' ? 'unpaired' : status.reason);
         }
         this.emit();
       },
@@ -748,6 +762,7 @@ export class CompanionService {
       ...(deps.socket ? { socket: { WebSocket: deps.socket } } : {}),
     });
     this.pairing = pairing;
+    this.ended = undefined;
     deps.logger.info('companion pairing started', { relay: new URL(relayUrl).host });
     this.emit();
   }
@@ -769,8 +784,10 @@ export class CompanionService {
           expiresAt,
           ...(status.phone ? { device: status.phone.device } : {}),
         };
-      case 'ended':
-        return { state: 'off' };
+      case 'ended': {
+        const reason = endReason(status.reason);
+        return reason ? { state: 'off', reason } : { state: 'off' };
+      }
     }
   }
 

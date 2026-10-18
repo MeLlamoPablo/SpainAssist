@@ -1,4 +1,10 @@
-import { type AppInfo, DEFAULT_SETTINGS, FEATURES_OFF, type VaultOverview } from '@sa/shared';
+import {
+  type AppInfo,
+  type CompanionStatus,
+  DEFAULT_SETTINGS,
+  FEATURES_OFF,
+  type VaultOverview,
+} from '@sa/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '../../components/ui/tooltip';
@@ -32,11 +38,15 @@ const DNIE = {
   createdAt: '2026-10-11T10:00:00.000Z',
 } as const;
 
-function render(dniePhone: boolean, credentials: VaultOverview['credentials'] = []): string {
+function render(
+  dniePhone: boolean,
+  credentials: VaultOverview['credentials'] = [],
+  companion: CompanionStatus = { state: 'off' },
+): string {
   store.state = {
     info: info(dniePhone),
     settings: DEFAULT_SETTINGS,
-    companion: { state: 'off' },
+    companion,
   };
   const overview: VaultOverview = {
     personal: [],
@@ -80,5 +90,21 @@ describe('Mis datos: DNIe with the phone', () => {
     expect(saved).toContain('Cambiar');
     expect(saved).toContain('Borrar');
     expect(saved).not.toContain('Guardar PIN');
+  });
+
+  it('says why the last pairing ended, unless the user unpaired here', () => {
+    const ended = {
+      phone_unpaired: 'Se ha desvinculado desde el móvil.',
+      expired: 'La vinculación ha caducado (dura 72 horas). Vuelve a escanear el código.',
+      relay_refused:
+        'El servidor de enlace ha rechazado la conexión. Inténtalo de nuevo más tarde.',
+    } as const;
+    for (const [reason, text] of Object.entries(ended)) {
+      const html = render(true, [DNIE], { state: 'off', reason } as CompanionStatus);
+      expect(html).toContain('Ningún móvil vinculado');
+      expect(html).toContain(text);
+      expect(html).toContain('Vincular el móvil');
+    }
+    expect(render(true, [DNIE])).not.toContain('companion-ended');
   });
 });

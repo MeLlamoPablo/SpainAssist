@@ -414,6 +414,8 @@ function DnieCard({
   const info = c.certificate;
   const connected = companion.state === 'connected';
   const paired = connected || companion.state === 'away';
+  // Why the last pairing ended, unless the user unpaired here.
+  const ended = companion.state === 'off' ? companion.reason : undefined;
 
   const pair = async () => {
     setPairing(true);
@@ -484,18 +486,34 @@ function DnieCard({
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2/60 px-3 py-2">
-            <p className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
-              <Smartphone
-                size={15}
-                className={connected ? 'text-st-done-fg' : 'text-fg-subtle'}
-                aria-hidden
-              />
-              {connected
-                ? tc.connected(companion.device ?? tc.app)
-                : companion.state === 'away' && companion.device
-                  ? tc.away(companion.device)
-                  : tc.noPhone}
-            </p>
+            <div className="min-w-0">
+              <p className="flex min-w-0 items-center gap-2 text-[13px] text-fg-muted">
+                <Smartphone
+                  size={15}
+                  className={
+                    connected
+                      ? 'text-st-done-fg'
+                      : ended
+                        ? 'text-st-attention-fg'
+                        : 'text-fg-subtle'
+                  }
+                  aria-hidden
+                />
+                {connected
+                  ? tc.connected(companion.device ?? tc.app)
+                  : companion.state === 'away' && companion.device
+                    ? tc.away(companion.device)
+                    : tc.noPhone}
+              </p>
+              {ended ? (
+                <p
+                  className="mt-0.5 pl-[23px] text-[12.5px] text-fg-subtle"
+                  data-testid="companion-ended"
+                >
+                  {tc.ended[ended]}
+                </p>
+              ) : null}
+            </div>
             {companion.state === 'unavailable' ? null : paired ? (
               <Button variant="ghost" size="sm" onClick={() => void unpair()}>
                 {tc.unpair}

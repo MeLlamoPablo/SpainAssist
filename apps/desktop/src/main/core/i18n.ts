@@ -213,6 +213,10 @@ const STRINGS = {
     es: 'La vinculación con el móvil ha caducado. Vuelve a escanear el código para firmar con el DNIe.',
     en: 'The phone pairing expired. Scan the code again to sign with your DNIe.',
   },
+  dnieError_relay_refused: {
+    es: 'El servidor de enlace con el móvil ha rechazado la conexión. Inténtalo de nuevo más tarde.',
+    en: 'The link server refused the connection to your phone. Try again later.',
+  },
   dnieError_failed: {
     es: 'No se ha podido usar el DNIe. Vuelve a intentarlo.',
     en: "Couldn't use your DNIe. Try again.",

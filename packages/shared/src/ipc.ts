@@ -324,13 +324,16 @@ export interface DataImportStatus {
 
 /**
  * The desktop's pairing with the phone app (`@sa/companion`):
- * - `unavailable`: no relay server (some test runs); `off`: no pairing;
+ * - `unavailable`: no relay server (some test runs); `off`: no pairing (`reason`: why the last
+ *   one ended, when the user didn't end it);
  * - `connecting`: reaching the relay; `waiting`: no phone has scanned the QR code yet;
  * - `away`: the phone paired but isn't connected now (app closed, phone asleep);
  * - `connected`.
  */
 export interface CompanionStatus {
   state: 'unavailable' | 'off' | 'connecting' | 'waiting' | 'away' | 'connected';
+  /** `off` only: why the pairing ended on its own, until the user pairs again or unpairs. */
+  reason?: CompanionEndReason;
   /** The pairing link for the QR code, until a phone pairs (it works once). Memory only. */
   link?: string;
   /** The paired phone's model ("Pixel 8"). */
@@ -338,6 +341,12 @@ export interface CompanionStatus {
   /** When the pairing ends (ISO 8601). */
   expiresAt?: string;
 }
+
+/**
+ * Why a pairing ended without the user ending it on the desktop: `phone_unpaired` (from the
+ * phone app), `expired` (its 72 hours passed), `relay_refused` (the relay closed the room).
+ */
+export type CompanionEndReason = 'phone_unpaired' | 'expired' | 'relay_refused';
 
 export interface SaApi {
   invoke<M extends SaMethod>(method: M, ...args: SaArgs<M>): Promise<SaResult<M>>;

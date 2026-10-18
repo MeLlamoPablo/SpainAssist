@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
-import { PhoneClient } from '@sa/companion';
+import { PAIRING_LIFETIME_MS, PhoneClient } from '@sa/companion';
 import { MemoryRelay } from '@sa/companion/testing';
-import type { AfirmaSignatureSummary, DesktopToPhone, ExternalSigningKey } from '@sa/shared';
+import {
+  type AfirmaSignatureSummary,
+  type DesktopToPhone,
+  type ExternalSigningKey,
+  RELAY_CLOSE,
+} from '@sa/shared';
 import type { RemoteKey } from '@sa/sidecar';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../core/i18n';
@@ -460,6 +465,88 @@ it('shows the QR only until a phone pairs, and pairs another phone without faili
   });
   await a.waitFor(() => received.some((m) => m.type === 'sign.request'));
   expect(await approval).toBeNull();
+});
+
+describe('a pairing that ends on its own', () => {
+  /**
+   * A signature waiting on a paired phone that only acknowledges the request, or (`need`) asks
+   * the user for a new PIN, which stops the signature's own timers.
+   */
+  async function signing(need = false) {
+    const ctx = await setup();
+    const { relay, app: a, procedureId } = ctx;
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await typeUnlock(a, procedureId);
+    await a.waitFor(() => a.services.companion!.status().state === 'waiting');
+    const { link } = await a.invoke('companion.status');
+    const p = phone(relay, link as string, (m, send) => {
+      if (m.type !== 'sign.request') return;
+      send({ type: 'sign.progress', requestId: m.requestId, stage: 'reviewing' });
+      if (need) send({ type: 'sign.need', requestId: m.requestId, what: 'pin', refused: true });
+    });
+    await a.waitFor(() => p.received.some((m) => m.type === 'sign.request'));
+    await a.waitFor(() => a.services.companion!.status().state === 'connected');
+    return { ...ctx, approval, phone: p };
+  }
+
+  /** The procedure's last notice, the one the failed signature left. */
+  function lastNotice(a: TestApp, procedureId: string) {
+    return a.services.procedures.transcript(procedureId).at(-1);
+  }
+
+  it('says the phone unpaired, fails the signature with it, and forgets it on a new pairing', async () => {
+    const { app: a, procedureId, approval, phone: p } = await signing();
+    p.client.unpair();
+    expect(await approval).toBeNull();
+    expect(await a.invoke('companion.status')).toEqual({ state: 'off', reason: 'phone_unpaired' });
+    expect(a.events).toContainEqual({
+      type: 'companion.changed',
+      status: { state: 'off', reason: 'phone_unpaired' },
+    });
+    expect(lastNotice(a, procedureId)).toMatchObject({
+      type: 'notice',
+      text: t('es', 'dnieError_unpaired'),
+    });
+    // It stays until the user pairs again; a new pairing has no reason.
+    expect((await a.invoke('companion.status')).reason).toBe('phone_unpaired');
+    const next = await a.invoke('companion.pair');
+    expect(next.state).not.toBe('off');
+    expect(next).not.toHaveProperty('reason');
+    // Unpairing on the desktop says nothing: the user did it.
+    expect(await a.invoke('companion.unpair')).toEqual({ state: 'off' });
+  });
+
+  it('says the relay refused, and fails the signature with that reason', async () => {
+    const { relay, app: a, procedureId, approval } = await signing();
+    const [room] = [...relay.rooms.values()];
+    room?.desktop?.remoteClose(RELAY_CLOSE.unauthorized);
+    expect(await approval).toBeNull();
+    expect(await a.invoke('companion.status')).toEqual({ state: 'off', reason: 'relay_refused' });
+    expect(lastNotice(a, procedureId)).toMatchObject({
+      type: 'notice',
+      level: 'warning',
+      text: t('es', 'dnieError_relay_refused'),
+    });
+  });
+
+  it('says the pairing expired after 72 hours, and fails the signature with that reason', async () => {
+    // Real time still runs (the relay, the phone), and the 72 hours can be skipped.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    const { app: a, procedureId, approval } = await signing(true);
+    // The phone waits for the user to type a new PIN: the signature's own timers are stopped.
+    await a.waitFor(() => {
+      const p = a.pendingPrompt(procedureId)?.prompt;
+      return p?.kind === 'dnie_signature' && p.stage === 'unlock';
+    });
+    await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+    vi.useRealTimers();
+    expect(await approval).toBeNull();
+    expect(await a.invoke('companion.status')).toEqual({ state: 'off', reason: 'expired' });
+    expect(lastNotice(a, procedureId)).toMatchObject({
+      type: 'notice',
+      text: t('es', 'dnieError_expired'),
+    });
+  });
 });
 
 it('ends login after inactivity and asks again for the next handshake', async () => {
