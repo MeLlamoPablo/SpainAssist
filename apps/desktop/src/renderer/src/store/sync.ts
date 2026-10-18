@@ -64,9 +64,27 @@ export async function reloadProcedures(): Promise<void> {
   useProcedureStore.getState().setAll(await api.invoke('procedures.list'));
 }
 
-/** Subscribe to main's events and load the initial state. */
+/**
+ * Subscribe to main's events and load the initial state. Events that arrive while the state loads
+ * wait and are applied after it: the snapshot may predate them (a voucher redeemed during startup
+ * must not be undone by the `providers.status` read before it).
+ */
 export async function startSync(): Promise<() => void> {
-  const unsubscribe = api.on(applyEvent);
+  let held: SaEvent[] | undefined = [];
+  const unsubscribe = api.on((event) => (held ? held.push(event) : applyEvent(event)));
+  try {
+    await loadInitialState();
+  } finally {
+    const events = held;
+    held = undefined;
+    for (const event of events) applyEvent(event);
+  }
+  void reloadVault();
+  void loadConversation();
+  return unsubscribe;
+}
+
+async function loadInitialState(): Promise<void> {
   const appInfo = api.invoke('app.info');
   const [info, settings, provider, procedures, state, companion, updates, dataImport] =
     await Promise.all([
@@ -94,9 +112,6 @@ export async function startSync(): Promise<() => void> {
     dataImport,
     ready: true,
   });
-  void reloadVault();
-  void loadConversation();
-  return unsubscribe;
 }
 
 /** Load (or refresh) the conversation. */

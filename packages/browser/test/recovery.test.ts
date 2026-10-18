@@ -40,6 +40,20 @@ function commandOf(pid: number): string {
   }
 }
 
+function descendants(pid: number): number[] {
+  let children: number[];
+  try {
+    children = execFileSync('pgrep', ['-P', String(pid)])
+      .toString()
+      .trim()
+      .split('\n')
+      .map(Number);
+  } catch {
+    return []; // pgrep exits 1 when there are none
+  }
+  return children.flatMap((child) => [child, ...descendants(child)]);
+}
+
 async function waitFor(condition: () => boolean, ms = 10_000): Promise<void> {
   const deadline = Date.now() + ms;
   while (!condition()) {
@@ -79,16 +93,12 @@ describe('crash recovery', () => {
 
   it('reloads a crashed tab on the next action', async () => {
     await t.service.open('tab', `${server.origin}/crash`);
-    // Kill the renderer processes (children of this test's browser process).
+    // Kill the renderer processes of this test's browser. On Linux they are the zygote's
+    // children, not the browser's, so look at every descendant.
     const browserPid = processesWithMarker().find((p) => !p.command.includes('--type='))?.pid;
     expect(browserPid).toBeDefined();
-    const children = execFileSync('pgrep', ['-P', String(browserPid)])
-      .toString()
-      .trim()
-      .split('\n')
-      .map(Number);
     let killed = 0;
-    for (const pid of children) {
+    for (const pid of descendants(browserPid as number)) {
       if (commandOf(pid).includes('--type=renderer')) {
         process.kill(pid, 'SIGKILL');
         killed++;
