@@ -36,6 +36,14 @@ internal object LineIcons {
         "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
     )
 
+    /** Something went wrong: a cross in a circle, so it differs from the warning by shape too. */
+    val Blocked = icon(
+        "blocked",
+        "M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20z",
+        "M15 9l-6 6",
+        "M9 9l6 6",
+    )
+
     private fun icon(name: String, vararg paths: String): ImageVector {
         val builder = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
         for (path in paths) {

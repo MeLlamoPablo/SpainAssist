@@ -58,8 +58,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -136,15 +142,20 @@ internal val colors @Composable get() = LocalFirmaColors.current
  * Every screen but the licences: a picture up top ([hero]: the wordmark, the card, the result)
  * and the words and buttons at the bottom, within reach of the thumb. It scrolls when they don't
  * fit. [menu] adds the "⋯" menu in the corner.
+ *
+ * [pane] names the screen for TalkBack, which reads it out when the screen appears or the name
+ * changes (a new step of the signature, its result): the screen reader follows the steps without
+ * the user having to explore the screen.
  */
 @Composable
 private fun Layout(
     hero: @Composable () -> Unit,
+    pane: String,
     top: Dp = 128.dp,
     menu: (() -> Unit)? = null,
     bottom: @Composable ColumnScope.() -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().semantics { paneTitle = pane }) {
         val height = maxHeight
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Column(
@@ -172,31 +183,40 @@ private fun Actions(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp), content = content)
 }
 
-/** Top-aligned and scrolling: the licences. */
+/** Top-aligned and scrolling: the licences. [pane] as in [Layout]. */
 @Composable
-internal fun Page(content: @Composable () -> Unit) {
+internal fun Page(pane: String, content: @Composable () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 64.dp),
+        modifier = Modifier.fillMaxSize().semantics { paneTitle = pane }.verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 64.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) { content() }
 }
 
+/** A screen's title: a heading, so TalkBack can jump to it. */
 @Composable
 internal fun Title(text: String) {
-    Text(text, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 30.sp)
+    Text(
+        text, Modifier.semantics { heading() },
+        fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 30.sp,
+    )
 }
 
 @Composable
-internal fun Body(text: String, color: Color = colors.fgSubtle) {
-    Text(text, fontSize = 16.sp, color = color, lineHeight = 22.sp)
+internal fun Body(text: String, modifier: Modifier = Modifier, color: Color = colors.fgSubtle) {
+    Text(text, modifier, fontSize = 16.sp, color = color, lineHeight = 22.sp)
 }
 
-/** "Spain Assist" with the flag, as on the desktop (Framer's App/Brand/Wordmark, Large). */
+/**
+ * "Spain Assist" with the flag, as on the desktop (Framer's App/Brand/Wordmark, Large). A logo: its
+ * size ignores the font scale, or at 200 % "Assist" would break across lines. [heading] when it is
+ * the screen's only title.
+ */
 @Composable
-internal fun Wordmark() {
+internal fun Wordmark(heading: Boolean = false) {
     val brand = brandFamily()
+    val size = with(LocalDensity.current) { 44.dp.toSp() }
     Row(
-        Modifier.semantics(mergeDescendants = true) {},
+        Modifier.semantics(mergeDescendants = true) { if (heading) heading() },
         horizontalArrangement = Arrangement.spacedBy(11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -207,7 +227,7 @@ internal fun Wordmark() {
             Box(Modifier.fillMaxWidth().weight(1f).background(colors.flagRed))
         }
         for ((word, style) in listOf("Spain" to FontStyle.Normal, "Assist" to FontStyle.Italic)) {
-            Text(word, fontFamily = brand, fontStyle = style, fontSize = 44.sp, lineHeight = 44.sp, letterSpacing = (-0.88).sp, color = colors.fg)
+            Text(word, fontFamily = brand, fontStyle = style, fontSize = size, lineHeight = size, letterSpacing = (-0.88).sp, color = colors.fg)
         }
     }
 }
@@ -237,38 +257,57 @@ private fun MoreMenu(openLicenses: () -> Unit, modifier: Modifier) {
     }
 }
 
-private enum class Tone { Info, Done, Attention, Blocked }
+/**
+ * How a notice or a result went. Each has its own icon as well as its colour, and its own name for
+ * TalkBack ([toneLabel]), so the colour never carries the meaning alone.
+ */
+internal enum class Tone { Info, Done, Attention, Blocked }
 
+internal fun toneLabel(tone: Tone): StringResource = when (tone) {
+    Tone.Info -> Res.string.a11y_status_info
+    Tone.Done -> Res.string.a11y_status_done
+    Tone.Attention -> Res.string.a11y_status_attention
+    Tone.Blocked -> Res.string.a11y_status_blocked
+}
+
+/**
+ * A notice. TalkBack reads its icon and text as one item ("Warning, NFC is off…"), and announces it
+ * when it appears or its text changes ([live]): the computer leaving, the card moving, a wrong PIN.
+ */
 @Composable
-private fun Banner(text: String, tone: Tone, action: (@Composable () -> Unit)? = null) {
+private fun Banner(text: String, tone: Tone, live: Boolean = true, action: (@Composable () -> Unit)? = null) {
     val (bg, fg, icon) = when (tone) {
         Tone.Info -> Triple(colors.surface3, colors.fgMuted, Icons.Filled.Info)
         Tone.Done -> Triple(colors.doneBg, colors.doneFg, Icons.Filled.CheckCircle)
         Tone.Attention -> Triple(colors.attentionBg, colors.attentionFg, Icons.Filled.Warning)
-        Tone.Blocked -> Triple(colors.blockedBg, colors.blockedFg, Icons.Filled.Warning)
+        Tone.Blocked -> Triple(colors.blockedBg, colors.blockedFg, LineIcons.Blocked)
     }
     Column(
         Modifier.fillMaxWidth().background(bg, RoundedCornerShape(12.dp)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+        Row(
+            Modifier.semantics(mergeDescendants = true) { if (live) liveRegion = LiveRegionMode.Polite },
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(icon, contentDescription = stringResource(toneLabel(tone)), tint = fg, modifier = Modifier.size(20.dp))
             Text(text, color = fg, fontSize = 15.sp, lineHeight = 21.sp)
         }
         action?.invoke()
     }
 }
 
+// Buttons grow with the font scale: a minimum height, never a fixed one.
 @Composable
 private fun Primary(text: String, onClick: () -> Unit, enabled: Boolean = true) {
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) {
+    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(12.dp)) {
         Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 internal fun Secondary(text: String, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(12.dp)) {
+    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(12.dp)) {
         Text(text, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = colors.fg)
     }
 }
@@ -277,19 +316,19 @@ internal fun Secondary(text: String, onClick: () -> Unit) {
 private fun NfcBanner(nfc: NfcAvailability, actions: FirmaActions) {
     when (nfc) {
         NfcAvailability.Missing -> Banner(stringResource(Res.string.nfc_missing), Tone.Blocked)
-        NfcAvailability.Disabled -> Banner(stringResource(Res.string.nfc_disabled), Tone.Attention) {
+        NfcAvailability.Disabled -> Banner(stringResource(Res.string.nfc_disabled), Tone.Attention, action = {
             TextButton(onClick = actions::openNfcSettings) {
                 Text(stringResource(Res.string.nfc_open_settings), color = colors.attentionFg, fontWeight = FontWeight.SemiBold)
             }
-        }
+        })
         NfcAvailability.Ready -> Unit
     }
 }
 
-/** A card resting on a phone: the gesture the user must make. */
+/** A card resting on a phone: the gesture the user must make. Decorative: the title says it. */
 @Composable
 private fun CardIllustration(active: Boolean) {
-    Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().height(170.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         Box(
             Modifier.size(width = 190.dp, height = 120.dp)
                 .background(colors.accentSoft, RoundedCornerShape(12.dp))
@@ -308,10 +347,10 @@ private fun CardIllustration(active: Boolean) {
     }
 }
 
-/** A computer with a PIN being typed: the user answers on the computer. */
+/** A computer with a PIN being typed: the user answers on the computer. Decorative. */
 @Composable
 private fun ComputerIllustration() {
-    Column(Modifier.height(170.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.height(170.dp).clearAndSetSemantics {}, verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.size(width = 180.dp, height = 116.dp)
                 .background(colors.surface, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
@@ -333,17 +372,17 @@ private fun ComputerIllustration() {
     }
 }
 
-/** A result: a round badge in the result's colours. */
+/** A result: a round badge in the result's colours, with an icon of its own for each tone. */
 @Composable
 private fun ResultIcon(tone: Tone) {
     val (bg, fg, icon) = when (tone) {
         Tone.Done -> Triple(colors.doneBg, colors.doneFg, Icons.Rounded.Check)
-        Tone.Blocked -> Triple(colors.blockedBg, colors.blockedFg, Icons.Outlined.Warning)
-        Tone.Attention -> Triple(colors.attentionBg, colors.attentionFg, Icons.Outlined.Info)
+        Tone.Blocked -> Triple(colors.blockedBg, colors.blockedFg, LineIcons.Blocked)
+        Tone.Attention -> Triple(colors.attentionBg, colors.attentionFg, Icons.Outlined.Warning)
         Tone.Info -> Triple(colors.surface3, colors.fgSubtle, Icons.Outlined.Info)
     }
     Box(Modifier.size(88.dp).background(bg, CircleShape), contentAlignment = Alignment.Center) {
-        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(44.dp))
+        Icon(icon, contentDescription = stringResource(toneLabel(tone)), tint = fg, modifier = Modifier.size(44.dp))
     }
 }
 
@@ -353,7 +392,7 @@ private fun ResultIcon(tone: Tone) {
 
 @Composable
 private fun StartScreen(s: Screen.Start, actions: FirmaActions, openLicenses: () -> Unit, scan: () -> Unit) {
-    Layout(hero = { Wordmark() }, menu = openLicenses) {
+    Layout(hero = { Wordmark(heading = true) }, pane = stringResource(Res.string.app_name), menu = openLicenses) {
         Actions {
             when (s.notice) {
                 StartNotice.BadLink -> Banner(stringResource(Res.string.notice_bad_link), Tone.Attention)
@@ -372,15 +411,20 @@ private fun StartScreen(s: Screen.Start, actions: FirmaActions, openLicenses: ()
 @Composable
 private fun ScanScreen(platform: Platform, actions: FirmaActions, close: () -> Unit) {
     platform.BackHandler(close)
-    Column(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 64.dp)) {
-        Box(Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(16.dp)).background(Color.Black)) {
+    val title = stringResource(Res.string.scan_title)
+    val camera = stringResource(Res.string.a11y_scan_camera)
+    Column(Modifier.fillMaxSize().semantics { paneTitle = title }.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 64.dp)) {
+        Box(
+            Modifier.fillMaxWidth().weight(1f).clip(RoundedCornerShape(16.dp)).background(Color.Black)
+                .semantics { contentDescription = camera },
+        ) {
             platform.QrScanner { code ->
                 close()
                 actions.onLink(code)
             }
         }
         Spacer(Modifier.height(24.dp))
-        Title(stringResource(Res.string.scan_title))
+        Title(title)
         Spacer(Modifier.height(64.dp))
         Secondary(stringResource(Res.string.scan_cancel), close)
     }
@@ -388,9 +432,10 @@ private fun ScanScreen(platform: Platform, actions: FirmaActions, close: () -> U
 
 @Composable
 private fun ConfirmPairingScreen(s: Screen.ConfirmPairing, actions: FirmaActions, openLicenses: () -> Unit) {
-    Layout(hero = { Wordmark() }, menu = openLicenses) {
+    val title = stringResource(Res.string.pair_title)
+    Layout(hero = { Wordmark() }, pane = title, menu = openLicenses) {
         Words {
-            Title(stringResource(Res.string.pair_title))
+            Title(title)
             Body(stringResource(Res.string.pair_body))
         }
         Actions {
@@ -403,15 +448,17 @@ private fun ConfirmPairingScreen(s: Screen.ConfirmPairing, actions: FirmaActions
 
 @Composable
 private fun HomeScreen(s: Screen.Home, actions: FirmaActions, openLicenses: () -> Unit) {
-    Layout(hero = { Wordmark() }, menu = openLicenses) {
+    Layout(hero = { Wordmark(heading = true) }, pane = stringResource(Res.string.app_name), menu = openLicenses) {
         Actions {
             NfcBanner(s.nfc, actions)
-            when (s.link) {
-                is LinkStatus.Connected -> Banner(stringResource(Res.string.home_connected), Tone.Done)
-                LinkStatus.DesktopAway, LinkStatus.RoomMissing -> Banner(stringResource(Res.string.home_away), Tone.Attention)
-                is LinkStatus.Outdated -> Banner(stringResource(Res.string.home_outdated), Tone.Blocked)
-                else -> Banner(stringResource(Res.string.home_connecting), Tone.Info)
+            // One banner whose text changes, so TalkBack announces each change of the link.
+            val (status, tone) = when (s.link) {
+                is LinkStatus.Connected -> Res.string.home_connected to Tone.Done
+                LinkStatus.DesktopAway, LinkStatus.RoomMissing -> Res.string.home_away to Tone.Attention
+                is LinkStatus.Outdated -> Res.string.home_outdated to Tone.Blocked
+                else -> Res.string.home_connecting to Tone.Info
             }
+            Banner(stringResource(status), tone)
             Secondary(stringResource(Res.string.home_unpair), actions::unpair)
         }
     }
@@ -429,7 +476,7 @@ private fun SigningScreen(s: Screen.Signing, actions: FirmaActions, platform: Pl
     when (val step = s.step) {
         Step.Review -> ReviewStep(s.request, s.nfc, actions, platform, away)
         is Step.WaitForComputer -> WaitStep(step, actions, !login, away)
-        is Step.HoldCard -> Layout(hero = { CardIllustration(active = false) }) {
+        is Step.HoldCard -> Layout(hero = { CardIllustration(active = false) }, pane = stringResource(Res.string.card_title)) {
             Words {
                 Title(stringResource(Res.string.card_title))
                 Body(stringResource(Res.string.card_body))
@@ -444,13 +491,19 @@ private fun SigningScreen(s: Screen.Signing, actions: FirmaActions, platform: Pl
                 }
             }
         }
-        is Step.Working -> Layout(hero = { CardIllustration(active = true) }) {
-            Words {
-                Title(stringResource(if (login) Res.string.working_login else if (step.reading) Res.string.working_reading else Res.string.working_signing))
-                Body(stringResource(Res.string.working_hint))
-                if (!login && step.signed > 0) Body(stringResource(Res.string.working_signed, step.signed))
+        is Step.Working -> {
+            val title = stringResource(if (login) Res.string.working_login else if (step.reading) Res.string.working_reading else Res.string.working_signing)
+            // Reading, then signing: the same screen with a new name, which TalkBack announces.
+            Layout(hero = { CardIllustration(active = true) }, pane = title) {
+                Words {
+                    Title(title)
+                    Body(stringResource(Res.string.working_hint))
+                    if (!login && step.signed > 0) {
+                        Body(stringResource(Res.string.working_signed, step.signed), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                    }
+                }
+                if (!s.connected) Actions { away() }
             }
-            if (!s.connected) Actions { away() }
         }
         is Step.Result -> ResultStep(step.outcome, actions, login)
     }
@@ -465,7 +518,7 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
         Actions {
             away()
             NfcBanner(nfc, actions)
-            if (!login && !certificateOnly && !r.verifiable) Banner(stringResource(Res.string.review_unchecked), Tone.Info)
+            if (!login && !certificateOnly && !r.verifiable) Banner(stringResource(Res.string.review_unchecked), Tone.Info, live = false)
             Primary(
                 stringResource(if (login) Res.string.review_login else if (certificateOnly) Res.string.review_share else Res.string.review_sign),
                 onClick = actions::approve,
@@ -475,13 +528,20 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
     }
     if (login || certificateOnly) {
         // Nothing to read: the wordmark, and the site at the bottom.
-        Layout(hero = { Wordmark() }) {
+        val title = stringResource(if (login) Res.string.review_title_login else Res.string.review_title_certificate)
+        Layout(hero = { Wordmark() }, pane = "$title ${r.host}") {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                Text(
-                    stringResource(if (login) Res.string.review_title_login else Res.string.review_title_certificate),
-                    fontSize = 16.sp, fontWeight = FontWeight.Medium, color = colors.fgSubtle, lineHeight = 22.sp,
-                )
-                Site(r.host, r.official, unknown)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // What and for whom, read as one heading: "Log in to, official site, sede…".
+                    Column(
+                        Modifier.semantics(mergeDescendants = true) { heading() },
+                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                    ) {
+                        Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = colors.fgSubtle, lineHeight = 22.sp)
+                        Site(r.host, r.official)
+                    }
+                    if (!r.official) UnknownSite(unknown)
+                }
                 if (certificateOnly) Body(stringResource(Res.string.review_certificate_body))
             }
             buttons()
@@ -489,14 +549,23 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
         return
     }
     // The documents take the place of the picture.
+    val title = stringResource(if (r.documents.size > 1) Res.string.review_title_documents else Res.string.review_title)
     Layout(
         top = 32.dp,
+        pane = title,
         hero = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Title(stringResource(if (r.documents.size > 1) Res.string.review_title_documents else Res.string.review_title))
-                    Site(r.host, r.official, unknown)
-                    r.signatures?.takeIf { it > 1 }?.let { Body(stringResource(Res.string.review_signatures, it)) }
+                    // What and for whom, read as one heading: "Sign document, official site, sede…, 3 signatures".
+                    Column(
+                        Modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading() },
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Title(title)
+                        Site(r.host, r.official)
+                        r.signatures?.takeIf { it > 1 }?.let { Body(stringResource(Res.string.review_signatures, it)) }
+                    }
+                    if (!r.official) UnknownSite(unknown)
                 }
                 r.documents.forEach { DocumentPreview(it, platform) }
             }
@@ -506,11 +575,11 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
 }
 
 /**
- * The site that asks: its host with a lock when it's an official administration, else dashed, in
- * the warning colour, with [unknown] below.
+ * The site that asks: its host with a lock when it's an official administration, else a question
+ * mark, dashed, in the warning colour. TalkBack reads the icon's meaning before the host.
  */
 @Composable
-private fun Site(host: String, official: Boolean, unknown: String) {
+private fun Site(host: String, official: Boolean) {
     val shape = RoundedCornerShape(12.dp)
     val tone = if (official) colors.doneFg else colors.blockedFg
     val frame = if (official) {
@@ -518,17 +587,25 @@ private fun Site(host: String, official: Boolean, unknown: String) {
     } else {
         Modifier.background(colors.blockedBg, shape).dashedBorder(colors.blockedLine, 12.dp)
     }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            frame.padding(start = 12.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(if (official) LineIcons.Lock else LineIcons.Question, contentDescription = null, tint = tone, modifier = Modifier.size(18.dp))
-            Text(host, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp)
-        }
-        if (!official) Text(unknown, fontSize = 14.sp, color = tone, lineHeight = 20.sp)
+    Row(
+        frame.padding(start = 12.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (official) LineIcons.Lock else LineIcons.Question,
+            contentDescription = stringResource(if (official) Res.string.a11y_site_official else Res.string.a11y_site_unknown),
+            tint = tone,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(host, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp)
     }
+}
+
+/** Below a site the app doesn't recognise: sign only if you trust it. */
+@Composable
+private fun UnknownSite(text: String) {
+    Text(text, fontSize = 14.sp, color = colors.blockedFg, lineHeight = 20.sp)
 }
 
 /** A 1 dp dashed outline with rounded corners. */
@@ -546,7 +623,8 @@ private fun Modifier.dashedBorder(color: Color, radius: Dp): Modifier = drawBehi
 
 /**
  * The top of a document, fading into the page, with its name and size. A PDF opens in the
- * phone's PDF viewer when tapped.
+ * phone's PDF viewer when tapped. A document too big to show has no preview: its name follows the
+ * notice instead of covering it, so nothing clips when the font is large.
  */
 @Composable
 private fun DocumentPreview(d: ReviewDocument, platform: Platform) {
@@ -558,14 +636,23 @@ private fun DocumentPreview(d: ReviewDocument, platform: Platform) {
     }
     val data = d.data
     val pdf = data?.takeIf { d.mimeType == "application/pdf" }
+    val name = d.name ?: stringResource(kind)
     val openLabel = stringResource(Res.string.review_open_pdf)
-    Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
+    val shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+    if (data == null) {
+        Column(
+            Modifier.fillMaxWidth().clip(shape).background(colors.surface2).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Body(stringResource(Res.string.review_no_data))
+            Text("SHA-256 ${d.sha256}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.fgSubtle)
+            DocumentName(name, d.size, Modifier.padding(top = 8.dp))
+        }
+        return
+    }
+    Box(Modifier.fillMaxWidth().height(200.dp).clip(shape)) {
         val page = Modifier.fillMaxSize().background(colors.surface2).padding(16.dp)
         when {
-            data == null -> Column(page, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Body(stringResource(Res.string.review_no_data))
-                Text("SHA-256 ${d.sha256}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.fgSubtle)
-            }
             pdf != null -> platform.PdfPreview(pdf)
             d.mimeType.startsWith("text/") || d.mimeType.endsWith("xml") -> {
                 val text = remember(d.sha256) { data.decodeToString().take(2000) }
@@ -579,25 +666,40 @@ private fun DocumentPreview(d: ReviewDocument, platform: Platform) {
                 .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    d.name ?: stringResource(kind), Modifier.weight(1f, fill = false),
-                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Text(formatSize(d.size), fontSize = 13.sp, color = colors.fgSubtle, lineHeight = 24.sp)
-            }
+            DocumentName(name, d.size)
         }
         if (pdf != null) {
-            // On top of the preview: a tap opens the PDF instead of scrolling its pages.
-            Box(Modifier.matchParentSize().clickable(onClickLabel = openLabel, role = Role.Button) { platform.openPdf(pdf) })
+            // On top of the preview: a tap opens the PDF instead of scrolling its pages. TalkBack
+            // reads it as one button: "Open the PDF, <name>".
+            Box(
+                Modifier.matchParentSize()
+                    .clickable(onClickLabel = openLabel, role = Role.Button) { platform.openPdf(pdf) }
+                    .semantics { contentDescription = "$openLabel, $name" },
+            )
             Box(
                 Modifier.align(Alignment.TopEnd).padding(12.dp).background(colors.fgSubtle, CircleShape)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Icon(LineIcons.OpenOutside, contentDescription = openLabel, tint = colors.surface, modifier = Modifier.size(14.dp))
+                Icon(LineIcons.OpenOutside, contentDescription = null, tint = colors.surface, modifier = Modifier.size(14.dp))
             }
         }
+    }
+}
+
+/** A document's name and size, read as one item. */
+@Composable
+private fun DocumentName(name: String, size: Long, modifier: Modifier = Modifier) {
+    Row(
+        modifier.semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            name, Modifier.weight(1f, fill = false),
+            fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        Text(formatSize(size), fontSize = 13.sp, color = colors.fgSubtle, lineHeight = 24.sp)
     }
 }
 
@@ -606,12 +708,14 @@ private fun DocumentPreview(d: ReviewDocument, platform: Platform) {
 private fun WaitStep(step: Step.WaitForComputer, actions: FirmaActions, canCancel: Boolean, away: @Composable () -> Unit) {
     val pin = step.what == Need.Pin
     val left = step.triesLeft
-    Layout(hero = { ComputerIllustration() }) {
+    val title = stringResource(if (pin) Res.string.wait_pin_title else Res.string.wait_can_title)
+    Layout(hero = { ComputerIllustration() }, pane = title) {
         Words {
-            Title(stringResource(if (pin) Res.string.wait_pin_title else Res.string.wait_can_title))
+            Title(title)
             if (pin && !step.refused && left != 1) Body(stringResource(Res.string.wait_pin_missing))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(16.dp), color = colors.fgSubtle, strokeWidth = 2.dp)
+                // The spinner only says "waiting": decorative, the text says it.
+                CircularProgressIndicator(Modifier.size(16.dp).clearAndSetSemantics {}, color = colors.fgSubtle, strokeWidth = 2.dp)
                 Body(stringResource(Res.string.wait_body))
             }
         }
@@ -638,8 +742,9 @@ private fun ResultStep(outcome: Outcome, actions: FirmaActions, login: Boolean) 
         Outcome.Expired -> Res.string.result_expired to Tone.Attention
         is Outcome.Failed -> failure(outcome.code, login) to Tone.Blocked
     }
-    Layout(hero = { ResultIcon(tone) }) {
-        Words { Title(stringResource(message)) }
+    val title = stringResource(message)
+    Layout(hero = { ResultIcon(tone) }, pane = title) {
+        Words { Title(title) }
         Actions { Primary(stringResource(Res.string.result_ok), onClick = actions::dismissResult) }
     }
 }

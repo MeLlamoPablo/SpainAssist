@@ -113,4 +113,13 @@
     <string name="licenses_google_notices">Open-source notices inside it</string>
     <string name="licenses_google_hide">Hide the notices</string>
     <string name="licenses_back">Back</string>
+
+    <!-- Read by TalkBack only -->
+    <string name="a11y_status_info">Information</string>
+    <string name="a11y_status_done">Done</string>
+    <string name="a11y_status_attention">Warning</string>
+    <string name="a11y_status_blocked">Error</string>
+    <string name="a11y_site_official">Official site</string>
+    <string name="a11y_site_unknown">Unrecognised site</string>
+    <string name="a11y_scan_camera">Camera to scan the QR code</string>
 </resources>

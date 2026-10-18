@@ -11,8 +11,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,8 +36,9 @@ internal fun LicensesScreen(platform: Platform, onBack: () -> Unit) {
     val licenses = platform.licenses
     val uri = LocalUriHandler.current
     platform.BackHandler(onBack)
-    Page {
-        Title(stringResource(Res.string.licenses_title))
+    val title = stringResource(Res.string.licenses_title)
+    Page(title) {
+        Title(title)
         Body(stringResource(if (licenses.eupl) Res.string.licenses_lead_eupl else Res.string.licenses_lead))
         Column {
             TextButton(onClick = { uri.openUri(Licenses.SOURCE_URL) }) { Text(stringResource(Res.string.licenses_source)) }
@@ -52,7 +56,7 @@ internal fun LicensesScreen(platform: Platform, onBack: () -> Unit) {
 
 @Composable
 private fun Subtitle(text: String) {
-    Text(text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp)
+    Text(text, Modifier.semantics { heading() }, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, lineHeight = 24.sp)
 }
 
 @Composable

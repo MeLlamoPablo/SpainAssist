@@ -113,4 +113,13 @@
     <string name="licenses_google_notices">Avisos del código abierto que incluye</string>
     <string name="licenses_google_hide">Ocultar los avisos</string>
     <string name="licenses_back">Volver</string>
+
+    <!-- Read by TalkBack only -->
+    <string name="a11y_status_info">Información</string>
+    <string name="a11y_status_done">Hecho</string>
+    <string name="a11y_status_attention">Atención</string>
+    <string name="a11y_status_blocked">Error</string>
+    <string name="a11y_site_official">Sitio oficial</string>
+    <string name="a11y_site_unknown">Sitio no reconocido</string>
+    <string name="a11y_scan_camera">Cámara para escanear el código QR</string>
 </resources>
