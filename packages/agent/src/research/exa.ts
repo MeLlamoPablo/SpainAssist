@@ -73,7 +73,7 @@ interface McpAnswer {
 type Outcome = { ok: true; text: string } | { ok: false; text: string };
 
 /**
- * Exa's hosted MCP server as two procedure-agent tools (D23): `exa_search`
+ * Exa's hosted MCP server as two procedure-agent tools: `exa_search`
  * (`web_search_advanced_exa`, biased to Spain and, by default, to official domains) and
  * `exa_fetch` (`web_fetch_exa`). Plain JSON-RPC `tools/call` over HTTP, no MCP session. Free
  * without a key; when the user saved one, it's read from the app on every call and sent only to

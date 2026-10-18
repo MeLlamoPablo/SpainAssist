@@ -89,7 +89,7 @@ class PhoneLinkTest {
         val welcomeJson = CompanionJson.encodeToString(Welcome.serializer(), welcome).encodeToByteArray()
         relay.onFrame(sealer.seal(byteArrayOf(Frame.WELCOME), singleRecord(welcomeJson)))
         assertIs<LinkStatus.Connected>(statuses.last())
-        // Later handshakes use the pairing's own secret (D26), which never reaches the log.
+        // Later handshakes use the pairing's own secret, which never reaches the log.
         assertContentEquals(session, link.pairing.secret)
         assertFalse(logs.any { it.contains(Base64Std.encode(session)) })
 

@@ -1,7 +1,7 @@
 import type { InstallChannel } from '@sa/shared';
 
 /**
- * How this copy of the app was installed (D17). It decides where updates come from (D19), and
+ * How this copy of the app was installed. It decides where updates come from, and
  * goes to Unleash and to error reports.
  *
  * - `windowsStore`: Electron's `process.windowsStore`, true inside the Microsoft Store's MSIX.

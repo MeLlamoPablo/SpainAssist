@@ -38,7 +38,7 @@ export interface DnieUnlockValues {
 }
 
 /**
- * How this copy of the app was installed (DECISIONS D17):
+ * How this copy of the app was installed:
  * - `msix`: the Microsoft Store package, which the Store updates;
  * - `nsis`: the Windows installer from GitHub Releases (or another packaged Windows build);
  * - `dmg`: macOS (the dmg or the zip);
@@ -189,7 +189,7 @@ export interface SaMethods {
   'providers.setModel': [[model: string], ProviderStatus];
   'providers.logout': [[], LogoutResult];
   /**
-   * BYOK and custom endpoints: saves the user's Exa API key for web research (D23), or deletes it
+   * BYOK and custom endpoints: saves the user's Exa API key for web research, or deletes it
    * with null. The renderer only ever learns whether one is saved (`ProviderStatus.exaKey`).
    */
   'providers.setExaKey': [[apiKey: string | null], ProviderStatus];

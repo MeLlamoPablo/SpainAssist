@@ -1,6 +1,8 @@
-# pi 1.0 — embedding research memo
+# pi 1.x: embedding research memo
 
-Status: verified against the published npm tarballs of `@earendil-works/pi-coding-agent@1.0.0`, `@earendil-works/pi-ai@1.0.0` and `@earendil-works/pi-agent-core@1.0.0` (released 2026-10-01, git tag `v1.0.0`, gitHead `a13d35a7`), plus local experiments run on 2026-10-03 (macOS arm64, Node 24.9, Electron 44.5.1). Anything not tested or not read in source is marked **UNVERIFIED**.
+Status: verified against the published npm tarballs of `@earendil-works/pi-coding-agent@1.0.0`, `@earendil-works/pi-ai@1.0.0` and `@earendil-works/pi-agent-core@1.0.0` (released 2026-10-01, git tag `v1.0.0`, gitHead `a13d35a7`), plus local experiments run on 2026-10-03 (macOS arm64, Node 24.9, Electron 44.5.1). The app now pins `^1.1.0` (`packages/agent/package.json`); the facts below were not re-checked against 1.1 unless noted. Anything not tested or not read in source is marked **UNVERIFIED**.
+
+**What was built.** An SDK agent host (`packages/agent/src/host/`: `ModelRuntime` + `AgentSession` + `runRpcMode`), spawned per agent with Electron as Node and driven over stdio JSONL by our own `PiRpcClient`. Its isolation (offline, no telemetry, private agent dir, no extensions/skills/context files, exact system prompt, `bash` blocked, `BridgeCredentialStore`) is described in `packages/agent/README.md` ("Architecture"). This memo keeps pi's protocol, behaviour and risks behind that design.
 
 Sources:
 
@@ -16,23 +18,14 @@ Sources:
   - `dist/core/system-prompt.{d.ts,js}`
 - pi-ai: `dist/auth/types.d.ts`, `dist/models.d.ts`, `dist/auth/oauth/*.js`.
 - pi-agent-core: `dist/types.d.ts`.
-- Experiment scripts live in the session scratchpad and are not part of the repo. They include a mock OpenAI server, RPC drivers, an SDK agent host, login probes and test extensions.
+- Experiment scripts lived in a session scratchpad and are not part of the repo. They included a mock OpenAI server, RPC drivers, an SDK agent host, login probes and test extensions.
 
 ---
 
-## 0. TL;DR for SpainAssist
+## 0. TL;DR
 
 - **RPC mode works as needed.** I tested it end to end under `ELECTRON_RUN_AS_NODE=1` with Electron 44.5.1 (Node 24.21.0). The test covered a custom tool returning an image, a confirm dialog, the mock LLM, streaming, abort, steer, retry and sessions. Packages installed with pnpm 10 also work.
-- **Recommended launch** (every flag verified):
-  ```bash
-  ELECTRON_RUN_AS_NODE=1 PI_CODING_AGENT_DIR=<appData>/pi PI_OFFLINE=1 PI_TELEMETRY=0 \
-  <electron> <res>/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js --mode rpc \
-    --model openrouter/moonshotai/kimi-k2.6 \
-    --session-dir <appData>/sessions --session-id <tramite-id> \
-    --no-extensions -e <res>/pi-ext/spain.js --no-builtin-tools \
-    --no-context-files --no-skills --no-prompt-templates --no-themes --no-approve \
-    --system-prompt <res>/prompts/system.md
-  ```
+- **Launch:** not the CLI. The host builds the session with the SDK and calls `runRpcMode` (§8), so CLI flags in §3–§5 matter only for their SDK equivalents.
 - **Big 1.0 changes compared with older pi:**
   - The package scope is `@earendil-works`.
   - Auth is now `ModelRuntime` + pi-ai `CredentialStore`. `AuthStorage` is no longer exported.
@@ -40,16 +33,7 @@ Sources:
   - "Sign in with ChatGPT" now lives on the **`openai`** provider and calls api.openai.com. **`openai-codex` is labelled "(legacy)"**.
   - System prompts and tool declarations are now `role:"system"` messages inside the transcript and event stream.
   - MCP and codemode are built-in extensions.
-- **Surprises and risks.** Details are in the relevant sections and in §12.
-  1. `RpcClient` hard-codes `spawn("node", …)` and cannot answer extension UI requests, so write our own client.
-  2. `abort` hangs while a tool awaits a dialog opened without `{ signal }`.
-  3. A `<cwd>…</cwd>` section is always appended to a custom system prompt.
-  4. Telemetry is on by default and adds pi.dev attribution headers to OpenRouter requests.
-  5. Credentials for a provider that was not configured at startup are invisible until a refresh. Rotating an existing key works live.
-  6. `max_completion_tokens` defaults to the model maximum (235,929 for kimi-k2.6). That is risky with credit-capped keys.
-  7. Session JSONL files hold screenshots as base64 and are written with mode 0644.
-  8. The next pi release drops `npm-shrinkwrap.json`, so we must pin dependencies ourselves.
-
+- **Surprises and risks:** §12.
 ---
 
 ## 1. RPC mode
@@ -232,18 +216,10 @@ Responses (stdin). These are for dialogs only and get no command response back.
   1. Always pass the tool's `signal` to dialogs and long operations.
   2. On abort, the client should answer open dialogs with `cancelled:true`.
 
-### 1.6 `RpcClient` (exported) — usable only as reference
+### 1.6 `RpcClient` (exported): why we wrote `PiRpcClient`
 
-```ts
-import { RpcClient } from "@earendil-works/pi-coding-agent";
-new RpcClient({ cliPath?, cwd?, env?, provider?, model?, args? })
-// start(), stop(), onEvent(listener) => unsubscribe, prompt(msg, images?, streamingBehavior?) => PromptDisposition,
-// steer, followUp, abort, clearQueue, newSession, getState, setModel, cycleModel, getAvailableModels, setThinkingLevel,
-// compact, setAutoCompaction, setAutoRetry, bash, getSessionStats, exportHtml, switchSession, fork, clone, getEntries,
-// getTree, getLastAssistantText, setSessionName, getMessages, getCommands, waitForIdle(timeout?), collectEvents, promptAndWait
-```
-
-Blockers for Electron, from the source in `dist/modes/rpc/rpc-client.js`:
+pi exports `RpcClient({ cliPath?, cwd?, env?, provider?, model?, args? })` with a method per
+command. Blockers for Electron, from the source in `dist/modes/rpc/rpc-client.js`:
 
 - `spawn("node", [cliPath, "--mode","rpc", …])` is hard-coded, so the executable cannot be chosen.
 - It has **no API to send `extension_ui_response`**. UI requests are passed to `onEvent` as if they were events.
@@ -252,19 +228,7 @@ Blockers for Electron, from the source in `dist/modes/rpc/rpc-client.js`:
 - The `./client` subpath export is source-only (`src/client/index.ts`), and `src` is not published, so it cannot be imported.
 - `@earendil-works/pi-client`, `pi-protocol` and `pi-server` are a separate **experimental** CBOR service protocol and are not needed here.
 
-**Recommendation:** write our own small client (~150 LOC). The outline below matches the tested driver logic:
-
-```ts
-const child = spawn(process.execPath, [cliJs, "--mode", "rpc", ...flags], {
-  env: { ...safeEnv, ELECTRON_RUN_AS_NODE: "1", PI_CODING_AGENT_DIR, PI_OFFLINE: "1", PI_TELEMETRY: "0" },
-  stdio: ["pipe", "pipe", "pipe"], cwd: workDir,
-});
-let buf = ""; child.stdout.setEncoding("utf8");
-child.stdout.on("data", (d) => { buf += d; let i; while ((i = buf.indexOf("\n")) >= 0) {
-  const line = buf.slice(0, i).replace(/\r$/, ""); buf = buf.slice(i + 1); if (line) onRecord(JSON.parse(line)); } });
-// onRecord: type==="response" && id -> resolve pending; type==="extension_ui_request" -> show native dialog
-//           and write {"type":"extension_ui_response",id,...}; everything else -> session event
-```
+Our client is `PiRpcClient` (`packages/agent/src/rpc/`), with the framing rules of §1.1.
 
 ---
 
@@ -418,7 +382,7 @@ Behaviour verified by inspecting the `tools` field of the request the mock serve
   - Codemode only activates if an MCP server with `codemode` exposure connects, or if `defaultTools` names it.
   - To remove them, use `--no-extensions` (then load ours with `-e`), or set `"extensions": ["-builtin:mcp","-builtin:codemode","-builtin:tool-search","-builtin:llama.cpp"]`.
   - SDK sessions never load the built-in extensions.
-- **Remaining exposure:** the RPC `bash` *command* still executes shell commands even when no tools exist. Our client simply never sends it.
+- **Remaining exposure:** the RPC `bash` *command* still executes shell commands even when no tools exist (§1.2).
 
 ---
 
@@ -435,11 +399,7 @@ Ways to change it:
   `"Eres SpainAssist. Responde en español.\n\n<cwd>\n/abs/work/dir\n</cwd>"`.
   - The `<cwd>` section is **always** appended, and it leaks the absolute path (including the username).
   - Tool `promptSnippet` / `promptGuidelines` are **not rendered** when a custom prompt is used, so put guidance in the tool descriptions or in our prompt.
-- **Exact full replacement, verified:**
-  ```ts
-  pi.on("before_agent_start", () => ({ systemPrompt: SYSTEM }));
-  ```
-  The provider then received exactly `SYSTEM`, with no `<cwd>`. A softer option is to mutate `event.systemPromptOptions.sections` (add, replace or `delete` keys).
+- **Exact full replacement, verified:** returning `{ systemPrompt }` from `before_agent_start` made the provider receive exactly that text, with no `<cwd>` (what the host does). A softer option is to mutate `event.systemPromptOptions.sections` (add, replace or `delete` keys).
 - **`--append-system-prompt <text|path>`** (repeatable) adds an `<addendum>`.
 - **Files:** `<agentDir>/SYSTEM.md` replaces the default prompt and `<agentDir>/APPEND_SYSTEM.md` appends to it. `.pi/SYSTEM.md` and `.pi/APPEND_SYSTEM.md` do the same but only after project trust.
 - **SDK:** `DefaultResourceLoader({ systemPromptOverride: () => "...", appendSystemPromptOverride: () => [] })`.
@@ -455,10 +415,9 @@ Preventing outside context from leaking in:
 | Project `.pi/*` settings, extensions, mcp.json, SYSTEM.md | `--no-approve` / `-na`. In RPC mode the default `defaultProjectTrust:"ask"` already means "skip", but be explicit. |
 | Auto-discovered extensions | `--no-extensions` / `-ne` |
 
-Notes:
+The SDK equivalents are the `DefaultResourceLoaderOptions` `no*` flags (§8.1), which the host sets.
 
-- Use an app-owned empty working directory per trámite as the cwd.
-- If we ever want skills (e.g. procedure playbooks), the model needs the `read` tool. Pi only lists skills when `read` or `bash` is active. A `tool_call` gate could restrict `read` to the skills directory.
+If we ever want skills (e.g. procedure playbooks), the model needs the `read` tool: pi only lists skills when `read` or `bash` is active. A `tool_call` gate could restrict `read` to the skills directory.
 
 ---
 
@@ -499,7 +458,7 @@ Further rules:
 
 - Session IDs may contain letters, digits, `.`, `_` and `-`.
 - `--fork <path|id>` and `--continue` also exist. RPC `switch_session` / `new_session` change the session at runtime.
-- Session files are created with mode **0644**. They contain the full transcript, including base64 screenshots. Store them in an app-private directory, and encrypt at rest if needed.
+- pi creates session files with mode **0644**. They contain the full transcript, including base64 screenshots (the host creates them 0600 first, `host/session.ts`).
 
 **Session format** (`docs/session-format.md`): JSONL, version 3, a tree via `id` / `parentId`. Verified first lines:
 
@@ -513,7 +472,7 @@ Further rules:
 
 Other entry types: `compaction`, `context_edit`, `branch_summary`, `custom` (extension state, not sent to the LLM), `custom_message` (sent to the LLM), `label`, `session_info`, `usage`.
 
-**Settings** (`docs/settings.md`). A suggested `<agentDir>/settings.json` for us:
+**Settings** (`docs/settings.md`). The keys that matter for an embedded app (the host passes its own in memory):
 
 ```json
 { "enableInstallTelemetry": false, "defaultTools": [], "defaultProjectTrust": "never",
@@ -548,30 +507,9 @@ Other entry types: `compaction`, `context_edit`, `branch_summary`, `custom` (ext
 
 ### 6.2 SDK credential store
 
-The SDK accepts an in-memory or custom credential store. Verified with `InMemoryCredentialStore`: the request carried `Authorization: Bearer sdk-key-from-memory`.
-
-```ts
-// @earendil-works/pi-ai  (dist/auth/types.d.ts)
-interface CredentialStore {
-  read(providerId: string, options?: { signal? }): Promise<Credential | undefined>;
-  list(options?): Promise<readonly { providerId: string; type: "api_key" | "oauth" }[]>;
-  modify(providerId: string, fn: (current: Credential | undefined) => Promise<Credential | undefined>, options?): Promise<Credential | undefined>; // serialized; also used for OAuth refresh
-  delete(providerId: string, options?): Promise<void>;
-}
-type Credential = { type: "api_key"; key?: string; env?: Record<string,string> }
-                | { type: "oauth"; access: string; refresh: string; expires: number; [k: string]: unknown };
-export class InMemoryCredentialStore implements CredentialStore {}
-
-// @earendil-works/pi-coding-agent (dist/core/model-runtime.d.ts)
-ModelRuntime.create(options?: { credentials?: CredentialStore; authPath?: string; modelsPath?: string | null;
-  modelsStore?: ModelsStore; modelsStorePath?: string; allowModelNetwork?: boolean /* default false */;
-  modelRefreshTimeoutMs?: number; catalogBaseUrl?: string; signal?: AbortSignal; refreshOnCreate?: boolean }): Promise<ModelRuntime>;
-runtime.setRuntimeApiKey(providerId, apiKey); runtime.removeRuntimeApiKey(providerId);
-runtime.login(providerId: string, type: "api_key" | "oauth", interaction: AuthInteraction, options?: { getDeviceId?: () => string }): Promise<Credential>;
-runtime.logout(providerId); runtime.checkAuth(providerId); runtime.getProviderAuthStatus(providerId); runtime.registerProvider(id, cfg);
-```
-
-An OS-keychain-backed `CredentialStore` (macOS Keychain, Windows DPAPI via Electron `safeStorage`) is a clean fit for SPEC's "credentials never leave the device". It only works with the **SDK host** (§8). The CLI subprocess always reads `<agentDir>/auth.json`.
+The SDK takes any pi-ai `CredentialStore` (`read`, `list`, `modify` (serialized, also used for
+OAuth refresh), `delete`; `dist/auth/types.d.ts`) through `ModelRuntime.create({ credentials })`.
+Ours is `BridgeCredentialStore` (`packages/agent/src/host/credentials.ts`).
 
 ### 6.3 OAuth subscription logins
 
@@ -689,62 +627,35 @@ runRpcMode(runtimeHost: AgentSessionRuntime): Promise<never>     // exported; re
 //   dispose(), messages, model, systemPrompt, getActiveToolNames(), getLastAssistantText(), bindExtensions({uiContext?, mode?, …})
 ```
 
-### 8.2 Minimal agent host (verified)
+### 8.2 SDK agent host (verified)
 
-This is a custom process that is a drop-in replacement for `pi --mode rpc` over stdio. It has in-memory credentials, an SDK tool, no built-ins, a custom prompt and no file I/O.
-
-```js
-import { createAgentSessionFromServices, createAgentSessionRuntime, createAgentSessionServices, defineTool,
-         ModelRuntime, runRpcMode, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { InMemoryCredentialStore } from "@earendil-works/pi-ai";   // or our keychain-backed CredentialStore
-import { Type } from "typebox";
-
-const credentials = new InMemoryCredentialStore();
-await credentials.modify("openrouter", async () => ({ type: "api_key", key: process.env.VOUCHER_KEY }));
-const modelRuntime = await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false });
-// e2e: modelRuntime.registerProvider("mock", { baseUrl, api: "openai-completions", models: [ … ] });
-const settingsManager = SettingsManager.inMemory({ enableInstallTelemetry: false, retry: { enabled: true, maxRetries: 2 } });
-const SYSTEM = "Eres SpainAssist…";
-const tool = defineTool({ name: "take_screenshot", label: "Screenshot", description: "…", parameters: Type.Object({ url: Type.String() }),
-  async execute(_id, p, signal, onUpdate, ctx) { const ok = await ctx.ui.confirm("¿Permitir?", p.url, { signal });
-    return { content: [{ type: "text", text: `ok=${ok}` }], details: { ok } }; } });
-
-const runtime = await createAgentSessionRuntime(async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
-  const services = await createAgentSessionServices({ cwd, agentDir, settingsManager, modelRuntime, resourceLoaderOptions: {
-    noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
-    systemPromptOverride: () => SYSTEM, appendSystemPromptOverride: () => [],
-    extensionFactories: [{ name: "spain", factory: (pi) => { pi.on("before_agent_start", () => ({ systemPrompt: SYSTEM })); } }] } });
-  const r = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent,
-    model: services.modelRuntime.getModel("openrouter", "moonshotai/kimi-k2.6"), noTools: "builtin", customTools: [tool] });
-  return { ...r, services, diagnostics: services.diagnostics };
-}, { cwd: process.cwd(), agentDir: process.env.PI_CODING_AGENT_DIR, sessionManager: SessionManager.inMemory(process.cwd()) });
-await runRpcMode(runtime);   // same JSONL protocol as §1; dialogs and confirm verified
-```
+A custom process built from these exports is a drop-in replacement for `pi --mode rpc` over
+stdio: `createAgentSessionRuntime` + `runRpcMode` speak the same JSONL protocol as §1. Ours is
+`packages/agent/src/host/run.ts` (described in `packages/agent/README.md`, "Architecture").
 
 Verified behaviour:
 
 - Inline `extensionFactories` still load with `noExtensions: true`.
 - `get_commands` lists them as `sourceInfo.path:"<inline:spain>"`.
 - The SDK does **not** load built-in MCP or codemode. Add `createMcpExtension()`, `createCodemodeExtension()` and `createToolSearchExtension()` to `extensionFactories` if needed.
+- An `InMemoryCredentialStore` key reached the provider (`Authorization: Bearer …`), so any `CredentialStore` works; the CLI subprocess instead always reads `<agentDir>/auth.json`.
 
 Concurrency:
 
 - One RPC process has exactly **one active session**. `switch_session` and `new_session` replace it.
-- The SDK can run **several `AgentSession`s concurrently in one process.** Verified: two parallel prompts of ~4 s each completed in 4.16 s. For parallel trámites we can use either one RPC process per active trámite, or one SDK host process with our own multiplexed protocol.
+- The SDK can run **several `AgentSession`s concurrently in one process.** Verified: two parallel prompts of ~4 s each completed in 4.16 s. We chose one RPC host process per active agent.
 
 Packaging note:
 
-- npm installs `pi-coding-agent` with its shrinkwrap, which **nests every dependency** under `pi-coding-agent/node_modules`.
-- An SDK host must therefore declare `typebox@1.3.27` and `@earendil-works/pi-ai@1.0.0` itself to import them. This was verified, and the duplicate copies interoperated.
+- An SDK host must declare `typebox` and `@earendil-works/pi-ai` itself to import them (versions matching pi's; with 1.0.0's shrinkwrap, nested duplicate copies also interoperated). `apps/desktop` keeps them equal to `@sa/agent`'s (`electron-packaging.md` §6.11).
 
 ---
 
 ## 9. Running under Electron and pnpm
 
-- **Verified on macOS arm64.** `ELECTRON_RUN_AS_NODE=1 <Electron 44.5.1 binary> node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js --mode rpc …` behaved identically to Node 24.
+- **Verified on macOS arm64 (with 1.0.0).** `ELECTRON_RUN_AS_NODE=1 <Electron 44.5.1 binary> node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js --mode rpc …` behaved identically to Node 24.
   - Electron 44.5.1 bundles Node **24.21.0**, satisfying `engines.node >=22.19.0`.
   - The test covered streaming, the dialog, an extension loaded via jiti, a session file, and **photon WASM image resize in a worker thread**.
-- **Spawning:** use `process.execPath` with `ELECTRON_RUN_AS_NODE=1`. **Do not use `RpcClient`**, because it spawns `node` from PATH.
 - **Native and WASM dependencies:**
   - `@silvia-odwyer/photon-node` is **WASM** (`photon_rs_bg.wasm`), not native. `quickjs-wasi` (codemode) is also WASM.
   - The only `.node` binaries are `@earendil-works/pi-tui` prebuilds (`darwin-platform.node`, `linux-platform-x11.node`, `win32-platform.node`). They are **N-API** (`napi_register_module_v1`), TUI-only (clipboard and modifier keys), and loaded lazily inside try/catch.
@@ -753,14 +664,10 @@ Packaging note:
 - **Size and dependencies:**
   - About 157 MB installed with npm, mostly SDKs for providers we do not use: Anthropic, Google, AWS and others.
   - The bundle `dist/bundle/*` (including its `image-resize-worker.js` and `codemode-worker.js` chunks) is self-contained, with two exceptions. It needs `@silvia-odwyer/photon-node` to be resolvable. The optional pi-tui native helper is also resolved from `node_modules`, but only for the TUI.
-  - The `main` branch has already **removed `npm-shrinkwrap.json`** for the next release, so pin versions with our own lockfile.
-- **pnpm 10 (verified):** a strict-layout install works (CLI, RPC and image resize). pnpm ignores the shrinkwrap; dependency ranges like `^1.0.0` still resolve. pnpm warns about ignored build scripts (`@google/genai`, `esbuild`, `protobufjs`), and none of them is needed.
-- **UNVERIFIED:**
-  - Behaviour inside an **asar** archive (workers, the `.wasm` loads and docs paths are file-relative). Plan to `asarUnpack` `node_modules/@earendil-works/**` and `@silvia-odwyer/**`.
-  - Windows and Linux.
-  - Hardened-runtime or notarization interplay.
-- **Electron Fuses:** setting the `RunAsNode` fuse to `false` (as Electron Forge templates do) **breaks** `ELECTRON_RUN_AS_NODE`. Keep it enabled, or use `utilityProcess.fork()`. **UNVERIFIED:** whether `utilityProcess` offers a usable stdin for `runRpcMode`; otherwise use the SDK with `parentPort` messaging.
-
+- **pnpm (verified on 10):** a strict-layout install works (CLI, RPC and image resize). pnpm warns about ignored build scripts (`@google/genai`, `esbuild`, `protobufjs`), and none of them is needed.
+- **asar:** works in the packaged app with only smartUnpack, including the image-resize worker (`electron-packaging.md` §6.9, §6.11).
+- **Electron Fuses:** setting the `RunAsNode` fuse to `false` (as Electron Forge templates do) **breaks** `ELECTRON_RUN_AS_NODE`, so the packaged app keeps it on. **UNVERIFIED:** whether `utilityProcess` offers a usable stdin for `runRpcMode`; otherwise use the SDK with `parentPort` messaging (`packages/agent/src/rpc/transport.ts` is the seam).
+- **UNVERIFIED:** Windows and Linux; hardened-runtime or notarization interplay.
 ---
 
 ## 10. MCP (brief)
@@ -811,27 +718,27 @@ Packaging note:
 
 ## 12. Risks and surprises (summary)
 
-1. **`RpcClient` is unusable inside Electron** (`spawn("node")`, no UI responses). Write our own JSONL client.
-2. **Abort can deadlock on an unanswered dialog** unless tools pass `{signal}`. Pi never tells the client that a dialog was dismissed.
-3. **`<cwd>` is appended to custom system prompts** and leaks the local path. Use a neutral cwd, or force the prompt via `before_agent_start`.
-4. **Telemetry defaults on.** It adds OpenRouter attribution headers, and the catalog refresh calls pi.dev. Set `PI_TELEMETRY=0` and `PI_OFFLINE=1`.
-5. **There is no auth command in RPC.** A newly configured provider needs `ctx.modelRegistry.refresh()` (via an extension command) or a restart. Key rotation for an existing provider is live.
-6. **"Sign in with ChatGPT" moved to the `openai` provider.**
+Solved in the host, so dropped from this list: `RpcClient` (we have `PiRpcClient`), the `<cwd>`
+prompt leak, telemetry and catalog calls, and session-file permissions (`packages/agent/README.md`).
+
+1. **Abort can deadlock on an unanswered dialog** unless tools pass `{signal}`. Pi never tells the client that a dialog was dismissed (§1.5).
+2. **There is no auth command in RPC.** With `auth.json`, a newly configured provider needs `ctx.modelRegistry.refresh()` (via an extension command) or a restart; key rotation for an existing provider is live. Whether the same holds for a provider that first appears in our `CredentialStore` mid-session is **UNVERIFIED**.
+3. **"Sign in with ChatGPT" moved to the `openai` provider.**
    - The login needs a stable device UUID.
    - Port 1455 is shared with Codex CLI logins.
    - The host must open the browser itself.
    - `openai-codex` is legacy.
    - Whether the subscription token is supported long-term on api.openai.com is OpenAI's policy and is **UNVERIFIED**.
-7. **`max_completion_tokens` defaults to the model maximum.** Override `maxTokens` for capped voucher keys.
-8. **Privacy of session files.** They are 0644 and contain base64 screenshots and PII. The `bash` RPC command exists even when tools are disabled.
-9. **Dependency pinning.** The next release drops the shrinkwrap. pi pulls about 157 MB of provider SDKs.
-10. **Packaging unknowns:** asar, the Electron `RunAsNode` fuse, `utilityProcess` stdin, and Windows/Linux. All **UNVERIFIED**.
-11. **The transcript now includes `role:"system"` messages** in events and `get_messages`. UIs must filter them.
+4. **`max_completion_tokens` defaults to the model maximum.** Override `maxTokens` for capped voucher keys (§7).
+5. **The `bash` RPC command exists even when tools are disabled** (the host blocks it).
+6. **Dependency pinning.** pi 1.1 no longer ships a shrinkwrap; our lockfile pins it. pi pulls about 157 MB of provider SDKs.
+7. **Packaging unknowns:** whether `utilityProcess` gives `runRpcMode` a usable stdin (needed to turn the `RunAsNode` fuse off), and Windows/Linux. All **UNVERIFIED**. Running from the ASAR works (`electron-packaging.md` §6.11).
+8. **The transcript includes `role:"system"` messages** in events and `get_messages`. UIs must filter them.
 
 ## 13. UNVERIFIED items
 
 - Behaviour with real OpenAI, ChatGPT or OpenRouter endpoints, including completing a real OAuth login, which models a ChatGPT plan allows, and OpenRouter's `max_tokens`-versus-credit rejection.
 - Windows and Linux.
-- asar packaging, Electron Fuses, `utilityProcess` stdio, and macOS notarization.
+- Electron Fuses with `RunAsNode` off, `utilityProcess` stdio, and macOS notarization.
 - MCP servers in practice. Only the docs and types were read; no MCP connection was tested.
 - Compaction behaviour. Read in docs; not triggered in tests.

@@ -8,8 +8,8 @@ import { DniAccessNumber, DniePin } from './vault';
  * schemas in Kotlin (`apps/mobile/shared/src/commonMain/kotlin/es/spainassist/firma/protocol`).
  * Change both sides together, and bump COMPANION_PROTOCOL when old apps can't follow.
  *
- * A signature, seen from the desktop (the user typed the CAN and the PIN on the desktop first,
- * DECISIONS D20; the phone never asks for them):
+ * A signature, seen from the desktop (the user typed the CAN and the PIN on the desktop first;
+ * the phone never asks for them):
  *   sign.request (with can, pin) ─▶ phone shows what and for whom, the user approves and holds
  *                   the card to the phone
  *   ◀─ sign.progress (reviewing → card → reading → signing), any number of times
@@ -70,7 +70,7 @@ export const CompanionWelcome = z.strictObject({
   /**
    * The pairing's own secret (32 bytes, Base64), only in the WELCOME that answers the QR's secret. The
    * phone keeps it and uses it in every later handshake; the desktop stops accepting the QR's, so
-   * a leaked QR is useless once a phone has paired (D26).
+   * a leaked QR is useless once a phone has paired.
    */
   session: z
     .string()
@@ -133,7 +133,7 @@ export const CompanionSignRequest = z.strictObject({
    */
   can: DniAccessNumber,
   /**
-   * The DNIe PIN the user typed on the desktop (D20). Required for `document` and `login`, left
+   * The DNIe PIN the user typed on the desktop. Required for `document` and `login`, left
    * out for `certificate` (reading the certificate needs no PIN). The phone uses it for this
    * request only, never stores it, and never tries a PIN the card refused again (`sign.need`).
    * The desktop sends it once: a request sent again after a reconnect leaves it out, and the

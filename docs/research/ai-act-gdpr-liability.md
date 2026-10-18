@@ -1,7 +1,7 @@
 # AI Act, GDPR and liability for SpainAssist: research memo
 
-Date: 2026-10-14. Context: [SPEC.md](../../SPEC.md) ("Privacy"), D10 (LiteLLM gateway), D12 (scan
-screening), D16 (MIT licence). Scope: what the law actually requires of us for sending users' data
+Date: 2026-10-14. Context: the product's privacy goals, the LiteLLM gateway, scan
+screening and the MIT licence. Scope: what the law actually requires of us for sending users' data
 to hosted LLMs, whether we must route through the EU or redact all PII, and what the MIT licence
 does for the author's liability.
 
@@ -16,7 +16,7 @@ zero-data-retention providers". It claims that:
 
 **How this was checked.** Web research on primary sources: EUR-Lex, Commission and EDPB guidance,
 the AEPD, the BOE, and the provider docs of OpenRouter, Anthropic, OpenAI and Google. Plus a
-reading of our own config (`infra/terraform/litellm.tf`, D10, D12,
+reading of our own config (`infra/terraform/litellm.tf`,
 `apps/desktop/src/main/phone/transcriber.ts`). Points that rest only on secondary sources are
 marked **[secondary]**. This is research, not legal advice; the open questions at the end need a
 Spanish lawyer.
@@ -54,10 +54,16 @@ Spanish lawyer.
 **Where the critic has a point.** "Tu proveedor de IA no los guarda" (onboarding, voucher users)
 is a public claim we must be able to back. Caveats:
 - Anthropic's ZDR excludes some features (code execution) and some models (Fable/Mythos 5.x).
-  Check `LITELLM_KEY_MODELS` against Anthropic's list.
-- Confirm that ZDR also covers the screening route (D12: OpenRouter Decisions API via LiteLLM
-  pass-through). Phone-call transcription already sends `provider: { zdr: true,
-  data_collection: 'deny' }`.
+  Production leaves `LITELLM_KEY_MODELS` empty and `litellm.tf` routes every OpenRouter model
+  (`*` → `openrouter/*`), so voucher keys can name any of them. OpenRouter's account-level ZDR
+  setting blocks every model that has no ZDR endpoint, so those calls fail instead of reaching a
+  provider that keeps data.
+- `litellm.tf` sets no ZDR option: ZDR is a setting of our OpenRouter account (the comment in
+  `transcriber.ts` says so), outside Terraform. Confirm that it also covers the screening route
+  (OpenRouter Decisions API via LiteLLM pass-through). Phone-call transcription also sends
+  `provider: { zdr: true, data_collection: 'deny' }` itself.
+- Web search (LiteLLM → Parallel) and web research (key server → Parallel's Task API) don't go
+  through OpenRouter, so its ZDR doesn't cover them. Check Parallel's retention terms.
 
 ## 2. AI Act (Regulation (EU) 2024/1689)
 
@@ -103,7 +109,8 @@ is a public claim we must be able to back. Caveats:
 We decide the purpose (running the assistant) and the essential means: our LiteLLM gateway, the
 OpenRouter account, ZDR, the model list and the US providers. That is a controller under the
 facts-based test of EDPB Guidelines 07/2020. OpenRouter and the model providers are our
-processors and sub-processors. Hetzner, which hosts the VM in Nuremberg, is a processor too.
+processors and sub-processors, and so is Parallel (web search through the gateway, web research
+through the key server). Hetzner, which hosts the VM in Nuremberg, is a processor too.
 - A natural person can be a controller.
 - The household exemption (Art. 2(2)(c)) covers our users, not us. Recital 18 applies GDPR to
   those "which provide the means for processing personal data for such personal or household
@@ -132,8 +139,11 @@ nothing, runs in the EU, and the hop after it is ZDR.
 **Leftover personal data on our side:**
 - Coolify/Traefik access logs: IP addresses. Keep their retention short.
 - LiteLLM spend logs: key, model, tokens and cost.
-- The key server's voucher ↔ key link.
+- The key server's voucher ↔ key link, and for ChatGPT users an HMAC of the account id next to
+  their encrypted key. Web research runs keep no research content.
 - The feedback and maps servers.
+- GlitchTip: the desktop app's PII-scrubbed error reports, when the user leaves them on (kept
+  90 days).
 
 ### "Sign in with ChatGPT", BYOK and local data (mode b)
 
@@ -144,8 +154,8 @@ nothing, runs in the EU, and the hop after it is ZDR.
 - Caveat: CJEU C‑683/21 says an entity can be a controller without touching the data if it
   determines purposes and means. That case concerned an authority that commissioned an app, not
   an open-source publisher.
-- ChatGPT users still reach our gateway for scan screening (D12, subsidy key): that slice is
-  mode (a).
+- ChatGPT users still reach our gateway for scan screening and phone-call transcription (the
+  key server's per-account ChatGPT key): that slice is mode (a).
 
 ## 4. International transfers
 
@@ -174,7 +184,7 @@ What we do need:
 - **Special categories (Art. 9).** Health, disability and similar data needs an Art. 9(2)
   condition; for us realistically explicit consent, asked in the app before such data reaches a
   model. It also tips us into needing a DPIA (Art. 35).
-- **`@sa/pii` stays where it matters.** Feedback (SPEC: fully scrubbed) and outgoing search
+- **`@sa/pii` stays where it matters.** Feedback (fully scrubbed) and outgoing search
   queries. Scrubbing agent context is good Art. 25 evidence where it doesn't hurt the agent; it
   is not an obligation.
 
@@ -233,10 +243,10 @@ What we do need:
 
 GDPR, for the gateway, key server, feedback server and maps server:
 1. Privacy notice (Arts. 13–14), on spainassist.es and in the app, in Spanish and English. It
-   names us as controller and OpenRouter, the model providers, Hetzner and Mapbox as
+   names us as controller and OpenRouter, the model providers, Parallel, Hetzner and Mapbox as
    recipients. It covers US transfers under SCCs, "prompts are not stored by us" (metadata
    only), legal basis (Art. 6(1)(b)) and user rights.
-2. Accept the DPAs (Art. 28) of OpenRouter, Hetzner and Mapbox.
+2. Accept the DPAs (Art. 28) of OpenRouter, Parallel, Hetzner and Mapbox.
 3. One-page transfer impact assessment.
 4. Explicit consent before special-category data reaches a model (Art. 9(2)(a)).
 5. Record of processing (Art. 30) and a short DPIA (Art. 35). The record is mandatory despite
@@ -245,8 +255,11 @@ GDPR, for the gateway, key server, feedback server and maps server:
 7. Short retention for proxy access logs.
 
 Technical:
-1. Enforce ZDR on every gateway route, including the D12 screening route.
-2. Exclude models outside Anthropic's ZDR from voucher keys.
+1. Enforce ZDR on every gateway route, including the scan screening route, and keep the
+   OpenRouter account setting documented (it is not in Terraform).
+2. Models without a ZDR endpoint are already blocked by the OpenRouter account setting, so keep
+   it on. A `LITELLM_KEY_MODELS` allowlist (empty today) would only turn those failures into a
+   clearer error.
 3. Optional EU-only routing (section 6).
 
 AI Act:

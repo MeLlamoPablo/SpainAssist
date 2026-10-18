@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const shell = process.platform === 'win32';
 
-// Fails on a licence that isn't permissive (DECISIONS D16).
+// Fails on a licence that isn't permissive.
 const noticesScript = fileURLToPath(new URL('notices.ts', import.meta.url));
 const notices = spawnSync(process.execPath, [noticesScript], { stdio: 'inherit' });
 if (notices.status !== 0) process.exit(notices.status ?? 1);

@@ -48,7 +48,7 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
   const voucherConnected = kind === 'voucher';
   // A ChatGPT subscription needs nothing else: the card shows only its status.
   const chatGptConnected = kind === 'chatgpt' || kind === 'codex';
-  // Without a gateway key, web research uses Exa, keyless or with the user's own key (D23).
+  // Without a gateway key, web research uses Exa, keyless or with the user's own key.
   const researchesWithExa = kind === 'byok' || kind === 'custom';
   const scrollRef = useRef<HTMLDivElement>(null);
   const providerRef = useRef<HTMLDivElement>(null);

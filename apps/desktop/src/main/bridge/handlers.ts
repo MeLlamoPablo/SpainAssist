@@ -80,7 +80,7 @@ const PIN_KEY = /(?:^|[._-])pin(?:$|[._-])/i;
 
 /**
  * Agents never read, save, type or ask for these: the DNI CAN (it goes only to the phone) and
- * PINs (the DNIe's is typed on the desktop and goes only to the phone, D20).
+ * PINs (the DNIe's is typed on the desktop and goes only to the phone).
  */
 function hiddenFromAgents(key: string): boolean {
   return AGENT_HIDDEN_PERSONAL_KEYS.has(key) || PIN_KEY.test(key);

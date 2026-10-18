@@ -159,7 +159,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const updates = deps.updates ?? createUpdates({ logger });
   updates.onStatus((status) => events.emit({ type: 'updates.status', status }));
   const settings = await SettingsStore.open(paths.settingsFile, {
-    overlay: {},
     events,
     logger: logger.child('settings'),
     language: deps.systemLanguage,
@@ -237,7 +236,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         research: {
           // Voucher users research through the key server (paid from the voucher).
           keyServerUrl: env.keyServerUrl,
-          // BYOK and custom endpoints research with Exa, keyless or with the user's key (D23).
+          // BYOK and custom endpoints research with Exa, keyless or with the user's key.
           ...(providers.researchesWithExa() ? { exa: true } : {}),
         },
         // Everyone reads community learnings. Sharing and rating them needs a user key (one vote

@@ -1,5 +1,5 @@
 /**
- * Stages playwright-core's pinned Chromium (Chrome for Testing) for packaging (D17): electron-
+ * Stages playwright-core's pinned Chromium (Chrome for Testing) for packaging: electron-
  * builder's `beforePack` calls it, and `extraResources` copies the folder to `<resources>/chromium`,
  * where main finds it (`src/main/browser/bundled.ts`). The app never downloads a browser.
  *

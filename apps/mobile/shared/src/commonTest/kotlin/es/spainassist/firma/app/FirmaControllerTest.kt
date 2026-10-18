@@ -200,7 +200,7 @@ class FirmaControllerTest {
         h.controller.confirmPairing()
         assertIs<Screen.Home>(h.screen)
         assertEquals("Test phone", h.spy.hellos.single().device)
-        // The first WELCOME carries the pairing's own secret, which replaces the QR's (D26).
+        // The first WELCOME carries the pairing's own secret, which replaces the QR's.
         val session = ByteArray(32) { 5 }
         h.link.connect(session = Base64Std.encode(session))
         assertIs<LinkStatus.Connected>((h.screen as Screen.Home).link)

@@ -51,7 +51,7 @@ export function PairingPanel({
   className?: string;
 }) {
   const t = useT(companionDict);
-  // A paired phone reconnects on its own; its QR no longer works (D26).
+  // A paired phone reconnects on its own; its QR no longer works.
   const paired = !status.link && (status.state === 'away' || !!status.device);
   const pairAnother = async () => {
     try {

@@ -1,15 +1,20 @@
 # Browser automation research: Playwright 1.63 and Spanish government logins
 
-**Built, 2026-10-11:** certificate logins now use `packages/sidecar` and
-`BrowserServiceOptions.certificates`, including `.p12` and the phone DNIe. Each context has a
-separate port; one browser-level CDP handler answers proxy passwords. Enabled hosts use the
-helper's SPKI pin and upstream platform verification; unlisted hosts keep Chromium verification.
-`apps/mock-sede` tests use `publicHost: '127.0.0.1'` and trust only its test CA in the helper.
-Real-card NFC timings, real-host TLS resumption, Linux intermediate-chain behavior and WAF
-compatibility remain unverified. The Playwright probes below describe the rejected alternative.
+Date: 2026-10-03 (updated 2026-10-18). Scope: the browser layer of SpainAssist, an Electron app
+driving Chromium with `playwright-core`, logging in with Cl@ve or a certificate.
 
+**What was built.** `packages/browser` (`service.ts`, `snapshot.ts`, `certificates.ts`,
+`notes.ts`) runs Playwright in the Electron main process (`apps/desktop/src/main/app/libs.ts`,
+`browser/holder.ts`), headed and started minimised. Every package bundles playwright-core's
+Chrome for Testing in `<resources>/chromium/` (`apps/desktop/scripts/chromium.ts`,
+`src/main/browser/bundled.ts`); the app never downloads a browser. Certificate logins (`.p12`
+and the phone DNIe) go through the TLS helper in `packages/sidecar` (its README), not
+Playwright's `clientCertificates`. The AutoFirma shim is injected with `addInitScript` and
+`exposeBinding` (`packages/signer`, `service.ts`). This memo keeps the Playwright and site
+behaviour behind those choices, and why `clientCertificates` was rejected (§1).
 
-Date: 2026-10-03. Scope: the browser layer of SpainAssist, meaning an Electron + TypeScript app driving Chromium with `playwright-core`, logging in with Cl@ve or a `.p12` certificate.
+Still UNVERIFIED: real-card NFC timings, TLS resumption on real hosts, Linux intermediate-chain
+behaviour, and whether the WAFs in §10 accept the sidecar's TLS fingerprint.
 
 ## How things were checked
 
@@ -23,38 +28,31 @@ Date: 2026-10-03. Scope: the browser layer of SpainAssist, meaning an Electron +
 
 ---
 
-## TL;DR: decisions and risks
+## Key findings
 
-1. **Where Playwright runs.** Run `playwright-core@1.63.0` inside an Electron `utilityProcess`, not the main process `[lab]`.
-   - It works in both. But with client certificates, all of the context's traffic passes through a SOCKS proxy on the Playwright process's event loop.
-2. **Which browser.** Use Playwright's Chrome for Testing r1243, installed at first run into `app.getPath('userData')`, and run it headed. For an invisible mode, use `channel: 'chromium'` (new headless) plus a user agent with "Headless" removed.
-   - Never use the default `chromium-headless-shell`. The Extranjería cita previa firewall returns a 403 "Intrusion Prevention Violation" to it, even with a spoofed user agent `[live]`.
-3. **Certificates.** `clientCertificates` works headed, with persistent contexts, with `channel:'chrome'`, inside Electron, and with TLS renegotiation `[lab]`. Four things to know:
-   - Origins must be exact (no wildcards, port-exact).
-   - Certificates are fixed when the context is created. Adding one means recreating the context and carrying over `storageState`.
-   - Setting it silently turns on `ignoreHTTPSErrors` for every origin in that context `[lab][src]`. That is a real downgrade for pages where passwords are typed.
-   - Convert the `.p12` to PEM with `node-forge`. Plain Node with OpenSSL 3 rejects legacy RC2-40 PKCS#12 files (Electron's BoringSSL accepts them) `[lab]`.
-4. **Hosts that ask for a TLS client certificate** (checked at the handshake, `[live]`):
-   - `pasarela-ident.clave.gob.es` (Cl@ve "DNIe / Certificado electrónico")
-   - `www1`, `www8` and `www10.agenciatributaria.gob.es`
-   - `w2.seg-social.es`
-   - `ipce.seg-social.es`
-   - Missing certificates rarely fail at the network level. Each site shows its own error page (section 9).
-5. **What the LLM sees.** Use `page.ariaSnapshot({ mode: 'ai' })` (public since 1.59) and act through `page.locator('aria-ref=<ref>')` `[lab]`.
-   - Iframes, including cross-site ones, are included with `f<seq>e<n>` refs.
-   - A ref only resolves against the most recent snapshot taken in its frame.
-6. **AutoFirma replacement.** Use `context.addInitScript(fn, { sign: async (...) => … }, { exposeFunctions: true })` (1.62+). It runs in every frame and popup before page scripts `[lab]`.
-7. **Live view.** Use `page.screencast.start({ onFrame })` (1.59+) `[lab]`.
-8. **Biggest product risk is legal or policy, not technical.** On 29/04/2026 AEAT published a notice listing these as improper uses of Cl@ve `[live]`:
-   - "automatización de autenticaciones, robotización, scripting"
-   - showing Cl@ve QR codes through "sistemas interpuestos"
-   - storing passwords or one-time codes
-
-   SpainAssist's planned "use Cl@ve automatically" default conflicts with this (section 10). Get legal review, keep a human in the loop for Cl@ve, and prefer certificates.
+1. **Never use the default `chromium-headless-shell`.** The Extranjería cita previa firewall
+   returns 403 "Intrusion Prevention Violation" to it, even with a spoofed user agent `[live]`.
+   Headed works; new headless (`channel: 'chromium'`) works only with "Headless" removed from the
+   user agent (§5.1).
+2. **Playwright's `clientCertificates` was rejected** (§1). It turns on `ignoreHTTPSErrors` for
+   every origin in the context, checks server certificates with Node's store (no AIA fetching),
+   uses Node's TLS fingerprint, fixes certificates at context creation, and can't use a key it
+   doesn't hold (DNIe; PKCS#11 is out of scope, issue #32003).
+3. **Hosts that ask for a TLS client certificate** at the handshake are listed in §9.1. Missing
+   certificates rarely fail at the network level: each site shows its own error page (§9.2).
+4. **Snapshot refs** (`ariaSnapshot({ mode: 'ai' })`, `aria-ref=`) include cross-site iframes and
+   resolve only against the latest snapshot of their frame (§2.3).
+5. **Biggest product risk is legal or policy, not technical.** On 29/04/2026 AEAT listed
+   "automatización de autenticaciones, robotización, scripting", showing Cl@ve QR codes through
+   "sistemas interpuestos", and storing passwords or one-time codes as improper uses of Cl@ve
+   `[live]` (§10). Keep a human in the loop for Cl@ve, and prefer certificates.
 
 ---
 
-## 1. Historical Playwright `clientCertificates` probes
+## 1. Rejected: Playwright `clientCertificates`
+
+These probes are why certificate logins go through `packages/sidecar` instead. Kept because
+the TLS facts (renegotiation, error signals) also apply to the sidecar.
 
 ### 1.1 Exact shape (1.63 `types.d.ts`) `[docs]`
 
@@ -125,11 +123,11 @@ These all worked against a lab server that required a client cert:
 - Electron main process
 - Electron `utilityProcess`
 
-### 1.5 PKCS#12 parsing in the built app
+### 1.5 PKCS#12 parsing `[lab]`
 
-`@sa/signer.openP12` reads modern AES and legacy RC2/3DES files, returning the certificate
-chain and private key in main-process memory. The sidecar receives PKCS#8 key material on
-stdin. There is no PKCS#12 normalization or Playwright certificate mode in the app.
+Plain Node 24 with OpenSSL 3 rejects legacy RC2-40 PKCS#12 files; Electron's BoringSSL accepts
+them. The app parses `.p12` files itself (`@sa/signer` `openP12`, modern and legacy) and hands
+the sidecar the key, so neither TLS stack has to.
 
 ### 1.6 Performance `[lab]`
 
@@ -141,13 +139,14 @@ Fetching 50 MB on localhost from inside a page, in Node 24 and Electron 44 respe
 | SOCKS pass-through (origin not listed) | ~920 MB/s | ~1 GB/s |
 | Node TLS interception (origin listed) | ~340 MB/s | ~280 MB/s |
 
-Throughput is irrelevant for government sites. The real cost is that every byte crosses the Playwright process's event loop, which is the argument for a `utilityProcess`.
+Throughput is irrelevant for government sites. The cost is that every byte crosses the
+Playwright process's event loop.
 
-### 1.7 Updating certificates in the built app
+### 1.7 Certificates are fixed per context
 
-`useClientCertificate(procedureId, {origins, identity} | null)` updates the sidecar's session
-configuration and closes the previous upstream connections. The browser context is preserved,
-including sessionStorage and in-page state. The old context-recreation API is removed.
+With `clientCertificates`, adding a certificate means recreating the context and carrying over
+`storageState` (which loses sessionStorage and in-page state). The sidecar avoids this:
+`useClientCertificate` changes the session's configuration and the context stays.
 
 ### 1.8 TLS renegotiation and mid-connection certificate requests
 
@@ -181,28 +180,9 @@ Debug with `DEBUG=pw:client-certificates`.
 
 ## 2. Snapshots and element refs for the LLM
 
-### 2.1 API (1.63) `[docs]`
+### 2.1 What `mode: 'ai'` changes `[src]` (`injected/src/ariaSnapshot.ts`)
 
-| Method / option | Since |
-|---|---|
-| `page.ariaSnapshot(...)`, `locator.ariaSnapshot({ mode, depth })` | 1.59 |
-| `boxes` | 1.60 |
-| `ariaSnapshotJSON` | 1.63 |
-
-The private `page._snapshotForAI()` (≤1.58) is gone, and `Locator.ariaRef()` was removed in 1.60.
-
-```ts
-// Page and Locator
-ariaSnapshot(options?: { boxes?: boolean; depth?: number; mode?: 'ai' | 'default'; signal?: AbortSignal; timeout?: number }): Promise<string>;   // YAML
-ariaSnapshotJSON(options?: { boxes?: boolean; depth?: number; mode?: 'ai' | 'default'; signal?: AbortSignal; timeout?: number }): Promise<Serializable>; // {role,name,ref,cursor,box,children,…}[]
-// Locator
-normalize(): Promise<Locator>;          // aria-ref locator -> "best practice" locator, e.g. getByRole(...)
-describe(description: string): Locator;  // label shown in traces/errors
-// Selector engine
-page.locator('aria-ref=e12'); page.locator('aria-ref=f2e5');
-```
-
-`mode: 'ai'` differs from the default mode `[src]` (`injected/src/ariaSnapshot.ts`):
+Compared with the default mode:
 - visibility is "aria **or** visible"
 - `generic` nodes are included
 - `[active]` and `[cursor=pointer]` are shown
@@ -274,7 +254,7 @@ Iframe case `[lab]` (cross-site OOPIF):
 - **Modal states**: dialogs and file choosers are tracked from `page.on('dialog' | 'filechooser')`. A snapshot is raced against them, so a pending dialog doesn't hang the snapshot.
 - **Embedding.** `tools.createConnection(config, () => Promise<BrowserContext>)` lets you hand it your own context, with certificates and hooks. That is an internal, non-semver export.
   - Version trap: `@playwright/mcp@0.0.83` depends on `playwright-core@1.64.0-alpha`. Don't mix its objects with a 1.63 context; import `tools` from the same `playwright-core` instead.
-  - Recommendation: write our own small tool set (snapshot, click, fill, select, upload, dialog, wait) with the same pattern.
+  - We wrote our own small tool set with the same pattern (`packages/browser`).
   - That keeps control over PII scrubbing. MCP's `secrets` redaction is "a convenience and not a security feature" (`config.d.ts`).
 
 ---
@@ -306,6 +286,9 @@ Semantics, all `[lab]` (Chromium wiring: `crPage.ts` uses `Page.addScriptToEvalu
   - A binding call is asynchronous; the page gets a Promise.
 - **Bindings leave detectable globals:** `window.__playwright__binding__` and `__playwright__binding__controller__`, even with `exposeFunctions`. Bot-defense scripts could look for them (UNVERIFIED that any government site does).
 - **Not covered:** service and web workers.
+
+The app uses a context-level `exposeBinding` (it needs `source.frame` to know which origin is
+asking) plus an `addInitScript` with the shim's source (`installAfirma` in `service.ts`).
 
 Pattern that was tested: a locked global that page scripts can't overwrite.
 
@@ -390,9 +373,9 @@ await page.getByLabel('Adjuntar documento').setInputFiles({ name: 'dni.pdf', mim
 
 | Option | Pros | Cons |
 |---|---|---|
-| **Playwright's Chrome for Testing** (`chromium`, r1243 = 153.0.8010.12) — **recommended** | The exact build 1.63 is tested against; same on every OS. Headed works on F5-protected sites `[live]`. | About 360 MB on disk (measured, macOS arm64). The app bundles it (DECISIONS D17); Google's redistribution terms are still to be confirmed. Shows as a separate "Google Chrome for Testing" app/window. |
+| **Playwright's Chrome for Testing** (`chromium`, r1243 = 153.0.8010.12): **chosen** | The exact build 1.63 is tested against; same on every OS. Headed works on F5-protected sites `[live]`. | About 360 MB on disk (measured, macOS arm64). The app bundles it; Google's redistribution terms are still to be confirmed. Shows as a separate "Google Chrome for Testing" app/window. |
 | `channel: 'chrome' \| 'msedge'` | No download; real branded Chrome. Worked, with certificates, on this Mac with Chrome 154 `[lab]`. | Not installed everywhere. Version drift (1.63 tested with Chrome 153). Enterprise policies can interfere (Playwright docs). |
-| Electron's own Chromium (e.g. a `WebContentsView` + `webContents.debugger` CDP, or `connectOverCDP` to the app's own `--remote-debugging-port`) | Nothing to download; true in-app view. | Loses the Playwright API or `clientCertificates`. A debugging port lets any local process take over the app. Not recommended for the MVP. |
+| Electron's own Chromium (e.g. a `WebContentsView` + `webContents.debugger` CDP, or `connectOverCDP` to the app's own `--remote-debugging-port`) | Nothing to download; true in-app view. | Loses the Playwright API or `clientCertificates`. A debugging port lets any local process take over the app. Rejected. |
 
 Headless variants against `icp.administracionelectronica.gob.es` `[live]`:
 
@@ -404,100 +387,49 @@ Headless variants against `icp.administracionelectronica.gob.es` `[live]`:
 
 So install only `chromium` (`--no-shell`).
 
-### 5.2 Installing programmatically into a custom path
+### 5.2 Playwright's browser registry
 
-> **Superseded for the app (2026-10-18, DECISIONS D17).** The app no longer downloads Chromium at
-> runtime: every package bundles playwright-core's build in `<resources>/chromium/`
-> (`apps/desktop/scripts/chromium.ts` stages it at packaging time) and main passes it as
-> `executablePath`. The Microsoft Store forbids downloading code (policy 10.2.2). The notes below
-> still describe how the registry and `PLAYWRIGHT_BROWSERS_PATH` work.
+The app bundles Chromium (`apps/desktop/scripts/chromium.ts` stages it at packaging time, main
+passes it as `executablePath`). It never downloads one at runtime: the Microsoft Store forbids
+downloading code (policy 10.2.2). What the packaging script relies on `[src]`:
 
-- `PLAYWRIGHT_BROWSERS_PATH` is read **once, when `playwright-core` is first required** (`registry/index.ts → registryDirectory`). Set it before any `require`/`import`.
-  - `"0"` means `node_modules/playwright-core/.local-browsers`.
-  - Unset means `~/Library/Caches/ms-playwright`, `%LOCALAPPDATA%\ms-playwright` or `~/.cache/ms-playwright`.
-- Use an app-private path. The shared cache is garbage-collected: `registry.install` deletes browser revisions not referenced by any `.links/<sha1>` entry. Guard against that with `PLAYWRIGHT_SKIP_BROWSER_GC=1`, `install(..., { gc: false })`, or CLI `--no-remove` (1.63).
+- `require('playwright-core/lib/coreBundle').registry.registry` is internal, not semver. Its
+  `findExecutable('chromium')` gives `directory` (`<cache>/chromium-<revision>`),
+  `executablePath()` and `browserVersion`. Check it whenever playwright-core is updated.
+- `PLAYWRIGHT_BROWSERS_PATH` is read **once, when `playwright-core` is first required**
+  (`registry/index.ts → registryDirectory`). `"0"` means `node_modules/playwright-core/.local-browsers`;
+  unset means `~/Library/Caches/ms-playwright`, `%LOCALAPPDATA%\ms-playwright` or
+  `~/.cache/ms-playwright`.
+- The shared cache is garbage-collected: `registry.install` deletes browser revisions not
+  referenced by any `.links/<sha1>` entry. Guard against that with `PLAYWRIGHT_SKIP_BROWSER_GC=1`,
+  `install(..., { gc: false })`, or CLI `--no-remove` (1.63).
+- Downloads come from `cdn.playwright.dev/builds/cft/<ver>/<platform>/...`
+  (`PLAYWRIGHT_DOWNLOAD_HOST` / `PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST` for mirrors). Electron's
+  `child_process.fork` runs the out-of-process downloader fine `[lab]`.
 
-Option A (tested inside Electron main: Electron's `child_process.fork` runs the out-of-process downloader fine `[lab]`). This is an internal API, so pin the exact version.
+### 5.3 Running Playwright inside Electron
 
-```ts
-process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(app.getPath('userData'), 'ms-playwright'); // BEFORE requiring playwright-core
-const { registry } = require('playwright-core/lib/coreBundle').registry;                    // exported via package.json "exports"
-const executables = registry.resolveBrowsers(['chromium'], { shell: 'no' });                 // -> chromium + ffmpeg
-await registry.install(executables, { force: false });
-const exe = registry.findExecutable('chromium').executablePath();                            // optional: pass as executablePath
-```
-
-Option B: the public CLI. Tested with `ELECTRON_RUN_AS_NODE=1` `[lab]`. It needs the `RunAsNode` fuse **enabled**; otherwise use option A or a `utilityProcess`.
-
-```ts
-spawn(process.execPath, [require.resolve('playwright-core/cli.js'), 'install', '--no-shell', 'chromium'],
-      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PLAYWRIGHT_BROWSERS_PATH: dir } });
-```
-
-Other env vars:
-- `PLAYWRIGHT_DOWNLOAD_HOST` / `PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST` for mirrors.
-- Downloads come from `cdn.playwright.dev/builds/cft/<ver>/<platform>/...`.
-
-### 5.3 Cached browsers on this machine `[lab]`
-
-Mapping from each version's `browsers.json` in the npm tarballs:
-
-| Cache dir | Chromium version | Used by playwright-core |
-|---|---|---|
-| `chromium-1208`, `chromium_headless_shell-1208` | 145.0.7632.6 | **1.58.0, 1.58.1, 1.58.2**. `.links` points to `~/Projects/SpainBench` (1.58.2). |
-| `chromium-1243`, `chromium_headless_shell-1243` | 153.0.8010.12 | **1.63.0**. `.links` points to `~/Projects/tenis-party` (1.63.0). |
-
-Other revisions, for reference:
-
-| playwright-core | Chromium revision |
-|---|---|
-| 1.57.0 | 1200 |
-| 1.59.x | 1217 |
-| 1.60.0 | 1223 |
-| 1.61.x | 1228 |
-| 1.62.x | 1234 |
-
-`ffmpeg-1011` is shared by 1.58–1.63.
-
-### 5.4 Running Playwright inside Electron
-
-- **It works** in Electron 44 main and in a `utilityProcess` `[lab]`, including certificates and screencast.
-  - Prefer `utilityProcess.fork()`: the Playwright protocol traffic and the certificate proxy stay off the UI thread, and a crash doesn't take the app down.
-  - Send frames and results over `process.parentPort.postMessage` or a `MessageChannelMain`.
+- **It works** in Electron 44 main and in a `utilityProcess` `[lab]`, including certificates and
+  screencast. The app runs it in main.
 - **The TLS stack differs.** Electron's Node is BoringSSL (`process.versions.openssl === '0.0.0'`).
-  - Effects seen: legacy RC2 `.p12` files load (plain Node 24 rejects them), renegotiation works as in Node, and the bundled root store is smaller than Node 24's (121 vs 146 certificates from `tls.getCACertificates('bundled')`).
-  - `NODE_EXTRA_CA_CERTS` is honored.
-  - `tls.setDefaultCACertificates()` exists (Node 24) for adding missing intermediates before creating a context.
-- **Packaging:**
-  - Keep `playwright-core` **external** to the Vite bundle (`dependencies` + electron-vite's externalized deps). It loads files relative to its package root: `browsers.json`, `lib/entry/oopBrowserDownload.js` (forked), `lib/server/electron/loader.js`, `webp_codec.wasm` `[src]`.
-  - No `asarUnpack` needed: forking `oopBrowserDownload.js` from inside `app.asar` works, and so does the first-run download (verified in the packaged macOS app, `electron-packaging.md` §6.11).
-- **Code signing.** The bundled Chrome for Testing .app is signed with the rest of the macOS app: ad-hoc, it passes `codesign --verify --deep --strict` and launches `[lab]`. Developer ID signing and notarization of it are UNVERIFIED.
-- **Startup checks.** `playwright-core` requires Node ≥ 20 (`lib/bootstrap.js`). Playwright installs SIGINT/SIGTERM handlers by default, so call `browser.close()` on `app.on('before-quit')`.
+  Its bundled root store is smaller than Node 24's (121 vs 146 certificates from
+  `tls.getCACertificates('bundled')`). `NODE_EXTRA_CA_CERTS` is honored.
+- **Packaging.** Keep `playwright-core` **external** to the Vite bundle. It loads files relative
+  to its package root: `browsers.json`, `lib/entry/oopBrowserDownload.js` (forked),
+  `lib/server/electron/loader.js`, `webp_codec.wasm` `[src]`. No `asarUnpack` is needed
+  (`electron-packaging.md` §6.11).
+- **Code signing.** The bundled Chrome for Testing .app is signed with the rest of the macOS app:
+  ad-hoc, it passes `codesign --verify --deep --strict` and launches `[lab]`. Developer ID signing
+  and notarization of it are UNVERIFIED.
+- **Shutdown.** Playwright installs SIGINT/SIGTERM handlers by default, so close the browser on
+  `app.on('before-quit')` (or pass `handleSIGINT: false` and friends).
 
 ---
 
 ## 6. Electron end-to-end tests with `_electron`
 
-- Still marked **experimental** in the 1.63 docs `[docs]`.
-- Supported Electron: v12.2+, v13.4+, v14+.
-- Worked with Electron 44.5.1 `[lab]`: launch in about 340 ms; `firstWindow`, main-process `evaluate`, `browserWindow`, and `ariaSnapshot` on the app window all worked.
-
-```ts
-import { _electron as electron, type ElectronApplication } from 'playwright-core'; // or '@playwright/test'
-const app: ElectronApplication = await electron.launch({
-  args: ['.'],                       // package.json "main": "./out/main/index.js" (electron-vite build output)
-  env: { ...process.env, SA_E2E: '1', SA_BACKEND_URL: mock.url },   // strip ELECTRON_RENDERER_URL / ELECTRON_RUN_AS_NODE
-  timeout: 30_000,
-});
-const win = await app.firstWindow();                                  // firstWindow(options?: { timeout?: number }): Promise<Page>
-await app.evaluate(({ dialog }, file) => {                            // runs in the main process; arg 1 = require('electron')
-  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] });
-}, '/tmp/fixture.p12');
-const bw = await app.browserWindow(win);                              // JSHandle<BrowserWindow>
-await app.close();
-```
-
-Other members: `windows(): Page[]`, `context(): BrowserContext`, `process(): ChildProcess`, `on('window' | 'console' | 'close')`.
+Still marked **experimental** in the 1.63 docs `[docs]`; worked with Electron 44.5.1 `[lab]`
+(launch in about 340 ms). Used by `e2e/fixtures.ts` and `apps/desktop/scripts/smoke.mjs`.
 
 Gotchas `[src][docs]`:
 1. Playwright starts Electron with `--inspect=0 --remote-debugging-port=0`. Without `executablePath`, it also adds `-r lib/server/electron/loader.js`, which patches `app.whenReady` and adds Chromium switches.
@@ -506,7 +438,7 @@ Gotchas `[src][docs]`:
 2. electron-vite: run `electron-vite build` first. The template loads `process.env.ELECTRON_RENDERER_URL` when `is.dev`, otherwise `out/renderer/index.html`.
    - `is.dev` (`!app.isPackaged`) is true under `_electron.launch`, so make sure `ELECTRON_RENDERER_URL` isn't inherited.
    - Use `waitForEvent('window', p => p.url().endsWith('index.html'))` if a splash or DevTools window may come first.
-3. Native dialogs are not intercepted; stub them through `app.evaluate` as above.
+3. Native dialogs are not intercepted; stub them in main through `app.evaluate(({ dialog }) => …)`.
 4. The agent's Chromium is a separate browser, so it is invisible to `app.windows()`. Assert on the renderer's live view, or expose a test hook.
    - For CI, point the agent at local mock sedes (like the lab servers used here) instead of real government sites.
 
@@ -579,30 +511,34 @@ Other notes:
 
 ### 9.1 Origins
 
-Handshake probe `[live]`: `openssl s_client -connect H:443 -servername H`. A `Requested Signature Algorithms` line means the server sent a CertificateRequest; the probe was calibrated on the lab servers. Every host below also passes Node 24 and Electron 44 certificate validation.
+Handshake probe `[live]`: `openssl s_client -connect H:443 -servername H`. A `Requested Signature
+Algorithms` line means the server sent a CertificateRequest; the probe was calibrated on the lab
+servers. Every host probed on 2026-10-03 also passes Node 24 and Electron 44 certificate
+validation.
 
-```ts
-export const CERT_AUTH_ORIGINS = [
-  'https://pasarela-ident.clave.gob.es',      // Cl@ve "DNIe / Certificado electrónico" (any sede that uses Cl@ve: DGT, SEPE, SS, Carpeta, DEHú, REC, …)
-  'https://www1.agenciatributaria.gob.es',    // AEAT certificate access (selector -> /wlpl/OVCT-CXEW/…)
-  'https://www8.agenciatributaria.gob.es',    // AEAT, asks during the TLS 1.3 handshake. Purpose UNVERIFIED
-  'https://www10.agenciatributaria.gob.es',   // AEAT, purpose UNVERIFIED
-  'https://w2.seg-social.es',                 // Seguridad Social certificate services. Purpose UNVERIFIED
-  'https://ipce.seg-social.es',               // Seguridad Social's own certificate login (/IPCE/Login per third-party code, UNVERIFIED)
-];
-```
+**Ask during the handshake** (`CERTIFICATE_ORIGINS` in `packages/browser/src/certificates.ts`):
+- `pasarela-ident.clave.gob.es`: Cl@ve "DNIe / Certificado electrónico", used by any sede on Cl@ve.
+- `www1.agenciatributaria.gob.es`: AEAT certificate access (selector → `/wlpl/OVCT-CXEW/…`).
+- `www8.agenciatributaria.gob.es` (asks during a TLS 1.3 handshake) and
+  `www10.agenciatributaria.gob.es`: AEAT, purpose UNVERIFIED.
+- `w2.seg-social.es`: Seguridad Social certificate services, purpose UNVERIFIED.
+- `ipce.seg-social.es`: Seguridad Social's own certificate login (`/IPCE/Login` per third-party
+  code, UNVERIFIED).
+- `idp.seg-social.es`: Seguridad Social login (Importass goes idp → ipce → idp), seen live on
+  2026-10-12.
 
 **No certificate request during the handshake** on: `pasarela.clave.gob.es`, `se-pasarela.clave.gob.es`, `clave-dninbrt.seg-social.gob.es`, `sede.agenciatributaria.gob.es`, AEAT `www2/www3/www6/www9/www11/www12`, `sede.seg-social.gob.es`, `portal.seg-social.gob.es`, `sede-tu.seg-social.gob.es`, `w6/w7.seg-social.es`, `sede.dgt.gob.es`, `sedeapl.dgt.gob.es`, `sedeclave.dgt.gob.es`, `sede.sepe.gob.es`, `citaprevia-sede.sepe.gob.es`, `www1.sedecatastro.gob.es`, `www.sedecatastro.gob.es`, `carpetaciudadana.gob.es`, `rec.redsara.es`, `dehu.redsara.es`, `valide.redsara.es`, `sede.administracion.gob.es`, `sede.administracionespublicas.gob.es`, `sede.mjusticia.gob.es`, `sede.policia.gob.es`, `www.sede.fnmt.gob.es`, `www.cert.fnmt.es`, `sede.madrid.es`, `servpub.madrid.es`, `valid.aoc.cat`, `sede.registradores.org`.
 
 Caveats:
 - A handshake probe **cannot see renegotiation-based requests**. TLS-1.2-only hosts such as `www1.sedecatastro.gob.es` or `sede.registradores.org` may ask on specific paths (UNVERIFIED).
-- Regional and municipal sedes often use their own gateways (e.g. Catalonia's VÀLid at `valid.aoc.cat`), so the list must grow over time. That is a good fit for the shared "learnings" database in SPEC.md.
+- Regional and municipal sedes often use their own gateways (e.g. Catalonia's VÀLid at `valid.aoc.cat`), so the list must grow over time. That is a good fit for the shared "learnings" database.
 
 ### 9.2 Runtime detection
 
 There is no single network-level signal, because government servers mostly use *optional* client auth. Combine these:
 
-1. **Known hosts.** When the user has approved certificate use for a procedure, create the context with `CERT_AUTH_ORIGINS`.
+1. **Known hosts.** When the user has approved certificate use for a procedure, turn it on for
+   the known origins.
    - The certificate is only sent to a listed origin that asks for one.
    - Sending it reveals name and DNI, so keep the list tight.
 2. **Network errors** on `page.goto` or `context.on('requestfailed')`:
@@ -614,8 +550,8 @@ There is no single network-level signal, because government servers mostly use *
    - AEAT: URL `/Sede/errores/erro4033.html`
    - Keep a regex list per site in the learnings database.
 4. **On detection:**
-   - (a) ask the user, since SPEC says the certificate is "ask before use" by default
-   - (b) recreate the context with that origin added (section 1.7), or add it live with a forked interceptor
+   - (a) ask the user, since the certificate is "ask before use" by default
+   - (b) turn the certificate on for that origin (no new context with the sidecar, §1.7)
    - (c) restart from the sede's login button
    - (d) record the origin.
 
@@ -694,7 +630,7 @@ Engineering consequences:
 - PR #42878: renegotiation test
 - #41105: HTTP/2 crash
 - #33230, #31906, #32004: native certificate popups in headed Chrome
-- #32003: PKCS#11 out of scope, which matters for the DNIe stretch goal (see `dnie.md`)
+- #32003: PKCS#11 out of scope, so a DNIe key can't be used through Playwright (see `dnie.md`)
 
 **`@playwright/mcp@0.0.83`** (npm tarball: `index.js`, `cli.js`, `config.d.ts`, README tool list): https://github.com/microsoft/playwright-mcp
 

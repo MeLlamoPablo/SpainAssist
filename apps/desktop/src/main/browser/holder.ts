@@ -243,7 +243,7 @@ export class BrowserHolder {
    * with the details of what is signed (+ Touch ID when available). Signatures with a `.p12`
    * always ask, whatever the credential's policy. The DNIe is approved on the phone instead
    * (`CompanionService.approve`), after the desktop asks for its CAN and PIN when it doesn't
-   * have them (D20). Returns null when declined / cancelled / no certificate.
+   * have them. Returns null when declined / cancelled / no certificate.
    */
   async approveSignature(
     procedureId: string,
@@ -293,7 +293,7 @@ export class BrowserHolder {
       if (!chosen) return null;
       if (chosen.kind === 'dnie') {
         if (!deps.companion) return null;
-        // The consent happens on the phone; the desktop asks for the CAN and the PIN (D20).
+        // The consent happens on the phone; the desktop asks for the CAN and the PIN.
         return await deps.companion.approve(procedureId, summary, chosen);
       }
       if (!(await this.confirm(procedureId, summary, chosen))) return null;

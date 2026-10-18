@@ -1,14 +1,13 @@
 # Spain Assist (phone app)
 
-Signs documents and approves certificate logins with the user's DNIe over NFC when SpainAssist on the computer asks. The desktop
-shows a QR code; the phone pairs, shows each request (the PDF itself, or the XML or text), and
-signs after the user approves and holds the card to the phone. The user types the DNIe's CAN
-and PIN on the computer only (DECISIONS D20): they come with each request, and the phone never
-asks for them. The protocol is in
-`packages/companion/README.md`.
+Signs documents and approves certificate logins with the user's DNIe over NFC when SpainAssist
+on the computer asks. The desktop shows a QR code; the phone pairs, shows each request (the PDF
+itself, or the XML or text), and signs after the user approves and holds the card to the phone.
+The user types the DNIe's CAN and PIN on the computer only: they come with each request, and
+the phone never asks for them. The protocol is in `packages/companion/README.md`.
 
-Compose Multiplatform. Android is the app today. The shared module also compiles for iOS (the
-`iosArm64` and `iosSimulatorArm64` targets), so the common code stays portable.
+Compose Multiplatform. There is only an Android app. The shared module also compiles for iOS
+(the `iosArm64` and `iosSimulatorArm64` targets), so the common code stays portable.
 
 | Module | What |
 | --- | --- |
@@ -23,8 +22,9 @@ Compose Multiplatform. Android is the app today. The shared module also compiles
   don't add BouncyCastle separately.
 - It reads the certificates after PACE without the PIN. Every signature opens a new PACE channel
   and checks the PIN, as the card requires. The CAN and the PIN come with the request (the
-  desktop asked the user for them, and keeps the PIN in memory for an hour). They serve that
-  request only, are never stored or cached on the phone, and are dropped when the request ends.
+  desktop asked the user for them and may keep them in its vault: the CAN with the DNI's data,
+  the PIN with the DNIe credential). They serve that request only, are never stored or cached
+  on the phone, and are dropped when the request ends.
 - **The card moving (Autofirma's AA300103).** Reader mode checks presence every 2 seconds, not
   every 125 ms, and IsoDep waits up to 5 seconds per command. When the card does leave the field,
   `IsoDepConnection` flags it, and whatever jmulticard throws becomes "the card moved". The app
@@ -36,9 +36,9 @@ Compose Multiplatform. Android is the app today. The shared module also compiles
   again while the app runs (the phone keeps only a SHA-256 of it in memory), not even from a
   request re-sent after a reconnect or a stale copy on the desktop: it asks again instead. So a
   wrong PIN costs one try. A request that comes without a PIN (re-sent to a restarted app) asks
-  the desktop too. **Blocked PIN,
-  no FIRMA certificate, expired certificate, not a DNIe 3.0/4.0, no NFC:** the request ends, and
-  the desktop shows why.
+  the desktop too.
+- **Blocked PIN, no FIRMA certificate, expired certificate, not a DNIe 3.0/4.0, no NFC:** the
+  request ends, and the desktop shows why.
 - Reader mode is on only while the app waits for a card and is in front. The screen stays on
   meanwhile. Release builds set `FLAG_SECURE` (no screenshots or recents preview of documents).
 
@@ -74,25 +74,25 @@ cd apps/mobile
 - **On an emulator** (no NFC, so up to "hold your DNIe"): `adb reverse tcp:8794 tcp:8794`, then
   open the link with `adb shell am start -a android.intent.action.VIEW -d "sa-firma://pair?d=<payload>"`.
 
-## Before publishing
+## Releasing
 
 - **Licence.** Every APK must come with its complete source (see "Licence" below).
 - **App Links.** Set `ANDROID_CERT_SHA256` on the relay to the Play App Signing and upload key
   fingerprints. Without them, links open the relay's `/p` page, which offers "Abrir en la app".
-- **Play Store.** The listing ("Spain Assist", `es.spainassist.firma`), the
-  release signing key, and the NFC requirement (`android.hardware.nfc` required).
+- **NFC.** The app requires `android.hardware.nfc`.
+
+## Logins and protocol
 
 Login uses the AUTENTICACIÓN certificate; documents use FIRMA. A `login` review shows the site
 without a document. TLS digests arrive already hashed (`prehashed`); the card adapter wraps
 DigestInfo without hashing them again, while preserving PACE/CWA cryptography. After approval,
-cancel from the desktop. Protocol 6 (WELCOME's `session`, the pairing's own secret that replaces
-the QR's, D26; protocol 5 the required `can`, `sign.need` and `sign.unlock`; protocol 4 the
-optional `pin`, protocol 3 `can`) requires a matching desktop; old apps must update.
+cancel from the desktop. `COMPANION_PROTOCOL` in `protocol/Messages.kt` must match the one in
+`packages/shared/src/companion.ts`; when it changes, old apps must update.
 
 ## Licence
 
 Our code here is MIT (`LICENSE`). The Android app as distributed is EUPL-1.2 as a whole,
-because the EUPL is the only licence every jmulticard file offers (`NOTICE`, DECISIONS D16).
+because the EUPL is the only licence every jmulticard file offers (`NOTICE`).
 So:
 
 - every APK must come with its complete source (`Licenses.SOURCE_URL`, for every release);

@@ -53,12 +53,12 @@ export const AgentHostConfigSchema = z.object({
        */
       keyServerUrl: z.string().url().optional(),
       /**
-       * BYOK and custom endpoints: web research on Exa's keyless tier (exa_search, exa_fetch,
-       * D23) instead of `web_research`. The user's optional key comes from the app at call time
+       * BYOK and custom endpoints: web research on Exa's keyless tier (exa_search, exa_fetch)
+       * instead of `web_research`. The user's optional key comes from the app at call time
        * (bridge `agent.exaKey`), never through this config.
        */
       exa: z.boolean().optional(),
-      /** Exa API base URL override (tests). Default https://api.exa.ai. */
+      /** Exa MCP base URL override (tests). Default https://mcp.exa.ai. */
       exaBaseUrl: z.string().url().optional(),
       /** BOE open-data API base URL override (tests). */
       boeBaseUrl: z.string().url().optional(),

@@ -96,10 +96,7 @@ describe('IPC router', () => {
   });
 
   it('settings.update emits settings.changed', async () => {
-    const next = await app.invoke('settings.update', {
-      shareLearnings: false,
-      browser: { headless: true },
-    });
+    const next = await app.invoke('settings.update', { shareLearnings: false });
     expect(next.shareLearnings).toBe(false);
     expect(app.events.at(-1)).toEqual({ type: 'settings.changed', settings: next });
   });

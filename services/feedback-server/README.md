@@ -26,9 +26,9 @@ Contracts: `packages/shared/src/services.ts`. Errors always look like
 | `POST /mcp` | Read-only MCP server (Streamable HTTP, stateless): `search_feedback` |
 | `GET /health` | `{ "status": "ok" }` |
 
-Every `/admin/*` route except the page needs `Authorization: Bearer <ADMIN_TOKEN>` and answers 404
-when `ADMIN_TOKEN` is unset. Admin contracts: `FeedbackAdmin*`, `FeedbackCreate` and `FeedbackEdit` in
-`packages/shared/src/services.ts`.
+Every `/admin/*` route except the page needs `Authorization: Bearer <ADMIN_TOKEN>` and answers
+404 when `ADMIN_TOKEN` is unset. Admin contracts: `FeedbackAdmin*`, `FeedbackCreate` and
+`FeedbackEdit` in `packages/shared/src/services.ts`.
 
 Error codes: `bad_request` (400), `unauthorized` (401), `no_credit` (403), `not_found` (404),
 `payload_too_large` (413), `pii_detected` (422), `rate_limited` / `quota_exceeded` (429, with
@@ -104,9 +104,9 @@ server does it again (defense in depth):
 
 ### Search
 
-The feedback table keeps two weighted `tsvector`s: `pg_catalog.spanish` and `public.spanish_unaccent`
-(unaccent → spanish_stem). Both are needed: Snowball needs accents for some suffixes ("renovación"
-→ `renov`, but "renovacion" → `renovacion`). Weights: title A, procedure + tags B, body C,
+The feedback table keeps two weighted `tsvector`s: `pg_catalog.spanish` and
+`public.spanish_unaccent` (unaccent → spanish_stem). Both are needed: Snowball needs accents for
+some suffixes ("renovación" → `renov`, but "renovacion" → `renovacion`). Weights: title A, procedure + tags B, body C,
 administration + region D.
 
 A search runs up to three stages and returns a short list:
@@ -144,28 +144,17 @@ Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
 
 `GET /admin` serves a page to curate learnings (Spanish, with English):
 
-- **Browse**: search any text field (stemmed and accent-insensitive, substrings or an id prefix),
-  filter by kind, net votes (positive, negative, neutral), review (has a human vote or not),
-  procedure, tag and author; sort by newest, oldest, most voted or recently edited; load more.
-  Each list item shows its author. The overview shows counts by kind, unreviewed entries and the
-  top procedures, tags and authors, each a shortcut to its filter.
-- **Inspect**: the full entry (the body rendered as Markdown: paragraphs, headings, lists,
-  quotes, code, bold/italic, http(s) links; the editor keeps the raw text), how often it is
-  served (chance and net weight on the −X…+X scale), every vote with what it is worth now,
-  author, created/edited dates and app version.
-- **Vote**: "Es útil" / "No es útil" add a human vote (worth `VOTE_THRESHOLD`). Any vote can be
-  removed, e.g. a mistaken one.
-- **Write** a new entry: "Nueva entrada" (or `n`) opens the editor empty, with the author set
-  to `human`. The server scrubs it like a submission; it starts with no votes (served 50%).
-- **Edit** every field. The server scrubs edits like submissions and says how many redactions it
-  made; mostly-personal text is rejected. Edited entries show an "Editado" badge. The author
-  is editable too: prefilled with the current one, a "Persona" button sets `human`, and the page
-  checks the format before saving.
-- **Delete** with an inline confirm; the page moves on to the next entry.
-- **Try a search**: run the agents' query and see every candidate in relevance order with its
-  score and serving chance, without the random draw.
-- Keys: `j`/`k` (or arrows) move, `/` search, `n` new entry, `e` edit, `u`/`d` vote, `Esc` close; in the editor
-  `⌘/Ctrl+Enter` saves and `Esc` cancels. `#id=<uuid>` in the address opens an entry.
+- **Browse** with search, filters (kind, net votes, review, procedure, tag, author) and sorting;
+  the overview shows counts and the top procedures, tags and authors.
+- **Inspect** an entry: the body as Markdown, how often it is served, every vote with what it is
+  worth now, author, dates and app version. `#id=<uuid>` in the address opens one.
+- **Vote** ("Es útil" / "No es útil": a human vote, worth `VOTE_THRESHOLD`) or remove any vote.
+- **Write**, **edit** and **delete** entries. New entries and edits are scrubbed like
+  submissions, and mostly-personal text is rejected. New entries start with no votes and the
+  author `human`.
+- **Try a search**: the agents' query with every candidate's score and serving chance, without
+  the random draw.
+- Keyboard shortcuts are listed on the page (`j`/`k` move, `/` search, `n` new entry…).
 
 Like the key server's voucher page it is one self-contained HTML page: no data server-side,
 strict CSP (inline script and style by hash, `connect-src 'self'`, `frame-ancestors 'none'`),

@@ -2,7 +2,7 @@ import { exaKeySettingsPath } from '../research/exa';
 
 /**
  * How the agent researches the web: `web_research` (vouchers and ChatGPT plans) or the Exa tools
- * with the user's own key (BYOK and custom endpoints, D23). See ResearchBackend.
+ * with the user's own key (BYOK and custom endpoints). See ResearchBackend.
  */
 export type PromptResearch = 'web_research' | 'exa';
 

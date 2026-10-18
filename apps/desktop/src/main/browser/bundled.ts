@@ -1,5 +1,5 @@
 /**
- * The Chromium that ships inside the packaged app (D17): playwright-core's pinned build, copied
+ * The Chromium that ships inside the packaged app: playwright-core's pinned build, copied
  * at packaging time by `scripts/chromium.ts` to `<resources>/chromium/`, with a manifest that
  * names its executable. Development runs have none and launch Playwright's cache instead.
  */

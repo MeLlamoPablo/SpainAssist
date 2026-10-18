@@ -1,8 +1,8 @@
-# Desktop release (DECISIONS D17): pushing a tag `vX.Y.Z` (or `vX.Y.Z-suffix`, a prerelease) on a
+# Desktop release: pushing a tag `vX.Y.Z` (or `vX.Y.Z-suffix`, a prerelease) on a
 # commit of `master` builds the installers on one native runner per target and publishes
 # them as a GitHub Release, with SHA256SUMS.txt. Windows also uploads `latest.yml` and the
 # installer's blockmap, and Linux `latest-linux.yml`: installed Windows apps and .deb installs
-# update from them (electron-updater, D19). Linux ships only the .deb: no AppImage, snap or apt
+# update from them (electron-updater). Linux ships only the .deb: no AppImage, snap or apt
 # repository. Installer names carry no version (`SpainAssist-mac-arm64.dmg`), so
 # `releases/latest/download/<name>` links always reach the newest stable release.
 # Publishing a tag that already has a release deletes that release first, so moving the tag

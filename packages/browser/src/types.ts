@@ -56,7 +56,7 @@ export interface BrowserServiceOptions {
   snapshotBudget?: number;
   logger?: Logger;
 
-  // --- Additions to the original stub (all optional) ------------------------------------------
+  // --- Optional ------------------------------------------------------------------------------
   /**
    * Viewport of every page. Default: 1280x800 when headless; `null` (the window decides, native
    * pixel ratio) when headed.

@@ -109,7 +109,7 @@ export interface ChatGPTLoginResult {
   clientId: string;
   /**
    * The verified OpenAI ID token (JWT). The app sends it to our key server, which checks it
-   * against OpenAI's keys to issue the account's scan-decider key (D12). Not a credential for
+   * against OpenAI's keys to issue the account's scan-decider key. Not a credential for
    * OpenAI's API; never handed to pi or the model.
    */
   idToken: string;

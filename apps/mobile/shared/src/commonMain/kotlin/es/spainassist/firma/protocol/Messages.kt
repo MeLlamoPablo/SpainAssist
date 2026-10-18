@@ -38,7 +38,7 @@ data class Welcome(
     val protocol: Int,
     val app: String,
     val expiresAt: String,
-    /** The pairing's own secret (Base64), only in the WELCOME that answers the QR's (D26). */
+    /** The pairing's own secret (Base64), only in the WELCOME that answers the QR's. */
     val session: String? = null,
 ) {
     // Never log the secret.

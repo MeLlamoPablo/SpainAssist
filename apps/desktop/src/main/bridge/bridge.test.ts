@@ -315,16 +315,6 @@ describe('bridge: prompts', () => {
     }
   });
 
-  it('ignores the obsolete visibility setting without restarting an active session', async () => {
-    await app.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, token);
-    const browser = app.services.browser.current();
-    await app.invoke('settings.update', { browser: { headless: true } });
-    await app.invoke('settings.update', { browser: { headless: false } });
-    expect(app.services.browser.current()).toBe(browser);
-    expect(app.browser.isOpen(procedureId)).toBe(true);
-    expect(app.browser.calls.some((call) => call.method === 'show')).toBe(false);
-  });
-
   it('only exposes the browser after the user clicks during a pending help request', async () => {
     await app.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, token);
     await app.invoke('browser.show', procedureId);

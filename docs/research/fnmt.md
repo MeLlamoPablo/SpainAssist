@@ -9,7 +9,7 @@ the key kept in our vault.*
 - **Today SpainAssist can't get an FNMT certificate issued.** The agent could fill in FNMT's form,
   but FNMT's page hands key generation to a local app, the *Configurador FNMT-RCM*, which we can't
   drive. The user would have to finish the request in their normal browser, then import the `.p12`
-  in Ajustes → Credenciales.
+  in Mis datos → Credenciales.
 - **The Configurador is a small Java app with a narrow job** (§3). It:
   - makes an RSA 2048 key, or EC P-256 when the page asks for EC;
   - builds a PKCS#10 request whose subject is always the placeholder `CN=foo.bar.com`;
@@ -403,7 +403,7 @@ traffic.
    ([browser.md](browser.md), `packages/browser/src/service.ts`).
    - Store it under SHA-256(SPKI) so the download can find it.
    - Allow several pending requests at once, and record the request date and the procedure.
-   - "Borrar todo" (`wipeAll`) and deleting the procedure must warn when a pending FNMT key exists.
+   - "Borrar todo" (IPC `vault.wipeAll`) and deleting the procedure must warn when a pending FNMT key exists.
    - Never expire the key silently. Let the user discard it.
 2. **The request must match the Configurador's:**
    - RSA 2048 with SHA256withRSA by default;
@@ -427,7 +427,7 @@ traffic.
 6. **Backup.** FNMT's flow nudges hard for a `.p12` backup, and users will expect one; without it,
    losing the vault or the computer means a new request and a new identity check. Offer "Guardar
    copia de seguridad" (export as a passphrase-protected `.p12`) right after the download, and from
-   Ajustes → Credenciales. This is a new vault feature: credentials can't be exported today.
+   Mis datos → Credenciales. This is a new vault feature: credentials can't be exported today.
 7. **Installing in the OS or Firefox.** The Configurador does it, and some users may want the
    certificate in their own browser too. That is a product choice, not an interoperability need.
    Default to vault-only, plus the backup from item 6. The user can import that file anywhere.
@@ -468,7 +468,7 @@ traffic.
      `packages/shared/src/official.ts`) and the mock-sede.
 2. **Certificate-request broker** (main process, `apps/desktop/src/main`):
    - `request({origin, keyType, keyLength, procedureId})`: get consent → generate the key
-     (`node:crypto`) → build the PKCS#10 (`pkijs`/`asn1js`, already dependencies) → store the
+     (`node:crypto`) → build the PKCS#10 (`pkijs`/`asn1js`, already dependencies of `@sa/signer`) → store the
      pending key in the vault → return base64 DER.
    - `install({origin, certData, procedureId})`: parse (§6.3) → find the pending key by SPKI hash →
      build the chain (§6.4) → get consent → create the vault credential → delete the pending key →
@@ -552,7 +552,7 @@ traffic.
 
 - **FNMT's mobile app "Certificado digital FNMT"** (Android, iOS) handles request, identity check
   and download without the Configurador. FNMT says its backup can be installed on a computer. The
-  user can then import that `.p12` in Ajustes → Credenciales. The export format is unverified
+  user can then import that `.p12` in Mis datos → Credenciales. The export format is unverified
   (Appendix B).
 - **Configurador in the user's own browser,** then import the backup `.p12`.
 - In both cases the agent can guide, fill FNMT's forms where it can, and book the identity
@@ -560,7 +560,7 @@ traffic.
 
 ## 10. Plan
 
-1. Decision record (D22): page shim plus main-process broker; pending keys in the vault; chain from
+1. Decision record: page shim plus main-process broker; pending keys in the vault; chain from
    bundled FNMT CAs; vault export.
 2. Mock-sede FNMT flow and e2e test (§6.13).
 3. Vault: pending-key record, `addCertificateFromKey`, `exportCertificate`, and wipe and delete

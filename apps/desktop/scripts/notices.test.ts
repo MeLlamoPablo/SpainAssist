@@ -37,7 +37,7 @@ describe('the desktop app’s third-party components', () => {
     }
   });
 
-  // AGENTS.md: no copyleft or proprietary dependency without a decision (DECISIONS D16).
+  // AGENTS.md: no copyleft or proprietary dependency without a decision.
   it('have permissive licences', () => {
     expect(
       packages.filter((p) => !isPermissive(p.license)).map((p) => `${p.name}: ${p.license}`),

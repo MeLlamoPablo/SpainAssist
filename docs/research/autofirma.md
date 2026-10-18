@@ -2,32 +2,42 @@
 
 *Date: 2026-10-03 · Scope: how Spanish sedes talk to AutoFirma, and how SpainAssist can sign with the user's `.p12` without the user ever seeing AutoFirma.*
 
+**What was built:** `@sa/signer` (`packages/signer/README.md`): the in-page `AutoScript` /
+`MiniApplet` shim, the Node handler behind the `AFIRMA_BINDING` (`__saAfirma`) binding, the
+triphase and batch clients, and CAdES, XAdES and PAdES engines in TypeScript (no Java). The README
+lists supported formats and known gaps. This memo keeps the external API, the sites' behaviour,
+the wire formats, the library findings, the legal reading and the open items.
+
 ## TL;DR
 
-- **The planned approach works, and it's the right primary design.** We inject an init script (Playwright `addInitScript`) that traps the global `AutoScript` and `MiniApplet` objects. Each operation goes to Node through `exposeBinding`, and Node signs with the `.p12`. I prototyped it with Playwright 1.63 and Chrome. It worked against:
+- **Trapping the JS API works.** An init script (Playwright `addInitScript`) traps the global
+  `AutoScript` and `MiniApplet` objects, and each operation goes to Node through `exposeBinding`.
+  The prototype (Playwright 1.63, Chrome) worked against:
   - the official `autoscript.js` 1.10.1, loaded twice and inside an iframe;
-  - the minified 1.8.2.1 copy that the AGE *Registro Electrónico General* bundles into its Angular app;
+  - the minified 1.8.2.1 copy that the AGE *Registro Electrónico General* bundles into its
+    Angular app;
   - the VALIDe-style `MiniApplet` alias;
   - the Junta de Andalucía `batchscript.js` pattern, which adds properties to `AutoScript`;
   - a strict CSP (`script-src 'self'`).
 
-  With the trap in place, the page never opens `afirma://`, never connects to `wss://127.0.0.1`, and never calls the StorageService or RetrieveService (§2).
-- The JS API is small and stable. One `sign(dataB64, algorithm, format, params, ok, ko)` call carries everything AutoFirma needs. Everything else on the wire (the `afirma://` URLs, the WebSocket messages, the intermediate-server encryption) is transport detail that the shim never has to touch (§1, Appendix A).
-- **Firma trifásica is cheap and covers a lot.** If a site asks for `*tri` formats (`CAdEStri`, `PAdEStri`, `XAdEStri`, …) and passes `serverUrl=`, the site's server builds the signature. We only compute a raw RSA PKCS#1 signature over each `PRE` blob. FIRe always works this way. I reimplemented the client in about 60 lines of JS and ran a full round trip against the public demo service at `valide.redsara.es/firmaMovil` (§4).
-- **For local (one-step) formats**, build CAdES-BES/EPES in Node with `@peculiar/asn1-cms` + `@peculiar/asn1-ess`. My prototype includes the *FirmaAGE* policy, `signing-certificate-v2` and `content-hints`, and OpenSSL verifies it.
-  - `node-forge` can't produce CAdES-BES, because it can't add `signing-certificate-v2`. It is still the right library for reading PKCS#12 files: it parsed AES-256, 3DES and legacy RC2-40 `.p12` files in my test.
-  - XAdES with `xadesjs` and PAdES with `@signpdf` are feasible but have real gotchas (§5). For exact AutoFirma output in XAdES/PAdES/FacturaE, consider running AutoFirma's own Java pre-sign/post-sign engine locally, with the key kept in Node (option D, §8). *Update: not needed. `@sa/signer` implements CAdES, XAdES and PAdES in TypeScript, and the app ships no Java (see `packages/signer/README.md` for what is left).*
+  With the trap in place, the page never opens `afirma://`, never connects to `wss://127.0.0.1`,
+  and never calls the StorageService or RetrieveService (§2).
+- The JS API is small and stable. One `sign(dataB64, algorithm, format, params, ok, ko)` call
+  carries everything AutoFirma needs. The `afirma://` URLs, WebSocket messages and
+  intermediate-server encryption are transport detail the shim never touches (§1, Appendix A).
+- **Firma trifásica is cheap and covers a lot.** If a site asks for `*tri` formats and passes
+  `serverUrl=`, the site's server builds the signature; the client only signs each `PRE` blob
+  (raw PKCS#1). FIRe always works this way. A full round trip ran against the public demo service
+  at `valide.redsara.es/firmaMovil` (§4).
+- **Local formats:** CAdES on `@peculiar/asn1-*`; `node-forge` only for reading PKCS#12 (it can't
+  add `signing-certificate-v2`). XAdES and PAdES libraries have real gotchas (§5). Running
+  AutoFirma's Java engine locally (option D, §8) was not needed: the TypeScript engines shipped.
 - **Real sites seen in this research:**
   - REG (`reg.redsara.es`) signs XML with `("SHA512withRSA", "XAdES Detached", null)`. Because of an AutoFirma quirk this actually produces **XAdES Enveloping** (§3.5).
   - FIRe forces the intermediate-server mode and triphase formats, and offers Cl@ve Firma as a cloud alternative.
   - VALIDe signs a file the user picks (`data=null`, `format="AUTO"`).
   - Junta de Andalucía runs recursive "sticky" signing loops.
 - **Legal:** a signature our code creates with the user's qualified certificate is the same legal kind of object as one created by AutoFirma with the same `.p12`: an advanced electronic signature based on a qualified certificate, accepted under art. 10.2.a of Ley 39/2015. What matters is the format and policy, plus the user's consent to each signature. No sede can verify which client produced a signature. `checkTime` and the WebSocket "echo" are not client-version checks (§7).
-- **MVP:**
-  - The shim with the full API surface.
-  - A signing broker in Node with a native confirmation prompt.
-  - Formats in priority order: the triphase client (all `*tri`), CAdES (implicit/explicit, FirmaAGE), NONE/PKCS#1, XAdES (Enveloping/Detached, FirmaAGE), then PAdES.
-  - Then cosign/countersign, JSON batch, and file helpers (§9).
 
 ---
 
@@ -214,13 +224,13 @@ function trap(name) {
 }
 trap('AutoScript'); trap('MiniApplet');
 // shim.sign = (dataB64, algorithm, format, params, ok, ko) =>
-//   window.__spaAutoFirma({op:'sign', args:{cop:'sign', dataB64, algorithm, format, params}})
+//   window.__saAfirma({op:'sign', args:{cop:'sign', dataB64, algorithm, format, params}})
 //     .then(r => r.ok ? ok(r.signatureB64, r.certificateB64, r.extraData) : ko(r.errorType, r.message, r.code));
 ```
 
 ```ts
 // Node side
-await context.exposeBinding('__spaAutoFirma', async ({ frame, page }, req) => broker.handle(frame.url(), page.url(), req));
+await context.exposeBinding('__saAfirma', async ({ frame, page }, req) => broker.handle(frame.url(), page.url(), req));
 await context.addInitScript({ path: 'shim.js' });
 ```
 
@@ -241,10 +251,10 @@ Results of the prototype (Playwright 1.63, `channel:'chrome'`, headless; harness
 3. **`setKeyStore` before `cargarAppAfirma`** throws in the real script. The shim tolerates it.
 4. **There is no presence check in the API.** `needNativeAppInstalled()` always returns `true`, and sites can only find out whether AutoFirma exists by running an operation. Nothing pings AutoFirma before an operation. The WebSocket `echo=-idsession=<id>@EOF` → `OK` exchange happens *inside* the real transport and is never visible to the site (`#L2594-L2620`; server side `CA/afirma-simple/.../AfirmaWebSocketServerV4Sup.java#L36`).
 5. **`checkTime`** fires a synchronous XHR (which causes a 404 in the site's logs) and may `alert()`. The shim makes it a no-op. Node can compare the `Date` header itself and warn the user or agent.
-6. **One operation at a time.** The real client overwrites its callbacks if a site launches two operations (manual §6 forbids it). The broker should queue per page and reject overlaps with an error.
+6. **One operation at a time.** The real client overwrites its callbacks if a site launches two operations (manual §6 forbids it). The shim queues operations per page.
 7. **`isAndroid()` / `isIOS()` must return `false`.** Otherwise sites switch to mobile flows.
 8. **Third success argument:** pass the JSON *string*, as the code does. If we want to also satisfy code written against the manual (`extraData.filename`), an option is `Object.assign(new String(json), JSON.parse(json))`. That is UNVERIFIED as necessary.
-9. **Treat the binding as hostile input.** Every page in the context can call `window.__spaAutoFirma(...)` directly. Take the origin from Playwright's `source.frame` (trusted), never from the page payload. Always ask the human.
+9. **Treat the binding as hostile input.** Every page in the context can call `window.__saAfirma(...)` directly. Take the origin from Playwright's `source.frame` (trusted), never from the page payload. Always ask the human.
 10. **When the trap fails:** if a site imports autoscript as an ES module, or declares `let/const AutoScript` (which creates a lexical binding that shadows `window.AutoScript`), the trap is bypassed. None of the sites in this research do that. **Fallback (layer 2):**
     - Override `window.WebSocket` in the init script so that `wss://127.0.0.1:<port>` connections go to an in-page fake that speaks protocol v4 (Appendix A).
     - The launch URL `afirma://websocket?ports=…&v=4&jvc=4&idsession=…` (and `afirma://<op>?…` in intermediate mode) is **observable** through Playwright's `page.on('request')` and CDP `Page.frameRequestedNavigation`, but **not interceptable** with `route()`. Both verified.
@@ -276,7 +286,7 @@ Results of the prototype (Playwright 1.63, `channel:'chrome'`, headless; harness
 
 Accepted set (`CA/afirma-core/.../UrlParametersToSign.java#L64`): `SHA1`, `SHA256`, `SHA384`, `SHA512`, plus each of those `withRSA` and `withECDSA`. Anything else fails with "Algoritmo de firma no soportado".
 
-AutoFirma builds the final algorithm from the key type, so `SHA512` with an RSA key becomes `SHA512withRSA`. FNMT and DNIe keys are RSA-2048, so an RSA-only MVP is fine. Observed values: `SHA512withRSA` (REG), `SHA256withRSA` (VALIDe), `SHA512` (manual examples).
+AutoFirma builds the final algorithm from the key type, so `SHA512` with an RSA key becomes `SHA512withRSA`. FNMT and DNIe keys are RSA-2048 (`@sa/signer` supports ECDSA too). Observed values: `SHA512withRSA` (REG), `SHA256withRSA` (VALIDe), `SHA512` (manual examples).
 
 ### 3.3 `params` / extraParams
 
@@ -468,11 +478,6 @@ POST <batchPostSignerUrl>  json=<b64u(batch, updated with presign errors)>&certs
 | PAdES | **@signpdf/signpdf** 3.3.0 (+ `placeholder-plain` / `placeholder-pdf-lib`) · 280k · 2025-12 | Usable. `SUBFILTER_ETSI_CADES_DETACHED` is supported by the placeholders. **But** the stock `P12Signer` (node-forge) adds `signingTime` and no `signingCertificateV2`, which is wrong for PAdES-BES and the AGE policy. Write a custom `Signer` that returns our CAdES-detached CMS over the ByteRange: no signing-time, no content-hints, with signing-certificate-v2 and optional policy. Add the `ESIC` catalog extension for FirmaAGE. Incremental update matters for already-signed PDFs (cosign): `placeholder-pdf-lib` rewrites the file, and `placeholder-plain` is limited with xref streams (UNVERIFIED in detail). Not prototyped. |
 | PDF manipulation | pdf-lib 1.17.1 (no release since 2022) → **@cantoo/pdf-lib** 2.11.1 (active fork) | for visible signature appearances later |
 
-**Where keys live:**
-- The `.p12` stays encrypted at rest (e.g. Electron `safeStorage`/Keychain).
-- Decrypt only in the Node main process, at signing time.
-- Never pass the key or password to the page, to Java, or on the command line.
-
 ---
 
 ## 6. Real-world behaviour
@@ -500,7 +505,7 @@ Two related facts:
   - The user needs Cl@ve Permanente at *nivel avanzado* (registered in person or with a certificate).
   - Signing means user + password + an **SMS OTP**, on Cl@ve's own pages. The certificate is created on first use.
   - So many Cl@ve users **can** produce cryptographic signatures without any `.p12` or AutoFirma, on sites that offer Cl@ve Firma (typically through FIRe). Sources: <https://clave.gob.es/dnin/que-es>, <https://clave.gob.es/dnin/realizando-la-firma>.
-  - This contradicts SPEC.md's statement that "Cl@ve … cannot produce a legally binding digital signature". The agent can drive it like the Cl@ve login, with the OTP relayed by the user.
+  - This contradicts the original product spec's statement that "Cl@ve … cannot produce a legally binding digital signature". The agent can drive it like the Cl@ve login, with the OTP relayed by the user.
 - **FIRe** (<https://github.com/ctt-gob-es/fire>):
   - The site redirects to FIRe, and the user chooses local certificate or cloud.
   - Local certificate uses AutoScript 1.9.0 (forced intermediate mode, triphase).
@@ -528,7 +533,7 @@ Two related facts:
   - The WebSocket `echo` is a liveness handshake between autoscript and AutoFirma.
   - `mcv` (`setMinimumClientVersion`) is enforced by AutoFirma itself.
   - On the triphase and batch HTTP calls, only the default Java User-Agent could hint at the client. Whether any WAF filters on it is UNVERIFIED.
-- **The real risks are structural differences** that make a strict back-end reject the signature: a missing `DataObjectFormat`, IssuerSerial DN order, `signing-time` inside PAdES, Enveloping vs Detached expectations (REG). Mitigations: be AutoFirma-compatible, test every format against VALIDe with a real certificate, or use option D (§8).
+- **The real risks are structural differences** that make a strict back-end reject the signature: a missing `DataObjectFormat`, IssuerSerial DN order, `signing-time` inside PAdES, Enveloping vs Detached expectations (REG). Mitigations: be AutoFirma-compatible and test every format against VALIDe with a real certificate.
 - **Consent and liability:**
   - The signature is legally the user's.
   - The agent must **never** auto-approve a certificate signature; a page could inject a prompt.
@@ -537,7 +542,7 @@ Two related facts:
   - Log every signature locally (origin, hash of data, time).
 - **Licensing:**
   - AutoFirma code is GPL-2.0+ / EUPL-1.1+. Reimplementing protocol compatibility from public behaviour is fine.
-  - *Copying* its code, or embedding its Java engine (option D), brings GPL/EUPL obligations. Keeping it as a separate process is usually treated as "mere aggregation" (UNVERIFIED; needs legal review).
+  - *Copying* its code, or embedding its Java engine, would bring GPL/EUPL obligations. We do neither.
 - **Automation:** `navigator.webdriver` and bot defences on some sedes are a general Playwright risk, not specific to AutoFirma.
 
 ---
@@ -546,81 +551,47 @@ Two related facts:
 
 | Option | How | Pros | Cons | Verdict |
 |---|---|---|---|---|
-| **A. JS API shim** (planned) | trap `AutoScript`/`MiniApplet`, `exposeBinding` → Node broker | Clean, high-level inputs (data, format, params, callbacks). Independent of transport (WebSocket, intermediate server, mobile). No localhost ports, TLS certs, LNA prompt or encryption. Verified on real bundles. | Bypassed by module-scoped autoscript (none seen). Must reimplement about 45 methods (trivial). | **Primary** |
+| **A. JS API shim** (built) | trap `AutoScript`/`MiniApplet`, `exposeBinding` → Node broker | Clean, high-level inputs (data, format, params, callbacks). Independent of transport (WebSocket, intermediate server, mobile). No localhost ports, TLS certs, LNA prompt or encryption. Verified on real bundles. | Bypassed by module-scoped autoscript (none seen). Must reimplement about 45 methods (trivial). | **Primary** |
 | **B. Fake AutoFirma at protocol level** | register or catch `afirma://`, run `wss://127.0.0.1:<port>` (v4: echo → `OK`, op URL → `cert\|sig[\|extra]` or `#wait`/`getresult?idsession=`), plus intermediate server (AES/DES, StorageService/RetrieveService `op=put/get`) | Works for any page, including bundled ones | TLS trust for 127.0.0.1, Chrome LNA, port races, fragmentation and binary frames (pyfirma), crypto of the intermediate mode, much more surface | **Fallback only, in-page** (WebSocket constructor override) |
 | **C. Bundle real AutoFirma** | install or ship the JRE app; drive it through `afirma://` or its CLI (`sign\|cosign\|countersign\|batchsign\|listaliases\|verify`, `-i -o -format -algorithm -config -store pkcs12:<path> -password -alias -filter`) | 100% parity | Its own UI, process lifecycle, OS protocol registration, key/password handed to Java (argv!), heavy | No |
-| **D. Hybrid: AutoFirma's signing core as a local "triphase server"** | Run AutoFirma's pre/post processors (`afirma-server-triphase-signer-core`: CAdES/XAdES/PAdES/FacturaE) locally (jlinked JRE or GraalVM native-image sidecar). Node does only the PKCS#1 with the key, using the **same triphase client as for remote servers**. | Byte-level parity including quirks; one code path for remote and local; key stays in Node. rfirma does exactly this (ADR-0001: "Java hace la prefirma y la postfirma … la firma la ejecuta Rust"). | About 50 MB sidecar or native-image build effort; GPL/EUPL review | Was the fallback for XAdES/PAdES/FacturaE if pure-TS parity proved costly. **Not pursued:** the TypeScript engines shipped, so there is no JRE. |
+| **D. Hybrid: AutoFirma's signing core as a local "triphase server"** | Run AutoFirma's pre/post processors (`afirma-server-triphase-signer-core`) locally in a JRE or native-image sidecar; Node only does the PKCS#1 with the key, as rfirma does (ADR-0001) | Byte-level parity including quirks; one code path for remote and local | About 50 MB sidecar or native-image build; GPL/EUPL review | **Not pursued:** the TypeScript engines shipped, so there is no JRE |
 
 ---
 
-## 9. Recommendation — the "AutoFirma shim" design
+## 9. Design decisions and open items
+
+The shim, the handler and the format engines are described in `packages/signer/README.md`
+(formats, approval and origin rules, known gaps). This section keeps only what it doesn't record.
 
 ### 9.1 Components
 
-1. **`autofirma-shim.js`** (page world, `context.addInitScript`). It installs into every frame:
-   - **Traps:** `AutoScript` and `MiniApplet` accessors, returning `undefined` until the site's script assigns them; afterwards our object, which keeps the real `VERSION` and stays extensible.
-   - **Full API surface** from §1.3 / §1.4, including the aliases `countersign` and `cargarMiniApplet` and the no-ops for JA legacy functions.
-   - **Pure-JS parts:** batch building (`createBatch`/`addDocumentToBatch` → JSON as autoscript does), `getBase64FromText`/`getTextFromBase64` (UTF-8), `downloadRemoteData` (`fetch` with credentials), `isAndroid`/`isIOS` → `false`, `echo`, `get*Error*`.
-   - **Exact callback shapes** (§1.3), error types (cancel → `AOCancelledOperationException`/`AS500001`) and async delivery.
-   - **Phase 2:** an in-page `WebSocket` override for `wss://127.0.0.1:*` that speaks v4, as the fallback.
-2. **Signing broker** (Node main process, behind `context.exposeBinding('__spaAutoFirma')`):
-   - Origin from `source.frame`/`source.page`; a per-page operation queue.
-   - Parse `params` as Java Properties (`\n`, escapes, `#`/`!` comments). Normalise Base64 (URL-safe, whitespace, padding). Accept `algorithm`/`format` case-insensitively.
-   - Resolve `dataB64`:
-     - `null` → let the user or agent pick a file (from SpainAssist's documents vault or a native dialog), and return `extraData='{"filename": "…"}'`;
-     - `http(s)://` → download with the browser context's cookies;
-     - otherwise decode.
-   - **Certificate selection:** the user's `.p12`(s), filtered by `filters`/`filters.N` (implement `nonexpired`, `issuer.*`, `subject.*`, `keyusage.*`, `qualified`, `encodedcert`, `thumbprint`, `policyid`, `dnie`→none). `sticky` means "reuse within this site/session". `headless`/`mandatoryCertSelection=false` mean "auto-select".
-   - **Confirmation UX:** native sheet + TouchID; the "sticky" flag offers "approve N signatures for this procedure" for recursive loops.
-   - **Dispatch:**
-     - `*tri` or batch → triphase client (§4): `net.fetch` from Electron (Chromium network stack, OS trust store), one cookie jar per operation, `Origin` like AutoFirma, 2-minute timeouts.
-     - Local formats → format engines (§9.3).
-   - Return `{ok, signatureB64, certificateB64 (leaf DER, standard Base64), extraData}` or `{ok:false, errorType, message, code}`.
-3. **Format engines** behind one interface: `sign({cop, format, algorithm, data, params, key, chain}) → bytes`.
+- **Shim (page world):** replaces every method (§2.3, item 1) and keeps the site's real
+  `Base64`, `Cipher` and `SupportDialog` globals. Operations are queued per page (§2.3, item 6).
+- **`dataB64` resolution:** `null` → the user picks a file, and the callback gets
+  `extraData='{"filename": "…"}'` as a string (§1.3). `http(s)://` → downloaded, but only from
+  the calling frame's own origin (AutoFirma downloads any URL).
+- **Triphase calls:** one cookie jar per operation and an `Origin` header like AutoFirma's (§4.1).
+- **Certificates:** the app's approval picks the certificate (`approveSignature` in
+  `apps/desktop/src/main/browser/holder.ts`): every unexpired stored certificate, plus the DNIe
+  when a phone is paired. The DNIe signs on the phone through an `ExternalSigningKey`
+  (`packages/signer/src/key.ts`). The site's `filters` / `filters.N` extraParams (§3.3) are
+  **ignored**. If they are added, `dnie:` should match the DNIe (`dnie.md` §4.1).
+- **Not built:** the in-page `WebSocket` override fallback for `wss://127.0.0.1:*` (§2.3, item 10).
 
-### 9.2 Methods for the MVP (in order)
+### 9.2 Live-smoke targets
 
-**P0**
-- `cargarAppAfirma`/`cargarMiniApplet`.
-- All setters, stored or no-op: `setServlets`, `setForceWSMode`, `setKeyStore`, `setPortRange`, `setStickySignatory`, `setLocale`, `setMinimumClientVersion`, `setAppName`, `setServiceTimeout`, `enableProgressDialog`, `checkTime` (no-op + Node-side skew warning).
-- **`sign`**, `selectCertificate`, the error getters, the Base64 utilities, `downloadRemoteData`, `isAndroid`/`isIOS`, `echo`.
+- **Conformance:** sign with a real FNMT test certificate and upload the result to **VALIDe**
+  (`valide.redsara.es`) for format and policy reports. Not done yet.
+- **Live smoke:** the VALIDe demo page and the public triphase service
+  `…/firmaMovil/afirma-server-triphase-signer/SignatureService`. By hand only: automated tests
+  never contact real government sites.
 
-**P1**
-- `coSign`/`cosign`/`counterSign` (CAdES first, plus `AUTO` detection).
-- `signBatchProcess` (triphase JSON + `setLocalBatchProcess(true)` local).
-- `signAndSaveToFile`, `saveDataToFile`, `getFileNameContentBase64`, `getMultiFileNameContentBase64` (native dialogs, or the agent supplies files from the vault).
+### 9.3 Open questions
 
-**P2**
-- Legacy `signBatch` (XML).
-- `getCurrentLog` (just return error `AS500010`).
-- The WebSocket-override fallback.
-- DNIe/PKCS#11 (see `dnie.md` §4.1).
-
-### 9.3 Formats, in priority order
-
-1. **Triphase client** for every `*tri` format and batch. About 100 lines, no format code, verified live. It covers FIRe and mobile-compatible sedes for every format.
-2. **CAdES** sign (implicit/explicit, `precalculatedHashAlgorithm`, `expPolicy=FirmaAGE`, `contentTypeOid`/`contentDescription`, `signerClaimedRoles`). Prototype exists and verifies with OpenSSL.
-3. **NONE / PKCS#1:** `crypto.sign(digest, data, key)`.
-4. **XAdES** sign:
-   - Enveloping (default), Detached (`<AFIRMA><CONTENT…>`), Enveloped; FirmaAGE.
-   - **Bug-compatible variant selection:** use extraParams `format`, otherwise Enveloping, even when the top-level format says "Detached". REG depends on this.
-   - Do it with xadesjs plus patches (`DataObjectFormat`, `SPURI` parse fix, DN order), **or** adopt option D now.
-5. **PAdES-BES:** @signpdf with a custom CAdES-detached signer (no signing-time); FirmaAGE ESIC; visible signature later.
-6. FacturaE, ASiC-S, CAdES/XAdES cosign/countersign trees: through option D or the site's triphase server.
-
-### 9.4 Test plan
-
-- **Unit:** each engine against `openssl cms -verify` (CAdES) and xmlsec, or a Java validator (XAdES).
-- **Conformance:** sign with a real FNMT test certificate and upload to **VALIDe** (`valide.redsara.es`) for format and policy reports.
-- **Differential:** the same input through real AutoFirma (or option D) vs our engine; compare signed attributes and structure.
-- **Integration:** keep the prototype pages (official 1.10.1/1.9.0, REG bundle, VALIDe, FIRe `MiniApplet.jsp`, Andalucía batchscript) as Playwright e2e fixtures with a fake broker.
-- **Live smoke:** VALIDe demo page and the public triphase service `…/firmaMovil/afirma-server-triphase-signer/SignatureService`.
-
-### 9.5 Open questions
-
-- AEAT, DGT and SEPE flows (§3.5): capture real calls when the agent runs them, using the shim's own logging (log `format`/`algorithm`/`params` keys, never data).
-- Option D vs pure TS for XAdES/PAdES. Decide after a 2–3 day spike that compares VALIDe reports.
-- Electron-hosted browser (instead of Playwright Chromium): there, use `session.setPreloads` plus a main-world injection, and block `afirma:` in `will-frame-navigate`.
+- AEAT, DGT and SEPE flows (§3.5): capture real calls when the agent runs them (log
+  `format`/`algorithm`/`params` keys, never data).
+- Electron-hosted browser (instead of Playwright Chromium): there, use `session.setPreloads` plus
+  a main-world injection, and block `afirma:` in `will-frame-navigate`.
 
 ---
 
@@ -674,5 +645,4 @@ AutoFirma stores the result with `op=put&v=1_0&id=<id>&dat=…`. The StorageServ
 - jsrsasign CAdES quality.
 - Whether strict validators reject xadesjs's forward-order `X509IssuerName`.
 - WAF filtering on User-Agent for triphase calls.
-- The licensing reading of option D.
 - Whether REG's backend would also accept a true Detached signature (we recommend the Enveloping output AutoFirma produces).

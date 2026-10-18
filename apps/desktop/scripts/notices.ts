@@ -17,7 +17,7 @@
  * Chromium's notices are Electron's own `LICENSES.chromium.html`.
  *
  * Fails, and writes nothing, when a licence isn't permissive: copyleft or proprietary code needs
- * a decision first (AGENTS.md, DECISIONS D16).
+ * a decision first (AGENTS.md).
  */
 import { execFileSync } from 'node:child_process';
 import {
@@ -50,7 +50,7 @@ const BUILD_ONLY = new Set([
  */
 const NOT_BUNDLED = new Set([
   // @sentry/node's build-tool plugins (`@sentry/node/bundler-plugin/*`), with the Sentry CLI
-  // (FSL-1.1) under them. The app imports only `@sentry/electron/main` and `/renderer` (D29).
+  // (FSL-1.1) under them. The app imports only `@sentry/electron/main` and `/renderer`.
   '@sentry/bundler-plugins',
 ]);
 
@@ -76,9 +76,9 @@ const PERMISSIVE = new Set([
  * Licences that aren't permissive but ship by a recorded decision. Keep the reason with each.
  */
 const DECIDED: Record<string, string> = {
-  // The agent's browser (DECISIONS D17): Google's Chrome for Testing build of Chromium, which
-  // playwright-core pins. Its redistribution terms are still to be confirmed (D17).
-  'LicenseRef-Chrome-for-Testing': 'D17',
+  // The agent's browser: Google's Chrome for Testing build of Chromium, which
+  // playwright-core pins. Its redistribution terms are still to be confirmed.
+  'LicenseRef-Chrome-for-Testing': 'Redistribution terms still to be confirmed',
 };
 
 /** Whether a component's licence may ship: permissive, or allowed by a decision. */
@@ -388,7 +388,7 @@ function main() {
   const blocked = components.filter((c) => !mayShip(c.license));
   if (blocked.length) {
     console.error(
-      'notices: these licences are not permissive; decide on them first (DECISIONS D16):\n' +
+      'notices: these licences are not permissive; decide on them first:\n' +
         blocked.map((c) => `  ${c.name}@${c.version}: ${c.license}`).join('\n'),
     );
     process.exit(1);

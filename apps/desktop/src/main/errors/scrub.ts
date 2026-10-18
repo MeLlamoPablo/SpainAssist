@@ -18,7 +18,7 @@ const KEEP = new Set([
 ]);
 
 /**
- * Removes personal data from an error report before it leaves the device (D29): no user, request,
+ * Removes personal data from an error report before it leaves the device: no user, request,
  * breadcrumbs or machine name, and every remaining string with the home folder replaced by `~`
  * (paths carry the account name) and Spanish PII (DNI, IBAN, phone, e-mail…) replaced by
  * placeholders.

@@ -54,7 +54,7 @@ export interface PhoneSignRequest {
   signatures?: number;
   /** The DNI's CAN (6 digits). */
   can: string;
-  /** The DNIe PIN (D20); left out for `certificate` requests. */
+  /** The DNIe PIN; left out for `certificate` requests. */
   pin?: string;
   /**
    * The phone needs a new CAN or PIN (the card refused it, or a re-sent request came without

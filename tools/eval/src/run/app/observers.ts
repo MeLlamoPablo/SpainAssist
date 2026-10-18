@@ -1,7 +1,7 @@
 /**
- * Everything the app does, as `Observation`s (docs/EVAL.md, "Run loop"; what the rules read is in
- * tools/eval/README.md). Every observation goes to the run's one sequencer: this file never
- * numbers anything itself.
+ * Everything the app does, as `Observation`s (docs/EVAL.md, "Run loop"; what the rules read is
+ * `Observation` and `Condition` in src/contracts.ts). Every observation goes to the run's one
+ * sequencer: this file never numbers anything itself.
  *
  *   tool_start        the agent's `AgentEvent` (complete arguments, as soon as the tool starts)
  *   tool_end          pi's session file (the complete result: the app's transcripts and the events

@@ -9,7 +9,7 @@ import { VOUCHER_BODY_LENGTH } from './voucher-code';
 
 // ---------------------------------------------------------------------------------------------
 // Key server: vouchers -> capped LiteLLM virtual keys. The key server never sees conversations;
-// the client calls our LiteLLM gateway at `baseUrl` with the key (D10 in docs/DECISIONS.md).
+// the client calls our LiteLLM gateway at `baseUrl` with the key.
 // Base path: /v1
 // ---------------------------------------------------------------------------------------------
 
@@ -72,7 +72,7 @@ export type VoucherCreditResponse = z.infer<typeof VoucherCreditResponse>;
  * Document-scan frame decider on our LiteLLM gateway: OpenRouter's Decisions API
  * (`POST https://openrouter.ai/api/alpha/decisions`) through LiteLLM's OpenRouter pass-through,
  * charged to the calling key. Voucher keys and ChatGPT keys may call it; nothing else under
- * `/openrouter` (D10, D12).
+ * `/openrouter`.
  */
 export const LITELLM_DECIDER_PATH = '/openrouter/alpha/decisions';
 
@@ -91,7 +91,7 @@ export function litellmDeciderUrl(baseUrl: string): string {
 export const TRANSCRIPTION_MODEL = 'google/gemini-3.5-flash-lite';
 
 /**
- * POST /v1/chatgpt-keys — the scan-decider key of a "Sign in with ChatGPT" user (D12). The app
+ * POST /v1/chatgpt-keys — the scan-decider key of a "Sign in with ChatGPT" user. The app
  * sends the OpenAI ID token it received (and verified) at sign-in; never the access token.
  */
 export const ChatGPTKeyRequest = z.object({

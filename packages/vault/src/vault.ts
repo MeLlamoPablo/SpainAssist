@@ -650,7 +650,7 @@ export class Vault {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   }
 
-  /** Creates or replaces a secret. `id` like "provider.openrouter" or "browser.state:<id>". */
+  /** Creates or replaces a secret. `id` like "provider.voucher". */
   async setSecret(id: string, label: string, value: string): Promise<void> {
     return this.lock.run(async () => {
       if (typeof id !== 'string' || !SECRET_ID_PATTERN.test(id)) throw invalid('Invalid secret id');

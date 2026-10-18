@@ -124,7 +124,7 @@ export async function buildVectors() {
   const desktop = keyPair('desktop');
   const phone = keyPair('phone');
   const secret = fixed('secret', 32);
-  // The pairing's own secret, sent in the first WELCOME (D26).
+  // The pairing's own secret, sent in the first WELCOME.
   const sessionSecret = fixed('session secret', 32);
   const room = fixed('room', 16);
   const desktopNonce = fixed('desktop nonce', 16);

@@ -1,10 +1,11 @@
 # @sa/agent
 
-Everything pi-specific in SpainAssist: the **agent host** (one process per active agent:
-the assistant behind the chat, or one procedure's agent), the **tools** the model can call, the **system prompt**, the **RPC client** the desktop app uses
-to drive a host, and **provider helpers** (Sign in with ChatGPT, vouchers, BYOK, credit).
+Everything pi-specific in SpainAssist: the **agent host** (one process per active agent: the
+assistant behind the chat, or one procedure's agent), the **tools** the model can call, the
+**system prompts**, the **RPC client** the desktop app uses to drive a host, and **provider
+helpers** (Sign in with ChatGPT, vouchers, BYOK, credit).
 
-Background: [`docs/research/pi.md`](../../docs/research/pi.md) (pi 1.0 facts),
+Background: [`docs/research/pi.md`](../../docs/research/pi.md) (pi 1.x facts),
 [`docs/research/providers-and-research.md`](../../docs/research/providers-and-research.md),
 contracts in [`@sa/shared`](../shared/src) (`bridge.ts`, `procedure.ts`, `chat.ts`).
 
@@ -13,7 +14,7 @@ contracts in [`@sa/shared`](../shared/src) (`bridge.ts`, `procedure.ts`, `chat.t
 ```
 desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as Node, one per agent)
      ▲   │                                     │  pi SDK: ModelRuntime + AgentSession + runRpcMode
-     │   └── PiRpcClient ◄── stdio JSONL ─────►│  inline extension: 26 tools + exact system prompt
+     │   └── PiRpcClient ◄── stdio JSONL ─────►│  inline extension: the tools + exact system prompt
      │                                         │
      └──── host bridge (HTTP, bearer token) ◄──┘  procedure agents: procedure/prompts/vault/
                                                   browser/search/feedback; the assistant:
@@ -33,11 +34,11 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
   files, and an inline extension that registers the tools, returns the exact system prompt from
   `before_agent_start` (no `<cwd>` leak), blocks pi's `bash` RPC command and any unknown tool.
   Then `runRpcMode`.
-- Roles (`config.role`, D9): `assistant` gets `createAssistantTools()` (delegation, `ask_user`,
+- Roles (`config.role`): `assistant` gets `createAssistantTools()` (delegation, `ask_user`,
   vault) and `buildAssistantPrompt()`; `procedure` gets `createTools()` (everything else, plus
   `web_research` for voucher users and ChatGPT plans, or `exa_search`/`exa_fetch` for BYOK and
-  custom endpoints, see `host/research.ts`) and `buildSystemPrompt()`, whose final message per run is a short
-  report for the assistant.
+  custom endpoints, see `host/research.ts`) and `buildSystemPrompt()`, whose final message per
+  run is a short report for the assistant.
 - `src/tools/` — tool definitions (TypeBox schemas, English model-facing text). Bridge-backed
   tools pass the tool's `AbortSignal` to the HTTP request, so aborting a run cancels a pending
   form/confirmation in the app (no abort deadlock).
@@ -52,20 +53,28 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 
 ## Tools
 
+The names are in `src/tools/names.ts`. The assistant has `procedure_list`, `procedure_read`,
+`procedure_start`, `procedure_message`, `procedure_respond`, `procedure_resume`,
+`procedure_stop` and `procedure_cancel` (bridge `procedures.*`: it delegates every online step),
+plus `ask_user`, `vault_read` and `vault_save`. Procedure agents have the rest:
+
 | Tool | Backed by | Notes |
 | --- | --- | --- |
 | `procedure_update` | `procedure.update` | Arrays replace the previous list (send complete lists); `clearNextAction` → `nextAction: null`. `nextAction.appointment` (address + local `startsAt`) gets Maps/Calendar buttons on the card. Result includes `Status: <status>` |
 | `ask_user` | `prompt.form` | Structured fields, `vaultKey` answers are always saved to my data; `secret` fields are not exposed to the model |
 | `confirm_action` | `prompt.confirm` | `confirmKind`: action / submission / payment |
 | `request_user_action` | `prompt.userAction` | captcha, qr_scan, phone_approval, manual_step, offline |
+| `request_credential` | `prompt.credential` | The user adds a Cl@ve Permanente (or the DNIe, with `dniePhone`) in the app's own form; returns the credential id |
+| `request_phone_call` | `prompt.phoneCall` | The user phones an office; the app can record and transcribe the call. Returns the outcome, transcript and notes |
 | `vault_read`, `vault_save` | `vault.read`, `vault.save` | Values of personal data; credential summaries only |
+| `document_read` | `vault.document` | A saved document as text, image or PDF text plus page images (paged) |
 | `download_save` | `downloads.save` | Moves a temporary browser download into the vault under a readable name (extension kept) |
 | `browser_open`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_check`, `browser_press`, `browser_wait`, `browser_back`, `browser_upload` | `browser.*` | Result = compact observation text (URL, tabs, downloads, signatures, dialogs, page script errors, notes, then the snapshot). `details.imageId` carries the UI screenshot id |
 | `browser_fill_from_vault` | `browser.fillFromVault` | `source` personal (`key`) or credential (`credentialId`, `field`) |
 | `browser_fill_from_user` | `browser.fillFromUser` | One-time codes typed by the app; the model never sees them |
 | `browser_tabs`, `browser_screenshot`, `browser_use_certificate`, `browser_close` | `browser.*` | Screenshot returns an image block (refused when the model has no vision) |
-| `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher (D13); `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan (D21); `mode` picks model and effort: `fast` → `gpt-6-luna`, `balanced` → `gpt-6.1-sol`, `deep` → `gpt-6-astra`, all at high effort | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
-| `exa_search`, `exa_fetch` | local (Exa REST API, `api.exa.ai`), with the user's own key from `agent.exaKey` | BYOK and custom endpoints only, instead of `web_research` (D23). `exa_search`: `POST /search`, `userLocation: "ES"`, `sources` `official` (default, `includeDomains` of Spanish administrations) or `any`, ≤ 10 results with 1,500 characters each. `exa_fetch`: `POST /contents`, ≤ 5 URLs, 12,000 (≤ 30,000) characters each, `fresh` asks for a new copy. No key, a rejected key or no credit: a research-blocker result that names where the user adds the key |
+| `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher; `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan; `mode` picks model and effort: `fast` → `gpt-6-luna`, `balanced` → `gpt-6.1-sol`, `deep` → `gpt-6-astra`, all at high effort | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
+| `exa_search`, `exa_fetch` | local (Exa's hosted MCP server, `mcp.exa.ai`): keyless free tier, or the user's optional key from `agent.exaKey` for higher limits | BYOK and custom endpoints only, instead of `web_research`. `exa_search`: `userLocation: "ES"`, `sources` `official` (default, `includeDomains` of Spanish administrations) or `any`, ≤ 10 results. `exa_fetch`: ≤ 5 URLs, 12,000 (≤ 30,000) characters each. A rejected key gives a research-blocker result that tells the user to fix or remove it |
 | `feedback_search`, `feedback_submit`, `feedback_vote` | `feedback.*` | Submit text must be PII-free (the app scrubs again); votes rate a search result by id |
 | `fetch_url` | local | 20 s timeout, 6 MB (HTML) / 25 MB (PDF) cap, ≤ 5 redirects (each re-checked), private hosts blocked, `offset`/`maxChars` paging, `mode: full`, 10-minute cache |
 | `boe_search` | local (BOE open data) | `legislacion-consolidada` search, in-force by default |
@@ -77,7 +86,7 @@ may run in parallel.
 ## Using it from the desktop main process
 
 ```ts
-import { buildAgentLaunch, PiRpcClient, type AgentEvent } from '@sa/agent';
+import { buildAgentLaunch, DEFAULT_MODELS, PiRpcClient, type AgentEvent } from '@sa/agent';
 
 const client = new PiRpcClient(
   buildAgentLaunch({
@@ -89,7 +98,7 @@ const client = new PiRpcClient(
       procedureId: p.id,
       sessionFile: join(appData, 'sessions', `${p.id}.jsonl`),
       language: settings.language,
-      model: { provider: 'litellm', id: 'moonshotai/kimi-k2.6', baseUrl: voucherBaseUrl, maxTokens: 8192 },
+      model: { provider: 'litellm', id: DEFAULT_MODELS.voucher, baseUrl: voucherBaseUrl, maxTokens: 8192 },
     },
     bridge: { url: bridgeUrl, token: perProcedureToken },
   }),
@@ -106,7 +115,8 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
   attempt pi retries: drop it). `tool_start` / `tool_end {summary, details}` map to activity rows.
   `usage {inputTokens, outputTokens, costUsd}` per model response. `log` (host stderr, pi
   notices) and `process_exit {code, signal, stderrTail}`. `errorKind`: auth, quota (402,
-  LiteLLM "budget has been exceeded", ChatGPT usage limit), rate_limit, context, network, provider, crash, unknown.
+  LiteLLM "budget has been exceeded", ChatGPT usage limit), rate_limit, context, network,
+  provider, crash, unknown.
 - **Prompts while running.** `prompt()` steers by default when a run is active. If the agent is
   blocked on a `prompt.*` request, the steering message waits until the user answers that
   prompt or the run is aborted (the app cancels the assistant's own questions when the user
@@ -132,6 +142,7 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 
 | Field | Meaning |
 | --- | --- |
+| `role` | `procedure` (default) or `assistant` |
 | `procedureId`, `sessionFile`, `language` | Session file is created if missing and resumed otherwise |
 | `model.provider`, `model.id` | `openai` (ChatGPT OAuth), `litellm` (vouchers), any pi provider (BYOK), or `custom` |
 | `model.baseUrl` | Required for `custom` and `litellm`; for built-in providers overrides the endpoint (dev/e2e: → mock LLM). Unknown ids are cloned from a sibling catalog model |
@@ -139,8 +150,11 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 | `model.maxTokens` | Output cap (capped voucher keys) |
 | `model.thinkingLevel` | Default `medium`, clamped to the model |
 | `research.keyServerUrl` | Our key server: vouchers' `web_research` |
-| `research.exa` | BYOK and custom endpoints: `exa_search`/`exa_fetch` with the user's Exa key, no `web_research` (D23) |
+| `research.exa` | BYOK and custom endpoints: `exa_search`/`exa_fetch` instead of `web_research` (the optional key comes from the app at call time) |
 | `research.boeBaseUrl`, `research.exaBaseUrl`, `research.allowPrivateHosts` | Tests / e2e (mock sede on localhost) |
+| `feedback` | `{submit, vote}` when the app has a feedback server: `feedback_search`, plus submit and vote when on |
+| `dniePhone` | The DNIe through the phone app (`dnie-phone` flag) is offered |
+| `idleCompaction` | Compaction while idle, just before the prompt cache expires |
 | `extraTrustedHosts` | Dev/e2e hosts allowed for credentials |
 | `timeZone` | For "today" in the prompt; default `Europe/Madrid` |
 
@@ -164,13 +178,12 @@ call without them is the product host.
 | `now` | Clock of "Today is …" in both system prompts, read on every turn |
 
 The shipped entry `src/host/main.ts` (bundled to `dist/host.js`) calls `runHost()` with none of
-them and imports nothing else: hooks are function values given by the code that calls `runHost`,
-so no config key or environment variable switches them on in a packaged app (`test/host-entry.test.ts`
-and the bundle check in `test/integration.test.ts` guard this). An embedder bundles its own entry
-from the `@sa/agent/host-runtime` subpath, which exports `runHost`, the hook types, `HostResolver`,
-the research factories (`createKeyServerResearchTool`, `createChatGPTResearchTool`,
-`createExaTools`) with their option types and `ResearchBackend`, and `hostLog` (stderr: stdout is
-the RPC protocol). The bundle keeps `@earendil-works/*`, `typebox` and
+them and imports nothing else: hooks are function values given by the code that calls
+`runHost`, so no config key or environment variable switches them on in a packaged app
+(`test/host-entry.test.ts` and the bundle check in `test/integration.test.ts` guard this). An
+embedder bundles its own entry from the `@sa/agent/host-runtime` subpath (`src/host/runtime.ts`
+lists its exports: `runHost`, the hook types, the research factories, `hostLog`…; stdout is the
+RPC protocol, so log to stderr). The bundle keeps `@earendil-works/*`, `typebox` and
 `@napi-rs/canvas` external like `scripts/build-host.mjs`, and must resolve them from where it
 runs. `test/helpers/hook-host.ts` is a worked example (see `test/host-hooks.test.ts`).
 `parseLiteLLMSpendHeaders` is exported from the package index for meters that read LiteLLM's
@@ -196,7 +209,7 @@ spend headers.
   changes the model); only BYOK and custom endpoints keep a user-chosen model, for every role.
 - `listByokProviders()` — pi-ai's built-in providers with API-key auth and their chat models.
 - `redeemVoucher(keyServerUrl, code)` → `KeyServerError {code, status}` on failure.
-- Vouchers run on our LiteLLM gateway (D10): the `litellm` provider is OpenAI-compatible at the
+- Vouchers run on our LiteLLM gateway: the `litellm` provider is OpenAI-compatible at the
   voucher's `baseUrl`, with model metadata (context window, images, reasoning levels) from pi's
   OpenRouter catalog, since LiteLLM serves models under their OpenRouter ids. Requests use the
   standard `reasoning_effort` and `max_tokens`, no `store` and no `developer` role.

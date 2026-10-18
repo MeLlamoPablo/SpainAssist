@@ -188,7 +188,7 @@ describe('DesktopPairing + PhoneClient', () => {
     await until(() => t.phoneMessages.length === 1);
   });
 
-  it('lets the QR pair one phone: a later phone with it gets no session (D26)', async () => {
+  it('lets the QR pair one phone: a later phone with it gets no session', async () => {
     const t = setup();
     const phone = t.connectPhone();
     await until(() => t.pairing.connected && phone.connected);

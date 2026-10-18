@@ -65,7 +65,7 @@ class PhoneLink(
 
     private class Session(val sealer: Sealer, val opener: Opener, val assembler: MessageAssembler)
 
-    /** The scanned link; its secret becomes the pairing's own once the desktop sends it (D26). */
+    /** The scanned link; its secret becomes the pairing's own once the desktop sends it. */
     var pairing: PairingLink = pairing
         private set
 

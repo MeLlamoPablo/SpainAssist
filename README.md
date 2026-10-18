@@ -33,12 +33,14 @@ corepack pnpm install
 corepack pnpm dev
 ```
 
-Dev build, local backends:
+Dev build, local backends (no Docker, no accounts):
 
 ```sh
 corepack pnpm services -- --mocks
 corepack pnpm dev:local
 ```
+
+What each one starts and the other ways to run the backends: [infra/README.md](infra/README.md).
 
 ## Project layout
 
@@ -48,18 +50,20 @@ corepack pnpm dev:local
 | `apps/mobile` | Phone app for DNIe signatures and certificate logins |
 | `packages/agent` | Agent host, tools, provider adapters and web research |
 | `packages/browser` | Browser contexts, element references, certificate login and downloads |
+| `packages/sidecar` | Go TLS helper for certificate and DNIe logins |
 | `packages/signer` | AutoScript shim and CAdES, XAdES, PAdES and triphase signing |
+| `packages/companion` | Encrypted desktop ↔ phone channel for DNIe signatures |
 | `packages/vault` | Encrypted data, documents and credentials with OS-backed key wrapping |
 | `packages/pii` | Spanish personal data detection and feedback scrubbing |
+| `packages/gateway-keys` | Users' LiteLLM keys as auth for our services |
 | `packages/shared` | Validated contracts between app, agent and services |
 | `services` | Voucher (LiteLLM keys), anonymous feedback, maps and phone relay backends |
 | `apps/mock-sede`, `tools/mock-llm`, `e2e` | Local simulation and integration tests |
-| `infra` | Docker Compose and infrastructure definitions |
+| `tools/eval` | SpainBench eval suite ([docs/EVAL.md](docs/EVAL.md)) |
+| `infra` | Docker Compose for a local stack, Terraform for production |
 
-See [architecture](docs/ARCHITECTURE.md) and each package's
-README for APIs and configuration. Backend production configuration is documented in
-[infra/README.md](infra/README.md). No infrastructure is deployed by local setup.
-
+See [architecture](docs/ARCHITECTURE.md) and each package's README for APIs and configuration.
+Backends and production are in [infra/README.md](infra/README.md). Local setup deploys nothing.
 
 ## Licence
 

@@ -5,10 +5,10 @@ import { LITELLM_PROVIDER_ID } from './model';
 
 /**
  * How a procedure's agent researches the web:
- * - "key server": vouchers, `web_research` on Parallel through our key server (D13);
- * - "chatgpt": ChatGPT plans (OAuth), `web_research` with OpenAI's hosted web search (D21);
+ * - "key server": vouchers, `web_research` on Parallel through our key server;
+ * - "chatgpt": ChatGPT plans (OAuth), `web_research` with OpenAI's hosted web search;
  * - "exa": BYOK and custom endpoints, `exa_search` and `exa_fetch` on Exa's keyless tier, or
- *   with the user's optional Exa key (D23). They never get `web_research`.
+ *   with the user's optional Exa key. They never get `web_research`.
  * Undefined: no web research (the assistant, or a provider with none); the prompt then makes the
  * agent report a research blocker.
  */

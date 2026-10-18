@@ -104,7 +104,7 @@ resource "unleash_api_token" "desktop_development" {
   depends_on = [coolify_resource_action.unleash]
 }
 
-# The desktop app's version, sent with every flags request (`properties[appVersion]`, D19), so
+# The desktop app's version, sent with every flags request (`properties[appVersion]`), so
 # flags such as must-update can be constrained by version (SEMVER_LT).
 resource "unleash_context_field" "app_version" {
   name        = "appVersion"
@@ -142,7 +142,7 @@ resource "unleash_context_field" "arch" {
   depends_on = [coolify_resource_action.unleash]
 }
 
-# How the desktop app was installed (`InstallChannel`, sent as `properties[installChannel]`, D17),
+# How the desktop app was installed (`InstallChannel`, sent as `properties[installChannel]`),
 # so a flag can target the Microsoft Store build.
 resource "unleash_context_field" "install_channel" {
   name        = "installChannel"

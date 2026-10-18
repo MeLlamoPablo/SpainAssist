@@ -1,5 +1,5 @@
 /**
- * electron-builder configuration (docs/research/electron-packaging.md §6.11, DECISIONS D17).
+ * electron-builder configuration (docs/research/electron-packaging.md §6.11).
  *
  *   corepack pnpm --filter @sa/desktop package       # installers for this OS and CPU
  *   corepack pnpm --filter @sa/desktop package:dir   # only the unpacked app, to check it
@@ -17,11 +17,11 @@
  *   next to the node_modules that hold its external imports (`dependencies`).
  * - Signing only happens when its environment variables are set. Without them, macOS builds are
  *   ad-hoc signed (no notarization: Gatekeeper warns once) and Windows builds are unsigned.
- * - Updates (D19): `publish` points the app at this repo's GitHub Releases (electron-updater).
+ * - Updates: `publish` points the app at this repo's GitHub Releases (electron-updater).
  *   The Microsoft Store package (`appx`) updates through the Store instead.
- * - Windows ships twice (D17): the NSIS installer on GitHub Releases (`win.target`, release.yml)
+ * - Windows ships twice: the NSIS installer on GitHub Releases (`win.target`, release.yml)
  *   and an MSIX for the Microsoft Store (`package:msix`, the `appx` options).
- * - Linux ships as a .deb, the only Linux target (D17).
+ * - Linux ships as a .deb, the only Linux target.
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -125,7 +125,7 @@ const config: Configuration = {
     // The agent's browser, staged by beforePack (scripts/chromium.ts, src/main/browser/bundled.ts).
     // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder macros
     { from: 'vendor/${platform}-${arch}/chromium', to: BUNDLED_CHROMIUM_DIR },
-    // Outside the ASAR, so users can read them (DECISIONS D16). electron-builder adds Electron's
+    // Outside the ASAR, so users can read them. electron-builder adds Electron's
     // LICENSE.electron.txt and Chromium's LICENSES.chromium.html (in Resources on macOS).
     { from: '../../LICENSE', to: 'LICENSE.txt' },
     { from: NOTICES, to: NOTICES },
@@ -138,7 +138,7 @@ const config: Configuration = {
   beforePack,
   electronFuses: {
     // The agent host runs this binary as Node (ELECTRON_RUN_AS_NODE). Turn it off when the host
-    // moves to utilityProcess (D2).
+    // moves to utilityProcess.
     runAsNode: true,
     enableCookieEncryption: true,
     // Also gates NODE_EXTRA_CA_CERTS, which the agent host inherits behind corporate proxies.
@@ -151,7 +151,7 @@ const config: Configuration = {
     // The renderer is served from app://, not file://.
     grantFileProtocolExtraPrivileges: false,
   },
-  // Where updates come from (D19): written into the app as `app-update.yml` and used for the
+  // Where updates come from: written into the app as `app-update.yml` and used for the
   // `latest*.yml` update files next to the installers. CI uploads them to the release itself
   // (`--publish never`, .github/workflows/release.yml). Windows and the Linux .deb update
   // themselves; macOS waits for signing.
@@ -178,9 +178,9 @@ const config: Configuration = {
     target: ['nsis'],
     ...(azure ? { azureSignOptions: azure } : {}),
   },
-  // The Microsoft Store package (D17). The Store signs it on submission; a local test build needs a
+  // The Microsoft Store package. The Store signs it on submission; a local test build needs a
   // certificate whose subject is `publisher` (sideloading). Tiles: packaging/appx/
-  // (packaging/render-icon.mjs). The Store updates it (D19), and uninstalling it removes its data.
+  // (packaging/render-icon.mjs). The Store updates it, and uninstalling it removes its data.
   appx: {
     ...STORE_IDENTITY,
     applicationId: 'SpainAssist',
@@ -194,8 +194,8 @@ const config: Configuration = {
     // Version X.Y.Z.0: the Store reserves the fourth part, so never take CI's build number.
     setBuildNumber: false,
   },
-  // A .deb only (D17): no AppImage, snap or apt repository. Installed apps update themselves from
-  // `latest-linux.yml` (D19): electron-builder writes `package-type` (`deb`) next to
+  // A .deb only: no AppImage, snap or apt repository. Installed apps update themselves from
+  // `latest-linux.yml`: electron-builder writes `package-type` (`deb`) next to
   // `app-update.yml`, and the .deb's after-install script sets up chrome-sandbox and, on
   // Ubuntu 24+, an AppArmor profile for it.
   linux: {

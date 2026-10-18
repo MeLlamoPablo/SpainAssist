@@ -56,7 +56,7 @@ class VectorsTest {
         val opener = Opener(keys.desktopToPhone, Direction.DesktopToPhone)
         val welcomePlain = opener.open(hex("welcomeFrame"), 1)
         assertContentEquals(hex("welcomePlaintext"), welcomePlain)
-        // The first WELCOME carries the pairing's own secret, which replaces the QR's (D26).
+        // The first WELCOME carries the pairing's own secret, which replaces the QR's.
         val welcome = CompanionJson.decodeFromString(
             Welcome.serializer(),
             parseSingleRecord(welcomePlain).decodeToString(),

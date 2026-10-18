@@ -880,7 +880,6 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
           : {}),
         ...(patch.shareLearnings !== undefined ? { shareLearnings: patch.shareLearnings } : {}),
         ...(patch.errorReports !== undefined ? { errorReports: patch.errorReports } : {}),
-        browser: { ...s.browser, ...patch.browser },
       };
       emit({ type: 'settings.changed', settings: state.settings });
       return state.settings;

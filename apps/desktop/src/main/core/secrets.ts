@@ -10,7 +10,7 @@ export const SECRET_IDS = {
   byok: 'provider.byok',
   /** API key of a custom OpenAI-compatible endpoint. */
   custom: 'provider.custom',
-  /** The user's own Exa API key: web research for BYOK and custom endpoints (D23). */
+  /** The user's own Exa API key: web research for BYOK and custom endpoints. */
   exa: 'research.exa',
 } as const;
 

@@ -99,7 +99,7 @@ const RESIZE = { duration: 380, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' } as con
 
 /**
  * With cold GPU caches (first launch, after an Electron or macOS update), the first splash → card
- * switch compiles dozens of GPU pipelines and every frame stalls for 100–200 ms while it does.
+ * switch compiles dozens of GPU pipelines and every frame stalls for 100–400 ms while it does.
  * So the splash replays the switch under the gradient, where it is never seen, until it runs
  * without a stall. Meanwhile the window stays invisible (see `app.reveal`), so no one sees the
  * splash itself stall either.

@@ -9,7 +9,7 @@ What changed in each release of Spain Assist, newest first. Built from the commi
 
 - **Web research needs no key.** With your own API key or a custom endpoint, research now uses
   Exa's free tier through its hosted MCP server. An Exa key is optional and only raises the
-  limits; Settings no longer warns that it is missing. (D24)
+  limits; Settings no longer warns that it is missing.
 
 ### Maintenance
 
@@ -53,7 +53,7 @@ What changed in each release of Spain Assist, newest first. Built from the commi
 - **DNIe logins:** one phone approval per organisation, and no Touch ID (the phone and the card
   are the second factor); a dropped connection no longer cancels the phone approval.
   (e772649, 3b40668, e96f717, 644b09a)
-- **DNIe PIN can be saved** in Mis datos (D22), with shorter PIN form copy. (a8056b7, 731f1e8)
+- **DNIe PIN can be saved** in Mis datos, with shorter PIN form copy. (a8056b7, 731f1e8)
 - **Saved documents appear as cards** in the assistant's messages. (6620da1)
 - **Linux x64 `.deb`** that updates itself; Windows and Linux lose the File/Edit/View/Window menu
   bar. (0add450, 2097e77, 3dfcbfb)
@@ -73,7 +73,7 @@ First release. The history before it is squashed into `89c22c9`, so this section
 - **The assistant** does procedures for you in its own browser: research, forms, appointments,
   signatures and downloads, asking before anything binding.
 - **Logins:** Cl@ve Permanente, digital certificates (`.p12`), the DNIe through the phone app
-  (CAN and PIN typed only on the desktop, 72-hour pairings, D20), and AutoFirma logins and
+  (CAN and PIN typed only on the desktop, 72-hour pairings), and AutoFirma logins and
   signatures without AutoFirma installed. (c7eaf38, bba8cda)
 - **Web research on ChatGPT plans** with OpenAI's hosted web search, at high effort. (ad87b39,
   561fcac, 69bd5f1)

@@ -65,7 +65,7 @@ export type AssistantToolName = (typeof ASSISTANT_TOOL_NAMES)[number];
 export const WEB_RESEARCH_TOOL_NAME = 'web_research';
 
 /**
- * Web research of BYOK and custom endpoints, on Exa's keyless tier (D23): search, and read
+ * Web research of BYOK and custom endpoints, on Exa's keyless tier: search, and read
  * pages. They replace `web_research`, which those agents don't have.
  */
 export const EXA_TOOL_NAMES = ['exa_search', 'exa_fetch'] as const;

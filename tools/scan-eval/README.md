@@ -56,8 +56,8 @@ Options:
   Spec: `id[@reasoning]`. Short ids get the gateway's vendor prefix (`claude-haiku-5-5` →
   `anthropic/claude-haiku-5.5`, `gpt-6-luna` → `openai/gpt-6-luna`).
 - Reasoning: without `@level`, the production rule. Flash Lite uses `minimal`; other models use
-  off (an explicit `none` effort, like the app) when pi's catalog allows it, else the lowest level it supports (the console says so: the
-  app would refuse such a model today, `no_fast_mode`).
+  off (an explicit `none` effort, like the app) when pi's catalog allows it, else the lowest
+  level it supports (the console says so: the app refuses such a model, `no_fast_mode`).
 - `--runs 3`, `--docs a,b` (default: every document), `--out file.json`, `--budget 5`.
 - `--repo <checkout>`, `--data <fixtures dir>`.
 - `--rescore a.json,b.json`: scores the fields saved in earlier result files again, with the

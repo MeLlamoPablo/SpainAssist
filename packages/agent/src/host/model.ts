@@ -6,7 +6,7 @@ import { TEMPLATE_MODEL_BY_PROVIDER } from '../providers/defaults';
 
 const CUSTOM_PROVIDER_ID = 'custom';
 /**
- * Voucher keys: our LiteLLM gateway (D10). OpenAI-compatible, and LiteLLM serves models under
+ * Voucher keys: our LiteLLM gateway. OpenAI-compatible, and LiteLLM serves models under
  * their OpenRouter ids, so model metadata comes from pi's OpenRouter catalog.
  */
 export const LITELLM_PROVIDER_ID = 'litellm';

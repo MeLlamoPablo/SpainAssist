@@ -126,9 +126,9 @@ app.setPath(
 );
 // Before Chromium reads it: the vault key of data imported from the NSIS install.
 applyStagedLocalState(app.getPath('userData'));
-// Error reports (D29): started before `ready` (the SDK registers its IPC scheme), sending nothing
+// Error reports: started before `ready` (the SDK registers its IPC scheme), sending nothing
 // until main() opens the gate with the flag and the setting.
-// How this copy was installed (D17): the Microsoft Store's MSIX updates through the Store.
+// How this copy was installed: the Microsoft Store's MSIX updates through the Store.
 const channel = installChannel({
   packaged: app.isPackaged,
   platform: process.platform,
@@ -481,7 +481,7 @@ async function main(): Promise<void> {
     s.providers,
     () => s.settings.get().language,
     await prepareScanStorage(paths.scanTranscriptsDir, isDev),
-    // The user key (voucher, ChatGPT or Codex development key, D12); the dev .env key overrides.
+    // The user key (voucher, ChatGPT or Codex development key); the dev .env key overrides.
     new OpenRouterFrameGate({
       apiKey: env.deciderApiKey,
       endpoint: env.deciderUrl,

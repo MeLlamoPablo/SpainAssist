@@ -1,4 +1,4 @@
--- ChatGPT subsidy keys (D12) replace the anonymous search keys of POST /v1/search-tokens.
+-- ChatGPT subsidy keys replace the anonymous search keys of POST /v1/search-tokens.
 --
 -- One permanent LiteLLM key per OpenAI account, for document-scan frame screening only. Unlike
 -- voucher keys, the key itself is kept (AES-256-GCM with KEY_ENCRYPTION_KEY) so another device

@@ -27,7 +27,7 @@ import type { FetchFn } from '../remote/http';
 import type { AppStateStore, SettingsStore } from '../settings/store';
 import { probeCustomEndpoint } from './probe';
 
-/** pi provider of voucher keys: our LiteLLM gateway at the voucher's base URL (D10). */
+/** pi provider of voucher keys: our LiteLLM gateway at the voucher's base URL. */
 const VOUCHER_PROVIDER = 'litellm';
 /** Output token cap for credit-capped voucher keys (pi defaults to the model maximum). */
 const VOUCHER_MAX_TOKENS = 8192;
@@ -48,7 +48,7 @@ function creditOf(b: VoucherBalance): NonNullable<ProviderStatus['credit']> {
 /**
  * The user, to our services: a key on our LiteLLM gateway, which they check with LiteLLM and
  * which stands for one user. Voucher: the voucher key (top-ups keep it). ChatGPT: the account's
- * key from the key server (one per OpenAI account, D12). Codex (development builds only):
+ * key from the key server (one per OpenAI account). Codex (development builds only):
  * SA_DEV_USER_KEY. BYOK and custom endpoints have none: features that need it are off (scan
  * screening, call transcription, map lookups, sharing and rating learnings).
  */
@@ -118,7 +118,7 @@ function isOAuth(p: ProviderConfig | undefined): p is Extract<ProviderConfig, { 
 
 /**
  * BYOK and custom endpoints: no gateway key, so their web research uses Exa (keyless, or the
- * user's own key, D23) instead of `web_research`.
+ * user's own key) instead of `web_research`.
  */
 function researchesWithExa(p: ProviderConfig | undefined): boolean {
   return p?.kind === 'byok' || p?.kind === 'custom';
@@ -445,7 +445,7 @@ export class ProviderManager {
     }
   }
 
-  // --- document-scan frame decider (D12) ---------------------------------------------------
+  // --- document-scan frame decider ---------------------------------------------------------
 
   /**
    * The gateway and key the scanner's frame decider uses: the user key (charged to the voucher,
@@ -777,7 +777,7 @@ export class ProviderManager {
   }
 
   /**
-   * BYOK and custom endpoints: saves the user's Exa key for web research (D23), or deletes it
+   * BYOK and custom endpoints: saves the user's Exa key for web research, or deletes it
    * with null. Agents read it on every Exa call, so running ones pick it up without a restart.
    */
   async setExaKey(apiKey: string | null): Promise<ProviderStatus> {
@@ -799,7 +799,7 @@ export class ProviderManager {
 
   // --- for agent processes -----------------------------------------------------------------
 
-  /** Whether procedure agents research with the user's Exa key (`research.exa`, D23). */
+  /** Whether procedure agents research with the user's Exa key (`research.exa`). */
   researchesWithExa(): boolean {
     return researchesWithExa(this.config());
   }

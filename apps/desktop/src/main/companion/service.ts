@@ -237,7 +237,7 @@ export class CompanionService {
 
   /**
    * A signature with the DNIe in the phone: shows the card, which first asks for the CAN and the
-   * PIN when the desktop doesn't have them (D20), then the QR code when no phone is connected,
+   * PIN when the desktop doesn't have them, then the QR code when no phone is connected,
    * sends the request, and resolves with the key once the phone has read the card's
    * certificate. Null when the user cancels, declines or it fails (with a notice).
    */
@@ -645,7 +645,7 @@ export class CompanionService {
     if (this.can === can) this.can = undefined;
   }
 
-  /** The PIN saved on the DNIe credential (D22). Never logged. */
+  /** The PIN saved on the DNIe credential. Never logged. */
   private async savedPin(credential: CredentialSummary): Promise<string | undefined> {
     try {
       const secret = await this.deps.vault().getCredentialSecret(credential.id);
@@ -757,7 +757,7 @@ export class CompanionService {
     switch (status.state) {
       case 'connected':
         return { state: 'connected', device: status.phone.device, expiresAt };
-      // The QR works only until a phone pairs (D26): a paired phone reconnects on its own.
+      // The QR works only until a phone pairs: a paired phone reconnects on its own.
       case 'away':
         return { state: 'away', device: status.phone.device, expiresAt };
       case 'waiting':

@@ -43,7 +43,7 @@ interface StoredCertificate extends CredentialBase {
 
 /**
  * The DNIe signs in the paired phone; we keep its certificate's details once read, and its PIN
- * once the user saves it or the card accepts a typed one (D22).
+ * once the user saves it or the card accepts a typed one.
  */
 interface StoredDnie extends CredentialBase {
   kind: 'dnie';

@@ -1,7 +1,7 @@
 # @sa/vault
 
 Encrypted local store for the user's personal data, documents, credentials (Cl@ve, digital
-certificates) and app secrets (AI provider keys, OAuth tokens, browser session state).
+certificates, the DNIe) and app secrets (AI provider keys, OAuth tokens).
 Plain Node library: no Electron imports. OS-backed key protection is injected via `KeyProvider`.
 
 ## Usage (desktop main process)
@@ -38,19 +38,20 @@ vault.overview({ biometricAvailable: systemPreferences.canPromptTouchID() }); //
 | Open/inspect | `Vault.open(dir, keys, { now? })`, `Vault.destroy(dir)`, `overview({ biometricAvailable })`, `storageInfo()` |
 | Personal data | `listPersonal()`, `getPersonal(key)`, `setPersonal(items, source)`, `deletePersonal(keys)` |
 | Documents | `listDocuments({ procedureId? })`, `getDocument(id)`, `addDocument(opts)`, `readDocument(id)`, `deleteDocument(id)` |
-| Credentials | `listCredentials()`, `getCredential(id)`, `addClave()`, `addClaveMovil()`, `addCertificate()`, `setCredentialPolicy()`, `getCredentialSecret()`, `markCredentialUsed()`, `deleteCredential()` |
+| Credentials | `listCredentials()`, `getCredential(id)`, `addClave()`, `addClaveMovil()`, `addCertificate()`, `addDnie()`, `setDnieCertificate()`, `setDniePin()`, `setCredentialPolicy()`, `getCredentialSecret()`, `markCredentialUsed()`, `deleteCredential()` |
 | App secrets | `listSecrets()` (labels only), `setSecret(id, label, value)`, `getSecret(id)`, `deleteSecret(id)` |
 | PII | `knownSensitiveValues()` (for `@sa/pii` `knownValues`) |
 | Reset | `wipe()` |
-| Helpers | `readPkcs12()`, `pkcs12ToPem()`, `certificateInfo()`, `parseHolder()`, `isDni()`, `isNie()` |
+| Helpers | `readPkcs12()`, `importCertificate()`, `pkcs12ToPem()`, `certificateInfo()`, `parseHolder()`, `isDni()`, `isNie()`, `isSpanishId()`, `compactId()`, `normalizePersonalInput()` |
 
 Behaviour worth knowing:
 
 - **Personal data**: keys are the well-known `PERSONAL_FIELDS` or `custom.<slug>` (a label is
   required the first time). Values are trimmed and validated by field type (dates
   `YYYY-MM-DD`, select options, email, phone, IBAN mod-97); an empty value deletes the field.
-  document-specific number keys (`dniNumber`, `dniSupportNumber`, `tieNumber`, `tieSupportNumber`, `passportNumber`) are stored compact and uppercase, IBAN without
-  spaces. A batch is all-or-nothing. Error messages never echo values.
+  Document number keys (`dniNumber`, `dniSupportNumber`, `tieNumber`, `tieSupportNumber`,
+  `passportNumber`) are stored compact and uppercase, IBAN without spaces. A batch is
+  all-or-nothing. Error messages never echo values.
 - **Documents**: each file is encrypted separately in `documents/<id>.bin`; max 50 MB;
   newest first.
 - **Cl@ve Permanente**: the username must be a valid DNI/NIE (normalized); the summary only
@@ -65,22 +66,27 @@ Behaviour worth knowing:
   `tls.createSecureContext({ pfx, passphrase })`, Playwright `clientCertificates` and
   Electron. `pkcs12ToPem()` gives `{ key, cert, ca }` PEM if a consumer prefers that.
   Importing the same certificate again returns the existing credential.
-- **Policies** default to `DEFAULT_CREDENTIAL_POLICY` (Cl@ve `auto`, certificate `ask`).
-- **Secrets**: ids like `provider.openrouter`, `oauth.chatgpt`, `browser.state:<procedureId>`;
-  values up to 8 MB (kept in `vault.bin`, rewritten on every change: keep them small).
+- **DNIe** (`addDnie`): one credential for "I sign with my DNIe and my phone" (adding it again
+  returns the existing one). It holds the signing certificate's details after the first read and,
+  if the user saves it, the PIN (8 to 16 characters, `setDniePin`).
+- **Policies** default to `DEFAULT_CREDENTIAL_POLICY` (Cl@ve `auto`, certificate and DNIe `ask`).
+- **Secrets**: ids like `provider.voucher` or `provider.chatgpt` (`SECRET_IDS` in the desktop's
+  `core/secrets.ts`); values up to 8 MB (kept in `vault.bin`, rewritten on every change: keep
+  them small).
 - **`knownSensitiveValues()`**: every personal value except low-identifying categories
   (document type, sex, nationality, marital status, province, country), plus variants: name
   combinations and each surname, DNI/NIE with/without letter and separators, dates as
   `dd/mm/yyyy`, phone with/without `+34`, IBAN with/without spaces and the 20-digit account,
-  NUSS with separators, address parts; Cl@ve usernames; certificate holder names/IDs. Values
-  under 3 characters are skipped. Sorted longest first. Passwords and API keys are not included.
+  NUSS with separators, address parts; Cl@ve usernames; certificate holder names/IDs; saved
+  DNIe PINs. Values under 3 characters are skipped. Sorted longest first. Passwords and API keys
+  are not included.
 
 ## Errors
 
 `VaultError.code`: `invalid_input`, `not_found`, `invalid_passphrase`, `invalid_certificate`,
 `expired_certificate`, `corrupted` (wrong key, tampering, truncation), `key_unavailable` (the
 OS cannot protect keys, e.g. `safeStorage` unavailable) and `io` (file system; `cause` holds the
-original error). `key_unavailable` and `io` are additions to the original stub.
+original error).
 
 ## Storage format and security
 

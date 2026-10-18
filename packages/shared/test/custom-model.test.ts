@@ -36,7 +36,6 @@ describe('custom endpoint capabilities', () => {
       shareLearnings: false,
       errorReports: true,
       provider: { ...custom, reasoning: true },
-      browser: { headless: false },
     });
     expect(settings.provider).toEqual({ ...custom, reasoning: true });
   });

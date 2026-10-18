@@ -56,7 +56,7 @@ interface Session extends Pending {
 }
 
 export class PhoneClient {
-  /** The scanned link; its secret becomes the pairing's own once the desktop sends it (D26). */
+  /** The scanned link; its secret becomes the pairing's own once the desktop sends it. */
   pairing: PairingLink;
   private readonly socket: RelaySocket;
   private pending?: Pending;

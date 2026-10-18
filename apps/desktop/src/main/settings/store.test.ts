@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_SETTINGS, type SaEvent } from '@sa/shared';
@@ -25,9 +25,8 @@ describe('SettingsStore', () => {
     events.on((e) => seen.push(e));
     const store = await SettingsStore.open(file, { events, logger: silentLogger });
     expect(store.get()).toEqual(DEFAULT_SETTINGS);
-    const next = await store.update({ language: 'en', browser: { headless: true } });
+    const next = await store.update({ language: 'en' });
     expect(next.language).toBe('en');
-    expect(next.browser.headless).toBe(true);
     expect(seen).toEqual([{ type: 'settings.changed', settings: next }]);
     const reopened = await SettingsStore.open(file, { logger: silentLogger });
     expect(reopened.get()).toEqual(next);
@@ -39,8 +38,8 @@ describe('SettingsStore', () => {
       JSON.stringify({
         language: 'fr',
         shareLearnings: false,
-        browser: { headless: 'yes' },
-        // Service URLs used to be settings: an old file's entry is dropped.
+        // Service URLs and the browser's visibility used to be settings: old entries are dropped.
+        browser: { headless: true },
         services: { keyServerUrl: 'https://keys.example.com' },
         provider: { kind: 'voucher', model: 'x' },
       }),
@@ -49,7 +48,7 @@ describe('SettingsStore', () => {
     const s = store.get();
     expect(s.language).toBe('es');
     expect(s.shareLearnings).toBe(false);
-    expect(s.browser.headless).toBe(false);
+    expect(s).not.toHaveProperty('browser');
     expect(s).not.toHaveProperty('services');
     expect(s.provider).toBeUndefined();
   });
@@ -74,17 +73,6 @@ describe('SettingsStore', () => {
     await writeFile(file, '{not json');
     const store = await SettingsStore.open(file, { logger: silentLogger });
     expect(store.get()).toEqual(DEFAULT_SETTINGS);
-  });
-
-  it('applies env overlays without persisting them', async () => {
-    const store = await SettingsStore.open(file, {
-      logger: silentLogger,
-      overlay: { browser: { headless: true } },
-    });
-    expect(store.get().browser.headless).toBe(true);
-    await store.update({ onboardingCompleted: true });
-    const raw = JSON.parse(await readFile(file, 'utf8'));
-    expect(raw.browser.headless).toBe(false);
   });
 
   it('sets and clears the provider; notifies listeners with previous values', async () => {

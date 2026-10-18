@@ -1,9 +1,13 @@
 # Onboarding GPU warm-up — research memo
 
 *Date: 2026-10-07 · Scope: why the first splash → voucher switch in the onboarding lagged, what
-fixed it, what did not, and how to measure it. Code: `apps/desktop/src/renderer/src/features/
-onboarding/Onboarding.tsx` (`Rehearsal`, `RehearsalCopy`), `components/LiquidGradient.tsx`, and
-`revealWindow` in `apps/desktop/src/main/index.ts`. Commits `85829b7`, `bb73d44`, `f8d2147`.*
+fixed it, what did not, and how to measure it. Commits `85829b7`, `bb73d44`, `f8d2147`.*
+
+**What was built:** a hidden window plus a hidden rehearsal of the switch that warms the GPU up
+before the window shows: `apps/desktop/src/renderer/src/features/onboarding/Onboarding.tsx`
+(`Rehearsal`, `RehearsalCopy`), `components/LiquidGradient.tsx`, and `revealWindow` in
+`apps/desktop/src/main/index.ts` (§3). This memo keeps the cause, the measurements, the method
+and what failed.
 
 ## TL;DR
 
@@ -111,46 +115,25 @@ the same shape inside a different kind of pass is a new pipeline.
 
 ## 3. The current design
 
-### 3.1 Hidden window (`app.reveal`)
+How it works is in the code comments: the hidden window in `apps/desktop/src/main/index.ts`
+(`ready-to-show` handler, `revealWindow`, `REVEAL_TIMEOUT_MS`), the rehearsal and its constants in
+`Onboarding.tsx` (`REHEARSAL_*`, `STALL_MS`, `Rehearsal`, `RehearsalCopy`), and the non-opaque
+canvas in `components/LiquidGradient.tsx`. Facts the comments don't record:
 
-- `main/index.ts`: at `ready-to-show`, if `settings.onboardingCompleted` is false, the window gets
-  `setOpacity(0)`, `setIgnoreMouseEvents(true)` and `showInactive()`. Chromium still draws an
-  opacity-0 window, so the GPU compiles. A window that is hidden (`show: false`) does not draw.
-- The renderer calls `app.reveal` (new `SaMethods` entry) when the warm-up is done. Main then sets
-  opacity 1, restores mouse events and calls `show()`.
-- Fallback: main reveals after 7 s whatever happens. Normal launches (onboarding complete) show at
-  `ready-to-show` as before.
-- The splash actions stay `invisible` (laid out, not drawn) until reveal, then remount, so their
-  entrance plays when the window shows.
-
-### 3.2 Rehearsal under the gradient
-
-- `LiquidGradient` no longer creates its context with `alpha: false`. Every pixel the shader writes
-  is opaque, so it looks the same, but the compositor no longer treats the canvas as opaque, and
-  it still draws what is under it. With `alpha: false`, viz/cc skip occluded layers and nothing
-  under the canvas compiles. The CSS fallback background is removed after the first WebGL frame
-  for the same reason.
-- The rehearsal sits at `-z-20` inside the onboarding root (under the canvas at `-z-10`). It is
-  `inert` and `aria-hidden`, and it uses the real classes and components: `SplashButton`s with
-  `animate-onboarding-splash-leave`, the logo glide (`animateGlide`, shared with the real FLIP),
-  the real `OnboardingCard` for the voucher step, and the skip button.
+- Chromium still draws an opacity-0 window, so the GPU compiles. A window created with
+  `show: false` does not draw, so it can't warm anything up.
+- With `alpha: false` on the WebGL context, viz/cc skip occluded layers and nothing under the
+  canvas compiles. The CSS fallback background is removed after the first WebGL frame for the
+  same reason.
 - The rehearsal must be **drawn like the real UI**. An opacity-0.001 wrapper does not work: it puts
-  everything in its own render pass with another format, so the pipelines differ.
+  everything in its own render pass with another format, so the pipelines differ (§4).
+- The copies sit on a ring (200 × 150 px, whole pixels) so opaque cards do not fully cover each
+  other: the compositor skips fully covered quads.
+- Why many copies are faster: one frame asks for many pipelines at once, and Dawn compiles them on
+  worker threads in parallel. One copy compiled them about one at a time (cold: 5.6 s → 2.6 s).
+  The short calm window cut the warm launch from 1.44 s to 0.44 s (§6).
 
-### 3.3 16 staggered copies
-
-- `REHEARSAL_COPIES = 16` copies, each offset on screen on a ring (200 × 150 px, whole pixels), so
-  opaque cards do not fully cover each other (the compositor skips fully covered quads).
-- Copy *i* starts `i × 62.5 ms` into the switch (`animation.currentTime += startAt` for every
-  animation in its subtree, in a layout effect) and restarts on its own every 1 s. So at any
-  moment the copies are 62.5 ms apart all around the switch.
-- Done when `REHEARSAL_CALM_MS` = 125 ms pass with no frame over `STALL_MS` = 50 ms: every moment
-  of the switch was drawn at least twice at real speed, with nothing new to compile. Limit: 5 s.
-- Why it is faster: one frame asks for many pipelines at once and Dawn compiles them on worker
-  threads in parallel. One copy compiled them about one at a time (cold: 5.6 s → 2.6 s). The
-  short calm window cut the warm launch from 1.44 s to 0.44 s.
-
-### 3.4 Details that each fixed one pipeline
+### 3.1 Details that each fixed one pipeline
 
 - **Focused field:** the rehearsal card is inert, so it can't take focus. A wrapper sets
   `data-focus` a frame after mount, and the CSS gives its `label` the focused look
@@ -176,7 +159,7 @@ the same shape inside a different kind of pass is a new pipeline.
 | Copies held still mid-animation (constant WAAPI keyframes) | Better, but variants depend on exact compositor states (blur kernel per radius, AA on/off, raster scale) that held states do not match. |
 | One rehearsal looping at 2× or 4× speed | Skips states. Stalls came back after reveal. |
 | Turning off the leave blur alone, or the logo shadow alone | No single effect removes most of the cost. |
-| Seeds for the "Saltar" AA quad (rotated layer, `scale(0.999)`, opacity/filter animations, fractional positions) | None made the exact pipeline. The fix was to copy how the real button behaves (§3.4). |
+| Seeds for the "Saltar" AA quad (rotated layer, `scale(0.999)`, opacity/filter animations, fractional positions) | None made the exact pipeline. The fix was to copy how the real button behaves (§3.1). |
 | `from { opacity: 0.99 }` on `splash-leave` | Did not remove the need for that pipeline. Reverted. |
 
 ## 5. Rules for future UI changes in the onboarding
@@ -193,15 +176,15 @@ the same shape inside a different kind of pass is a new pipeline.
 - Other screens (the card → data step, the exit to the app) are **not** warmed up. Their first run
   on a cold cache can still stall.
 
-## 6. Tuning knobs
+## 6. Tuning knobs: measured trade-offs
 
-| Constant | Value | Effect |
-| --- | --- | --- |
-| `REHEARSAL_COPIES` | 16 | More copies: more parallel compiles and a shorter calm window, but more GPU work per frame. Measured: 1 copy (1 s calm loop) 1.44 s warm / 5.6 s cold; 4 copies 0.93 s / 2.6–3.1 s; 8 copies 0.94 s / 2.6–3.1 s; 16 copies 0.44 s / ~2.6 s. |
-| `REHEARSAL_CALM_MS` | 2 steps (125 ms) | One step left about 1 cold launch in 6 with one stall. |
-| `STALL_MS` | 50 ms | Frames over this count as compiling. On a GPU whose normal frames are slower than 50 ms, the warm-up never ends early and hits the limit. |
-| `REHEARSAL_MAX_MS` | 5 s | Upper bound on the hidden time in the renderer. |
-| `REVEAL_TIMEOUT_MS` (main) | 7 s | Shows the window if the renderer never calls `app.reveal`. |
+Values are in the code (§3). What changing them did:
+
+| Constant | Effect |
+| --- | --- |
+| `REHEARSAL_COPIES` | More copies: more parallel compiles and a shorter calm window, but more GPU work per frame. Measured (warm / cold): 1 copy (1 s calm loop) 1.44 s / 5.6 s; 4 copies 0.93 s / 2.6–3.1 s; 8 copies 0.94 s / 2.6–3.1 s; 16 copies 0.44 s / ~2.6 s. |
+| `REHEARSAL_CALM_MS` | One step (instead of two) left about 1 cold launch in 6 with one stall. |
+| `STALL_MS` | On a GPU whose normal frames are slower than this, the warm-up never ends early and hits `REHEARSAL_MAX_MS`. |
 
 ## 7. Ideas to make the cold launch faster
 

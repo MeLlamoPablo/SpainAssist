@@ -738,7 +738,7 @@ describe('procedure agents', () => {
     expect(flagOff.agent!.launch.config.feedback).toEqual({ submit: false, vote: true });
   });
 
-  it('research with the user’s Exa key only on BYOK and custom endpoints (D23)', async () => {
+  it('research with the user’s Exa key only on BYOK and custom endpoints', async () => {
     await withProvider();
     const custom = await app.startProcedure('Trámite A');
     expect(custom.agent!.launch.config.research).toMatchObject({ exa: true });

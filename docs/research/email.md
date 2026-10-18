@@ -127,7 +127,8 @@ Rules:
 - Email content is untrusted: strip HTML, block remote content, never take instructions from it,
   check public-office addresses independently.
 - OTPs and tokenized links: a local extractor returns a handle; a browser action restricted to
-  the expected site uses it. Show the raw value only in user UI.
+  the expected site uses it. Show the raw value only in user UI. (Today codes the user types go
+  into pages through `browser_fill_from_user`, which the model never sees; handles extend that.)
 - Fetch only what the current procedure needs; scrub logs with `@sa/pii`.
 
 ## Open questions

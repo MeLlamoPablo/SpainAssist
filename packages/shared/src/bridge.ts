@@ -280,7 +280,7 @@ export const BridgeParams = {
    */
   'agent.refreshCredential': z.object({ providerId: z.string() }),
   /**
-   * The user's own Exa API key, for the web research of BYOK and custom endpoints (D23). Null
+   * The user's own Exa API key, for the web research of BYOK and custom endpoints. Null
    * when none is saved or the provider is not BYOK or custom. Read on every Exa call (the user
    * may add it while the agent runs) and sent only to Exa; never persisted by the host.
    */

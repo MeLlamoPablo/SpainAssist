@@ -212,7 +212,7 @@ export const RUN_SPEC: CommandSpec = {
       type: 'string',
       arg: 'id',
       description:
-        'Name of the run (1 to 64 letters, digits, - or _; also SpainBench world id). Default: ' +
+        'Name of the run (1 to 64 letters, digits, - or _). Default: ' +
         '<fixture>-<provider>-<yyyymmdd-hhmmss>-<4 hex>.',
     },
     ...LIMIT_OPTIONS,

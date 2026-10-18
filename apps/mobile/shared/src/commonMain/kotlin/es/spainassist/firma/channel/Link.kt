@@ -9,7 +9,7 @@ package es.spainassist.firma.channel
  * uncompressed) | relay base URL (UTF-8, ws:// or wss://). The app also accepts the landing
  * page's `sa-firma://pair?d=<payload>`.
  *
- * The QR's secret works for one handshake (D26): its WELCOME carries the pairing's own secret,
+ * The QR's secret works for one handshake: its WELCOME carries the pairing's own secret,
  * which replaces it ([withSession]) in the stored pairing and in every later handshake.
  */
 data class PairingLink(

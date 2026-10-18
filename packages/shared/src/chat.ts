@@ -301,7 +301,7 @@ export type PhoneCallOutcome = z.infer<typeof PhoneCallOutcome>;
 /**
  * Where a DNIe signature is (raised by the app, never by the agent):
  * - `unlock`: the desktop asks for the DNIe's CAN and/or PIN (`unlock`), before anything goes to
- *   the phone, or again when the card refused one (D20);
+ *   the phone, or again when the card refused one;
  * - `phone`: waiting for the phone app (shows the QR code when no phone is connected);
  * - `reviewing`: the request is on the phone; `card`: approved, hold the DNIe to the phone;
  * - `reading` / `signing`: the phone is talking to the card.

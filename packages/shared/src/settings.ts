@@ -123,7 +123,7 @@ export const CustomProviderInput = z.object({
 });
 export type CustomProviderInput = z.infer<typeof CustomProviderInput>;
 
-/** The user's own Exa API key (web research for BYOK and custom endpoints, D23). */
+/** The user's own Exa API key (web research for BYOK and custom endpoints). */
 export const ExaApiKey = z.string().trim().min(1).max(200);
 
 /** What to ask a custom endpoint about, before it is saved. `model` may still be empty. */
@@ -186,14 +186,10 @@ export const Settings = z.object({
   shareLearnings: z.boolean(),
   /**
    * Send PII-scrubbed error reports (crashes, uncaught errors) to our GlitchTip server, when the
-   * `error-reports` flag is on (D29).
+   * `error-reports` flag is on.
    */
   errorReports: z.boolean(),
   provider: ProviderConfig.optional(),
-  browser: z.object({
-    /** Run the agent's browser without a visible window. */
-    headless: z.boolean(),
-  }),
 });
 export type Settings = z.infer<typeof Settings>;
 
@@ -202,7 +198,6 @@ export const SettingsPatch = z.object({
   onboardingCompleted: z.boolean().optional(),
   shareLearnings: z.boolean().optional(),
   errorReports: z.boolean().optional(),
-  browser: Settings.shape.browser.partial().optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;
 
@@ -223,7 +218,7 @@ export const PRODUCTION_SERVICES = {
   flagsUrl: 'https://flags.spainassist.es',
   /**
    * Where packaged builds send error reports: the `desktop` project of our GlitchTip, which
-   * speaks Sentry's protocol (infra/terraform/glitchtip.tf, D29). Public by design: a DSN can
+   * speaks Sentry's protocol (infra/terraform/glitchtip.tf). Public by design: a DSN can
    * only send events.
    */
   errorReportsDsn: 'https://55d88ac9618e485a917b33ddb359ec0b@errors.spainassist.es/1',
@@ -246,7 +241,7 @@ export interface FeatureFlags {
    */
   feedbackServer: boolean;
   /**
-   * The DNIe through the phone app (D14, D15): signatures and logins, the "DNIe con el móvil"
+   * The DNIe through the phone app: signatures and logins, the "DNIe con el móvil"
    * card and pairing in Mis datos, the relay connection. Off, the app behaves as if it didn't
    * exist; a saved `dnie` credential stays in the vault, hidden.
    */
@@ -258,7 +253,7 @@ export interface FeatureFlags {
    */
   mustUpdate: boolean;
   /**
-   * Error reports to GlitchTip (D29), a kill switch: off, nothing is sent whatever the setting
+   * Error reports to GlitchTip, a kill switch: off, nothing is sent whatever the setting
    * says, and Settings hides the toggle.
    */
   errorReports: boolean;
@@ -284,5 +279,4 @@ export const DEFAULT_SETTINGS: Settings = {
   onboardingCompleted: false,
   shareLearnings: true,
   errorReports: true,
-  browser: { headless: false },
 };

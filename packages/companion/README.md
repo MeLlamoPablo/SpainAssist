@@ -1,9 +1,10 @@
 # @sa/companion
 
 The channel between the desktop app and the phone app ("Spain Assist", `apps/mobile`),
-which signs documents and TLS login digests with the user's DNIe over NFC. The relay (`services/relay-server`) carries the
-frames and can't read them. The messages are a contract in `@sa/shared` (`companion.ts`), and the
-Kotlin app mirrors this package (`apps/mobile/shared/.../channel`, `relay`).
+which signs documents and TLS login digests with the user's DNIe over NFC. The relay
+(`services/relay-server`) carries the frames and can't read them. The messages are a contract
+in `@sa/shared` (`companion.ts`), and the Kotlin app mirrors this package
+(`apps/mobile/shared/.../channel`, `relay`).
 
 | Export | What |
 | --- | --- |
@@ -27,7 +28,7 @@ The relay's `/p` page also opens it as `sa-firma://pair?d=<payload>`. A pairing 
 (the desktop's lifetime). It ends earlier with "Desvincular" on either side, or when the
 desktop app quits.
 
-The QR works once (D26). The WELCOME that answers its secret carries `session`, the pairing's
+The QR works once. The WELCOME that answers its secret carries `session`, the pairing's
 own secret; the phone stores the pairing with it in place of the QR's, and the desktop stops
 accepting the QR's. A leaked QR is useless once a phone has paired. The desktop shows the QR
 only until then; another phone pairs with a new QR (`companion.pairAnother`).
@@ -44,8 +45,8 @@ RECORD     0x10 | seq (8) | sealed                                         both 
 - Whenever the relay reports the phone present (either side connected or reconnected), the
   desktop sends a fresh CHALLENGE. The phone answers with HELLO, using a new P-256 key and nonce.
 - Both sides compute `ECDH(phone key, desktop key)`. They feed it to HKDF-SHA256 with the
-  pairing secret as salt (the link's for the first handshake, then the WELCOME's `session`) and `"sa-companion v1" | desktop key | phone key | desktop nonce | phone nonce`
-  as info, which gives a desktop→phone key and a phone→desktop key (32 bytes each).
+  pairing secret as salt (the link's for the first handshake, then the WELCOME's `session`)
+  and `"sa-companion v1" | desktop key | phone key | desktop nonce | phone nonce` as info, which gives a desktop→phone key and a phone→desktop key (32 bytes each).
 - Only the phone that paired knows the secret, and only the desktop holds its private key.
   The fresh nonces on both sides make each connection's keys new, so frames can't be replayed
   across connections.
@@ -96,7 +97,7 @@ sign.done ───────────────────────�
   certificate and every signature again. Both sides ignore duplicates (same request id, same seq),
   so the card never signs a blob twice. A certificate that changes after a reconnect ends the
   request with `wrong_card`.
-- **The CAN and the PIN** (D20). The user types them on the desktop. `PhoneSignRequest.can`
+- **The CAN and the PIN**. The user types them on the desktop. `PhoneSignRequest.can`
   (six digits) always goes in the request; `pin` (8 to 16 characters) goes unless it's a
   certificate read. The pairing link never carries them. The PIN goes once: as soon as the phone
   answers anything for the request, `PhoneSigner` drops it from its outbox, so a request re-sent
@@ -120,13 +121,12 @@ secrets, unpairing, cancel, timeouts, large documents), and the vectors.
 `services/relay-server` tests the same flow over real sockets. Its `interop` script runs the
 Android app's Kotlin code against this package (see `apps/mobile/README.md`).
 
-The application handshake is protocol 6, which adds WELCOME's `session` (D26: protocol-5 phones
-would reconnect with the QR's secret). Protocol 5 made `can` required on `sign.request` and added
-`sign.need` and `sign.unlock`. Protocol 4 added the optional `pin`, protocol 3 the optional `can`.
-Protocol 2 added login: `login` requests show the site
-without a document, and `PhoneKey.sign(..., undefined, true)` sends a pre-hashed TLS digest.
-The phone rejects this flag on document requests and requires it on login requests.
-AUTENTICACIÓN is used for login, FIRMA for documents. The pairing link and encrypted frame
-formats are unchanged; matching phone and desktop releases are required. `vectors/v1.json` also
-includes login wire messages (the login request carries a `can` and a `pin`), a `sign.need` and
-a `sign.unlock`.
+## Logins and versions
+
+`login` requests show the site without a document, and `PhoneKey.sign(..., undefined, true)`
+sends a pre-hashed TLS digest. The phone rejects this flag on document requests and requires it
+on login requests. AUTENTICACIÓN is used for login, FIRMA for documents. `vectors/v1.json` also
+holds login wire messages (with a `can` and a `pin`), a `sign.need` and a `sign.unlock`.
+
+The application handshake carries `COMPANION_PROTOCOL` (6, in `@sa/shared`). Bump it when old
+apps can't follow; phone and desktop must then be released together.

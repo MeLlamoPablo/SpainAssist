@@ -12,17 +12,12 @@ import { readJsonFile, writeFileAtomic } from '../core/fs';
 import type { Logger } from '../core/logger';
 import { Mutex } from '../core/util';
 
-/** Values that win over the stored settings without being persisted (env overrides). */
-export interface SettingsOverlay {
-  browser?: Partial<Settings['browser']>;
-}
-
 type SettingsListener = (next: Settings, prev: Settings) => void;
 
 /**
  * settings.json: validated with zod, merged over DEFAULT_SETTINGS field by field (an invalid
  * field falls back to its default instead of discarding the whole file). Emits
- * `settings.changed` with the effective settings (stored + overlay).
+ * `settings.changed` with the new settings.
  */
 export class SettingsStore {
   private stored: Settings;
@@ -33,7 +28,6 @@ export class SettingsStore {
     private readonly file: string,
     initial: Settings,
     private readonly defaults: Settings,
-    private readonly overlay: SettingsOverlay,
     private readonly events: EventBus | undefined,
     private readonly logger: Logger,
   ) {
@@ -43,7 +37,6 @@ export class SettingsStore {
   static async open(
     file: string,
     opts: {
-      overlay?: SettingsOverlay;
       events?: EventBus;
       logger: Logger;
       /** Language when settings.json stores none (first run, after a wipe): the OS language. */
@@ -61,12 +54,11 @@ export class SettingsStore {
       opts.logger.warn('settings.json is not valid JSON; using defaults', err);
     }
     const stored = normalizeSettings(raw, opts.logger, defaults);
-    return new SettingsStore(file, stored, defaults, opts.overlay ?? {}, opts.events, opts.logger);
+    return new SettingsStore(file, stored, defaults, opts.events, opts.logger);
   }
 
-  /** Effective settings (stored + env overlay). */
   get(): Settings {
-    return applyOverlay(this.stored, this.overlay);
+    return { ...this.stored };
   }
 
   onChange(listener: SettingsListener): () => void {
@@ -83,7 +75,6 @@ export class SettingsStore {
         : {}),
       ...(patch.shareLearnings !== undefined ? { shareLearnings: patch.shareLearnings } : {}),
       ...(patch.errorReports !== undefined ? { errorReports: patch.errorReports } : {}),
-      browser: { ...s.browser, ...stripUndefined(patch.browser) },
     }));
   }
 
@@ -111,30 +102,18 @@ export class SettingsStore {
       const next = Settings.parse(fn(structuredClone(this.stored)));
       await writeFileAtomic(this.file, `${JSON.stringify(next, null, 2)}\n`);
       this.stored = next;
-      const effective = this.get();
-      this.events?.emit({ type: 'settings.changed', settings: effective });
+      const current = this.get();
+      this.events?.emit({ type: 'settings.changed', settings: current });
       for (const l of this.listeners) {
         try {
-          l(effective, prev);
+          l(current, prev);
         } catch (err) {
           this.logger.error('settings listener failed', err);
         }
       }
-      return effective;
+      return current;
     });
   }
-}
-
-function stripUndefined<T extends object>(value: T | undefined): Partial<T> {
-  if (!value) return {};
-  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
-}
-
-function applyOverlay(s: Settings, overlay: SettingsOverlay): Settings {
-  return {
-    ...s,
-    browser: { ...s.browser, ...stripUndefined(overlay.browser) },
-  };
 }
 
 /**
@@ -168,14 +147,6 @@ export function normalizeSettings(
     const parsed = shape[key].safeParse(r[key]);
     if (parsed.success) (out as Record<string, unknown>)[key] = parsed.data;
     else logger?.warn(`settings: invalid "${key}", using default`);
-  }
-  for (const key of ['browser'] as const) {
-    const value = r[key];
-    if (!value || typeof value !== 'object') continue;
-    const merged = { ...out[key], ...(value as object) };
-    const parsed = shape[key].safeParse(merged);
-    if (parsed.success) (out as Record<string, unknown>)[key] = parsed.data;
-    else logger?.warn(`settings: invalid "${key}", using defaults`);
   }
   if (r.provider !== undefined) {
     const parsed = ProviderConfig.safeParse(r.provider);

@@ -34,9 +34,9 @@ export type CapReason =
  * request count. For Codex runs (the plan has no price per call) only the request counts apply.
  *
  * The defaults are what a voucher run enforces, with one exception: the run loop gives each run
- * the cost limit of its fixture as `perRunUsd` (`RunLimits.maxCostUsd`, `--max-cost`; $1.50 for
- * the vida laboral fixtures), which is above the day and the per-agent caps, so on a voucher those
- * bind first. The meter's own `perRunUsd` is for a run that has no fixture.
+ * the cost limit of its fixture as `perRunUsd` (`RunLimits.maxCostUsd`, `--max-cost`; $0.30 for
+ * the vida laboral fixtures), which is below the day and the per-agent caps, so it binds first.
+ * The meter's own `perRunUsd` is for a run that has no fixture.
  */
 export interface MeterLimits extends MeterBudget {
   perRunRequests: number;

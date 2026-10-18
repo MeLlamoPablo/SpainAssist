@@ -13,7 +13,7 @@ export interface ErrorReports {
 }
 
 /**
- * Error reports to GlitchTip with the Sentry SDK (D29). Must run before `ready`: the SDK
+ * Error reports to GlitchTip with the Sentry SDK. Must run before `ready`: the SDK
  * registers the `sentry-ipc` scheme the renderer's SDK hands its events to main through, so
  * renderer errors pass the same gate and scrubbing.
  *

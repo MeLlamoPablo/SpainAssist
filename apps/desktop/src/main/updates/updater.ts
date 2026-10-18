@@ -21,7 +21,7 @@ export interface Updates {
 }
 
 /**
- * Where the app updates itself from GitHub Releases (D19), by how it was installed
+ * Where the app updates itself from GitHub Releases, by how it was installed
  * (`installChannel`): the NSIS installer's builds, and the Linux .deb, which electron-updater
  * reinstalls with `dpkg -i`, asking for the password through pkexec. Not the Microsoft Store's
  * MSIX: the Store updates it. Not macOS until builds are signed (Squirrel.Mac only installs updates

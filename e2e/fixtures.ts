@@ -98,7 +98,6 @@ export const test = base.extend<{ harness: Harness }>({
         DATABASE_URL: 'pglite://memory',
         DEV_SEED: '1',
         RATE_LIMIT: '0',
-        ANON_SEARCH_IP_WINDOW_HOURS: '0',
         MOCK_LLM_BASE_URL: llm.baseUrl,
       });
       await keys.ensureDemoVoucher(keyDb, { pepper: config.voucherPepper });

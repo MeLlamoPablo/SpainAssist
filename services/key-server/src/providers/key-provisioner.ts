@@ -7,7 +7,7 @@ import { sha256Hex } from '../crypto';
  * What a key may do:
  * - "inference": a voucher key: the allowed models, the search tools, the scan decider and call
  *   transcription;
- * - "decider": a ChatGPT subsidy key: only the document-scan frame decider (D12) and call
+ * - "decider": a ChatGPT subsidy key: only the document-scan frame decider and call
  *   transcription (chat completions, TRANSCRIPTION_MODEL only).
  */
 export type KeyScope = 'inference' | 'decider';

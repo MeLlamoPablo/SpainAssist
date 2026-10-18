@@ -542,7 +542,7 @@ const EXA_KEYS_URL = 'https://dashboard.exa.ai/api-keys';
 
 /**
  * BYOK and custom endpoints: the user's optional Exa key, which raises the limits of Exa's free
- * keyless tier that their web research uses (D23).
+ * keyless tier that their web research uses.
  * Main keeps the key; the renderer only learns whether one is saved (`ProviderStatus.exaKey`).
  */
 export function ExaKeyForm() {

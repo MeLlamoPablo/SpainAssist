@@ -2,11 +2,12 @@
 
 Exchanges voucher codes for **capped LiteLLM virtual keys**, and gives each "Sign in with
 ChatGPT" account one small **scan-decider key** (document-scan frame screening, which their
-ChatGPT plan cannot pay for). Both work on our LiteLLM gateway, which proxies LLM calls to
-OpenRouter, web search to Exa / Parallel and the scan decider to OpenRouter's Decisions API
-(D10, D12 in [`docs/DECISIONS.md`](../../docs/DECISIONS.md)). It also runs **web research**
-for voucher users on Parallel's Task API and charges it to the voucher (D13). This server never
-sees conversations, searches or frames, and it relays research without storing or logging it.
+ChatGPT plan cannot pay for, and phone-call transcription). Both work on our LiteLLM gateway,
+which proxies LLM calls to OpenRouter, web search to Parallel and the scan decider to
+OpenRouter's Decisions API.
+It also runs **web research** for voucher users on Parallel's Task API and charges it to the
+voucher. This server never sees conversations, searches or frames, and it relays research
+without storing or logging it.
 
 Hono on Node 24, raw SQL on Postgres (production) or PGlite (development and tests).
 HTTP contracts: `packages/shared/src/services.ts`.
@@ -85,7 +86,8 @@ Admin routes (and the page) answer `404` when `ADMIN_TOKEN` is not set.
 
 Both key responses carry `provider: "litellm"`, `baseUrl` (`${LITELLM_PUBLIC_URL}/v1`) and
 `apiKey`. Vouchers add `limitUsd`, `searchTools` and `expiresAt` when the key expires; ChatGPT
-keys add `deciderModel`, `dailyLimitUsd` and `monthlyLimitUsd`. With the key, a client calls (`{gateway}` is `baseUrl` without `/v1`):
+keys add `deciderModel`, `dailyLimitUsd` and `monthlyLimitUsd`. With the key, a client calls
+(`{gateway}` is `baseUrl` without `/v1`):
 
 | Call | Keys | What |
 | --- | --- | --- |
@@ -133,9 +135,10 @@ logged at $0, pass-through for virtual keys is Enterprise-only), so the key serv
   (`reserved`) and lowers the key's `max_budget` by the price with `POST /key/update`. It never
   writes `spend`: LiteLLM's batch writer keeps updating it from chat and search calls, while
   `max_budget` is only ours. A run that fails (or never starts) gives the price back the same
-  way, once (state change and cap change in one transaction); completed runs keep it, as Parallel
-  bills only completed runs. LiteLLM writes `spend` to its database in batches (it can lag a minute), so the
-  remaining-budget check can be a few cents optimistic, like LiteLLM's own budget checks.
+  way, once (state change and cap change in one transaction); completed runs keep it, as
+  Parallel bills only completed runs. LiteLLM writes `spend` to its database in batches (it can
+  lag a minute), so the remaining-budget check can be a few cents optimistic, like LiteLLM's
+  own budget checks.
 - **Lifecycle** (`research_runs`, no research content): `reserved` → `running` (Parallel run id
   stored) → `completed` | `refunded` | `expired` (no result after `RESEARCH_MAX_MINUTES`; stays
   charged). A refund that fails at LiteLLM leaves `refunding`; hourly housekeeping (and startup)
@@ -186,6 +189,7 @@ logged at $0, pass-through for virtual keys is Enterprise-only), so the key serv
   route check and reaches OpenRouter's chat API with the proxy's own key and no spend; a body
   without `model` also skips the model check. The public reverse proxy must forward
   `/openrouter/…` only for the exact path `/openrouter/alpha/decisions` (and reject `..`/`%2e`).
+  In production Coolify's Traefik does this (`infra/README.md`, "Why it looks like this").
 - **ChatGPT keys**: the app sends the OpenAI ID token of its "Sign in with ChatGPT" login
   (never the access token). The server verifies it against OpenAI's published JWKS
   (`OPENAI_JWKS_URL`, cached by `jose`): RS256 signature, `iss` = `OPENAI_ISSUER`, `exp` (60 s
@@ -275,28 +279,19 @@ logged at $0, pass-through for virtual keys is Enterprise-only), so the key serv
 
 Empty variables count as unset. Docker and deployment: see [`infra/README.md`](../../infra/README.md).
 
-The LiteLLM proxy itself must not keep prompts or answers: `general_settings.store_prompts_in_spend_logs: false`,
-`litellm_settings.turn_off_message_logging: true`, and no logging callbacks (the decider pricing
-callback below logs nothing). Expose only the routes clients need (`/v1/chat/completions`,
-`/v1/models`, `/v1/search/*`, exactly `/openrouter/alpha/decisions`, `/key/info`) at the public
-reverse proxy; the admin API stays internal.
+The LiteLLM proxy itself must not keep prompts or answers:
+`general_settings.store_prompts_in_spend_logs: false`,
+`litellm_settings.turn_off_message_logging: true`, and no logging callbacks besides pricing.
+Expose only the routes clients need (`/v1/chat/completions`, `/v1/models`, `/v1/search/*`,
+exactly `/openrouter/alpha/decisions`, `/key/info`) at the public reverse proxy; the admin API
+stays internal.
 
-LiteLLM v1.104's price map has no `openrouter/~perplexity/pplx-decider-flash-latest`, so without help
-every decision costs $0 and budgets never fill. A `model_list` entry does not help (custom prices
-are registered only under the deployment id, not the `openrouter/<model>` key the pass-through
-looks up). The proxy needs a small callback module next to its config that registers the price
-($0.01 per million input tokens, output free, as OpenRouter charges it):
-
-```python
-# sa_pricing.py, loaded with litellm_settings.callbacks: ["sa_pricing.handler"]
-import litellm
-from litellm.integrations.custom_logger import CustomLogger
-
-litellm.register_model({"openrouter/~perplexity/pplx-decider-flash-latest": {
-    "input_cost_per_token": 1e-08, "output_cost_per_token": 0.0,
-    "litellm_provider": "openrouter", "mode": "evaluation"}})
-handler = CustomLogger()
-```
+Keys' budgets only fill if LiteLLM knows each model's price. LiteLLM v1.104's price map has no
+`openrouter/~perplexity/pplx-decider-flash-latest`, and a `model_list` entry does not help
+(custom prices are registered only under the deployment id, not the `openrouter/<model>` key the
+pass-through looks up). The production proxy loads a callback module that registers OpenRouter's
+prices and the decider's by hand: `infra/terraform/templates/litellm_sa_pricing.py`
+(`infra/README.md`, "Why it looks like this").
 
 ## Layout
 
@@ -305,5 +300,5 @@ handler = CustomLogger()
 `schema_migrations`; never edit an applied one, add the next number), `src/providers/` LiteLLM /
 mock key provisioners, `src/identity.ts` OpenAI ID-token checks, `src/subsidy-team.ts` the
 ChatGPT keys' team, `src/research/` web research (Parallel client, charging and run
-follower), `src/codes.ts` + `src/crypto.ts` codes, hashing and key encryption,
-`src/admin-page.ts` the admin page, `src/cli/` the voucher CLI and the admin page opener.
+follower), `src/vouchers.ts` voucher creation and the demo voucher, `src/codes.ts` +
+`src/crypto.ts` codes, hashing and key encryption, `src/admin-page.ts` the admin page, `src/cli/` the voucher CLI and the admin page opener.

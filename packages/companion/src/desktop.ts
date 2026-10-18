@@ -3,7 +3,7 @@
  * phone's handshake and carries messages. One pairing lasts until `unpair()`, the phone says
  * `bye`, or its lifetime (72 h) ends; a new QR means a new pairing.
  *
- * The QR's secret works for one handshake (D26). Its WELCOME gives the phone the pairing's own
+ * The QR's secret works for one handshake. Its WELCOME gives the phone the pairing's own
  * secret, which every later handshake uses; from then on the QR is useless, so a screenshot or
  * a shared screen can't let anyone take the phone's place.
  *

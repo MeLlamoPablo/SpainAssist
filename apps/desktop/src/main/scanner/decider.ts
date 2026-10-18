@@ -76,7 +76,7 @@ export interface FrameGateAccess {
 
 /**
  * Screens frames with the Decisions API. `access` resolves the user key on our LiteLLM gateway
- * (UserKey, D12) for each check; `apiKey` + `endpoint` is the
+ * (UserKey) for each check; `apiKey` + `endpoint` is the
  * development override (`OPENROUTER_DECIDER_API_KEY`, straight to OpenRouter's System One API,
  * the same request and answer).
  */

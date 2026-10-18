@@ -1,5 +1,5 @@
 # Everything that runs inside Coolify: one Postgres (a database and a role per service), the
-# key server and the feedback server (built by Coolify from GitHub), LiteLLM (litellm.tf),
+# key, feedback, maps and relay servers (built by Coolify from GitHub), LiteLLM (litellm.tf),
 # Unleash (unleash.tf) and GlitchTip (glitchtip.tf).
 
 data "coolify_servers" "localhost" {
@@ -163,9 +163,9 @@ locals {
       LITELLM_ADMIN_URL  = local.litellm_internal_url
       LITELLM_MASTER_KEY = var.litellm_master_key
       LITELLM_PUBLIC_URL = "https://${local.hosts.llm}"
-      # ChatGPT users' decider keys: one per OpenAI account, stored encrypted (D12).
+      # ChatGPT users' decider keys: one per OpenAI account, stored encrypted.
       KEY_ENCRYPTION_KEY = var.key_encryption_key
-      # Deep research: Parallel Task API, processor and price forced by the key server (D13).
+      # Deep research: Parallel Task API, processor and price forced by the key server.
       PARALLEL_API_KEY = var.parallel_api_key
     }, var.key_server_env)
     # Sharing learnings and voting need the user's LiteLLM key, checked like the maps server does.

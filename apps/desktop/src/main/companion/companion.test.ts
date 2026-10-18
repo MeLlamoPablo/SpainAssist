@@ -219,7 +219,7 @@ describe('DNIe signatures with the phone', () => {
 
   it('uses the CAN from Mis datos when valid, and asks only for what it lacks', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
-    /** One phone that declines every request: it pairs with the QR once and stays (D26). */
+    /** One phone that declines every request: it pairs with the QR once and stays. */
     const requests: { m: DesktopToPhone; send: PhoneClient['send'] }[] = [];
     const refuseNext = async () => {
       if (phones.length === 0) {
@@ -443,7 +443,7 @@ it('shows the QR only until a phone pairs, and pairs another phone without faili
   await a.waitFor(() => old.received.some((m) => m.type === 'sign.request'));
   old.client.close();
   await a.waitFor(() => a.services.companion!.status().state === 'away');
-  // The phone reconnects on its own: the QR, which no longer works, isn't shown again (D26).
+  // The phone reconnects on its own: the QR, which no longer works, isn't shown again.
   expect(await a.invoke('companion.status')).toEqual({
     state: 'away',
     device: 'Phone under test',

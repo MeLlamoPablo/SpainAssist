@@ -25,7 +25,7 @@ export interface AppConfig {
   searchTools: string[];
   /** OpenRouter id of the document-scan frame decider (the only model of ChatGPT keys). */
   deciderModel: string;
-  /** Scan-decider keys for "Sign in with ChatGPT" users (POST /v1/chatgpt-keys, D12). */
+  /** Scan-decider keys for "Sign in with ChatGPT" users (POST /v1/chatgpt-keys). */
   chatgptKeys: {
     /** False when disabled or when no KEY_ENCRYPTION_KEY is available. */
     enabled: boolean;

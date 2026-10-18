@@ -401,7 +401,7 @@ export function createApp(deps: AppDeps): Hono {
     } satisfies VoucherCreditResponse);
   });
 
-  // --- ChatGPT scan-decider keys (D12) -----------------------------------------------------
+  // --- ChatGPT scan-decider keys -----------------------------------------------------------
 
   const { chatgptKeys } = config;
   const subsidyTeam = new SubsidyTeam(db, provisioner, {

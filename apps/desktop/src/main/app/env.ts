@@ -38,7 +38,7 @@ import type { UserKey } from '../providers/manager';
  *   SA_AGENT_HOST            path of the agent host script (default: @sa/agent dist/host.js)
  *   OPENROUTER_DECIDER_API_KEY Development override for scan frame screening: an OpenRouter
  *                            key used instead of the user's gateway key (voucher or ChatGPT
- *                            key, D12). Dev builds read it from apps/desktop/.env; e2e
+ *                            key). Dev builds read it from apps/desktop/.env; e2e
  *                            requires a loopback endpoint.
  *   SA_DECIDER_URL          dev-only Decisions endpoint override; e2e requires loopback.
  *   SA_PROVIDER              "custom|<baseUrl>|<model>[|<api>[|<capabilities>]]": preconfigure a

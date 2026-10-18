@@ -251,7 +251,7 @@ describe('Sign in with ChatGPT', () => {
     const outcome = await result;
     expect(outcome.clientId).toBe('oaiapp_issued');
     expect(outcome.account).toBe('ana@example.com');
-    // The verified ID token, for our key server (D12).
+    // The verified ID token, for our key server.
     expect(outcome.idToken.split('.')).toHaveLength(3);
     expect(outcome.credential).toMatchObject({
       type: 'oauth',
