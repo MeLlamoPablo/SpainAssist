@@ -65,6 +65,7 @@ the QR too.
 | `ANDROID_CERT_SHA256` | empty | Comma-separated SHA-256 fingerprints of the app's signing certificates |
 | `INSTALL_URL` | Play Store page | Where "Instalar la app" points |
 | `ROOMS_PER_ADDRESS` / `CONNECTIONS_PER_ADDRESS` | 20 / 40 | Per client address |
+| `MAX_CONNECTIONS` | 300 | In total, all addresses |
 | `ROOM_MEGABYTES` | 512 | Bytes forwarded per room |
 
 Local development: `corepack pnpm services` starts it on port 8794. `corepack pnpm dev:local`

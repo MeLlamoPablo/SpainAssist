@@ -158,6 +158,37 @@ describe('relay rooms', () => {
     expect(await d2.closed).toBe(1009);
   });
 
+  it('enforces the global connection limit from different addresses', async () => {
+    const { url } = await start({ limits: { maxConnections: 2 } });
+    const id1 = room();
+    const id2 = room();
+    const d1 = connect(url, id1, 'desktop', 'k');
+    await d1.opened;
+    const p1 = connect(url, id1, 'phone');
+    await p1.opened;
+    // Both connections from different addresses filled the limit (2), HTTP upgrade refused
+    const d2 = connect(url, id2, 'desktop', 'k');
+    expect(await d2.closed).toBe(1006);
+  });
+
+  it('allows new connections after one closes under the global limit', async () => {
+    const { url } = await start({ limits: { maxConnections: 2 } });
+    const id1 = room();
+    const id2 = room();
+    const d1 = connect(url, id1, 'desktop', 'k');
+    await d1.opened;
+    const p1 = connect(url, id1, 'phone');
+    await p1.opened;
+    // Capacity exhausted, HTTP upgrade refused
+    expect(await connect(url, id2, 'desktop', 'k').closed).toBe(1006);
+    // Close one connection to free capacity
+    d1.ws.close();
+    await d1.closed;
+    // Now we can connect again
+    const d2 = connect(url, id2, 'desktop', 'k');
+    await d2.opened;
+  });
+
   it('expires rooms after their lifetime', async () => {
     let now = 1_000_000;
     const { url, relay } = await start({ now: () => now, limits: { roomTtlMs: 1000 } });

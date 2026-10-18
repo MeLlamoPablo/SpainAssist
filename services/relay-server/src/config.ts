@@ -18,6 +18,7 @@ const Env = z.object({
     .int()
     .positive()
     .default(DEFAULT_LIMITS.connectionsPerAddress),
+  MAX_CONNECTIONS: z.coerce.number().int().positive().default(DEFAULT_LIMITS.maxConnections),
   ROOM_MEGABYTES: z.coerce
     .number()
     .int()
@@ -39,6 +40,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     limits: {
       roomsPerAddress: e.ROOMS_PER_ADDRESS,
       connectionsPerAddress: e.CONNECTIONS_PER_ADDRESS,
+      maxConnections: e.MAX_CONNECTIONS,
       roomBytes: e.ROOM_MEGABYTES * 1024 * 1024,
     },
   };

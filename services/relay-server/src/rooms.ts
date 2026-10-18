@@ -11,7 +11,8 @@
  *   half-dead can reconnect at once.
  * - Both sides get `{"type":"peer","present":…}` on connect and whenever the other side comes
  *   or goes; `{"type":"ping"}` gets `{"type":"pong"}`.
- * - Limits: room lifetime, idle expiry, bytes per room, rooms and connections per address.
+ * - Limits: room lifetime, idle expiry, bytes per room, rooms and connections per address, and
+ *   total open connections.
  */
 import crypto from 'node:crypto';
 import { RELAY_CLOSE } from '@sa/shared';
@@ -38,6 +39,8 @@ export interface RoomLimits {
   roomsPerAddress: number;
   /** Open connections per address (default 40). */
   connectionsPerAddress: number;
+  /** Open connections in total, across all addresses (default 300). */
+  maxConnections: number;
   /** A receiver further behind than this is disconnected (default 16 MiB). */
   maxBuffered: number;
 }
@@ -48,6 +51,7 @@ export const DEFAULT_LIMITS: RoomLimits = {
   roomBytes: 512 * 1024 * 1024,
   roomsPerAddress: 20,
   connectionsPerAddress: 40,
+  maxConnections: 300,
   maxBuffered: 16 * 1024 * 1024,
 };
 
@@ -79,6 +83,7 @@ export interface Attached {
 export class RoomRegistry {
   private readonly rooms = new Map<string, Room>();
   private readonly connections = new Map<string, number>();
+  private totalConnections = 0;
   private readonly limits: RoomLimits;
 
   constructor(
@@ -94,7 +99,10 @@ export class RoomRegistry {
 
   /** Whether an address may open one more connection (checked before the upgrade). */
   canConnect(address: string): boolean {
-    return (this.connections.get(address) ?? 0) < this.limits.connectionsPerAddress;
+    return (
+      (this.connections.get(address) ?? 0) < this.limits.connectionsPerAddress &&
+      this.totalConnections < this.limits.maxConnections
+    );
   }
 
   /**
@@ -149,6 +157,7 @@ export class RoomRegistry {
     if (previous) previous.close(RELAY_CLOSE.replaced, 'replaced');
     r.lastActivity = now;
     this.connections.set(info.address, (this.connections.get(info.address) ?? 0) + 1);
+    this.totalConnections++;
 
     this.control(socket, { type: 'peer', present: this.isOpen(r[other]) });
     this.control(r[other], { type: 'peer', present: true });
@@ -183,6 +192,7 @@ export class RoomRegistry {
         const count = (this.connections.get(info.address) ?? 1) - 1;
         if (count > 0) this.connections.set(info.address, count);
         else this.connections.delete(info.address);
+        this.totalConnections--;
         if (r[role] !== socket) return;
         r[role] = undefined;
         r.lastActivity = this.now();
