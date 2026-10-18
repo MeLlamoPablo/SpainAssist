@@ -659,6 +659,36 @@ it('keeps one phone approval across the hosts of one organisation, and tells the
   ).rejects.toThrow();
 });
 
+it('waits for the user to open the phone app, then gives up with its own explanation', async () => {
+  const { app: a, procedureId, dnie } = await setup();
+  const companion = a.services.companion!;
+  // Real time keeps flowing for the harness; the 10 minutes are skipped below.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const approval = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
+  await typeUnlock(a, procedureId);
+  await a.waitFor(() => {
+    const p = a.pendingPrompt(procedureId)?.prompt;
+    return p?.kind === 'dnie_signature' && p.stage === 'phone';
+  });
+  // No phone connected: the agent knows the login waits for the app to be opened.
+  expect(companion.takeLoginNotes(procedureId)).toEqual([
+    expect.stringMatching(/^Waiting for the user to open the Spain Assist app on their phone/),
+  ]);
+  // Longer than the review time: still waiting.
+  await vi.advanceTimersByTimeAsync(6 * 60_000);
+  expect(a.pendingPrompt(procedureId)?.prompt.kind).toBe('dnie_signature');
+  await vi.advanceTimersByTimeAsync(4 * 60_000);
+  expect(await approval).toBeNull();
+  expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
+    type: 'notice',
+    level: 'warning',
+    text: t('es', 'dnieError_phone_away'),
+  });
+  expect(companion.takeLoginNotes(procedureId)).toEqual([
+    expect.stringMatching(/was not approved: the user did not open the phone app in time/),
+  ]);
+});
+
 it('keeps the login approval when the browser drops a connection', async () => {
   const { relay, app: a, procedureId, dnie } = await setup();
   const companion = a.services.companion!;

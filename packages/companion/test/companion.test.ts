@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { DesktopToPhone, PhoneToDesktop } from '@sa/shared';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ChannelError,
   DesktopPairing,
@@ -524,5 +524,137 @@ describe('PhoneSigner', () => {
       certificates: [crypto.randomBytes(300).toString('base64')],
     });
     await expect(signing).rejects.toMatchObject({ code: 'wrong_card' });
+  });
+});
+
+describe('PhoneSigner timing', () => {
+  const request = {
+    purpose: 'login' as const,
+    origin: 'https://sede.example.gob.es',
+    description: 'Acceder',
+    format: '',
+    documents: [],
+    verifiable: false,
+    can: '123456',
+  };
+  const REVIEW = 5 * 60_000;
+  const AWAY = 10 * 60_000;
+
+  /** A link the test connects and disconnects, as the pairing would. */
+  function fakeLink() {
+    const sent: DesktopToPhone[] = [];
+    const link = {
+      connected: false,
+      sent,
+      send: (m: DesktopToPhone) => {
+        if (link.connected) sent.push(m);
+        return link.connected;
+      },
+    };
+    const signer = new PhoneSigner(link);
+    const connect = () => {
+      link.connected = true;
+      signer.onSession();
+    };
+    const away = () => {
+      link.connected = false;
+      signer.onAway();
+    };
+    const requestOf = () => sent.find((m) => m.type === 'sign.request');
+    return { link, signer, connect, away, requestOf };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('waits longer for an away phone, and starts the review time once it has the request', async () => {
+    vi.useFakeTimers();
+    const t = fakeLink();
+    const pending = t.signer.request(request);
+    let settled = false;
+    pending.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    // Away for longer than the review time: the request still waits.
+    await vi.advanceTimersByTimeAsync(REVIEW + 60_000);
+    expect(settled).toBe(false);
+    expect(t.requestOf()).toBeUndefined();
+    t.connect();
+    const sent = t.requestOf();
+    expect(sent).toBeDefined();
+    // Its deadline counts from when the phone gets it, not from when it was asked.
+    const expiresAt = Date.parse((sent as { expiresAt: string }).expiresAt);
+    expect(expiresAt).toBe(Date.now() + REVIEW);
+    // The away wait is over: only the review time runs now.
+    await vi.advanceTimersByTimeAsync(AWAY);
+    await expect(pending).rejects.toMatchObject({ code: 'timeout' });
+    expect(t.link.sent.at(-1)).toMatchObject({ type: 'sign.cancel', reason: 'timeout' });
+  });
+
+  it('ends with phone_away when the app is never opened', async () => {
+    vi.useFakeTimers();
+    const t = fakeLink();
+    const pending = t.signer.request(request);
+    const failed = expect(pending).rejects.toMatchObject({ code: 'phone_away' });
+    await vi.advanceTimersByTimeAsync(AWAY - 1);
+    expect(t.signer.busy).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await failed;
+    expect(t.signer.busy).toBe(false);
+    expect(t.link.sent).toEqual([]);
+  });
+
+  it('times out as before when the phone is connected, and honours the given times', async () => {
+    vi.useFakeTimers();
+    const t = fakeLink();
+    t.link.connected = true;
+    const pending = t.signer.request({ ...request, reviewTimeoutMs: 1000, awayTimeoutMs: 50 });
+    const failed = expect(pending).rejects.toMatchObject({ code: 'timeout' });
+    await vi.advanceTimersByTimeAsync(999);
+    expect(t.signer.busy).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await failed;
+  });
+
+  it('goes back to waiting when the phone leaves before answering, not after', async () => {
+    vi.useFakeTimers();
+    const t = fakeLink();
+    t.link.connected = true;
+    const pending = t.signer.request(request);
+    let error: PhoneSignError | undefined;
+    pending.catch((e) => {
+      error = e;
+    });
+    await vi.advanceTimersByTimeAsync(REVIEW - 1000);
+    // The app closed before it showed the request: the review time doesn't run out meanwhile.
+    t.away();
+    await vi.advanceTimersByTimeAsync(AWAY - 1000);
+    expect(error).toBeUndefined();
+    t.connect();
+    const requests = t.link.sent.filter((m) => m.type === 'sign.request');
+    expect(requests).toHaveLength(2);
+    expect(Date.parse((requests[1] as { expiresAt: string }).expiresAt)).toBe(Date.now() + REVIEW);
+    // The phone shows it: from now on a disconnect doesn't pause the review time.
+    const { requestId } = requests[1] as { requestId: string };
+    t.signer.onMessage({ type: 'sign.progress', requestId, stage: 'reviewing' });
+    t.away();
+    await vi.advanceTimersByTimeAsync(REVIEW);
+    expect(error?.code).toBe('timeout');
+  });
+
+  it('resolves when the phone answers', async () => {
+    const t = fakeLink();
+    const pending = t.signer.request(request);
+    t.connect();
+    const { requestId } = t.requestOf() as { requestId: string };
+    t.signer.onMessage({
+      type: 'sign.certificate',
+      requestId,
+      certificates: [Buffer.from('cert').toString('base64')],
+    });
+    await expect(pending).resolves.toMatchObject({ certificates: [Buffer.from('cert')] });
+    t.away();
   });
 });

@@ -11,6 +11,11 @@
  * Connections drop (phone asleep, network change, app restarted): everything the phone hasn't
  * answered stays in an outbox and is sent again when the next session starts. Both sides
  * ignore duplicates (same request id, same seq), so re-sending is always safe.
+ *
+ * The phone gets requests only while its app is open. Until the request reaches it, the request
+ * waits for the user to open the app (`awayTimeoutMs`, then `phone_away`); the time to review
+ * (`reviewTimeoutMs`, then `timeout`) starts once a session takes the request. If the phone goes
+ * away before it answers anything (`onAway`), the request goes back to waiting.
  */
 import crypto from 'node:crypto';
 import {
@@ -26,8 +31,17 @@ import {
   type PhoneToDesktop,
 } from '@sa/shared';
 
-/** `unpaired`, `expired` and `relay_refused`: the pairing ended while the request was active. */
-export type PhoneSignErrorCode = CompanionErrorCode | 'unpaired' | 'expired' | 'relay_refused';
+/**
+ * Desktop-only codes besides the phone's: `unpaired`, `expired` and `relay_refused` (the pairing
+ * ended while the request was active), and `phone_away` (the app on the phone wasn't opened
+ * while the request waited for it).
+ */
+export type PhoneSignErrorCode =
+  | CompanionErrorCode
+  | 'unpaired'
+  | 'expired'
+  | 'relay_refused'
+  | 'phone_away';
 
 export class PhoneSignError extends Error {
   constructor(
@@ -63,8 +77,13 @@ export interface PhoneSignRequest {
    * wait meanwhile. Without it, the request ends with `cancelled`.
    */
   onNeed?(need: PhoneNeed): Promise<string | null>;
-  /** Time to review and read the card. Default 5 minutes. */
+  /** Time to review and read the card, from when the phone gets the request. Default 5 minutes. */
   reviewTimeoutMs?: number;
+  /**
+   * Time for the user to open the app while the phone isn't connected, before the request
+   * reaches it. Default 10 minutes; then the request ends with `phone_away`.
+   */
+  awayTimeoutMs?: number;
   signal?: AbortSignal;
   onStage?(stage: CompanionStage): void;
 }
@@ -109,7 +128,13 @@ interface Active {
   signatures: Map<number, Waiter<Buffer> & { timer: ReturnType<typeof setTimeout> | undefined }>;
   nextSeq: number;
   reviewMs: number;
+  awayMs: number;
+  /** A session took the request: the review timer runs (else the away timer). */
+  delivered: boolean;
+  /** The phone answered something for this request. */
+  answered: boolean;
   timer?: ReturnType<typeof setTimeout>;
+  awayTimer?: ReturnType<typeof setTimeout>;
   onStage?(stage: CompanionStage): void;
   onNeed?(need: PhoneNeed): Promise<string | null>;
   /** Waiting for the user to type what the phone needs: timers stopped. */
@@ -118,6 +143,8 @@ interface Active {
 }
 
 const SIGNATURE_TIMEOUT_MS = 90_000;
+const REVIEW_TIMEOUT_MS = 5 * 60_000;
+const AWAY_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * Removes the PIN from the request kept for re-sending, and an answered `sign.unlock`: they go
@@ -146,7 +173,7 @@ export class PhoneSigner {
     if (this.active) return Promise.reject(new PhoneSignError('busy'));
     if (req.signal?.aborted) return Promise.reject(new PhoneSignError('cancelled'));
     const id = crypto.randomUUID();
-    const reviewMs = req.reviewTimeoutMs ?? 5 * 60_000;
+    const reviewMs = req.reviewTimeoutMs ?? REVIEW_TIMEOUT_MS;
     const total = req.documents.reduce((sum, d) => sum + d.data.length, 0);
     const sendData = total <= COMPANION_MAX_DOCUMENT_BYTES;
     const documents: CompanionDocument[] = req.documents.map((d) => ({
@@ -175,6 +202,9 @@ export class PhoneSigner {
         signatures: new Map(),
         nextSeq: 1,
         reviewMs,
+        awayMs: req.awayTimeoutMs ?? AWAY_TIMEOUT_MS,
+        delivered: false,
+        answered: false,
         onStage: req.onStage,
         onNeed: req.onNeed,
         needing: false,
@@ -182,8 +212,7 @@ export class PhoneSigner {
       };
       this.active = active;
       req.signal?.addEventListener('abort', onAbort, { once: true });
-      this.armReview(active);
-      this.post(active, 'request', {
+      active.outbox.set('request', {
         type: 'sign.request',
         requestId: id,
         purpose: req.purpose,
@@ -197,6 +226,7 @@ export class PhoneSigner {
         can: req.can,
         ...(req.pin ? { pin: req.pin } : {}),
       });
+      if (!this.sendRequest(active)) this.armAway(active);
     });
   }
 
@@ -206,6 +236,8 @@ export class PhoneSigner {
     if (!active || message.type === 'bye' || message.requestId !== active.id) return;
     // The phone has the request (and any unlock): the PIN goes once.
     dropSecrets(active, message);
+    active.answered = true;
+    if (!active.delivered) this.delivered(active);
     switch (message.type) {
       case 'sign.progress':
         active.onStage?.(message.stage);
@@ -251,9 +283,21 @@ export class PhoneSigner {
   onSession(): void {
     const active = this.active;
     if (!active) return;
-    for (const message of active.outbox.values()) {
-      if (!this.link.send(message)) return;
+    for (const [key, message] of active.outbox) {
+      if (key === 'request' ? !this.sendRequest(active) : !this.link.send(message)) return;
     }
+  }
+
+  /**
+   * The phone isn't connected any more. A request it hasn't answered yet may never have reached
+   * the app: it waits for the user to open it again, without using up the review time.
+   */
+  onAway(): void {
+    const active = this.active;
+    if (!active?.delivered || active.answered) return;
+    active.delivered = false;
+    clearTimeout(active.timer);
+    this.armAway(active);
   }
 
   /** The pairing ended: nothing more can arrive. */
@@ -288,6 +332,39 @@ export class PhoneSigner {
         });
       },
       () => this.fail(active.id, new PhoneSignError('cancelled'), 'cancelled'),
+    );
+  }
+
+  /**
+   * Sends the request. Until the phone has it, its deadline is the review time from now: the
+   * phone refuses a request that is already past it.
+   */
+  private sendRequest(active: Active): boolean {
+    const request = active.outbox.get('request');
+    if (!request) return true;
+    let message = request;
+    if (!active.delivered && message.type === 'sign.request') {
+      message = { ...message, expiresAt: new Date(Date.now() + active.reviewMs).toISOString() };
+      active.outbox.set('request', message);
+    }
+    if (!this.link.send(message)) return false;
+    if (!active.delivered) this.delivered(active);
+    return true;
+  }
+
+  /** The phone has the request: the time to review starts. */
+  private delivered(active: Active): void {
+    active.delivered = true;
+    clearTimeout(active.awayTimer);
+    active.awayTimer = undefined;
+    if (!active.certificates && !active.needing) this.armReview(active);
+  }
+
+  private armAway(active: Active): void {
+    clearTimeout(active.awayTimer);
+    active.awayTimer = setTimeout(
+      () => this.fail(active.id, new PhoneSignError('phone_away'), 'timeout'),
+      active.awayMs,
     );
   }
 
@@ -360,6 +437,7 @@ export class PhoneSigner {
 
   private clear(active: Active): void {
     clearTimeout(active.timer);
+    clearTimeout(active.awayTimer);
     active.cleanup();
     if (this.active === active) this.active = undefined;
   }

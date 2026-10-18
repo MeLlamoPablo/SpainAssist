@@ -42,12 +42,17 @@ function CompanionQr({ link, size = 196 }: { link: string; size?: number }) {
   );
 }
 
-/** QR code (until a phone pairs) and connection state, while no phone is connected. */
+/**
+ * QR code (until a phone pairs) and connection state, while no phone is connected. With
+ * `request`, a DNIe request waits for a paired phone: opening the app is the user's next step.
+ */
 export function PairingPanel({
   status,
+  request,
   className,
 }: {
   status: CompanionStatus;
+  request?: boolean;
   className?: string;
 }) {
   const t = useT(companionDict);
@@ -109,12 +114,20 @@ export function PairingPanel({
     );
   return (
     <div
-      className={cn('flex flex-wrap items-center gap-5', className)}
+      className={cn(
+        'flex flex-wrap items-center',
+        paired && request ? 'gap-3' : 'gap-5',
+        className,
+      )}
       data-testid="companion-pairing"
       data-state={status.state}
     >
       {status.link ? (
         <CompanionQr link={status.link} />
+      ) : paired && request ? (
+        <span className="flex size-10 shrink-0 items-center justify-center self-start rounded-xl bg-st-attention-bg text-st-attention-fg">
+          <Smartphone size={19} aria-hidden />
+        </span>
       ) : paired ? (
         <div className="flex size-11 shrink-0 items-center justify-center self-start rounded-full bg-surface-2">
           <Smartphone size={20} className="text-fg-subtle" aria-hidden />
@@ -125,7 +138,26 @@ export function PairingPanel({
         </div>
       )}
       <div className="min-w-[200px] flex-1">
-        {paired ? (
+        {paired && request ? (
+          <>
+            <p className="text-[14.5px] font-semibold text-fg" data-testid="companion-open-app">
+              {t.openApp}
+            </p>
+            <p className="mt-0.5 text-[13px] text-fg-muted">{t.openAppHint}</p>
+            <p className="mt-2 text-[12.5px] text-fg-subtle">
+              {t.notConnected(status.device ?? t.app)}. {t.otherPhone}
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Smartphone}
+              className="mt-3"
+              onClick={() => void pairAnother()}
+            >
+              {t.pairOther}
+            </Button>
+          </>
+        ) : paired ? (
           <>
             <p className="text-[14px] font-semibold text-fg">{t.away(status.device ?? t.app)}</p>
             <p className="mt-1 text-[13px] text-fg-muted">{t.otherPhone}</p>

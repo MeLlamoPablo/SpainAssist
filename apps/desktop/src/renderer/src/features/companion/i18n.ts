@@ -13,6 +13,11 @@ export const companionDict = defineDict({
     connecting: 'Conectando…',
     unavailable: 'Ahora mismo no se puede usar el móvil para firmar. Inténtalo más tarde.',
     away: (device: string) => `${device} no está conectado. Abre la app Spain Assist en el móvil.`,
+    /** A request waits for the paired phone, which gets it only while the app is open. */
+    openApp: 'Abre Spain Assist en el móvil para continuar',
+    openAppHint:
+      'El móvil solo recibe las peticiones con la app abierta. Esta te espera hasta 10 minutos.',
+    notConnected: (device: string) => `${device} no está conectado`,
     otherPhone: '¿Has cambiado de móvil? Vincula el nuevo con un código nuevo.',
     pairOther: 'Vincular otro móvil',
     connected: (device: string) => `Conectado con ${device}`,
@@ -99,6 +104,10 @@ export const companionDict = defineDict({
     connecting: 'Connecting…',
     unavailable: "Signing with your phone isn't available right now. Try again later.",
     away: (device: string) => `${device} isn't connected. Open the Spain Assist app on your phone.`,
+    openApp: 'Open Spain Assist on your phone to continue',
+    openAppHint:
+      'Your phone only gets requests while the app is open. This one waits for up to 10 minutes.',
+    notConnected: (device: string) => `${device} isn't connected`,
     otherPhone: 'Using a different phone? Pair it with a new code.',
     pairOther: 'Pair another phone',
     connected: (device: string) => `Connected to ${device}`,

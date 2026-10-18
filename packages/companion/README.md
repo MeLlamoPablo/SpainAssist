@@ -110,8 +110,13 @@ sign.done ───────────────────────�
   one again. The phone never sends a CAN or a PIN.
 - **One request at a time.** A second request while one is active gets `busy`. A request that
   arrives right after `sign.done` (batches) replaces the finished one.
-- **Timeouts (desktop).** 5 minutes for the user to review and read the card, then 90 seconds per
-  signature. On expiry the desktop sends `sign.cancel` with `timeout`.
+- **Timeouts (desktop).** The phone gets requests only while its app is open (no push). While no
+  session has taken the request, it waits up to 10 minutes for the user to open the app, then
+  ends with `phone_away` (desktop-only; the desktop asks the user to open the app meanwhile).
+  Once a session takes it, the user has 5 minutes to review and read the card (the request's
+  `expiresAt` counts from then), then 90 seconds per signature. If the phone leaves before
+  answering anything, the request waits for it again. On expiry the desktop sends `sign.cancel`
+  with `timeout`.
 
 ## Tests
 

@@ -89,6 +89,7 @@ const NOTICES: Partial<Record<PhoneSignErrorCode, StringKey>> = {
   binding_mismatch: 'dnieError_binding_mismatch',
   nfc_unavailable: 'dnieError_nfc_unavailable',
   timeout: 'dnieError_timeout',
+  phone_away: 'dnieError_phone_away',
   busy: 'dnieError_busy',
   unpaired: 'dnieError_unpaired',
   expired: 'dnieError_expired',
@@ -100,6 +101,7 @@ const LOGIN_REFUSALS: Partial<Record<PhoneSignErrorCode, string>> = {
   rejected: 'the user declined it on the phone',
   cancelled: 'the user cancelled it',
   timeout: 'nobody approved it in time',
+  phone_away: 'the user did not open the phone app in time, so the request never reached the phone',
   pin_blocked: 'the DNIe PIN is blocked',
   wrong_card: 'a different DNIe was held to the phone',
   unpaired: 'the phone was unpaired',
@@ -619,7 +621,9 @@ export class CompanionService {
     const notes = news.notes.splice(0);
     if (news.waiting)
       notes.push(
-        `Waiting for the user to approve the DNIe login for ${news.waiting} on their phone. The page may not change until then: use browser_wait instead of clicking again.`,
+        this.pairing?.connected
+          ? `Waiting for the user to approve the DNIe login for ${news.waiting} on their phone. The page may not change until then: use browser_wait instead of clicking again.`
+          : `Waiting for the user to open the Spain Assist app on their phone, which gets the DNIe login for ${news.waiting} only while it is open. The page may not change until then: use browser_wait instead of clicking again.`,
       );
     else this.logins.delete(procedureId);
     return notes;
@@ -744,6 +748,8 @@ export class CompanionService {
       appVersion: deps.appVersion,
       onStatus: (status) => {
         if (this.pairing !== pairing) return;
+        // The phone gets requests only while its app is open: wait for it to come back.
+        if (status.state !== 'connected') this.signer.onAway();
         if (status.state === 'ended') {
           this.pairing = undefined;
           this.ended = endReason(status.reason);

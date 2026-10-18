@@ -201,6 +201,10 @@ const STRINGS = {
     es: 'La firma con el DNIe ha tardado demasiado. Vuelve a intentarlo.',
     en: 'Signing with your DNIe took too long. Try again.',
   },
+  dnieError_phone_away: {
+    es: 'No has abierto Spain Assist en el móvil a tiempo y la petición no le ha llegado. Abre la app en el móvil y vuelve a intentarlo.',
+    en: "You didn't open Spain Assist on your phone in time, so the request never reached it. Open the app on your phone and try again.",
+  },
   dnieError_busy: {
     es: 'El móvil ya está firmando otra cosa. Termina esa firma y vuelve a intentarlo.',
     en: 'The phone is already signing something else. Finish that and try again.',

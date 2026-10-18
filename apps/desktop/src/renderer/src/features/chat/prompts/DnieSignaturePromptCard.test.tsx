@@ -1,4 +1,5 @@
 import {
+  type CompanionStatus,
   DEFAULT_SETTINGS,
   type DnieSignaturePrompt,
   type Language,
@@ -17,10 +18,14 @@ vi.mock('../../../store/app', () => ({
   ),
 }));
 
-function render(language: Language, prompt: Partial<DnieSignaturePrompt>): string {
+function render(
+  language: Language,
+  prompt: Partial<DnieSignaturePrompt>,
+  companion: CompanionStatus['state'] = 'connected',
+): string {
   store.state = {
     settings: { ...DEFAULT_SETTINGS, language },
-    companion: { state: 'connected', device: 'Pixel 8', expiresAt: '2026-10-12T22:00:00.000Z' },
+    companion: { state: companion, device: 'Pixel 8', expiresAt: '2026-10-12T22:00:00.000Z' },
   };
   const full: DnieSignaturePrompt = {
     kind: 'dnie_signature',
@@ -72,5 +77,20 @@ describe('DNIe progress card', () => {
     expect(
       render('en', { stage: 'unlock', unlock: { can: true, pin: false, refused: 'can' } }),
     ).toContain('match your DNIe');
+  });
+
+  it('asks to open the app while the paired phone is away, then follows the phone', () => {
+    const away = render('es', { stage: 'phone', purpose: 'login' }, 'away');
+    expect(away).toContain('Abre Spain Assist en el móvil para continuar');
+    expect(away).toContain('solo recibe las peticiones con la app abierta');
+    expect(away).toContain('Pixel 8 no está conectado');
+    expect(away).not.toContain('data-stage');
+    expect(render('en', { stage: 'phone' }, 'away')).toContain(
+      'Open Spain Assist on your phone to continue',
+    );
+    const connected = render('es', { stage: 'phone' });
+    expect(connected).not.toContain('Abre Spain Assist en el móvil');
+    expect(connected).toContain('data-stage="phone"');
+    expect(connected).toContain('Mira tu móvil');
   });
 });

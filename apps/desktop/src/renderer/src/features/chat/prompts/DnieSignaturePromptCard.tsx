@@ -44,8 +44,9 @@ const STAGE_ICON: Record<DnieSignatureStage, LucideIcon> = {
 /**
  * A signature with the DNIe in the paired phone. This card first asks for the DNIe's CAN and PIN
  * when the app doesn't have them (and again if the card refuses one): they go straight to main
- * with `companion.unlock`, never into the transcript. Then it shows the QR code until a phone is
- * connected, then the phone's progress. The phone asks for consent; here the user can only
+ * with `companion.unlock`, never into the transcript. Then it shows the QR code until a phone
+ * pairs, or asks to open the app on a paired phone that isn't connected (it gets requests only
+ * while the app is open), then the phone's progress. The phone asks for consent; here the user can only
  * cancel.
  */
 export function DnieSignaturePromptCard({
@@ -146,7 +147,7 @@ export function DnieSignaturePromptCard({
             </div>
           </div>
         ) : (
-          <PairingPanel status={companion} />
+          <PairingPanel status={companion} request />
         )}
       </div>
 
