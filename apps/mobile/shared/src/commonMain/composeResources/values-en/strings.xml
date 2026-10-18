@@ -52,6 +52,7 @@
     <string name="review_sign">Sign with my DNIe</string>
     <string name="review_share">Share my certificate</string>
     <string name="review_decline">Don’t sign</string>
+    <string name="review_decline_login">Don’t log in</string>
     <string name="review_disconnected">Waiting for your computer…</string>
 
     <!-- CAN and PIN: typed on the computer -->

@@ -523,7 +523,7 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
                 stringResource(if (login) Res.string.review_login else if (certificateOnly) Res.string.review_share else Res.string.review_sign),
                 onClick = actions::approve,
             )
-            Secondary(stringResource(Res.string.review_decline), actions::decline)
+            Secondary(stringResource(if (login) Res.string.review_decline_login else Res.string.review_decline), actions::decline)
         }
     }
     if (login || certificateOnly) {

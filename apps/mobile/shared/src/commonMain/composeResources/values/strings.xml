@@ -52,6 +52,7 @@
     <string name="review_sign">Firmar con mi DNIe</string>
     <string name="review_share">Compartir mi certificado</string>
     <string name="review_decline">No firmar</string>
+    <string name="review_decline_login">No iniciar sesión</string>
     <string name="review_disconnected">Esperando a tu ordenador…</string>
 
     <!-- CAN and PIN: typed on the computer -->
