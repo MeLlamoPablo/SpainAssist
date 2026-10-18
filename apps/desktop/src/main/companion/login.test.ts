@@ -39,12 +39,14 @@ beforeAll(async () => {
   });
 }, 120_000);
 
+// Closing a real Chromium takes well under a second when idle but can take tens of seconds on a
+// loaded machine (parallel suites), past Vitest's 10 s default hook timeout.
 afterAll(async () => {
   await browser?.closeAll();
   await sidecar?.close();
   await sede?.close();
   if (dir) await rm(dir, { recursive: true, force: true });
-});
+}, 120_000);
 
 async function login(id: string, identity: SidecarIdentity) {
   // biome-ignore lint/correctness/useHookAtTopLevel: This configures TLS on the browser service.

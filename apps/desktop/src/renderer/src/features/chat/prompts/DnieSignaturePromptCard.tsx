@@ -155,6 +155,9 @@ export function DnieSignaturePromptCard({
               </p>
             </div>
           </div>
+        ) : companion.outdated && !companion.link && companion.state !== 'unavailable' ? (
+          // Opening the outdated app won't help: only the update notice (and another phone).
+          <OutdatedPhone side={companionOutdatedSide(companion.outdated)} />
         ) : (
           <PairingPanel status={companion} request />
         )}
@@ -188,6 +191,38 @@ export function DnieSignaturePromptCard({
         </div>
       )}
     </PromptShell>
+  );
+}
+
+/** A paired phone whose app speaks another protocol version: which app to update. */
+function OutdatedPhone({ side }: { side: 'phone' | 'desktop' }) {
+  const tc = useT(companionDict);
+  const pairAnother = async () => {
+    try {
+      useAppStore.setState({ companion: await api.invoke('companion.pairAnother') });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+  return (
+    <div className="flex flex-col gap-3" data-testid="dnie-outdated">
+      <OutdatedNotice side={side} />
+      {/* Another phone can help only when this one is behind. */}
+      {side === 'phone' ? (
+        <div>
+          <p className="text-[12.5px] text-fg-subtle">{tc.otherPhone}</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={Smartphone}
+            className="mt-3"
+            onClick={() => void pairAnother()}
+          >
+            {tc.pairOther}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -109,6 +109,10 @@ describe('DNIe progress card', () => {
     expect(waiting).toContain(
       'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
     );
+    // Opening the outdated app won't help: no "open the app" step, but another phone can pair.
+    expect(waiting).not.toContain('companion-open-app');
+    expect(waiting).not.toContain('Pixel 8 no está conectado');
+    expect(waiting).toContain('Vincular otro móvil');
     // Before the user types the CAN and the PIN, too.
     const unlock = render(
       'en',
@@ -117,6 +121,28 @@ describe('DNIe progress card', () => {
     );
     expect(unlock).toContain('data-side="desktop"');
     expect(unlock).toContain('Update Spain Assist on the computer');
+    // This computer is behind: only its update helps.
+    const desktop = render(
+      'en',
+      { stage: 'phone' },
+      { ...outdated, outdated: { phone: 7, desktop: 6 } },
+    );
+    expect(desktop).toContain('data-side="desktop"');
+    expect(desktop).not.toContain('companion-open-app');
+    expect(desktop).not.toContain('Pair another phone');
+    // Before a phone pairs, the QR stays: an up-to-date phone can still scan it.
+    const qr = render(
+      'es',
+      { stage: 'phone' },
+      {
+        state: 'waiting',
+        link: 'https://relay.example.invalid/p#demo',
+        expiresAt: '2026-10-12T22:00:00.000Z',
+        outdated: { phone: 5, desktop: 6 },
+      },
+    );
+    expect(qr).toContain('companion-outdated');
+    expect(qr).toContain('companion-qr');
     expect(render('es', { stage: 'phone' }, 'away')).not.toContain('companion-outdated');
   });
 

@@ -213,11 +213,18 @@ describe('catastro postal codes', () => {
       times.push(Date.now());
       return new Response('{}');
     });
-    await createCatastro({ fetch: fetchImpl, minIntervalMs: 60 }).postalCode(
-      dni('C. SAN JACINTO 12'),
-    );
+    // A fake clock: real timers fire a few ms off `Date.now()` under load, which made this flaky.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const done = createCatastro({ fetch: fetchImpl, minIntervalMs: 60 }).postalCode(
+        dni('C. SAN JACINTO 12'),
+      );
+      await vi.runAllTimersAsync();
+      await done;
+    } finally {
+      vi.useRealTimers();
+    }
     expect(times.length).toBeGreaterThan(1);
-    for (const [i, time] of times.slice(1).entries())
-      expect(time - times[i]!).toBeGreaterThanOrEqual(55);
+    for (const [i, time] of times.slice(1).entries()) expect(time - times[i]!).toBe(60);
   });
 });

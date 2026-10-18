@@ -13,9 +13,11 @@ import { ProcedureStore } from './store';
 let dir: string;
 let events: EventBus;
 let seen: SaEvent[];
+let stores: ProcedureStore[];
 
 function makeService(root = dir, clock = () => new Date()) {
   const store = new ProcedureStore(root, silentLogger, 20);
+  stores.push(store);
   return {
     store,
     service: new ProcedureService({
@@ -33,9 +35,12 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'sa-proc-'));
   events = new EventBus();
   seen = [];
+  stores = [];
   events.on((e) => seen.push(structuredClone(e)));
 });
 afterEach(async () => {
+  // A debounced write landing while `rm` walks the directory fails it with ENOTEMPTY.
+  await Promise.all(stores.map((store) => store.flush()));
   await rm(dir, { recursive: true, force: true });
 });
 
