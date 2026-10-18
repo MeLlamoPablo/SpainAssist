@@ -4,6 +4,7 @@ import { createApp } from './app';
 import { loadConfig } from './config';
 import { migrate } from './db/migrate';
 import { openDb } from './db/open';
+import { scheduleVotePurge } from './feedback/retention';
 import { seedFeedback } from './feedback/seed';
 
 const log = (line: string) => process.stdout.write(`${new Date().toISOString()} ${line}\n`);
@@ -18,6 +19,8 @@ async function main() {
     const n = await seedFeedback(db);
     if (n > 0) log(`seeded ${n} example learnings (tag "seed")`);
   }
+  // Retention: votes are deleted once they stop counting (VOTE_DECAY_END_DAYS), hourly.
+  const stopPurge = scheduleVotePurge(db, config.votes, log);
   const app = createApp({
     db,
     adminToken: config.adminToken,
@@ -54,6 +57,7 @@ async function main() {
     if (closing) return;
     closing = true;
     log(`${signal}: shutting down`);
+    stopPurge();
     server.close(() => {
       db.close().finally(() => process.exit(0));
     });

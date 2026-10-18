@@ -74,6 +74,7 @@ describe('health and migrations', () => {
       '007_author.sql',
       '008_drop_outcome.sql',
       '009_vote_users.sql',
+      '010_vote_retention.sql',
     ]);
   });
 

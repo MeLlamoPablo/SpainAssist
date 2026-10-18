@@ -168,14 +168,17 @@ export async function addVote(
 
 /**
  * Records a user's agent vote: one per user and entry. A different vote replaces the earlier one
- * (and restarts its fading). True when the vote was stored or changed; false when the user had
- * already cast this vote, or the entry does not exist.
+ * (and restarts its fading). True when the vote was stored, changed or renewed; false when the
+ * user had already cast this vote and it still counts, or the entry does not exist. A vote cast
+ * at `expiredAt` or before no longer counts (and the next purge deletes it): the same vote again
+ * renews it, as if it had been deleted already.
  */
 export async function castVote(
   db: Db,
   id: string,
   value: 1 | -1,
   userId: string,
+  expiredAt: Date,
 ): Promise<boolean> {
   if (!UUID_RE.test(id)) return false;
   const { rows } = await db.query(
@@ -183,9 +186,9 @@ export async function castVote(
      SELECT id, $2, 'agent', $3 FROM feedback WHERE id = $1::uuid
      ON CONFLICT (feedback_id, user_id) WHERE user_id IS NOT NULL
      DO UPDATE SET value = EXCLUDED.value, created_at = now()
-       WHERE feedback_votes.value <> EXCLUDED.value
+       WHERE feedback_votes.value <> EXCLUDED.value OR feedback_votes.created_at <= $4::timestamptz
      RETURNING id`,
-    [id, value, userId],
+    [id, value, userId, expiredAt.toISOString()],
   );
   return rows.length > 0;
 }

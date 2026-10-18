@@ -51,8 +51,9 @@ these leave room for a busy day while a single key cannot flood the database.
 
 **One vote per user and entry**, whatever address it comes from, kept in the database
 (`feedback_votes.user_id`), so restarts don't reset it. A different vote replaces the user's
-earlier one (and restarts its fading); the same vote again answers `counted: false`. Pushing an
-entry takes many paid keys, not many requests. Maintainers' votes have no user.
+earlier one (and restarts its fading); the same vote again answers `counted: false`, unless the
+earlier one has expired (it renews it, `counted: true`). Pushing an entry takes many paid keys, not
+many requests. Maintainers' votes have no user.
 
 ```bash
 curl -s localhost:8788/v1/feedback -H 'content-type: application/json' \
@@ -97,6 +98,10 @@ server does it again (defense in depth):
 - no IPs, install ids or keys are stored, and learnings have no user. A vote row has the entry,
   up/down, agent/human, the time and, for agent votes, the user's id (an HMAC of the key with
   `USER_ID_SECRET`, which can't be matched with LiteLLM's key hashes without the secret).
+  **A vote is deleted, user id included, once it stops counting**: `VOTE_DECAY_END_DAYS` (365)
+  days after it was cast or last changed, within the hour (see [Votes](#votes)). The daily
+  database backups (`infra/terraform/coolify.tf`, 7 kept) hold deleted votes for up to a week
+  longer. Learnings are kept until a maintainer deletes them.
   Per-address limits live in memory, keyed by a salted hash of the client address (new salt on
   every start); per-user quotas live in memory, keyed by the user's id. The access log has
   method, route pattern, status and duration only: never bodies, query strings, keys or
@@ -135,6 +140,23 @@ its net vote weight `w` and the threshold `X` (`VOTE_THRESHOLD`):
   `VOTE_DECAY_END_DAYS`, when it stops counting. Advice that went stale (say, after a website
   redesign) goes back to 50% instead of staying promoted forever.
 
+**Retention.** A vote that stopped counting is deleted, agent or human, so a user's id is kept
+only as long as their vote counts. Migration `010_vote_retention.sql` defines the SQL function
+`purge_expired_votes(cutoff)` (deletes every vote with `created_at <= cutoff`); the server calls
+it on start-up and every hour with `cutoff = now − VOTE_DECAY_END_DAYS` (`src/feedback/retention.ts`).
+The cutoff comes from the config, not from the database, so a vote that still counts is never
+deleted; a vote cast exactly `VOTE_DECAY_END_DAYS` ago is worth 0 and goes. Fading and retention
+both run from `created_at`, which a changed vote resets (`up` → `down` keeps it 365 more days).
+Until the purge runs, an expired vote is still listed (worth 0) and the same vote again renews it;
+afterwards the user simply votes again. Lowering `VOTE_DECAY_END_DAYS` deletes more at the next
+purge; raising it can't bring back votes already deleted.
+
+Why not closer to the data: `pg_cron` is not in the official `postgres:17-alpine` image prod
+runs (it needs the package and `shared_preload_libraries`, which Terraform doesn't manage) nor in
+PGlite; a trigger on `feedback_votes` would only fire when someone votes and can't read the
+app's `VOTE_DECAY_END_DAYS`. So the deletion lives in the database and the clock and cutoff in
+the server.
+
 Entries carry `votes` (the net weight now, rounded). Agents vote with `feedback_vote`; the app
 sends those votes only when sharing learnings is on (flag and user setting).
 
@@ -147,7 +169,7 @@ Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
 - **Browse** with search, filters (kind, net votes, review, procedure, tag, author) and sorting;
   the overview shows counts and the top procedures, tags and authors.
 - **Inspect** an entry: the body as Markdown, how often it is served, every vote with what it is
-  worth now, author, dates and app version. `#id=<uuid>` in the address opens one.
+  worth now (expired votes are deleted within the hour), author, dates and app version. `#id=<uuid>` in the address opens one.
 - **Vote** ("Es útil" / "No es útil": a human vote, worth `VOTE_THRESHOLD`) or remove any vote.
 - **Write**, **edit** and **delete** entries. New entries and edits are scrubbed like
   submissions, and mostly-personal text is rejected. New entries start with no votes and the
@@ -189,7 +211,7 @@ ADMIN_TOKEN=dev-token corepack pnpm feedback --local   # http://127.0.0.1:8788/a
 | `VOTE_DAILY_LIMIT` | `200` | Votes per user per UTC day |
 | `VOTE_THRESHOLD` | `5` | Net votes for 100% (and −this for 0%) serving; also a human vote's weight (≥ 1) |
 | `VOTE_DECAY_START_DAYS` | `90` | Age at which a vote starts losing value |
-| `VOTE_DECAY_END_DAYS` | `365` | Age at which a vote stops counting (must be > the start) |
+| `VOTE_DECAY_END_DAYS` | `365` | Age at which a vote stops counting (must be > the start) and is deleted, with its user id (hourly) |
 | `MCP_ENABLED` | `1` | `0` hides `/mcp` |
 
 ## Development

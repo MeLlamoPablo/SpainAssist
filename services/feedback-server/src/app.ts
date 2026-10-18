@@ -50,6 +50,7 @@ import {
   searchFeedback,
   type VoteContext,
 } from './feedback/repo';
+import { voteExpiry } from './feedback/retention';
 import { MAX_PII_SHARE, scrubSubmission } from './feedback/scrub';
 import { DEFAULT_VOTE_POLICY, type VotePolicy } from './feedback/votes';
 import { clientKey, RateLimiter } from './http/limits';
@@ -242,7 +243,7 @@ export function createApp(deps: AppDeps): Hono {
   };
 
   // Agent votes: one per user and entry. A different vote replaces the user's earlier one; the
-  // same vote again is accepted but not counted.
+  // same vote again is accepted but not counted, unless the earlier one expired (then it renews).
   app.post('/v1/feedback/:id/vote', bodyLimit({ maxSize: 1024 }), async (c) => {
     const tooMany = limited(voteLimiter, c);
     if (tooMany) return tooMany;
@@ -252,7 +253,7 @@ export function createApp(deps: AppDeps): Hono {
     if ('response' in auth) return auth.response;
     const id = c.req.param('id').toLowerCase();
     if (!(await feedbackExists(db, id))) return fail(c, 404, 'not_found', 'Feedback not found.');
-    const counted = await castVote(db, id, value, auth.user);
+    const counted = await castVote(db, id, value, auth.user, voteExpiry(now(), policy));
     return c.json({ id, counted } satisfies FeedbackVoteResponse);
   });
 
