@@ -38,6 +38,7 @@ export function providerLib(codex?: CodexLib): ProviderLib {
     getChatGPTKey: (keyServerUrl, idToken) => agent.getChatGPTKey(keyServerUrl, idToken),
     getVoucherCredit: (keyServerUrl, apiKey) => agent.getVoucherCredit(keyServerUrl, apiKey),
     defaultModels: agent.DEFAULT_MODELS,
+    chatgptModels: agent.CHATGPT_MODELS,
     assistantModels: agent.ASSISTANT_MODELS,
     ...(codex ? { codex } : {}),
   };

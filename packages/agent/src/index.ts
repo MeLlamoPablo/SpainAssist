@@ -46,6 +46,7 @@ export {
 } from './providers/chatgpt';
 export {
   ASSISTANT_MODELS,
+  CHATGPT_MODELS,
   DEFAULT_MODELS,
   type FixedModel,
   listByokProviders,

@@ -619,6 +619,7 @@ export function createFakeProviderLib(overrides: Partial<ProviderLib> = {}): Pro
   const revoked: string[] = [];
   const lib: ProviderLib = {
     defaultModels: { chatgpt: 'gpt-test', voucher: 'test/voucher-model' },
+    chatgptModels: ['gpt-test', 'gpt-test-luna'],
     assistantModels: {
       chatgpt: { id: 'gpt-test-assistant', thinkingLevel: 'high' },
       voucher: { id: 'test/voucher-assistant', thinkingLevel: 'high' },
