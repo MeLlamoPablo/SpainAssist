@@ -135,30 +135,26 @@ export function AppointmentPicker({
         })}
       </ToggleGroup.Root>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p
-          className={cn(
-            'flex min-w-0 items-center gap-2 text-[13.5px]',
-            value ? 'font-medium text-fg' : 'text-fg-subtle',
-          )}
-          data-testid="appointment-chosen"
-        >
-          {value ? (
-            <CalendarCheck size={16} className="shrink-0 text-accent-text" aria-hidden />
-          ) : null}
-          <span className="truncate first-letter:uppercase">
-            {value ? slotLabel(value, lang) : t.prompt.appointmentPick}
-          </span>
-        </p>
         <Button
           size="sm"
           variant="ghost"
           icon={CalendarSearch}
           disabled={busy}
           onClick={onRequestMore}
+          className="-ml-3"
           data-testid="appointment-more"
         >
           {t.prompt.appointmentMore}
         </Button>
+        {value ? (
+          <p
+            className="flex min-w-0 items-center gap-2 text-[13.5px] font-medium text-fg"
+            data-testid="appointment-chosen"
+          >
+            <CalendarCheck size={16} className="shrink-0 text-accent-text" aria-hidden />
+            <span className="truncate first-letter:uppercase">{slotLabel(value, lang)}</span>
+          </p>
+        ) : null}
       </div>
     </div>
   );
