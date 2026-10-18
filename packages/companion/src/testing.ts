@@ -36,6 +36,12 @@ export class MemoryRelay {
     socket?.remoteClose(1006);
   }
 
+  /** Closes one side's connection with a specific close code. */
+  closeWithCode(roomId: string, role: Role, code: number): void {
+    const socket = this.rooms.get(roomId)?.[role];
+    socket?.remoteClose(code);
+  }
+
   private accept(socket: FakeSocket, url: string, auth?: string): void {
     const match = /\/v1\/rooms\/([A-Za-z0-9_-]{22})\/(desktop|phone)$/.exec(url);
     if (!match) {

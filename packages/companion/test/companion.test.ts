@@ -745,6 +745,32 @@ describe('PhoneSigner timing', () => {
   });
 });
 
+describe('DesktopPairing relay close codes', () => {
+  it('ends with expired reason when relay closes with RELAY_CLOSE.expired', async () => {
+    const relay = new MemoryRelay();
+    const t = setup(relay);
+    await until(() => t.pairing.status.state === 'waiting');
+    const phone = t.connectPhone();
+    await until(() => t.pairing.connected && phone.connected);
+    // Close the desktop connection with expired code
+    relay.closeWithCode(roomId(phone.pairing.room), 'desktop', 4408); // RELAY_CLOSE.expired
+    await until(() => t.pairing.status.state === 'ended', 500);
+    expect(t.pairing.status).toEqual({ state: 'ended', reason: 'expired' });
+  });
+
+  it('ends with relay_refused for other close codes like RELAY_CLOSE.unauthorized', async () => {
+    const relay = new MemoryRelay();
+    const t = setup(relay);
+    await until(() => t.pairing.status.state === 'waiting');
+    const phone = t.connectPhone();
+    await until(() => t.pairing.connected && phone.connected);
+    // Close with unauthorized code
+    relay.closeWithCode(roomId(phone.pairing.room), 'desktop', 4401); // RELAY_CLOSE.unauthorized
+    await until(() => t.pairing.status.state === 'ended', 500);
+    expect(t.pairing.status).toEqual({ state: 'ended', reason: 'relay_refused' });
+  });
+});
+
 describe('PhoneClient retry on missing room', () => {
   it('retries on not_found with expiresAt until pairing expires', async () => {
     const relay = new MemoryRelay();
@@ -752,12 +778,14 @@ describe('PhoneClient retry on missing room', () => {
     let currentTime = baseTime;
     const now = () => currentTime;
     const expiresAt = baseTime + 100; // Expires in 100ms
-    const qr = decodePairingLink(encodePairingLink({
-      relayUrl: RELAY,
-      room: crypto.randomBytes(16),
-      secret: crypto.randomBytes(32),
-      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
-    }));
+    const qr = decodePairingLink(
+      encodePairingLink({
+        relayUrl: RELAY,
+        room: crypto.randomBytes(16),
+        secret: crypto.randomBytes(32),
+        desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+      }),
+    );
     const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
     const phoneStatuses: PhoneStatus[] = [];
     const phone = new PhoneClient({
@@ -786,12 +814,14 @@ describe('PhoneClient retry on missing room', () => {
     let currentTime = baseTime;
     const now = () => currentTime;
     const expiresAt = baseTime + 72 * 60 * 60 * 1000; // 72 hours (longer than timeout)
-    const qr = decodePairingLink(encodePairingLink({
-      relayUrl: RELAY,
-      room: crypto.randomBytes(16),
-      secret: crypto.randomBytes(32),
-      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
-    }));
+    const qr = decodePairingLink(
+      encodePairingLink({
+        relayUrl: RELAY,
+        room: crypto.randomBytes(16),
+        secret: crypto.randomBytes(32),
+        desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+      }),
+    );
     const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
     const phoneStatuses: PhoneStatus[] = [];
     const phone = new PhoneClient({
@@ -820,12 +850,14 @@ describe('PhoneClient retry on missing room', () => {
     let currentTime = baseTime;
     const now = () => currentTime;
     const expiresAt = baseTime + 500; // 500ms lifetime
-    const qr = decodePairingLink(encodePairingLink({
-      relayUrl: RELAY,
-      room: crypto.randomBytes(16),
-      secret: crypto.randomBytes(32),
-      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
-    }));
+    const qr = decodePairingLink(
+      encodePairingLink({
+        relayUrl: RELAY,
+        room: crypto.randomBytes(16),
+        secret: crypto.randomBytes(32),
+        desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+      }),
+    );
     const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
     const phoneStatuses: PhoneStatus[] = [];
     const phone = new PhoneClient({
@@ -854,12 +886,14 @@ describe('PhoneClient retry on missing room', () => {
 
   it('ends immediately on not_found if expiresAt is not provided (backward compatibility)', async () => {
     const relay = new MemoryRelay();
-    const qr = decodePairingLink(encodePairingLink({
-      relayUrl: RELAY,
-      room: crypto.randomBytes(16),
-      secret: crypto.randomBytes(32),
-      desktopKey: crypto.createECDH('prime256v1').generateKeys(),
-    }));
+    const qr = decodePairingLink(
+      encodePairingLink({
+        relayUrl: RELAY,
+        room: crypto.randomBytes(16),
+        secret: crypto.randomBytes(32),
+        desktopKey: crypto.createECDH('prime256v1').generateKeys(),
+      }),
+    );
     const otherRoom = encodePairingLink({ ...qr, room: crypto.randomBytes(16) });
     const phoneStatuses: PhoneStatus[] = [];
     const phone = new PhoneClient({
@@ -871,6 +905,9 @@ describe('PhoneClient retry on missing room', () => {
     });
     cleanups.push(() => phone.close());
     await until(() => phoneStatuses.some((s) => s.state === 'ended'), 1000);
-    expect(phoneStatuses.find((s) => s.state === 'ended')).toEqual({ state: 'ended', reason: 'not_found' });
+    expect(phoneStatuses.find((s) => s.state === 'ended')).toEqual({
+      state: 'ended',
+      reason: 'not_found',
+    });
   });
 });
