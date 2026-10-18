@@ -3,6 +3,57 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.3.0-beta (2026-10-18)
+
+A prerelease: GitHub Releases only, installed apps don't update to it.
+
+### App
+
+- **Windows: Microsoft Store package.** The Windows build also makes an MSIX for the Store, and
+  every installer now bundles its Chromium instead of downloading it on first use. On its first
+  start, the Store version offers to copy the data of an existing installation. (1be994d,
+  6de26e0, 9bd17eb, 8b0d532)
+- **Error reports.** Errors (only errors, scrubbed of personal data and home folder paths) go to
+  our own GlitchTip server. On by default; you can turn them off in Settings. (4633262)
+- **Safer DNIe pairing.** The pairing QR works only once: after the first connection the phone
+  uses a secret of its own, so a leaked link can't receive your CAN and PIN. (607029a)
+- **DNIe with the phone, more reliable:**
+  - The DNIe card asks you to open Spain Assist on the phone, and waits up to 10 minutes for it.
+    (a532c98)
+  - It says when the phone app or this app is outdated, when the link server can't be reached,
+    and why a pairing ended. (e5ca005, 90701f3, b669b78)
+  - A server restart no longer ends a pairing or leaves a request stuck. (e499d99, 2903012)
+  - DNIe signatures and logins carry the card's full certificate chain. (b9ca7bf)
+- **Signatures use SHA-256** when a site asks for SHA-1 and the data is available. (0a26d14)
+- **Signing out of ChatGPT** also ends the session at OpenAI. (44769de)
+- **The certificate error page** follows the app's language. (fb06c53)
+- **The document scanner** screens frames again: its model had been retired, so every scan
+  skipped screening. (8e16c21)
+- **Settings:** the anonymous data switch is always shown, with clearer copy; the voucher card
+  drops the server sentence. (9b9f024, 2c8f4fe, 31d50e9)
+- **The assistant's browser** waits for a tab a click opens before looking at the page.
+  (6b79547, a271a9f)
+
+### Services and maintenance
+
+- The backend moved to spainassist.es; released apps keep working on the old addresses.
+  (feb790e, 3931714, 5b2b5e0, dfe4f8a)
+- Relay: caps on total connections and total buffered data, so one burst can't take every
+  pairing down. (fa67bf5, dcf0422)
+- Feedback server: votes are deleted once they stop counting, as the privacy policy says.
+  (26c0943)
+- Feature flags can target an OS, CPU and install channel. (0f96927, 471c261, 51a21d8)
+- Google Workspace mail for spainassist.es. (8bdd11f, 41ac3bd)
+- CI on every push and pull request, and a weekly Chromium security update. (a99e8ee, cfc415d,
+  1e76af6, 558545a, 7771abb)
+- Agent: scripts' web requests go through the same host checks as page fetches. (a087a65,
+  0a7a36e)
+- SpainBench eval suite and browser capture mode for building mock sites (development only).
+  (aab8d02, c1b2dc0)
+- knip, and unused code removed. (40b9fd7)
+- Version 0.3.0-beta everywhere except the phone app, which is released on its own
+  (`mobile-v*` tags). (d8d29de)
+
 ## 0.2.1 (2026-10-13)
 
 ### App
