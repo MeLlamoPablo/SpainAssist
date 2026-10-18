@@ -11,25 +11,33 @@ export function Switch({
   description,
   disabled,
   className,
+  ariaLabel,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  label: ReactNode;
+  label?: ReactNode;
   description?: ReactNode;
   disabled?: boolean;
   className?: string;
+  /** Accessible name when there is no visible label. */
+  ariaLabel?: string;
 }) {
   const id = useId();
   return (
     <div className={cn('flex items-start justify-between gap-6', className)}>
       <div className="min-w-0">
-        <label htmlFor={id} className="text-sm font-medium text-fg">
-          {label}
-        </label>
+        {label ? (
+          <label htmlFor={id} className="text-sm font-medium text-fg">
+            {label}
+          </label>
+        ) : null}
         {description ? (
-          <p id={`${id}-d`} className="mt-0.5 text-[13px] text-fg-muted">
+          <div
+            id={`${id}-d`}
+            className={cn('text-[13px] text-fg-muted [&_p+p]:mt-2', label && 'mt-0.5')}
+          >
             {description}
-          </p>
+          </div>
         ) : null}
       </div>
       <RSwitch.Root
@@ -37,6 +45,7 @@ export function Switch({
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
+        aria-label={label ? undefined : ariaLabel}
         aria-describedby={description ? `${id}-d` : undefined}
         className="no-drag relative mt-0.5 inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full bg-line-strong transition-colors duration-150 data-[state=checked]:bg-accent disabled:opacity-50"
       >

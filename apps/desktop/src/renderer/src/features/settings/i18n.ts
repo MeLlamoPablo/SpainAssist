@@ -121,8 +121,11 @@ export const settingsDict = defineDict({
       body: 'El idioma de la app y de mis respuestas.',
     },
     learnings: {
-      title: 'Compartir aprendizajes anónimos',
-      body: 'Cuando termino un trámite, comparto lo que he aprendido (por ejemplo, «las citas salen a las 9:00») para que el asistente de otras personas lo haga mejor. Nunca incluye tus datos: los quito antes de enviar nada.',
+      title: 'Compartir datos anónimos',
+      body: [
+        'El asistente comparte información sobre trámites para hacerlos cada vez mejor. Nunca se incluyen tus datos.',
+        'Al compartir, también te beneficias de los aprendizajes de otros usuarios.',
+      ],
     },
     errorReports: {
       title: 'Enviar informes de errores',
@@ -261,8 +264,11 @@ export const settingsDict = defineDict({
       body: 'The language of the app and of my answers.',
     },
     learnings: {
-      title: 'Share anonymous learnings',
-      body: 'When I finish a procedure, I share what I learned (for example, “appointments open at 9:00”) so other people’s assistants do better. It never includes your data: I remove it before sending anything.',
+      title: 'Share anonymous data',
+      body: [
+        'The assistant shares information about procedures to make them better every time. Your data is never included.',
+        'By sharing, you also benefit from what other users have learned.',
+      ],
     },
     errorReports: {
       title: 'Send error reports',

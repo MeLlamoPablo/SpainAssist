@@ -171,8 +171,8 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
             <Switch
               checked={settings.shareLearnings}
               onCheckedChange={(shareLearnings) => void set({ shareLearnings })}
-              label={t.learnings.title}
-              description={t.learnings.body}
+              ariaLabel={t.learnings.title}
+              description={t.learnings.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             />
           </SectionCard>
 
