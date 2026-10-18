@@ -16,8 +16,21 @@ import type {
   SigningKey,
 } from '@sa/shared';
 import { z } from 'zod';
-import { checkAlgorithm, type ResolvedAlgorithm, resolveAlgorithm } from './algorithms';
-import { type CountersignTarget, cosignCades, countersignCades, createCades, OID } from './cades';
+import {
+  checkAlgorithm,
+  digestFromAny,
+  type ResolvedAlgorithm,
+  resolveAlgorithm,
+  xmlDigestUri,
+} from './algorithms';
+import {
+  type CountersignTarget,
+  cosignCades,
+  countersignCades,
+  createCades,
+  OID,
+  parseCades,
+} from './cades';
 import { AfirmaError, CANCELLED_TYPE, toAfirmaError } from './errors';
 import { type ExtraParams, isTrue, parseExtraParams } from './extra-params';
 import {
@@ -88,6 +101,8 @@ export interface AfirmaHandlerOptions {
   now?(): Date;
   /** Largest document accepted (default 50 MB). */
   maxDataBytes?: number;
+  /** Where to log notable choices (never data, hashes or signatures). Default: silent. */
+  logger?: { info(msg: string, data?: unknown): void };
 }
 
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
@@ -205,12 +220,116 @@ interface ResolvedData {
 }
 
 // ---------------------------------------------------------------------------------------------
+// No SHA-1 when we can avoid it (#17)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Why a SHA-1 request has to stay SHA-1: all there is to sign is a SHA-1 hash, either the page's
+ * precalculated hash or the message digest of a detached signature being cosigned.
+ */
+type Sha1Reason = 'precalculated-hash' | 'detached-cosign';
+
+/**
+ * The algorithm to sign with for the page's `algorithm` (already checked). AutoFirma signs with
+ * SHA-1 when asked (docs/research/autofirma.md §3.2). We sign with SHA-256 instead whenever the
+ * data is hashed by us or by the site's triphase server, keeping the page's spelling
+ * ("SHA1withRSA" → "SHA256withRSA", "SHA1" → "SHA256").
+ */
+function signingAlgorithm<T extends string | null | undefined>(
+  requested: T,
+  keepSha1: Sha1Reason | null,
+): T | string {
+  if (keepSha1 || requested == null || requested === '' || checkAlgorithm(requested) !== 'sha1')
+    return requested;
+  return requested.trim().replace(/^SHA-?1/i, 'SHA256');
+}
+
+/** XAdES `referencesDigestMethod=sha1` (the data is always here): SHA-256 instead. */
+function withoutSha1References(params: ExtraParams): ExtraParams {
+  const refs = params.referencesDigestMethod;
+  if (!refs || digestFromAny(refs) !== 'sha1') return params;
+  return { ...params, referencesDigestMethod: xmlDigestUri('sha256') };
+}
+
+function hasCadesContent(signature: Buffer | null): boolean {
+  if (!signature) return false;
+  try {
+    return parseCades(signature).content !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a SHA-1 request must stay SHA-1, and why. `data` is the content we have (for a cosign,
+ * the data the page sent alongside the signature).
+ */
+function sha1Reason(o: {
+  cop: Cop;
+  family: FormatFamily;
+  triphase: boolean;
+  params: ExtraParams;
+  data: Buffer | null;
+  signature: Buffer | null;
+}): Sha1Reason | null {
+  if (o.params.precalculatedHashAlgorithm) return 'precalculated-hash';
+  if (o.cop !== 'cosign') return null;
+  // A detached CAdES cosign without the data reuses the existing signer's message digest; a
+  // triphase server may be in the same position, and we can't tell.
+  if (o.triphase) return 'detached-cosign';
+  if (o.family === 'CAdES' && !o.data && !hasCadesContent(o.signature)) return 'detached-cosign';
+  return null;
+}
+
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).host || origin;
+  } catch {
+    return origin;
+  }
+}
+
+/** Why a batch as a whole must stay SHA-1 (see `sha1Reason`; no signature parsing here). */
+function batchSha1Reason(batch: BatchRequest): Sha1Reason | null {
+  for (const single of batch.singlesigns) {
+    if (batchParams(single.extraparams ?? batch.extraparams).precalculatedHashAlgorithm)
+      return 'precalculated-hash';
+    const sub = (single.suboperation ?? batch.suboperation ?? 'sign').toLowerCase();
+    if (sub === 'cosign') return 'detached-cosign';
+  }
+  return null;
+}
+
+/** Batch extraparams: Base64 → literal "\n" to newlines → Properties.load (ISO-8859-1). */
+function batchParams(extra: string | null | undefined): ExtraParams {
+  const text = extra
+    ? Buffer.from(extra, 'base64').toString('latin1').trim().replace(/\\n/g, '\n')
+    : '';
+  return parseExtraParams(text);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------------------------
 
 export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaHandler {
   const now = () => options.now?.() ?? new Date();
   const maxBytes = options.maxDataBytes ?? DEFAULT_MAX_BYTES;
+
+  /** The page's algorithm, upgraded from SHA-1 unless `keep`; logs (host only) when kept. */
+  function algorithmFor<T extends string | null | undefined>(
+    call: AfirmaCall,
+    requested: T,
+    keep: Sha1Reason | null,
+  ): T | string {
+    if (keep && requested && checkAlgorithm(requested) === 'sha1') {
+      options.logger?.info('AutoFirma: signing with SHA-1, only a SHA-1 hash is available', {
+        host: hostOf(call.origin),
+        reason: keep,
+      });
+    }
+    return signingAlgorithm(requested, keep);
+  }
 
   /** Asks the user; the caller must `identity.release()` when the operation ends. */
   async function approve(
@@ -342,6 +461,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       const subject = cop === 'sign' ? data : signature;
       effective = expandPolicy(params, family as PolicyFormat, subject ? subject.length : null);
     }
+    if (!triphase && family === 'XAdES') effective = withoutSha1References(effective);
     if (!triphase && family === 'NONE' && cop !== 'sign') {
       throw AfirmaError.unsupportedOperation(`${cop} con formato NONE`);
     }
@@ -385,10 +505,15 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       ((family === 'CAdES' && cop === 'sign') || (family === 'PAdES' && cop !== 'countersign'));
     // Reject an unsupported algorithm before the user is asked to approve.
     checkAlgorithm(input.algorithm);
+    const algorithmName = algorithmFor(
+      call,
+      input.algorithm,
+      sha1Reason({ cop, family, triphase, params, data, signature }),
+    );
     const { identity } = await approve(ctx, {
       method: call.method,
       format: requestedFormat,
-      algorithm: input.algorithm ?? '',
+      algorithm: algorithmName ?? '',
       origin: call.origin,
       description: lines.join('\n'),
       dataSize: subjectBytes.length,
@@ -398,7 +523,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     });
 
     const signed = await using(identity, () => {
-      const algorithm = resolveAlgorithm(input.algorithm, identity.keyType);
+      const algorithm = resolveAlgorithm(algorithmName, identity.keyType);
       return triphase
         ? triphaseSign({
             serverUrl: params.serverUrl as string,
@@ -584,10 +709,15 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     }
     // Reject an unsupported algorithm before the user is asked to approve.
     checkAlgorithm(batch.algorithm);
+    // A local batch decides per document; the site's batch server gets one algorithm, so SHA-1
+    // stays when any document is only a hash.
+    const batchAlgorithm = local
+      ? signingAlgorithm(batch.algorithm, batchSha1Reason(batch))
+      : algorithmFor(call, batch.algorithm, batchSha1Reason(batch));
     const { identity } = await approve(ctx, {
       method: call.method,
       format: batch.format,
-      algorithm: batch.algorithm,
+      algorithm: batchAlgorithm,
       origin: call.origin,
       description: [
         `Firmar un lote de ${n} ${n === 1 ? 'documento' : 'documentos'} en formato ${batch.format}.`,
@@ -602,14 +732,13 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       signatures: n,
     });
     const result: BatchResult = await using(identity, () => {
-      const algorithm = resolveAlgorithm(batch.algorithm, identity.keyType);
       return local
-        ? localBatch(batch, stopOnError, algorithm, identity)
+        ? localBatch(call, batch, stopOnError, identity)
         : batchSign({
-            batch: { ...batch, stoponerror: stopOnError },
+            batch: { ...batch, algorithm: batchAlgorithm, stoponerror: stopOnError },
             preUrl: preUrl as string,
             postUrl: postUrl as string,
-            algorithm,
+            algorithm: resolveAlgorithm(batchAlgorithm, identity.keyType),
             signer: identity.signer,
             chain: identity.chainDer,
             fetch: ctx.fetch,
@@ -681,9 +810,9 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
   }
 
   async function localBatch(
+    call: AfirmaCall,
     batch: BatchRequest,
     stopOnError: boolean,
-    algorithm: ResolvedAlgorithm,
     identity: SignerIdentity,
   ): Promise<BatchResult> {
     const signs: BatchResultEntry[] = [];
@@ -694,12 +823,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
         continue;
       }
       try {
-        const extra = single.extraparams ?? batch.extraparams;
-        // AutoFirma: Base64 → literal "\n" to newlines → Properties.load (ISO-8859-1).
-        const paramsText = extra
-          ? Buffer.from(extra, 'base64').toString('latin1').trim().replace(/\\n/g, '\n')
-          : '';
-        const params = parseExtraParams(paramsText);
+        const params = batchParams(single.extraparams ?? batch.extraparams);
         const data = decodeBase64(single.datareference);
         if (!data || data.length > maxBytes) throw AfirmaError.invalidData();
         const spec = parseFormat(single.format ?? batch.format);
@@ -711,11 +835,20 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
           (cop === 'sign' ? detectFormatForSign(data) : detectFormatForSignature(data));
         if (spec.triphase || !LOCAL_FAMILIES.has(family))
           throw AfirmaError.unsupportedFormat(spec.requested);
-        const effective =
+        const expanded =
           family === 'NONE' ? params : expandPolicy(params, family as PolicyFormat, data.length);
-        const signature = await signLocally(family, cop, {
+        const effective = family === 'XAdES' ? withoutSha1References(expanded) : expanded;
+        const input = {
           data: cop === 'sign' ? data : null,
           signature: cop === 'sign' ? null : data,
+        };
+        const keep = sha1Reason({ cop, family, triphase: false, params, ...input });
+        const algorithm = resolveAlgorithm(
+          algorithmFor(call, batch.algorithm, keep),
+          identity.keyType,
+        );
+        const signature = await signLocally(family, cop, {
+          ...input,
           algorithm,
           identity,
           params: effective,
