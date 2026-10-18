@@ -40,4 +40,46 @@ describe('PairingPanel', () => {
     expect(html).toContain('companion-qr');
     expect(html).not.toContain('companion-ended');
   });
+
+  it('says which app to update, with the QR still there for a first pairing', () => {
+    const phone = render({
+      state: 'waiting',
+      link: 'https://relay.example.invalid/p#demo',
+      outdated: { phone: 5, desktop: 6 },
+    });
+    expect(phone).toContain('data-side="phone"');
+    expect(phone).toContain(
+      'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
+    );
+    expect(phone).toContain('companion-qr');
+    const desktop = render({
+      state: 'away',
+      device: 'Pixel 8',
+      outdated: { phone: 7, desktop: 6 },
+    });
+    expect(desktop).toContain('data-side="desktop"');
+    expect(desktop).toContain(
+      'La app del móvil es más nueva que Spain Assist en el ordenador. Actualiza Spain Assist en el ordenador para firmar con el móvil.',
+    );
+  });
+
+  it('spins while connecting, then says the server is out of reach and offers to retry', () => {
+    const link = 'https://relay.example.invalid/p#demo';
+    const connecting = render({ state: 'connecting', link });
+    expect(connecting).toContain('Conectando…');
+    expect(connecting).not.toContain('companion-stalled');
+    const stalled = render({ state: 'connecting', link, stalled: true });
+    expect(stalled).toContain('data-testid="companion-stalled"');
+    expect(stalled).toContain(
+      'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
+    );
+    expect(stalled).toContain('Reintentar');
+    expect(stalled).not.toContain('companion-qr');
+    expect(stalled).not.toContain('Conectando…');
+    // A paired phone: the same words, under its own state (it reconnects by itself).
+    const paired = render({ state: 'connecting', device: 'Pixel 8', stalled: true });
+    expect(paired).toContain('data-testid="companion-stalled"');
+    expect(paired).not.toContain('Reintentar');
+    expect(paired).toContain('Vincular otro móvil');
+  });
 });

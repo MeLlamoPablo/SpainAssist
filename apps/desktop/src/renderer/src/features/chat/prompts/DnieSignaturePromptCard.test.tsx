@@ -21,11 +21,14 @@ vi.mock('../../../store/app', () => ({
 function render(
   language: Language,
   prompt: Partial<DnieSignaturePrompt>,
-  companion: CompanionStatus['state'] = 'connected',
+  companion: CompanionStatus['state'] | CompanionStatus = 'connected',
 ): string {
   store.state = {
     settings: { ...DEFAULT_SETTINGS, language },
-    companion: { state: companion, device: 'Pixel 8', expiresAt: '2026-10-12T22:00:00.000Z' },
+    companion:
+      typeof companion === 'string'
+        ? { state: companion, device: 'Pixel 8', expiresAt: '2026-10-12T22:00:00.000Z' }
+        : companion,
   };
   const full: DnieSignaturePrompt = {
     kind: 'dnie_signature',
@@ -92,5 +95,42 @@ describe('DNIe progress card', () => {
     expect(connected).not.toContain('Abre Spain Assist en el móvil');
     expect(connected).toContain('data-stage="phone"');
     expect(connected).toContain('Mira tu móvil');
+  });
+
+  it('says which app to update when the phone speaks another protocol version', () => {
+    const outdated = {
+      state: 'away',
+      device: 'Pixel 8',
+      outdated: { phone: 5, desktop: 6 },
+    } as const;
+    const waiting = render('es', { stage: 'phone' }, outdated);
+    expect(waiting).toContain('data-testid="companion-outdated"');
+    expect(waiting).toContain('data-side="phone"');
+    expect(waiting).toContain(
+      'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
+    );
+    // Before the user types the CAN and the PIN, too.
+    const unlock = render(
+      'en',
+      { stage: 'unlock', unlock: { can: true, pin: true } },
+      { ...outdated, outdated: { phone: 7, desktop: 6 } },
+    );
+    expect(unlock).toContain('data-side="desktop"');
+    expect(unlock).toContain('Update Spain Assist on the computer');
+    expect(render('es', { stage: 'phone' }, 'away')).not.toContain('companion-outdated');
+  });
+
+  it('says the server is out of reach, hides the QR and offers to try again', () => {
+    const html = render(
+      'es',
+      { stage: 'phone' },
+      { state: 'connecting', link: 'https://relay.example.invalid/p#demo', stalled: true },
+    );
+    expect(html).toContain('data-testid="companion-stalled"');
+    expect(html).toContain(
+      'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
+    );
+    expect(html).toContain('Reintentar');
+    expect(html).not.toContain('companion-qr');
   });
 });

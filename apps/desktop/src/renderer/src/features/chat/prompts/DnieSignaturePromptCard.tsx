@@ -1,4 +1,5 @@
 import {
+  companionOutdatedSide,
   DniAccessNumber,
   DniePin,
   type DnieSignaturePrompt,
@@ -27,7 +28,7 @@ import { cn } from '../../../lib/cn';
 import { useAppStore } from '../../../store/app';
 import { toast } from '../../../store/toast';
 import { companionDict } from '../../companion/i18n';
-import { PairingPanel } from '../../companion/PairingPanel';
+import { OutdatedNotice, PairingPanel } from '../../companion/PairingPanel';
 import { chatDict } from '../i18n';
 import { Markdown } from '../Markdown';
 import { PromptShell } from './PromptShell';
@@ -120,7 +121,15 @@ export function DnieSignaturePromptCard({
 
       <div className="mt-4 rounded-xl border border-line bg-surface-2/60 p-4">
         {unlock ? (
-          <UnlockForm itemId={item.id} unlock={unlock} onCancel={() => void cancel()} />
+          <>
+            {/* The request would fail once sent: say why before the user types anything. */}
+            {companion.outdated ? (
+              <div className="mb-4 flex">
+                <OutdatedNotice side={companionOutdatedSide(companion.outdated)} />
+              </div>
+            ) : null}
+            <UnlockForm itemId={item.id} unlock={unlock} onCancel={() => void cancel()} />
+          </>
         ) : connected ? (
           <div
             className="flex items-start gap-3"

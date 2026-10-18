@@ -340,7 +340,31 @@ export interface CompanionStatus {
   device?: string;
   /** When the pairing ends (ISO 8601). */
   expiresAt?: string;
+  /**
+   * `connecting` only: the relay hasn't been reached for a while (`COMPANION_STALLED_MS`): no
+   * internet, or the server is down. It keeps retrying.
+   */
+  stalled?: boolean;
+  /**
+   * A phone handshook with another protocol version, so it can't sign until one app is updated
+   * (`companionOutdatedSide`); cleared when a phone with this one handshakes.
+   */
+  outdated?: CompanionOutdated;
 }
+
+/** The protocol versions of the phone that handshook and of this desktop. */
+export interface CompanionOutdated {
+  phone: number;
+  desktop: number;
+}
+
+/** Which app needs the update: the older one. */
+export function companionOutdatedSide(outdated: CompanionOutdated): 'phone' | 'desktop' {
+  return outdated.phone < outdated.desktop ? 'phone' : 'desktop';
+}
+
+/** How long `connecting` lasts before it reads as `stalled`. */
+export const COMPANION_STALLED_MS = 20_000;
 
 /**
  * Why a pairing ended without the user ending it on the desktop: `phone_unpaired` (from the

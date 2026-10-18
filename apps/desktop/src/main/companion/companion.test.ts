@@ -3,6 +3,8 @@ import { PAIRING_LIFETIME_MS, PhoneClient } from '@sa/companion';
 import { MemoryRelay } from '@sa/companion/testing';
 import {
   type AfirmaSignatureSummary,
+  COMPANION_PROTOCOL,
+  COMPANION_STALLED_MS,
   type DesktopToPhone,
   type ExternalSigningKey,
   RELAY_CLOSE,
@@ -546,6 +548,118 @@ describe('a pairing that ends on its own', () => {
       type: 'notice',
       text: t('es', 'dnieError_expired'),
     });
+  });
+});
+
+describe('a phone app that speaks another protocol version', () => {
+  /** A phone whose app speaks `protocol`: the desktop answers its handshake but won't use it. */
+  function phoneWith(relay: MemoryRelay, link: string, protocol: number) {
+    const hello = { app: '0.9.0', platform: 'test', device: 'Old phone', protocol } as const;
+    const client = new PhoneClient({
+      link,
+      hello,
+      socket: { WebSocket: relay.WebSocket, backoffMs: () => 5 },
+    });
+    phones.push(client);
+    return client;
+  }
+
+  it('says the phone app is out of date and fails a waiting signature at once', async () => {
+    const { relay, app: a, procedureId } = await setup();
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await typeUnlock(a, procedureId);
+    await a.waitFor(() => a.services.companion!.status().state === 'waiting');
+    const { link } = await a.invoke('companion.status');
+    phoneWith(relay, link as string, COMPANION_PROTOCOL - 1);
+    // Without waiting for the phone (10 minutes) or for its review (5 minutes).
+    expect(await approval).toBeNull();
+    const outdated = { phone: COMPANION_PROTOCOL - 1, desktop: COMPANION_PROTOCOL };
+    const status = await a.invoke('companion.status');
+    // The QR still works: the phone can pair once its app is updated.
+    expect(status).toMatchObject({ state: 'waiting', outdated });
+    expect(status.link).toBe(link);
+    expect(a.events).toContainEqual({
+      type: 'companion.changed',
+      status: expect.objectContaining({ outdated }),
+    });
+    expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
+      type: 'notice',
+      level: 'warning',
+      text: t('es', 'dnieError_phone_outdated'),
+    });
+
+    // The updated app pairs with the same QR: the warning goes.
+    for (const p of phones.splice(0)) p.close();
+    phone(relay, link as string, () => {});
+    await a.waitFor(() => a.services.companion!.status().state === 'connected');
+    expect(await a.invoke('companion.status')).not.toHaveProperty('outdated');
+  });
+
+  it('asks to update the desktop for a newer phone app, and fails a new request at once', async () => {
+    const { relay, app: a, procedureId } = await setup();
+    const { link } = await a.invoke('companion.pair');
+    await a.waitFor(() => a.services.companion!.status().state === 'waiting');
+    phoneWith(relay, link as string, COMPANION_PROTOCOL + 1);
+    await a.waitFor(() => !!a.services.companion!.status().outdated);
+    expect(await a.invoke('companion.status')).toMatchObject({
+      outdated: { phone: COMPANION_PROTOCOL + 1, desktop: COMPANION_PROTOCOL },
+    });
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await typeUnlock(a, procedureId);
+    expect(await approval).toBeNull();
+    expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
+      type: 'notice',
+      text: t('es', 'dnieError_desktop_outdated'),
+    });
+    // A new pairing starts clean.
+    expect(await a.invoke('companion.pairAnother')).not.toHaveProperty('outdated');
+  });
+});
+
+describe('a relay that cannot be reached', () => {
+  /** A WebSocket that never connects (no internet, server down). */
+  class Unreachable {
+    readonly OPEN = 1;
+    readyState = 0;
+    binaryType = 'arraybuffer';
+    onopen: (() => void) | null = null;
+    onmessage: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onclose: ((event: { code: number }) => void) | null = null;
+    constructor() {
+      queueMicrotask(() => this.onclose?.({ code: 1006 }));
+    }
+    send(): void {
+      throw new Error('not open');
+    }
+    close(): void {}
+  }
+
+  it('says so after a while of trying, and a new pairing starts counting again', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    app = await createTestApp({
+      env: { relayServerUrl: 'wss://relay.example.test' },
+      relaySocket: Unreachable as unknown as typeof WebSocket,
+    });
+    const a = app;
+    expect(await a.invoke('companion.pair')).toMatchObject({ state: 'connecting' });
+    await vi.advanceTimersByTimeAsync(COMPANION_STALLED_MS - 1000);
+    expect(await a.invoke('companion.status')).toMatchObject({ state: 'connecting' });
+    expect(await a.invoke('companion.status')).not.toHaveProperty('stalled');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await a.invoke('companion.status')).toMatchObject({
+      state: 'connecting',
+      stalled: true,
+    });
+    expect(a.events).toContainEqual({
+      type: 'companion.changed',
+      status: expect.objectContaining({ state: 'connecting', stalled: true }),
+    });
+    // "Reintentar": a new pairing, counted from zero.
+    expect(await a.invoke('companion.pairAnother')).not.toHaveProperty('stalled');
+    await vi.advanceTimersByTimeAsync(COMPANION_STALLED_MS);
+    expect((await a.invoke('companion.status')).stalled).toBe(true);
+    expect(await a.invoke('companion.unpair')).toEqual({ state: 'off' });
   });
 });
 

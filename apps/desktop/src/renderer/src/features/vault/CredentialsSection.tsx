@@ -1,6 +1,7 @@
 import {
   type CredentialPolicy,
   type CredentialSummary,
+  companionOutdatedSide,
   DniePin,
   type VaultOverview,
 } from '@sa/shared';
@@ -416,6 +417,12 @@ function DnieCard({
   const paired = connected || companion.state === 'away';
   // Why the last pairing ended, unless the user unpaired here.
   const ended = companion.state === 'off' ? companion.reason : undefined;
+  // What keeps the phone from signing now: an app to update, or no relay.
+  const problem = companion.outdated
+    ? tc.outdated[companionOutdatedSide(companion.outdated)]
+    : companion.state === 'connecting' && companion.stalled
+      ? tc.stalled
+      : undefined;
 
   const pair = async () => {
     setPairing(true);
@@ -491,9 +498,9 @@ function DnieCard({
                 <Smartphone
                   size={15}
                   className={
-                    connected
+                    connected && !problem
                       ? 'text-st-done-fg'
-                      : ended
+                      : ended || problem
                         ? 'text-st-attention-fg'
                         : 'text-fg-subtle'
                   }
@@ -511,6 +518,13 @@ function DnieCard({
                   data-testid="companion-ended"
                 >
                   {tc.ended[ended]}
+                </p>
+              ) : problem ? (
+                <p
+                  className="mt-0.5 pl-[23px] text-[12.5px] text-st-attention-fg"
+                  data-testid="companion-problem"
+                >
+                  {problem}
                 </p>
               ) : null}
             </div>

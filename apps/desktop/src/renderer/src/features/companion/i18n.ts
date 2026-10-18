@@ -91,6 +91,16 @@ export const companionDict = defineDict({
         'El servidor de enlace ha rechazado la conexión. Inténtalo de nuevo más tarde.',
     },
     pairAgain: 'Volver a vincular',
+    /** A phone handshook with another protocol version: which app to update. */
+    outdated: {
+      phone:
+        'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
+      desktop:
+        'La app del móvil es más nueva que Spain Assist en el ordenador. Actualiza Spain Assist en el ordenador para firmar con el móvil.',
+    },
+    /** The relay hasn't been reached for a while. */
+    stalled: 'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
+    retry: 'Reintentar',
     done: 'Hecho',
   },
   en: {
@@ -176,6 +186,13 @@ export const companionDict = defineDict({
       relay_refused: 'The link server refused the connection. Try again later.',
     },
     pairAgain: 'Pair again',
+    outdated: {
+      phone: 'The phone app is out of date. Update it from Google Play and open it again.',
+      desktop:
+        'The phone app is newer than Spain Assist on this computer. Update Spain Assist on the computer to sign with your phone.',
+    },
+    stalled: "Can't connect to the server. Check your internet connection.",
+    retry: 'Try again',
     done: 'Done',
   },
 });

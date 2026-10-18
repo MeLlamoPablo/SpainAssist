@@ -107,4 +107,22 @@ describe('Mis datos: DNIe with the phone', () => {
     }
     expect(render(true, [DNIE])).not.toContain('companion-ended');
   });
+
+  it('says which app to update, or that the server is out of reach', () => {
+    const away = { state: 'away', device: 'Pixel 8' } as const;
+    const phone = render(true, [DNIE], { ...away, outdated: { phone: 5, desktop: 6 } });
+    expect(phone).toContain('data-testid="companion-problem"');
+    expect(phone).toContain(
+      'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
+    );
+    expect(phone).toContain('Desvincular');
+    expect(render(true, [DNIE], { ...away, outdated: { phone: 7, desktop: 6 } })).toContain(
+      'Actualiza Spain Assist en el ordenador',
+    );
+    expect(render(true, [DNIE], { state: 'connecting', stalled: true })).toContain(
+      'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
+    );
+    expect(render(true, [DNIE], away)).not.toContain('companion-problem');
+    expect(render(true, [DNIE], { state: 'connecting' })).not.toContain('companion-problem');
+  });
 });

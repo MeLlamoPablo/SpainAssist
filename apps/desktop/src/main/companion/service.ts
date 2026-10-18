@@ -13,11 +13,13 @@ import {
 } from '@sa/companion';
 import {
   type AfirmaSignatureSummary,
+  COMPANION_STALLED_MS,
   type CompanionAlgorithm,
   type CompanionCheck,
   type CompanionEndReason,
   type CompanionStatus,
   type CredentialSummary,
+  companionOutdatedSide,
   DniAccessNumber,
   DniePin,
   type DnieSignaturePrompt,
@@ -79,8 +81,14 @@ const ALGORITHMS: Record<SignatureDigest, CompanionAlgorithm> = {
   sha512: 'SHA512withRSA',
 };
 
+/**
+ * Why a DNIe request ended: the signer's codes, or the phone's app speaking another protocol
+ * version (`phone_outdated`: update the phone app; `desktop_outdated`: update this one).
+ */
+type RefusalCode = PhoneSignErrorCode | 'phone_outdated' | 'desktop_outdated';
+
 /** What the user reads when the phone did not sign (declines and cancels show nothing). */
-const NOTICES: Partial<Record<PhoneSignErrorCode, StringKey>> = {
+const NOTICES: Partial<Record<RefusalCode, StringKey>> = {
   pin_blocked: 'dnieError_pin_blocked',
   card_unsupported: 'dnieError_card_unsupported',
   no_certificate: 'dnieError_no_certificate',
@@ -94,10 +102,12 @@ const NOTICES: Partial<Record<PhoneSignErrorCode, StringKey>> = {
   unpaired: 'dnieError_unpaired',
   expired: 'dnieError_expired',
   relay_refused: 'dnieError_relay_refused',
+  phone_outdated: 'dnieError_phone_outdated',
+  desktop_outdated: 'dnieError_desktop_outdated',
 };
 
 /** Why a DNIe login wasn't approved, for the agent. */
-const LOGIN_REFUSALS: Partial<Record<PhoneSignErrorCode, string>> = {
+const LOGIN_REFUSALS: Partial<Record<RefusalCode, string>> = {
   rejected: 'the user declined it on the phone',
   cancelled: 'the user cancelled it',
   timeout: 'nobody approved it in time',
@@ -107,6 +117,10 @@ const LOGIN_REFUSALS: Partial<Record<PhoneSignErrorCode, string>> = {
   unpaired: 'the phone was unpaired',
   expired: 'the phone pairing expired',
   relay_refused: 'the relay server refused the phone connection',
+  phone_outdated:
+    'the Spain Assist app on the phone is out of date: the user must update it from Google Play and open it again',
+  desktop_outdated:
+    'the phone app is newer than this desktop app: the user must update Spain Assist on the computer',
 };
 
 /** `promise`, or a `declined` error once `signal` aborts (the browser dropped the connection). */
@@ -167,6 +181,11 @@ export class CompanionService {
   private endLogin?: () => void;
   /** Why the last pairing ended on its own, until the user pairs again or unpairs. */
   private ended?: CompanionEndReason;
+  /** The pairing has been `connecting` for `COMPANION_STALLED_MS` (no relay). */
+  private stalled = false;
+  private stallTimer?: ReturnType<typeof setTimeout>;
+  /** Requests waiting on the phone, failed at once when it turns out to speak another protocol. */
+  private readonly onOutdated = new Set<(code: RefusalCode) => void>();
   private readonly signer: PhoneSigner;
   private readonly relayUrl?: string;
   /** The CAN the user typed, while the app runs. */
@@ -215,6 +234,7 @@ export class CompanionService {
     const pairing = this.pairing;
     this.pairing = undefined;
     this.ended = undefined;
+    this.watchStall();
     pairing?.unpair();
     this.signer.onEnded('unpaired');
     this.emit();
@@ -246,6 +266,7 @@ export class CompanionService {
     this.signer.onEnded('unpaired');
     const pairing = this.pairing;
     this.pairing = undefined;
+    this.watchStall();
     pairing?.unpair();
   }
 
@@ -265,7 +286,7 @@ export class CompanionService {
         site: string;
         signal?: AbortSignal;
         onCancelled?: () => void;
-        onRefused?: (code: PhoneSignErrorCode) => void;
+        onRefused?: (code: RefusalCode) => void;
       };
     } = {},
   ): Promise<ExternalSigningKey | null> {
@@ -385,6 +406,16 @@ export class CompanionService {
       return pin ?? null;
     };
 
+    // A phone that speaks another protocol version can't take the request: say so at once.
+    let outdated: RefusalCode | undefined;
+    const failOutdated = (code: RefusalCode) => {
+      outdated = code;
+      abort.abort();
+    };
+    this.onOutdated.add(failOutdated);
+    const known = this.pairing?.outdated;
+    if (known) failOutdated(`${companionOutdatedSide(known)}_outdated`);
+
     let key: PhoneKey;
     try {
       key = await this.signer.request({
@@ -402,7 +433,7 @@ export class CompanionService {
         onStage: (stage) => show({ ...base, stage }),
       });
     } catch (err) {
-      const code: PhoneSignErrorCode = err instanceof PhoneSignError ? err.code : 'internal';
+      const code: RefusalCode = outdated ?? (err instanceof PhoneSignError ? err.code : 'internal');
       if (code === 'pin_blocked') await this.forgetPin(credential);
       deps.logger.info('dnie signature not approved', { procedureId, code });
       login?.onRefused?.(code);
@@ -416,6 +447,8 @@ export class CompanionService {
         );
       }
       return null;
+    } finally {
+      this.onOutdated.delete(failOutdated);
     }
 
     if (!login) await this.remember(credential, key.certificates[0] as Buffer);
@@ -489,7 +522,7 @@ export class CompanionService {
       this.endLogin?.();
       const label = siteLabel(hostOf(site));
       this.loginNews(procedureId).waiting = label;
-      let refused: PhoneSignErrorCode | undefined;
+      let refused: RefusalCode | undefined;
       const key = await this.approve(
         procedureId,
         {
@@ -756,7 +789,13 @@ export class CompanionService {
           // A signature in progress fails with the reason (the phone's unpairing reads as one).
           this.signer.onEnded(status.reason === 'phone_unpaired' ? 'unpaired' : status.reason);
         }
+        this.watchStall(status);
         this.emit();
+        const outdated = pairing.outdated;
+        if (outdated) {
+          const code: RefusalCode = `${companionOutdatedSide(outdated)}_outdated`;
+          for (const fail of [...this.onOutdated]) fail(code);
+        }
       },
       onMessage: (message) => {
         if (this.pairing === pairing) this.signer.onMessage(message);
@@ -769,26 +808,51 @@ export class CompanionService {
     });
     this.pairing = pairing;
     this.ended = undefined;
+    this.watchStall();
     deps.logger.info('companion pairing started', { relay: new URL(relayUrl).host });
     this.emit();
   }
 
+  /**
+   * Starts counting while the pairing is `connecting` (from its first attempt, through the relay
+   * socket's backoff); any other status, or none, stops it.
+   */
+  private watchStall(status?: PairingStatus): void {
+    if (status?.state === 'connecting') {
+      if (this.stalled || this.stallTimer) return;
+      this.stallTimer = setTimeout(() => {
+        this.stallTimer = undefined;
+        this.stalled = true;
+        this.deps.logger.info('companion relay unreachable');
+        this.emit();
+      }, COMPANION_STALLED_MS);
+      this.stallTimer.unref?.();
+      return;
+    }
+    clearTimeout(this.stallTimer);
+    this.stallTimer = undefined;
+    this.stalled = false;
+  }
+
   private describe(pairing: DesktopPairing, status: PairingStatus): CompanionStatus {
     const expiresAt = new Date(pairing.expiresAt).toISOString();
+    const outdated = pairing.outdated ? { outdated: pairing.outdated } : {};
     switch (status.state) {
       case 'connected':
-        return { state: 'connected', device: status.phone.device, expiresAt };
+        return { state: 'connected', device: status.phone.device, expiresAt, ...outdated };
       // The QR works only until a phone pairs: a paired phone reconnects on its own.
       case 'away':
-        return { state: 'away', device: status.phone.device, expiresAt };
+        return { state: 'away', device: status.phone.device, expiresAt, ...outdated };
       case 'waiting':
-        return { state: 'waiting', ...link(pairing), expiresAt };
+        return { state: 'waiting', ...link(pairing), expiresAt, ...outdated };
       case 'connecting':
         return {
           state: 'connecting',
           ...link(pairing),
           expiresAt,
           ...(status.phone ? { device: status.phone.device } : {}),
+          ...(this.stalled ? { stalled: true } : {}),
+          ...outdated,
         };
       case 'ended': {
         const reason = endReason(status.reason);

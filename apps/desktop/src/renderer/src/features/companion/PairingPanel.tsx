@@ -1,5 +1,5 @@
-import type { CompanionStatus } from '@sa/shared';
-import { Loader2, Smartphone, TriangleAlert } from 'lucide-react';
+import { type CompanionStatus, companionOutdatedSide } from '@sa/shared';
+import { Loader2, RotateCw, Smartphone, TriangleAlert, WifiOff } from 'lucide-react';
 import { useMemo } from 'react';
 import { encode } from 'uqr';
 import { Button } from '../../components/ui/button';
@@ -45,6 +45,8 @@ function CompanionQr({ link, size = 196 }: { link: string; size?: number }) {
 /**
  * QR code (until a phone pairs) and connection state, while no phone is connected. With
  * `request`, a DNIe request waits for a paired phone: opening the app is the user's next step.
+ * Says which app to update when the phone speaks another protocol version, and when the relay
+ * can't be reached (`stalled`) hides the QR and offers to try again.
  */
 export function PairingPanel({
   status,
@@ -58,6 +60,7 @@ export function PairingPanel({
   const t = useT(companionDict);
   // A paired phone reconnects on its own; its QR no longer works.
   const paired = !status.link && (status.state === 'away' || !!status.device);
+  const stalled = status.state === 'connecting' && !!status.stalled;
   const pairAnother = async () => {
     try {
       useAppStore.setState({ companion: await api.invoke('companion.pairAnother') });
@@ -122,7 +125,12 @@ export function PairingPanel({
       data-testid="companion-pairing"
       data-state={status.state}
     >
-      {status.link ? (
+      {status.outdated ? <OutdatedNotice side={companionOutdatedSide(status.outdated)} /> : null}
+      {stalled && !paired ? (
+        <div className="flex size-[196px] items-center justify-center rounded-xl bg-st-attention-bg">
+          <WifiOff size={22} className="text-st-attention-fg" aria-hidden />
+        </div>
+      ) : status.link ? (
         <CompanionQr link={status.link} />
       ) : paired && request ? (
         <span className="flex size-10 shrink-0 items-center justify-center self-start rounded-xl bg-st-attention-bg text-st-attention-fg">
@@ -171,20 +179,57 @@ export function PairingPanel({
               {t.pairOther}
             </Button>
           </>
+        ) : stalled ? (
+          <div data-testid="companion-stalled">
+            <p className="text-[14px] font-semibold text-fg">{t.stalled}</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RotateCw}
+              className="mt-3"
+              onClick={() => void pairAnother()}
+            >
+              {t.retry}
+            </Button>
+          </div>
         ) : (
           <>
             <p className="text-[14px] font-semibold text-fg">{t.scanTitle}</p>
             <p className="mt-1 text-[13px] text-fg-muted">{t.scanBody}</p>
           </>
         )}
-        {status.state === 'connecting' ? (
+        {stalled && paired ? (
+          <p
+            className="mt-2 flex items-center gap-1.5 text-[12.5px] text-st-attention-fg"
+            data-testid="companion-stalled"
+          >
+            <WifiOff size={13} aria-hidden />
+            {t.stalled}
+          </p>
+        ) : status.state === 'connecting' && !stalled ? (
           <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-fg-subtle">
             <Loader2 size={13} className="animate-spin" aria-hidden />
             {t.connecting}
           </p>
         ) : null}
-        {paired ? null : <p className="mt-3 text-[12.5px] text-fg-subtle">{t.getApp}</p>}
+        {paired || stalled ? null : <p className="mt-3 text-[12.5px] text-fg-subtle">{t.getApp}</p>}
       </div>
     </div>
+  );
+}
+
+/** The phone and this desktop speak different protocol versions: which app to update. */
+export function OutdatedNotice({ side }: { side: 'phone' | 'desktop' }) {
+  const t = useT(companionDict);
+  return (
+    <p
+      role="alert"
+      className="flex basis-full items-start gap-2 rounded-lg bg-st-attention-bg px-3 py-2 text-[13px] font-medium text-st-attention-fg ring-1 ring-st-attention-line ring-inset"
+      data-testid="companion-outdated"
+      data-side={side}
+    >
+      <TriangleAlert size={15} className="mt-0.5 shrink-0" aria-hidden />
+      {t.outdated[side]}
+    </p>
   );
 }

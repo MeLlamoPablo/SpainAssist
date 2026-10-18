@@ -221,6 +221,14 @@ const STRINGS = {
     es: 'El servidor de enlace con el móvil ha rechazado la conexión. Inténtalo de nuevo más tarde.',
     en: 'The link server refused the connection to your phone. Try again later.',
   },
+  dnieError_phone_outdated: {
+    es: 'La app del móvil está desactualizada. Actualízala desde Google Play, vuelve a abrirla e inténtalo de nuevo.',
+    en: 'The phone app is out of date. Update it from Google Play, open it again and try again.',
+  },
+  dnieError_desktop_outdated: {
+    es: 'La app del móvil es más nueva que Spain Assist en el ordenador. Actualiza Spain Assist en el ordenador e inténtalo de nuevo.',
+    en: 'The phone app is newer than Spain Assist on this computer. Update Spain Assist on the computer and try again.',
+  },
   dnieError_failed: {
     es: 'No se ha podido usar el DNIe. Vuelve a intentarlo.',
     en: "Couldn't use your DNIe. Try again.",

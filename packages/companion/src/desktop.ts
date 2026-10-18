@@ -87,6 +87,7 @@ export class DesktopPairing {
   private phone?: CompanionHello;
   private relay: RelayState = { status: 'connecting' };
   private ended?: PairingEndReason;
+  private mismatch?: { phone: number; desktop: number };
 
   constructor(private readonly opts: DesktopPairingOptions) {
     const now = opts.now ?? Date.now;
@@ -138,6 +139,14 @@ export class DesktopPairing {
 
   get connected(): boolean {
     return this.session !== undefined;
+  }
+
+  /**
+   * The last phone to handshake speaks another protocol version (its app or this one needs an
+   * update), until one that matches does.
+   */
+  get outdated(): { phone: number; desktop: number } | undefined {
+    return this.mismatch;
   }
 
   /** False when no phone is connected (the caller re-sends on the next `onSession`). */
@@ -261,8 +270,11 @@ export class DesktopPairing {
     if (!compatible) {
       // The WELCOME tells the phone our version; it shows "update the app" and stops.
       this.opts.log?.('companion protocol mismatch', { phone: hello.data.protocol });
+      this.mismatch = { phone: hello.data.protocol, desktop: COMPANION_PROTOCOL };
+      this.emitStatus();
       return;
     }
+    this.mismatch = undefined;
     if (session) {
       this.secret = session;
       this.qr = undefined;

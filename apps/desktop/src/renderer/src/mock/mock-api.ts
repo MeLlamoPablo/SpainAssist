@@ -2,6 +2,7 @@ import {
   type ActivityItem,
   type AssistantItem,
   type ChatItem,
+  COMPANION_PROTOCOL,
   type CompanionStatus,
   type ConversationState,
   type CredentialSummary,
@@ -63,7 +64,9 @@ import {
  * ?phone=1 (the DNI card asks for a phone call) · ?dnie=1 (feature flag: DNIe with the phone on;
  * ?companion, ?dnieSaved and the playground imply it) · ?companion=waiting|away|connected (phone
  * pairing for DNIe signatures; the playground starts connected; =phone_unpaired|expired|
- * relay_refused: no pairing, the last one ended for that reason) · ?dnieSaved=1|pin (a saved
+ * relay_refused: no pairing, the last one ended for that reason; =outdated|outdated_desktop:
+ * the paired phone's app, or this one, needs an update; =stalled: the relay can't be reached,
+ * "Reintentar" pairs anew) · ?dnieSaved=1|pin (a saved
  * DNIe in Mis datos; =pin with its PIN saved).
  */
 
@@ -218,11 +221,23 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         ? { state: 'away', device: 'Pixel 8', expiresAt: pairedUntil }
         : companionParam === 'waiting'
           ? { state: 'waiting', link: demoLink, expiresAt: pairedUntil }
-          : companionParam === 'phone_unpaired' ||
-              companionParam === 'expired' ||
-              companionParam === 'relay_refused'
-            ? { state: 'off', reason: companionParam }
-            : { state: 'off' };
+          : companionParam === 'outdated' || companionParam === 'outdated_desktop'
+            ? {
+                state: 'away',
+                device: 'Pixel 8',
+                expiresAt: pairedUntil,
+                outdated:
+                  companionParam === 'outdated'
+                    ? { phone: COMPANION_PROTOCOL - 1, desktop: COMPANION_PROTOCOL }
+                    : { phone: COMPANION_PROTOCOL + 1, desktop: COMPANION_PROTOCOL },
+              }
+            : companionParam === 'stalled'
+              ? { state: 'connecting', link: demoLink, expiresAt: pairedUntil, stalled: true }
+              : companionParam === 'phone_unpaired' ||
+                  companionParam === 'expired' ||
+                  companionParam === 'relay_refused'
+                ? { state: 'off', reason: companionParam }
+                : { state: 'off' };
   const setCompanion = (next: CompanionStatus) => {
     companion = next;
     emit({ type: 'companion.changed', status: next });
