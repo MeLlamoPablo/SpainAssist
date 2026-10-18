@@ -1,0 +1,117 @@
+# Checks every push to master and every pull request: Biome (lint + format), typecheck, knip,
+# the generated colour tokens and the desktop's third-party licences; the unit tests of every
+# package; the Electron e2e suite; and the phone app (host tests, debug build, Android lint and
+# the desktop ↔ phone interop check). Everything runs offline against the mocks (apps/mock-sede,
+# tools/mock-llm): no real government site, paid API or secret is used.
+#
+# CI has no git-crypt key, so encrypted paths (.gitattributes) are binary here: nothing below
+# may read them.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # A new push to a pull request replaces its run; every master commit is checked.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  checks:
+    name: Lint, format, types and dead code
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      # `biome ci` is `biome check` without writes, with GitHub annotations.
+      - name: Biome
+        run: corepack pnpm exec biome ci .
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: corepack pnpm typecheck
+      - name: Knip
+        if: ${{ !cancelled() }}
+        run: corepack pnpm knip
+      - name: Colour tokens
+        if: ${{ !cancelled() }}
+        run: corepack pnpm design:colors:check
+      # Fails when a dependency the desktop ships isn't permissively licensed (AGENTS.md).
+      - name: Third-party licences
+        if: ${{ !cancelled() }}
+        run: corepack pnpm --filter @sa/desktop notices --out "$RUNNER_TEMP/THIRD_PARTY_NOTICES.txt"
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      # Browser, signer and mock-sede tests launch playwright-core's Chromium (`chromium` also
+      # installs the headless shell); the system libraries come with --with-deps.
+      - name: Install Chromium
+        run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
+      - name: Test
+        run: corepack pnpm test
+
+  e2e:
+    name: Electron e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces Electron's sandbox needs.
+      - name: Allow Electron's sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Install Electron and Chromium
+        run: |
+          corepack pnpm --filter @sa/desktop exec install-electron
+          corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
+      # Builds sa-sidecar, the agent host and the app the suite launches.
+      - name: Build the app
+        run: corepack pnpm --filter @sa/desktop build
+      # Electron needs a display even with its window hidden.
+      - name: E2E
+        run: xvfb-run --auto-servernum corepack pnpm e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: e2e/test-results
+          retention-days: 7
+
+  mobile:
+    name: Phone app
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      # Gradle picks JDK 17 (gradle/gradle-daemon-jvm.properties) from JAVA_HOME_17_X64.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v5
+      # The runner's Android SDK (ANDROID_HOME) lacks the compile SDK.
+      - name: Install Android platform 37
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' > /dev/null
+      - name: Host tests, debug build and Android lint
+        run: ./gradlew --console=plain :shared:testAndroidHostTest :androidApp:assembleDebug :androidApp:lintDebug
+      # The real Kotlin phone code against this repo's relay and signer.
+      - name: Desktop ↔ phone interop
+        run: corepack pnpm --filter @sa/relay-server interop

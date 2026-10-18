@@ -13,3 +13,9 @@ allowBuilds:
   '@google/genai': false
   protobufjs: false
   electron-winstaller: false
+
+# electron-vite 5 found the bundle's last import with a regex, which a string ending in
+# ` import'` fooled into splicing its CommonJS shim into that string. The patch backports 6.0's
+# AST lookup; drop it when upgrading to electron-vite 6.
+patchedDependencies:
+  electron-vite@5.0.0: patches/electron-vite@5.0.0.patch

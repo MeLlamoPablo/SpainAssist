@@ -7,7 +7,9 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -47,6 +49,8 @@ import org.jetbrains.compose.resources.stringResource
 import java.util.concurrent.Executors
 
 /** The camera, reading QR codes with ML Kit (the bundled model: works offline). */
+// ML Kit reads the camera frame's `Image`, which CameraX marks experimental.
+@OptIn(ExperimentalGetImage::class)
 @Composable
 fun QrScanner(onCode: (String) -> Unit) {
     val context = LocalContext.current

@@ -389,9 +389,7 @@ export async function createAnswerer(options: AnswererOptions): Promise<Answerer
 
   const call = (system: string, messages: Message[]): Promise<AssistantMessage> => {
     const signal = AbortSignal.any(
-      [AbortSignal.timeout(timeoutMs), options.signal].filter(
-        (s): s is AbortSignal => !!s,
-      ),
+      [AbortSignal.timeout(timeoutMs), options.signal].filter((s): s is AbortSignal => !!s),
     );
     return runtime.completeSimple(
       model,

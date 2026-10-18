@@ -1,0 +1,36 @@
+# Node 24, Go, Corepack's pnpm and the workspace's dependencies, for the CI workflow's jobs.
+name: Set up the workspace
+description: Installs Node, Go and Corepack, restores the pnpm store and installs dependencies.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 24
+        # It would look for pnpm before Corepack is set up; the pnpm store is cached below.
+        package-manager-cache: false
+    # sa-sidecar (certificate logins) is Go: its tests, the e2e build and the interop check build it.
+    - uses: actions/setup-go@v6
+      with:
+        go-version: stable
+        # Standard library only: nothing to cache.
+        cache: false
+    # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
+    - name: Install Corepack
+      shell: bash
+      run: |
+        npm install --global --force corepack@latest
+        echo "$(npm prefix --global)/bin" >> "$GITHUB_PATH"
+    - id: pnpm-store
+      name: Find the pnpm store
+      shell: bash
+      run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-
+    - name: Install dependencies
+      shell: bash
+      run: corepack pnpm install --frozen-lockfile

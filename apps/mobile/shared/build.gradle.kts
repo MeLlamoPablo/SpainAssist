@@ -75,6 +75,9 @@ kotlin {
     }
 }
 
+// Android lint reads the common test sources but misses the task dependency `srcDir` carries.
+tasks.matching { it.name.startsWith("lintAnalyze") || it.name.endsWith("LintModel") }.configureEach { dependsOn(generateVectors) }
+
 // `-Pinterop=<config.json>` runs InteropTest against a live desktop; without it, it's skipped.
 tasks.withType<Test>().configureEach {
     providers.gradleProperty("interop").orNull?.let { systemProperty("interop.config", it) }

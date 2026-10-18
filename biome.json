@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/out", "!**/.data", "!**/*.min.js", "!.idea"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/out",
+      "!**/.data",
+      "!**/*.min.js",
+      "!.idea",
+      "!tools/scan-eval/fixtures"
+    ]
   },
   "formatter": {
     "enabled": true,
