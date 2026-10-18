@@ -158,16 +158,12 @@ export interface SaMethods {
   'app.exportTranscripts': [[], string];
   /** The app's own updates (see UpdateStatus); changes arrive as `updates.status` events. */
   'updates.status': [[], UpdateStatus];
-  /** Data of the GitHub (NSIS) install, for the Microsoft Store build (see DataImportStatus). */
+  /** The Microsoft Store build's move from the GitHub (NSIS) install (see DataImportStatus). */
   'dataImport.status': [[], DataImportStatus];
-  /** Copies that data into this app's own folder and restarts the app; never resolves then. */
-  'dataImport.accept': [[], void];
-  /** The user starts from scratch: never offered again. */
-  'dataImport.decline': [[], void];
-  /** Closes the "your data is here" notice for good. */
-  'dataImport.dismiss': [[], void];
-  /** Opens Windows Settings > Apps, where the user can uninstall the other version. */
-  'dataImport.openAppsSettings': [[], void];
+  /** Starts the GitHub install's uninstaller (Windows Settings > Apps if it can't). */
+  'dataImport.uninstall': [[], void];
+  /** Copies its data into this app's own folder and restarts the app; never resolves then. */
+  'dataImport.run': [[], void];
   /** Opens the app's Microsoft Store page, where the Store build updates (`installChannel` msix). */
   'updates.openStore': [[], void];
 
@@ -324,14 +320,15 @@ export type UpdateStatus =
   | { state: 'ready'; version: string };
 
 /**
- * The Microsoft Store (MSIX) build's offer to bring in the data that the GitHub (NSIS) install
- * left on the same Windows account (`apps/desktop/src/main/migrate/`):
- * - `none`: nothing to offer (other builds, no old data, or already answered);
- * - `offer`: ask before anything else, on the first start;
- * - `imported`: the data came in; say so once, until `dataImport.dismiss`.
+ * The Microsoft Store (MSIX) build's move from the GitHub (NSIS) install on the same Windows
+ * account (`apps/desktop/src/main/migrate/`):
+ * - `none`: nothing to do (other builds, no GitHub install, or done);
+ * - `uninstall`: the GitHub install is still there; nothing else shows until it is uninstalled
+ *   (`dataImport.uninstall`, then `dataImport.status` again);
+ * - `import`: it is gone and left data; `dataImport.run` copies it in and restarts.
  */
 export interface DataImportStatus {
-  state: 'none' | 'offer' | 'imported';
+  state: 'none' | 'uninstall' | 'import';
 }
 
 /**

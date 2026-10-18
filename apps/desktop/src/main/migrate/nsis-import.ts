@@ -12,7 +12,14 @@ import { normalizeSettings } from '../settings/store';
 /*
  * Windows ships two builds: the Microsoft Store MSIX (advertised) and the NSIS installer from
  * GitHub Releases (kept, unadvertised). Some NSIS users install the Store build too; this module
- * offers to bring the NSIS install's data into it on its first start.
+ * moves them over:
+ * 1. While the NSIS app is installed (`nsis-install.ts`), the Store build shows nothing but a
+ *    screen that asks to uninstall it, with a button that starts its uninstaller. Two installs
+ *    would update, pair with the phone and keep data apart. The screen checks again every couple
+ *    of seconds, so it goes on by itself once the uninstaller is done.
+ * 2. Then, if the NSIS install left data and this build has none of its own yet, it copies that
+ *    data in and restarts, without asking: the uninstaller keeps the data and nothing writes to it
+ *    any more. Someone who wanted a fresh start can delete everything in Settings.
  *
  * Where each build keeps its data. Both are Electron userData under the real %APPDATA%:
  * - NSIS: `%APPDATA%\SpainAssistant` (index.ts sets it explicitly; the name also keys the macOS
@@ -53,8 +60,8 @@ import { normalizeSettings } from '../settings/store';
  *
  * Copying happens in a staging folder while the app still runs, so a failure leaves everything
  * as it was. Then main's services stop, each entry is swapped in, the decision is saved and the
- * app restarts. An import cut short (crash, power loss) leaves the staging folder, which brings
- * the offer back on the next start; the NSIS data itself is only ever read.
+ * app restarts. An import cut short (crash, power loss) leaves the staging folder, so the next
+ * start imports again; the NSIS data itself is only ever read.
  */
 
 /** Electron's userData folder name in the NSIS (and macOS, Linux) builds. */
@@ -92,6 +99,7 @@ function importedEntries(userData: string): string[] {
     .map(([key]) => relative(userData, paths[key as keyof typeof IMPORTED]));
 }
 
+// `declined` and `dismissed` come from the 0.3.0 betas, which asked before importing.
 const Decision = z.object({ state: z.enum(['declined', 'imported', 'dismissed']) });
 type Decision = z.infer<typeof Decision>['state'];
 
@@ -124,21 +132,19 @@ export function applyStagedLocalState(userData: string): void {
 }
 
 export interface DataImport {
-  status(): DataImportStatus;
+  /** Checks again whether the NSIS app is still installed. */
+  status(): Promise<DataImportStatus>;
+  /** Starts the NSIS app's uninstaller (or opens Windows Settings > Apps if it can't). */
+  uninstall(): Promise<void>;
   /** Copies the NSIS install's data in, stops the app's services and restarts the app. */
-  accept(): Promise<void>;
-  decline(): Promise<void>;
-  dismiss(): Promise<void>;
-  openAppsSettings(): Promise<void>;
+  run(): Promise<void>;
 }
 
 /** Builds that have nothing to import (macOS, Linux, NSIS, tests). */
 export const noDataImport: DataImport = {
-  status: () => ({ state: 'none' }),
-  accept: () => Promise.reject(new Error('Nothing to import')),
-  decline: async () => {},
-  dismiss: async () => {},
-  openAppsSettings: () => Promise.reject(new Error('Not available')),
+  status: async () => ({ state: 'none' }),
+  uninstall: () => Promise.reject(new Error('Nothing to uninstall')),
+  run: () => Promise.reject(new Error('Nothing to import')),
 };
 
 export interface DataImportDeps {
@@ -153,14 +159,18 @@ export interface DataImportDeps {
   stop(): Promise<void>;
   /** Restarts the app; doesn't return. */
   relaunch(): void;
+  /** The NSIS app's uninstaller while it is installed (`findNsisUninstaller`). */
+  findUninstaller(): Promise<string | undefined>;
+  /** Starts that uninstaller (`launchNsisUninstaller`). */
+  launchUninstaller(uninstaller: string): Promise<void>;
   /** Opens Windows Settings > Apps. */
   openAppsSettings(): Promise<void>;
   logger: Logger;
 }
 
 /**
- * The import offer of the MSIX build. Call it before main's services open this userData: they
- * create its files, and "has no data of its own yet" is decided from what was there before.
+ * The MSIX build's move from the NSIS install. Call it before main's services open this userData:
+ * they create its files, and "has no data of its own yet" is decided from what was there before.
  */
 export async function openDataImport(deps: DataImportDeps): Promise<DataImport> {
   const { userData, logger } = deps;
@@ -171,11 +181,13 @@ export async function openDataImport(deps: DataImportDeps): Promise<DataImport> 
   const decisionFile = join(userData, DECISION_FILE);
   const decision = await readDecision(decisionFile, logger);
   const interrupted = await exists(staging);
-  let state: DataImportStatus['state'] = 'none';
-  if (decision === 'imported') state = 'imported';
-  else if (!decision && (await hasUserData(source)))
-    state = interrupted || !(await hasUserData(userData)) ? 'offer' : 'none';
+  const importable =
+    !decision && (await hasUserData(source)) && (interrupted || !(await hasUserData(userData)));
   if (decision && interrupted) await rm(staging, { recursive: true, force: true }).catch(() => {});
+  const afterUninstall = (): DataImportStatus['state'] => (importable ? 'import' : 'none');
+  let state: DataImportStatus['state'] = (await deps.findUninstaller())
+    ? 'uninstall'
+    : afterUninstall();
   logger.info('NSIS data import', { state, decision: decision ?? 'none', interrupted });
 
   const decide = async (next: Decision) => {
@@ -184,26 +196,30 @@ export async function openDataImport(deps: DataImportDeps): Promise<DataImport> 
   let importing: Promise<void> | undefined;
 
   return {
-    status: () => ({ state }),
-    accept() {
-      if (state !== 'offer') return Promise.reject(new Error('Nothing to import'));
+    async status() {
+      if (state === 'uninstall' && !(await deps.findUninstaller())) {
+        state = afterUninstall();
+        logger.info('NSIS app uninstalled', { state });
+      }
+      return { state };
+    },
+    async uninstall() {
+      const uninstaller = state === 'uninstall' ? await deps.findUninstaller() : undefined;
+      if (!uninstaller) return;
+      try {
+        await deps.launchUninstaller(uninstaller);
+      } catch (err) {
+        logger.warn('NSIS uninstaller did not start', { error: errorMessage(err) });
+        await deps.openAppsSettings();
+      }
+    },
+    run() {
+      if (state !== 'import') return Promise.reject(new Error('Nothing to import'));
       importing ??= runImport().finally(() => {
         importing = undefined;
       });
       return importing;
     },
-    async decline() {
-      if (state !== 'offer') return;
-      await decide('declined');
-      await rm(staging, { recursive: true, force: true }).catch(() => {});
-      state = 'none';
-    },
-    async dismiss() {
-      if (state !== 'imported') return;
-      await decide('dismissed');
-      state = 'none';
-    },
-    openAppsSettings: () => deps.openAppsSettings(),
   };
 
   async function runImport(): Promise<void> {
@@ -225,7 +241,7 @@ export async function openDataImport(deps: DataImportDeps): Promise<DataImport> 
       throw err;
     }
     // 2. Stop everything that reads or writes userData, swap the entries in, restart. If a swap
-    // fails, the staging folder stays and the next start offers the import again.
+    // fails, the staging folder stays and the next start imports again.
     logger.info('NSIS data import: copied, restarting');
     await deps.stop();
     try {

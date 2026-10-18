@@ -48,7 +48,7 @@ async function nsisInstall(): Promise<void> {
   await put(join(nsis, 'lockfile'), '');
 }
 
-/** What a first start of the Store build creates before the user answers. */
+/** What a first start of the Store build creates before the import. */
 async function freshStoreStart(): Promise<void> {
   await put(join(store, 'settings.json'), '{"onboardingCompleted":false}');
   await put(join(store, 'vault', 'key.bin'), 'wrapped-by-store');
@@ -56,6 +56,9 @@ async function freshStoreStart(): Promise<void> {
   await put(join(store, 'Local State'), '{"os_crypt":{"encrypted_key":"store"}}');
   await put(join(store, 'logs', 'main.log'), 'new log');
 }
+
+const UNINSTALLER =
+  'C:\\Users\\u\\AppData\\Local\\Programs\\spain-assist\\Uninstall Spain Assist.exe';
 
 function deps(over: Partial<DataImportDeps> = {}): DataImportDeps {
   return {
@@ -65,11 +68,30 @@ function deps(over: Partial<DataImportDeps> = {}): DataImportDeps {
     userData: store,
     stop: vi.fn(async () => {}),
     relaunch: vi.fn(),
+    findUninstaller: vi.fn(async () => undefined),
+    launchUninstaller: vi.fn(async () => {}),
     openAppsSettings: vi.fn(async () => {}),
     logger: silentLogger,
     ...over,
   };
 }
+
+/** Deps whose NSIS app stays installed until `uninstalled()`. */
+function installedDeps(over: Partial<DataImportDeps> = {}) {
+  let installed = true;
+  const d = deps({
+    findUninstaller: vi.fn(async () => (installed ? UNINSTALLER : undefined)),
+    ...over,
+  });
+  return {
+    d,
+    uninstalled: () => {
+      installed = false;
+    },
+  };
+}
+
+const status = async (d: DataImportDeps) => (await openDataImport(d)).status();
 
 describe('defaultUserData', () => {
   it('gives the Store build its own folder', () => {
@@ -81,55 +103,56 @@ describe('defaultUserData', () => {
 });
 
 describe('openDataImport', () => {
-  it('offers nothing outside the Store build', async () => {
+  it('does nothing outside the Store build', async () => {
     await nsisInstall();
     for (const over of [
       { windowsStore: false },
       { platform: 'darwin' as const, windowsStore: undefined },
       { platform: 'linux' as const },
     ]) {
-      const d = await openDataImport(deps(over));
-      expect(d.status()).toEqual({ state: 'none' });
+      const { d } = installedDeps(over);
+      expect(await status(d)).toEqual({ state: 'none' });
+      expect(d.findUninstaller).not.toHaveBeenCalled();
     }
   });
 
-  it('offers nothing without NSIS data, or when it never got past the onboarding', async () => {
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'none' });
+  it('imports nothing without NSIS data, or when it never got past the onboarding', async () => {
+    expect(await status(deps())).toEqual({ state: 'none' });
     await put(join(nsis, 'settings.json'), '{"onboardingCompleted":false}');
     await put(join(nsis, 'vault', 'key.bin'), 'x');
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'none' });
+    expect(await status(deps())).toEqual({ state: 'none' });
   });
 
-  it('offers it on a first start, and again while unanswered', async () => {
+  it('imports on a first start, and again until it is done', async () => {
     await nsisInstall();
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'offer' });
+    expect(await status(deps())).toEqual({ state: 'import' });
     await freshStoreStart();
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'offer' });
+    expect(await status(deps())).toEqual({ state: 'import' });
   });
 
-  it('offers nothing once the Store build has data of its own', async () => {
+  it('imports nothing once the Store build has data of its own', async () => {
     await nsisInstall();
     await put(join(store, 'settings.json'), '{"onboardingCompleted":true}');
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'none' });
+    expect(await status(deps())).toEqual({ state: 'none' });
     await rm(join(store, 'settings.json'));
     await put(join(store, 'procedures', 'p9', 'procedure.json'), '{}');
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'none' });
+    expect(await status(deps())).toEqual({ state: 'none' });
   });
 
-  it('remembers a no', async () => {
+  it('keeps an answer from the betas that asked first', async () => {
     await nsisInstall();
-    const d = await openDataImport(deps());
-    await d.decline();
-    expect(d.status()).toEqual({ state: 'none' });
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'none' });
+    for (const answer of ['declined', 'dismissed', 'imported']) {
+      await put(join(store, 'nsis-import.json'), `{"state":"${answer}"}`);
+      expect(await status(deps())).toEqual({ state: 'none' });
+    }
   });
 
-  it('copies the app data, stages Local State, restarts, and says so once', async () => {
+  it('copies the app data, stages Local State, restarts, and is done', async () => {
     await nsisInstall();
     await freshStoreStart();
     const d1 = deps();
     const d = await openDataImport(d1);
-    await d.accept();
+    await d.run();
 
     expect(d1.stop).toHaveBeenCalledOnce();
     expect(d1.relaunch).toHaveBeenCalledOnce();
@@ -152,11 +175,7 @@ describe('openDataImport', () => {
     // The NSIS install is only read.
     expect(await readFile(join(nsis, 'vault', 'key.bin'), 'utf8')).toBe('wrapped-by-nsis');
 
-    const next = await openDataImport(deps());
-    expect(next.status()).toEqual({ state: 'imported' });
-    await next.dismiss();
-    expect(next.status()).toEqual({ state: 'none' });
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'none' });
+    expect(await status(deps())).toEqual({ state: 'none' });
   });
 
   it('changes nothing when the copy fails', async () => {
@@ -166,23 +185,62 @@ describe('openDataImport', () => {
     await chmod(join(nsis, 'vault', 'items', 'a.bin'), 0);
     const d1 = deps();
     const d = await openDataImport(d1);
-    await expect(d.accept()).rejects.toThrow();
+    await expect(d.run()).rejects.toThrow();
     expect(d1.stop).not.toHaveBeenCalled();
     expect(await readFile(join(store, 'vault', 'key.bin'), 'utf8')).toBe('wrapped-by-store');
     expect(await readdir(store)).not.toContain('nsis-import.staging');
-    expect(d.status()).toEqual({ state: 'offer' });
+    expect(await d.status()).toEqual({ state: 'import' });
   });
 
-  it('offers it again after an import cut short', async () => {
+  it('imports again after an import cut short', async () => {
     await nsisInstall();
     await put(join(store, 'settings.json'), '{"onboardingCompleted":true}');
     await mkdir(join(store, 'nsis-import.staging'), { recursive: true });
-    expect((await openDataImport(deps())).status()).toEqual({ state: 'offer' });
+    expect(await status(deps())).toEqual({ state: 'import' });
   });
 
-  it('opens Windows Settings > Apps', async () => {
-    const d1 = deps();
-    await (await openDataImport(d1)).openAppsSettings();
+  it('asks to uninstall the NSIS app first, then imports once it is gone', async () => {
+    await nsisInstall();
+    const { d: d1, uninstalled } = installedDeps();
+    const d = await openDataImport(d1);
+    expect(await d.status()).toEqual({ state: 'uninstall' });
+    await expect(d.run()).rejects.toThrow();
+    expect(d1.stop).not.toHaveBeenCalled();
+
+    await d.uninstall();
+    expect(d1.launchUninstaller).toHaveBeenCalledWith(UNINSTALLER);
+    // Cancelled, or still running: the screen stays.
+    expect(await d.status()).toEqual({ state: 'uninstall' });
+
+    uninstalled();
+    expect(await d.status()).toEqual({ state: 'import' });
+    await d.run();
+    expect(d1.relaunch).toHaveBeenCalledOnce();
+    expect(await readFile(join(store, 'vault', 'key.bin'), 'utf8')).toBe('wrapped-by-nsis');
+  });
+
+  it('asks to uninstall it even with nothing to import', async () => {
+    await put(join(store, 'nsis-import.json'), '{"state":"imported"}');
+    const { d: d1, uninstalled } = installedDeps();
+    const d = await openDataImport(d1);
+    expect(await d.status()).toEqual({ state: 'uninstall' });
+    uninstalled();
+    expect(await d.status()).toEqual({ state: 'none' });
+  });
+
+  it('opens Windows Settings > Apps when the uninstaller does not start', async () => {
+    const { d: d1 } = installedDeps({
+      launchUninstaller: vi.fn(async () => {
+        throw new Error('spawn explorer.exe ENOENT');
+      }),
+    });
+    await (await openDataImport(d1)).uninstall();
     expect(d1.openAppsSettings).toHaveBeenCalledOnce();
+  });
+
+  it('starts no uninstaller once the NSIS app is gone', async () => {
+    const d1 = deps();
+    await (await openDataImport(d1)).uninstall();
+    expect(d1.launchUninstaller).not.toHaveBeenCalled();
   });
 });

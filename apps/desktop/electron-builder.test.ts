@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { sidecarBinaryPath } from '@sa/sidecar';
 import type { Configuration, FileSet } from 'electron-builder';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BUNDLED_CHROMIUM_DIR } from './src/main/browser/bundled';
+import { NSIS_UNINSTALL_KEY } from './src/main/migrate/nsis-install';
 
 async function loadConfig(env: Record<string, string> = {}): Promise<Configuration> {
   vi.resetModules();
@@ -120,4 +122,28 @@ describe('electron-builder config', () => {
     for (const logo of ['StoreLogo', 'Square44x44Logo', 'Square150x150Logo', 'Wide310x150Logo'])
       for (const scale of [100, 200]) expect(files).toContain(`${logo}.scale-${scale}.png`);
   });
+
+  it('installs NSIS the way the Store build finds and uninstalls it (migrate/nsis-install.ts)', async () => {
+    const config = await loadConfig();
+    // Uninstall\<UUID v5 of the appId in electron-builder's namespace>, under HKCU.
+    expect(NSIS_UNINSTALL_KEY).toBe(
+      `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${uuidV5(config.appId ?? '', '50e065bc-3134-11e6-9bab-38c9862bdaf3')}`,
+    );
+    // One-click, per user, and the uninstaller keeps the data the Store build imports.
+    expect(config.nsis?.oneClick ?? true).toBe(true);
+    expect(config.nsis?.perMachine ?? false).toBe(false);
+    expect(config.nsis?.deleteAppDataOnUninstall ?? false).toBe(false);
+  });
 });
+
+/** RFC 4122 UUID v5 (SHA-1), as electron-builder names its Uninstall key. */
+function uuidV5(name: string, namespace: string): string {
+  const hash = createHash('sha1')
+    .update(Buffer.from(namespace.replaceAll('-', ''), 'hex'))
+    .update(name)
+    .digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}

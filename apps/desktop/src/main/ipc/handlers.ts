@@ -81,12 +81,10 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('app.exportTranscripts', S['app.exportTranscripts'], () => s.exportTranscripts());
   router.register('updates.status', S['updates.status'], () => s.updates.status());
   router.register('dataImport.status', S['dataImport.status'], () => s.dataImport.status());
-  router.register('dataImport.accept', S['dataImport.accept'], () => s.dataImport.accept());
-  router.register('dataImport.decline', S['dataImport.decline'], () => s.dataImport.decline());
-  router.register('dataImport.dismiss', S['dataImport.dismiss'], () => s.dataImport.dismiss());
-  router.register('dataImport.openAppsSettings', S['dataImport.openAppsSettings'], () =>
-    s.dataImport.openAppsSettings(),
+  router.register('dataImport.uninstall', S['dataImport.uninstall'], () =>
+    s.dataImport.uninstall(),
   );
+  router.register('dataImport.run', S['dataImport.run'], () => s.dataImport.run());
   router.register('updates.openStore', S['updates.openStore'], async () => {
     if (s.appInfo.installChannel !== 'msix')
       throw new UserError(t(lang(), 'notStoreBuild'), 'unavailable');

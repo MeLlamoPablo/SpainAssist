@@ -1,68 +1,88 @@
-import { FolderInput, Settings } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { FolderInput, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BrandMark } from '../../components/brand';
 import { Button } from '../../components/ui/button';
-import { Dialog } from '../../components/ui/dialog';
 import { defineDict, useT } from '../../i18n';
-import { common } from '../../i18n/common';
 import { api } from '../../lib/api';
 import { useAppStore } from '../../store/app';
 
 const dict = defineDict({
   es: {
-    title: '¿Traemos tus datos?',
-    body: 'Ya usabas Spain Assist en este ordenador. Puedes traer aquí tus trámites, tus datos y tus credenciales.',
-    closeOther: 'Si la otra versión está abierta, ciérrala antes. Sus datos se quedan como están.',
-    accept: 'Traer mis datos',
-    decline: 'Empezar de cero',
-    copying: 'Copiando tus datos… Spain Assist se abrirá de nuevo en un momento.',
-    failed: 'No he podido copiar tus datos. Inténtalo otra vez.',
-    doneTitle: 'Tus datos ya están aquí',
-    doneBody:
-      'Ya no necesitas la otra versión de Spain Assist. Si quieres, desinstálala en Configuración de Windows, en Aplicaciones. Tus datos de aquí no se borran.',
-    openSettings: 'Abrir Configuración',
-    ok: 'Entendido',
+    title: 'Pasa a la versión de Microsoft Store',
+    body: 'Ya usabas Spain Assist en este ordenador. Para seguir, desinstala la versión antigua, que se instaló fuera de Microsoft Store.',
+    migrate: 'Tus datos se migrarán de la aplicación antigua a la nueva.',
+    uninstall: 'Desinstalar Spain Assist antiguo',
+    waiting: 'Esperando a que termine la desinstalación…',
+    importing: 'Trayendo tus datos',
+    reopening: 'Spain Assist se abrirá de nuevo en un momento.',
+    failed: 'No he podido traer tus datos.',
+    retry: 'Reintentar',
   },
   en: {
-    title: 'Bring your data over?',
-    body: 'You already used Spain Assist on this computer. You can bring your procedures, your data and your credentials here.',
-    closeOther: 'If the other version is open, close it first. Its data stays as it is.',
-    accept: 'Bring my data',
-    decline: 'Start from scratch',
-    copying: 'Copying your data… Spain Assist will open again in a moment.',
-    failed: 'I couldn’t copy your data. Try again.',
-    doneTitle: 'Your data is here',
-    doneBody:
-      'You no longer need the other version of Spain Assist. If you like, uninstall it in Windows Settings, under Apps. Your data here isn’t deleted.',
-    openSettings: 'Open Settings',
-    ok: 'Got it',
+    title: 'Move to the Microsoft Store version',
+    body: 'You already used Spain Assist on this computer. To continue, uninstall the old version, which was installed outside the Microsoft Store.',
+    migrate: 'Your data will be moved from the old app to the new one.',
+    uninstall: 'Uninstall old Spain Assist',
+    waiting: 'Waiting for the uninstall to finish…',
+    importing: 'Bringing your data over',
+    reopening: 'Spain Assist will open again in a moment.',
+    failed: 'I couldn’t bring your data over.',
+    retry: 'Try again',
   },
 });
 
+/** How often the screen checks whether the old version is gone. */
+const POLL_MS = 1500;
+
 /**
- * The Microsoft Store build's first start, when the GitHub (NSIS) install left data on this
- * Windows account: replaces the onboarding until the user answers. Accepting restarts the app.
+ * The Microsoft Store build while the GitHub (NSIS) install is on this Windows account: nothing
+ * else shows until it is uninstalled. Then its data is copied in and the app restarts
+ * (`main/migrate/nsis-import.ts`).
  */
-export function DataImportOffer() {
+export function StoreMigration() {
   const t = useT(dict);
-  const [step, setStep] = useState<'ask' | 'copying' | 'failed'>('ask');
+  const state = useAppStore((s) => s.dataImport.state);
+  const [waiting, setWaiting] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const started = useRef(false);
 
   // The window opens hidden while the onboarding warms up; this screen replaces it.
   useEffect(() => {
     void api.invoke('app.reveal');
   }, []);
 
-  const accept = async () => {
-    setStep('copying');
+  // Goes on by itself once the uninstaller is done.
+  useEffect(() => {
+    if (state !== 'uninstall') return;
+    const timer = setInterval(() => {
+      void api
+        .invoke('dataImport.status')
+        .then((dataImport) => {
+          if (dataImport.state !== 'uninstall') useAppStore.setState({ dataImport });
+        })
+        .catch(() => {});
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [state]);
+
+  const runImport = useCallback(async () => {
+    setFailed(false);
     try {
-      await api.invoke('dataImport.accept');
+      // Restarts the app: doesn't come back unless the copy fails.
+      await api.invoke('dataImport.run');
     } catch {
-      setStep('failed');
+      setFailed(true);
     }
-  };
-  const decline = async () => {
-    await api.invoke('dataImport.decline').catch(() => {});
-    useAppStore.setState({ dataImport: { state: 'none' } });
+  }, []);
+  useEffect(() => {
+    if (state !== 'import' || started.current) return;
+    started.current = true;
+    void runImport();
+  }, [state, runImport]);
+
+  const uninstall = async () => {
+    await api.invoke('dataImport.uninstall').catch(() => {});
+    setWaiting(true);
   };
 
   return (
@@ -78,69 +98,31 @@ export function DataImportOffer() {
         </div>
         <h1 className="text-xl font-semibold tracking-tight">{t.title}</h1>
         <p className="mt-2 text-[14px] text-fg-muted">{t.body}</p>
-        <p className="mt-2 text-[13px] text-fg-subtle">{t.closeOther}</p>
-        {step === 'failed' && (
-          <p role="alert" className="mt-4 text-[13px] font-medium text-danger">
-            {t.failed}
-          </p>
-        )}
-        <div className="mt-6 flex justify-center gap-2">
-          <Button variant="secondary" disabled={step === 'copying'} onClick={() => void decline()}>
-            {t.decline}
-          </Button>
-          <Button
-            variant="primary"
-            icon={FolderInput}
-            loading={step === 'copying'}
-            onClick={() => void accept()}
-          >
-            {t.accept}
-          </Button>
+        <p className="mt-2 text-[14px] text-fg-muted">{t.migrate}</p>
+        <div className="mt-6 flex justify-center">
+          {state === 'uninstall' ? (
+            <Button variant="primary" icon={Trash2} onClick={() => void uninstall()}>
+              {t.uninstall}
+            </Button>
+          ) : failed ? (
+            <Button variant="primary" icon={FolderInput} onClick={() => void runImport()}>
+              {t.retry}
+            </Button>
+          ) : (
+            <Button variant="primary" icon={FolderInput} loading>
+              {t.importing}
+            </Button>
+          )}
         </div>
-        {step === 'copying' && (
-          <p className="mt-4 text-[13px] text-fg-muted" aria-live="polite">
-            {t.copying}
+        <p className="mt-4 min-h-5 text-[13px] text-fg-muted" aria-live="polite">
+          {state === 'uninstall' ? (waiting ? t.waiting : '') : failed ? '' : t.reopening}
+        </p>
+        {failed && (
+          <p role="alert" className="text-[13px] font-medium text-danger">
+            {t.failed}
           </p>
         )}
       </div>
     </div>
-  );
-}
-
-/** Once, after the import: the other version can go. */
-export function DataImportDone() {
-  const t = useT(dict);
-  const tc = useT(common);
-  const windows = useAppStore((s) => s.info?.platform === 'win32');
-  const dismiss = () => {
-    useAppStore.setState({ dataImport: { state: 'none' } });
-    void api.invoke('dataImport.dismiss').catch(() => {});
-  };
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => !open && dismiss()}
-      title={t.doneTitle}
-      closeLabel={tc.close}
-      width="sm"
-      footer={
-        <>
-          {windows && (
-            <Button
-              variant="secondary"
-              icon={Settings}
-              onClick={() => void api.invoke('dataImport.openAppsSettings').catch(() => {})}
-            >
-              {t.openSettings}
-            </Button>
-          )}
-          <Button variant="primary" onClick={dismiss}>
-            {t.ok}
-          </Button>
-        </>
-      }
-    >
-      <p className="text-[14px] leading-relaxed text-fg-muted">{t.doneBody}</p>
-    </Dialog>
   );
 }

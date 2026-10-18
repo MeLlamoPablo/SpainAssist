@@ -3,7 +3,7 @@ import { PreviewTrafficLights, PreviewWindowControls } from './components/Previe
 import { Toaster } from './components/ui/toaster';
 import { TooltipProvider } from './components/ui/tooltip';
 import { Onboarding } from './features/onboarding/Onboarding';
-import { DataImportDone, DataImportOffer } from './features/shell/DataImport';
+import { StoreMigration } from './features/shell/DataImport';
 import { MustUpdate } from './features/shell/MustUpdate';
 import { Shell } from './features/shell/Shell';
 import { useT } from './i18n';
@@ -22,7 +22,7 @@ export function App() {
   const lang = useAppStore((s) => s.settings?.language ?? 'es');
   // This version may no longer be used: nothing else of the app shows.
   const mustUpdate = useAppStore((s) => s.info?.features.mustUpdate ?? false);
-  // The Store build's first start offers the GitHub install's data before anything else.
+  // The Store build shows nothing else until the GitHub install is gone and its data copied in.
   const dataImport = useAppStore((s) => s.dataImport.state);
   // Keep the onboarding on top of the freshly mounted app while it plays its exit.
   const [onboardingShown, setOnboardingShown] = useState(false);
@@ -36,7 +36,7 @@ export function App() {
 
   // Windows and Linux: white window controls over the onboarding's gradient, until it exits.
   const controls =
-    !playground && !mustUpdate && dataImport !== 'offer' && !onboardingDone ? 'onboarding' : 'app';
+    !playground && !mustUpdate && dataImport === 'none' && !onboardingDone ? 'onboarding' : 'app';
   useEffect(() => {
     void api.invoke('app.windowControls', controls);
   }, [controls]);
@@ -49,8 +49,8 @@ export function App() {
         </Suspense>
       ) : mustUpdate ? (
         <MustUpdate />
-      ) : dataImport === 'offer' ? (
-        <DataImportOffer />
+      ) : dataImport !== 'none' ? (
+        <StoreMigration />
       ) : (
         <div className="relative h-full">
           {onboardingDone ? (
@@ -66,7 +66,6 @@ export function App() {
           ) : null}
         </div>
       )}
-      {!playground && !mustUpdate && dataImport === 'imported' && <DataImportDone />}
       {!playground && <PreviewTrafficLights />}
       {!playground && <PreviewWindowControls style={controls} />}
       <Toaster closeLabel={t.close} />

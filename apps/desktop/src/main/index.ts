@@ -58,6 +58,7 @@ import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
 import { startErrorReports } from './errors/reports';
 import { applyStagedLocalState, defaultUserData, openDataImport } from './migrate/nsis-import';
+import { findNsisUninstaller, launchNsisUninstaller } from './migrate/nsis-install';
 import { catastro } from './places/catastro';
 import { noBiometric } from './ports';
 import { chatgptLoginPages } from './providers/login-pages';
@@ -425,6 +426,8 @@ async function main(): Promise<void> {
       app.relaunch();
       app.exit(0);
     },
+    findUninstaller: findNsisUninstaller,
+    launchUninstaller: launchNsisUninstaller,
     openAppsSettings: () => shell.openExternal('ms-settings:appsfeatures'),
     logger: log,
   });

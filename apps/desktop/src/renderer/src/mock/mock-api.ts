@@ -97,14 +97,16 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const latency = Number(params.get('latency') ?? 60);
   const freeze = params.has('freeze') || params.has('playground');
   const initialLang: Lang = params.get('lang') === 'en' ? 'en' : 'es';
-  // The Microsoft Store build's import of the GitHub install's data (on Windows):
-  // `?dataImport=offer` (first start, before the onboarding) or `=imported` (after the restart).
+  // The Microsoft Store build's move from the GitHub install (on Windows): `?dataImport=uninstall`
+  // (it is still installed; "uninstalled" 3 s after the button) or `=import` (copying its data).
   const dataImportParam = params.get('dataImport');
   let dataImport: DataImportStatus = {
-    state: dataImportParam === 'offer' || dataImportParam === 'imported' ? dataImportParam : 'none',
+    state:
+      dataImportParam === 'uninstall' || dataImportParam === 'import' ? dataImportParam : 'none',
   };
+  let uninstalledAt: number | undefined;
   const onboarding =
-    (params.has('onboarding') && params.get('onboarding') !== '0') || dataImport.state === 'offer';
+    (params.has('onboarding') && params.get('onboarding') !== '0') || dataImport.state !== 'none';
   const chatgptIneligible = params.get('chatgpt') === 'ineligible';
   const dnieSaved = params.has('dnieSaved');
   const dniePhone =
@@ -900,23 +902,23 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       errorReports: false,
     }),
     'updates.status': () => updates,
-    'dataImport.status': () => dataImport,
-    'dataImport.accept': async () => {
+    'dataImport.status': () => {
+      if (dataImport.state === 'uninstall' && uninstalledAt && Date.now() >= uninstalledAt)
+        dataImport = { state: 'import' };
+      return dataImport;
+    },
+    'dataImport.uninstall': () => {
+      toast.info(tr('Desinstalador de ejemplo', 'Example uninstaller'));
+      if (!freeze) uninstalledAt = Date.now() + 3000;
+    },
+    'dataImport.run': async () => {
+      if (freeze) await new Promise<never>(() => {});
       await sleep(1500);
       // The real app restarts into the imported data.
       const next = new URLSearchParams(params);
-      next.set('dataImport', 'imported');
+      next.delete('dataImport');
       location.search = next.toString();
       await new Promise<never>(() => {});
-    },
-    'dataImport.decline': () => {
-      dataImport = { state: 'none' };
-    },
-    'dataImport.dismiss': () => {
-      dataImport = { state: 'none' };
-    },
-    'dataImport.openAppsSettings': () => {
-      toast.info(tr('Configuración de Windows', 'Windows Settings'), 'ms-settings:appsfeatures');
     },
     'updates.openStore': () => {
       toast.info(tr('Microsoft Store de ejemplo', 'Example Microsoft Store'));
