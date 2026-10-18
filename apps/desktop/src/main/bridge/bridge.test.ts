@@ -825,6 +825,24 @@ describe('bridge: browser and credentials', () => {
     expect(app.vault.listPersonal()).toEqual([]);
   });
 
+  it('fillFromUser never asks for the Cl@ve Permanente password on its own', async () => {
+    app.browser.refs.set('e6', {
+      role: 'textbox',
+      name: 'Contraseña',
+      inputType: 'password',
+      frameUrl: CLAVE_LOGIN,
+    });
+    const res = await app.rpc(
+      'browser.fillFromUser',
+      { ref: 'e6', title: 'Contraseña de Cl@ve Permanente', label: 'Contraseña' },
+      token,
+    );
+    expect(res.body.error?.code).toBe('policy_denied');
+    expect(res.body.error?.message).toContain('request_credential');
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
+    expect(typed()).toEqual([]);
+  });
+
   it('fillFromUser refuses a secret when the target frame changes while the user answers', async () => {
     app.browser.refs.set('e6', {
       role: 'textbox',

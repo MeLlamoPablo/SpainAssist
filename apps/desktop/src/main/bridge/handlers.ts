@@ -718,6 +718,13 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
           'not_found',
           'Element not found: take a new snapshot and use a fresh ref.',
         );
+      // The Cl@ve Permanente password is never asked on its own: the app's form takes the DNI/NIE
+      // and the password together, into the vault.
+      if (info.inputType === 'password' && credentialAllowedOn('clave_permanente', info.frameUrl))
+        throw new BridgeError(
+          'policy_denied',
+          'This is the Cl@ve Permanente password: never ask the user for it. Use browser_fill_from_vault with a saved Cl@ve Permanente, or request_credential (credential clave_permanente) if none is saved.',
+        );
       const host = hostOf(info.frameUrl);
       const note = t(lang(), 'fillFromUserNote', { host });
       const message = params.message ? `${params.message}\n\n${note}` : note;

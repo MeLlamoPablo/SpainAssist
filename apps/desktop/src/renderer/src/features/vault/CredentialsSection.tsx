@@ -32,7 +32,7 @@ import { daysUntil, formatLongDate, formatRelative } from '../../lib/format';
 import { useAppStore } from '../../store/app';
 import { reloadVault } from '../../store/sync';
 import { toast } from '../../store/toast';
-import { useVaultStore } from '../../store/vault';
+import { usePersonal, useVaultStore } from '../../store/vault';
 import { chatDict } from '../chat/i18n';
 import { companionDict } from '../companion/i18n';
 import { PairingPanel } from '../companion/PairingPanel';
@@ -673,6 +673,20 @@ function DniePinDialog({
 
 const DNI_NIE = /^([0-9]{8}[A-Z]|[XYZ][0-9]{7}[A-Z])$/;
 
+/** The DNI or NIE saved in Mis datos (e.g. from a scanned document), if any. */
+function useSavedDniNie(): string | undefined {
+  const personal = usePersonal();
+  for (const key of ['dniNumber', 'tieNumber']) {
+    const value = personal
+      .find((item) => item.key === key)
+      ?.value.trim()
+      .toUpperCase()
+      .replace(/[\s-]/g, '');
+    if (value && DNI_NIE.test(value)) return value;
+  }
+  return undefined;
+}
+
 export function ClaveDialog({
   open,
   onOpenChange,
@@ -685,10 +699,16 @@ export function ClaveDialog({
   const t = useT(vaultDict);
   const tc = useT(common);
   const tchat = useT(chatDict);
+  const savedUser = useSavedDniNie();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // The DNI/NIE comes prefilled when Mis datos knows it: the user only adds the password.
+  useEffect(() => {
+    if (open && savedUser) setUsername((u) => u || savedUser);
+  }, [open, savedUser]);
 
   const reset = () => {
     setUsername('');
@@ -767,7 +787,7 @@ export function ClaveDialog({
               aria-describedby={describedBy}
               aria-invalid={invalid || undefined}
               className="uppercase tracking-wider"
-              autoFocus
+              autoFocus={!savedUser}
             />
           )}
         </Field>
@@ -779,6 +799,7 @@ export function ClaveDialog({
               onChange={(e) => setPassword(e.target.value)}
               revealLabel={tchat.prompt.reveal}
               hideLabel={tchat.prompt.hide}
+              autoFocus={!!savedUser}
             />
           )}
         </Field>

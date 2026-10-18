@@ -208,7 +208,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       name: 'browser_fill_from_user',
       label: 'Ask code and fill',
       description:
-        'Ask the user for a one-time secret (SMS code, Cl@ve PIN, verification code) and type it straight into the field (ref). You never see the value. Waits for the user.',
+        'Ask the user for a one-time secret (SMS code, Cl@ve PIN, verification code) and type it straight into the field (ref). You never see the value. Never for a Cl@ve Permanente password: use browser_fill_from_vault, or request_credential if none is saved. Waits for the user.',
       parameters: Type.Object({
         ref: Ref,
         title: Type.String({
