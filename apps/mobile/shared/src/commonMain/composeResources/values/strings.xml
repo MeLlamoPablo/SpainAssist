@@ -38,10 +38,10 @@
     <string name="review_title_documents">Firmar documentos</string>
     <string name="review_unknown_sign">No reconocemos este sitio. Firma solo si confías en él.</string>
     <string name="review_unknown_login">No reconocemos este sitio. Entra solo si confías en él.</string>
-    <string name="review_unknown_certificate">No reconocemos este sitio. Compártelo solo si confías en él.</string>
+    <string name="review_unknown_certificate">No reconocemos este sitio. Continúa solo si confías en él.</string>
     <string name="review_open_pdf">Abrir el PDF</string>
-    <string name="review_title_certificate">Compartir tu certificado con</string>
-    <string name="review_certificate_body">No se firma nada: solo comparte qué certificado tienes.</string>
+    <string name="review_title_certificate">Continuar en</string>
+    <string name="review_certificate_body">Aún no se va a firmar nada.</string>
     <string name="review_signatures">%1$d firmas</string>
     <string name="review_no_data">El documento es demasiado grande para enseñarlo aquí.</string>
     <string name="doc_pdf">Documento PDF</string>
@@ -49,7 +49,7 @@
     <string name="doc_text">Texto</string>
     <string name="doc_other">Documento</string>
     <string name="review_sign">Firmar con mi DNIe</string>
-    <string name="review_share">Compartir mi certificado</string>
+    <string name="review_share">Continuar con mi DNIe</string>
     <string name="review_decline">No firmar</string>
     <string name="review_decline_login">No iniciar sesión</string>
     <string name="review_disconnected">Esperando a tu ordenador…</string>
@@ -75,7 +75,7 @@
 
     <!-- Results -->
     <string name="result_signed">Firmado. Sigue en el ordenador.</string>
-    <string name="result_certificate">Has compartido tu certificado. Sigue en el ordenador.</string>
+    <string name="result_certificate">Listo. Sigue en el ordenador.</string>
     <string name="result_declined">No has firmado.</string>
     <string name="result_cancelled">Has cancelado la firma.</string>
     <string name="result_cancelled_desktop">El ordenador ha cancelado la firma.</string>

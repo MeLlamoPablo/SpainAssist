@@ -38,10 +38,10 @@
     <string name="review_title_documents">Sign documents</string>
     <string name="review_unknown_sign">We don’t recognise this site. Only sign if you trust it.</string>
     <string name="review_unknown_login">We don’t recognise this site. Only log in if you trust it.</string>
-    <string name="review_unknown_certificate">We don’t recognise this site. Only share it if you trust it.</string>
+    <string name="review_unknown_certificate">We don’t recognise this site. Only continue if you trust it.</string>
     <string name="review_open_pdf">Open the PDF</string>
-    <string name="review_title_certificate">Share your certificate with</string>
-    <string name="review_certificate_body">Nothing is signed: it only shares which certificate you have.</string>
+    <string name="review_title_certificate">Continue on</string>
+    <string name="review_certificate_body">Nothing will be signed yet.</string>
     <string name="review_signatures">%1$d signatures</string>
     <string name="review_no_data">The document is too large to show here.</string>
     <string name="doc_pdf">PDF document</string>
@@ -49,7 +49,7 @@
     <string name="doc_text">Text</string>
     <string name="doc_other">Document</string>
     <string name="review_sign">Sign with my DNIe</string>
-    <string name="review_share">Share my certificate</string>
+    <string name="review_share">Continue with my DNIe</string>
     <string name="review_decline">Don’t sign</string>
     <string name="review_decline_login">Don’t log in</string>
     <string name="review_disconnected">Waiting for your computer…</string>
@@ -75,7 +75,7 @@
 
     <!-- Results -->
     <string name="result_signed">Signed. Carry on on your computer.</string>
-    <string name="result_certificate">You shared your certificate. Carry on on your computer.</string>
+    <string name="result_certificate">Done. Carry on on your computer.</string>
     <string name="result_declined">You didn’t sign.</string>
     <string name="result_cancelled">You cancelled the signature.</string>
     <string name="result_cancelled_desktop">The computer cancelled the signature.</string>
