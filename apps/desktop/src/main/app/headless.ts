@@ -262,7 +262,7 @@ export async function createHeadlessApp(opts: HeadlessOptions): Promise<Headless
       browserFactory: opts.browserFactory ?? realBrowserFactory,
       ...(opts.startSidecar ? { startSidecar: opts.startSidecar } : {}),
       certificateOrigins,
-      signer: signerLib,
+      signer: signerLib(logger),
       pii: piiLib,
       fetch: opts.fetch ?? offlineFetch,
       ...(opts.places ? { places: opts.places } : {}),

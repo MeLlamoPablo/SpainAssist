@@ -430,7 +430,7 @@ async function main(): Promise<void> {
       }),
     browserExecutable: bundledBrowser(log),
     certificateOrigins,
-    signer: signerLib,
+    signer: signerLib(log),
     pii: piiLib,
     fetch,
     signerFetch: net.fetch as unknown as typeof fetch,
