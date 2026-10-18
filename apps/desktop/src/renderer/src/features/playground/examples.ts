@@ -230,6 +230,32 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     }),
   );
   addField(
+    'appointment',
+    t('Cita previa', 'Appointment'),
+    field(
+      'appointment',
+      t('Cita en la oficina de expedición (demo)', 'Appointment at the issuing office (demo)'),
+      {
+        slots: [
+          '2026-10-06T09:00',
+          '2026-10-06T09:20',
+          '2026-10-06T12:40',
+          '2026-10-07T10:00',
+          '2026-10-09T08:40',
+          '2026-10-09T09:00',
+          '2026-10-09T13:20',
+          '2026-10-13T11:00',
+          '2026-10-14T09:40',
+          '2026-10-14T10:00',
+          '2026-10-16T12:00',
+          '2026-10-20T08:30',
+          '2026-10-20T19:00',
+          '2026-10-22T19:00',
+        ],
+      },
+    ),
+  );
+  addField(
     'optional',
     t('Campo opcional', 'Optional field'),
     field('text', t('Referencia (si la tienes)', 'Reference (if you have one)'), {

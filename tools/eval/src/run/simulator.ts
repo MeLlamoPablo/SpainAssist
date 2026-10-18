@@ -118,6 +118,7 @@ function toFormFields(fields: NonNullable<PendingPrompt['fields']>): FormField[]
     type: field.type as FormField['type'],
     required: field.required ?? true,
     ...(field.options ? { options: field.options.map((o) => ({ ...o })) } : {}),
+    ...(field.slots ? { slots: [...field.slots] } : {}),
     ...(field.vaultKey ? { vaultKey: field.vaultKey } : {}),
     ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
     ...(field.visibleWhen

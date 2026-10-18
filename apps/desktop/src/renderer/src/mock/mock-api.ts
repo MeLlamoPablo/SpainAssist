@@ -170,6 +170,44 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         });
     } else state.personal = state.personal.filter((p) => !p.key.startsWith('address'));
   }
+  if (params.has('appointment')) {
+    const item = state.procedures
+      .get(DEMO_IDS.dni)
+      ?.runtime.prompts?.find((p) => p.id === DEMO_IDS.dniPrompt);
+    if (item?.prompt.kind === 'form') {
+      item.prompt.title = initialLang === 'es' ? 'Elige tu cita' : 'Choose your appointment';
+      item.prompt.message =
+        initialLang === 'es'
+          ? 'Estas son las citas libres de la oficina de demostración. Elige la que te venga mejor.'
+          : 'These are the free appointments at the demo office. Choose the one that suits you.';
+      item.prompt.submitLabel = initialLang === 'es' ? 'Continuar' : 'Continue';
+      item.prompt.fields = [
+        {
+          key: 'cita',
+          label:
+            initialLang === 'es'
+              ? 'Cita en la Oficina de Documentación (demo)'
+              : 'Appointment at the Documentation Office (demo)',
+          type: 'appointment',
+          required: true,
+          slots: [
+            '2026-10-19T09:20',
+            '2026-10-19T19:00',
+            '2026-10-20T10:40',
+            '2026-10-20T19:00',
+            '2026-10-22T19:00',
+            '2026-10-26T09:00',
+            '2026-10-26T19:00',
+            '2026-10-27T19:00',
+            '2026-10-29T12:20',
+            '2026-10-29T19:00',
+            '2026-11-02T09:40',
+            '2026-11-03T10:00',
+          ],
+        },
+      ];
+    }
+  }
   if (dnieSaved)
     state.credentials.push({
       id: 'cred-dnie',

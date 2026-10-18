@@ -72,7 +72,12 @@ describe('map options', () => {
     expect(initialValues([{ ...field, defaultValue: 'near' }])).toEqual({ centre: 'near' });
     expect(initialValues([{ ...field, defaultValue: 'unknown' }])).toEqual({ centre: '' });
     expect(
-      displayValue(field, 'near', { yes: 'Yes', no: 'No', hidden: 'Hidden' }, () => undefined),
+      displayValue(
+        field,
+        'near',
+        { yes: 'Yes', no: 'No', hidden: 'Hidden', moreAppointments: 'More' },
+        () => undefined,
+      ),
     ).toBe('Near');
   });
 });

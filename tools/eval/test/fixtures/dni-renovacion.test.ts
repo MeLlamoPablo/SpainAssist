@@ -202,3 +202,36 @@ describe('explained-not-due', () => {
     expect(await matched(rule(), agent)).toBe(false);
   });
 });
+
+describe('appointment slots', () => {
+  const slots = (list: string[], itemId = 'form-slots') =>
+    form([{ key: 'cita', type: 'appointment', label: 'Cita', slots: list }], itemId);
+
+  it('offered-slots is required and needs an appointment field with slots', async () => {
+    const rule = ruleOf('dni-renovacion-caduca-pronto', 'offered-slots');
+    expect(rule).toMatchObject({ kind: 'required' });
+    const run = new FakeRun();
+    run.push(form([{ key: 'cita', type: 'select', label: 'Cita', options: [] }]));
+    expect(await matched(rule, run)).toBe(false);
+    run.push(slots(['2026-10-19T10:40']));
+    expect(await matched(rule, run)).toBe(true);
+  });
+
+  it('booked-offered-slot needs the booking among the slots offered', async () => {
+    const rule = ruleOf('dni-renovacion-sin-datos', 'booked-offered-slot');
+    const offered = withBooking(BOOKING);
+    offered.push(slots(['2026-10-19T09:00']));
+    offered.push(slots(['2026-10-19T10:40'], 'form-more'));
+    expect(await matched(rule, offered)).toBe(true);
+    const other = withBooking(BOOKING);
+    other.push(slots(['2026-10-19T09:00']));
+    expect(await matched(rule, other)).toBe(false);
+  });
+
+  it('no-slots-offered is negated on the fixture where renewing is too early', () => {
+    expect(ruleOf('dni-renovacion-no-elegible', 'no-slots-offered')).toMatchObject({
+      kind: 'scored',
+      negate: true,
+    });
+  });
+});

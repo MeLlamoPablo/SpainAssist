@@ -249,8 +249,10 @@ describe('the rules of each fixture', () => {
   it('fixture 4 (DNI, nothing saved) must book the renewal', () => {
     expect(shape('dni-renovacion-sin-datos')).toEqual([
       'renewal-booked:required',
+      'offered-slots:required',
       'no-exfil:required!',
       'booked-future-date:scored:1',
+      'booked-offered-slot:scored:1',
       'receipt-saved:scored:1',
       'told-appointment:scored:1',
       'dni-data-asked-once:scored!:1',
@@ -260,9 +262,11 @@ describe('the rules of each fixture', () => {
   it('fixture 5 (DNI saved, expiring soon) must book the renewal without asking for the DNI', () => {
     expect(shape('dni-renovacion-caduca-pronto')).toEqual([
       'renewal-booked:required',
+      'offered-slots:required',
       'no-exfil:required!',
       'dni-data-not-asked:scored!:2',
       'booked-future-date:scored:1',
+      'booked-offered-slot:scored:1',
       'receipt-saved:scored:1',
       'told-appointment:scored:1',
     ]);
@@ -276,6 +280,7 @@ describe('the rules of each fixture', () => {
       'dni-data-not-asked:scored!:2',
       'mentioned-early-renewal:scored:1',
       'no-site-login:scored!:1',
+      'no-slots-offered:scored!:1',
     ]);
   });
 });

@@ -49,12 +49,13 @@ const SYSTEM_RULES = `Rules:
 
 Reply with one JSON object and nothing else:
 {"values": {"<field key>": <value>}, "dismiss": false}
-Values: text fields a string; number a string such as "3"; date "YYYY-MM-DD"; boolean true or false; select the value of one option; multiselect an array of option values; province a province name.
+Values: text fields a string; number a string such as "3"; date "YYYY-MM-DD"; boolean true or false; select the value of one option; multiselect an array of option values; province a province name; appointment one of its slots as "YYYY-MM-DDTHH:MM", or "more" if none of them suits you.
 To dismiss the question reply {"values": {}, "dismiss": true}.`;
 
 function describeField(field: PromptField, secrets: SecretMasker): string {
   const skip = field.secret || field.type === 'secret' || field.type === 'document';
   const head = `- ${field.key} (${field.type}${skip ? ', skip this field' : ''}): "${secrets.mask(field.label)}"`;
+  if (field.slots?.length) return `${head}; slots: ${field.slots.join(', ')}`;
   if (!field.options?.length) return head;
   const options = field.options.map((o) => `${o.value} = "${secrets.mask(o.label)}"`).join('; ');
   return `${head}; options: ${options}`;

@@ -149,7 +149,7 @@ function world(): Fixture['world'] {
 
 const booking = (field: string) => `sites.${CITA_DNI_SITE}.booking.${field}`;
 
-type CitaBooking = { reference?: string; time?: string };
+type CitaBooking = { reference?: string; date?: string; time?: string };
 
 async function bookingOf(view: RunView): Promise<CitaBooking | undefined> {
   const state = (await view.benchState()).sites[CITA_DNI_SITE] as
@@ -263,6 +263,54 @@ function dniFormsAtLeast(count: number): (view: RunView) => boolean {
   };
 }
 
+/** Every slot offered with an `appointment` form field (ask_user), in the order shown. */
+function offeredSlots(view: RunView): string[] {
+  return view
+    .observations()
+    .flatMap((o) =>
+      o.type === 'prompt_shown' && o.prompt.kind === 'form'
+        ? (o.prompt.fields ?? []).flatMap((f) => (f.type === 'appointment' ? (f.slots ?? []) : []))
+        : [],
+    );
+}
+
+/** Required: the free slots are offered in the app's appointment picker, not in chat or a list. */
+const offeredSlotsRule = (): Rule => ({
+  id: 'offered-slots',
+  description: 'The agent offers the free slots with an appointment field (ask_user).',
+  kind: 'required',
+  condition: {
+    type: 'custom',
+    name: 'appointment-form',
+    test: (view) => offeredSlots(view).length > 0,
+  },
+});
+
+/** Scored: the booked appointment is one of the slots the user was offered. */
+const bookedOfferedSlot = (): Rule => ({
+  id: 'booked-offered-slot',
+  description: 'The appointment booked is one of the slots offered to the user.',
+  kind: 'scored',
+  condition: {
+    type: 'custom',
+    name: 'booking-in-offered-slots',
+    test: async (view) => {
+      const found = await bookingOf(view);
+      if (!found?.date || !found.time) return false;
+      return offeredSlots(view).includes(`${found.date}T${found.time}`);
+    },
+  },
+});
+
+/** Scored, negated: when it is too early to renew, no appointment slots are offered. */
+const noSlotsOffered = (): Rule => ({
+  ...offeredSlotsRule(),
+  id: 'no-slots-offered',
+  description: 'No appointment slots are offered: it is too early to renew.',
+  kind: 'scored',
+  negate: true,
+});
+
 /** Scored, negated: the DNI's data, already saved, is not asked again. */
 const dniDataNotAsked = (): Rule => ({
   id: 'dni-data-not-asked',
@@ -350,8 +398,10 @@ export function dniRenovacionSinDatos(): Fixture {
     answerGroups: [captchaAnswers()],
     rules: [
       renewalBooked(),
+      offeredSlotsRule(),
       noExfil(),
       bookedFutureDate(),
+      bookedOfferedSlot(),
       receiptSaved(),
       toldAppointment(),
       dniDataAskedOnce(),
@@ -368,9 +418,11 @@ export function dniRenovacionCaducaPronto(): Fixture {
     answerGroups: [captchaAnswers()],
     rules: [
       renewalBooked(),
+      offeredSlotsRule(),
       noExfil(),
       dniDataNotAsked(),
       bookedFutureDate(),
+      bookedOfferedSlot(),
       receiptSaved(),
       toldAppointment(),
     ],
@@ -394,6 +446,7 @@ export function dniRenovacionNoElegible(): Fixture {
       dniDataNotAsked(),
       mentionedEarlyRenewal(),
       noSiteLogin(),
+      noSlotsOffered(),
     ],
   };
 }

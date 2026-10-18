@@ -1,4 +1,5 @@
 import {
+  APPOINTMENT_MORE,
   type FormField,
   type FormPrompt,
   type FormValue,
@@ -21,7 +22,7 @@ import { Button } from '../../../components/ui/button';
 import { Checkbox, SegmentedControl } from '../../../components/ui/controls';
 import { Field, Input, PasswordInput, Select, Textarea } from '../../../components/ui/field';
 import { ProvinceSelect } from '../../../components/ui/province-select';
-import { useT } from '../../../i18n';
+import { useLang, useT } from '../../../i18n';
 import { common } from '../../../i18n/common';
 import { api, errorMessage } from '../../../lib/api';
 import { cn } from '../../../lib/cn';
@@ -32,6 +33,7 @@ import { ScanDialog } from '../../vault/ScanDialog';
 import { scanDict } from '../../vault/scanI18n';
 import { chatDict } from '../i18n';
 import { Markdown } from '../Markdown';
+import { AppointmentPicker } from './AppointmentPicker';
 import {
   buildResponse,
   displayValue,
@@ -58,6 +60,7 @@ export function FormPromptCard({
   embedded?: boolean;
 }) {
   const t = useT(chatDict);
+  const lang = useLang();
   const scanText = useT(scanDict);
   const [scanOpen, setScanOpen] = useState(false);
   const personal = useVaultStore((s) => s.overview?.personal);
@@ -92,8 +95,14 @@ export function FormPromptCard({
           const shown = displayValue(
             f,
             item.response?.kind === 'form' ? item.response.values?.[f.key] : undefined,
-            { yes: t.prompt.yes, no: t.prompt.no, hidden: t.prompt.hiddenValue },
+            {
+              yes: t.prompt.yes,
+              no: t.prompt.no,
+              hidden: t.prompt.hiddenValue,
+              moreAppointments: t.prompt.appointmentMoreAsked,
+            },
             docName,
+            lang,
           );
           if (shown === null) return null;
           return (
@@ -106,19 +115,10 @@ export function FormPromptCard({
       </dl>
     ) : null;
 
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!mapsReady) return;
-    const errs = validate(prompt.fields, values);
-    setErrors(errs);
-    if (Object.keys(errs).length) {
-      const first = prompt.fields.find((f) => errs[f.key]);
-      if (first) document.getElementById(`field-${item.id}-${first.key}`)?.focus();
-      return;
-    }
+  const respond = async (answers: typeof values) => {
     setBusy(true);
     try {
-      const response = buildResponse(prompt.fields, values);
+      const response = buildResponse(prompt.fields, answers);
       await api.invoke(
         'chat.respond',
         item.id,
@@ -130,6 +130,22 @@ export function FormPromptCard({
       setBusy(false);
     }
   };
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!mapsReady) return;
+    const errs = validate(prompt.fields, values);
+    setErrors(errs);
+    if (Object.keys(errs).length) {
+      const first = prompt.fields.find((f) => errs[f.key]);
+      if (first) document.getElementById(`field-${item.id}-${first.key}`)?.focus();
+      return;
+    }
+    await respond(values);
+  };
+
+  /** None of the slots suits the user: answer now (other answers as they are) to get others. */
+  const requestMore = (key: string) => void respond({ ...values, [key]: APPOINTMENT_MORE });
 
   const set = (key: string, value: FormValue) => {
     setFormState((prev) => ({ ...prev, values: { ...prev.values, [key]: value } }));
@@ -208,6 +224,8 @@ export function FormPromptCard({
                 onChange={(v) => set(field.key, v)}
                 procedureId={procedureId}
                 onMapReadyChange={setMapReadyField}
+                onRequestMore={() => requestMore(field.key)}
+                busy={busy}
               />
             ))}
           </div>
@@ -263,6 +281,8 @@ function FieldControl({
   onChange,
   procedureId,
   onMapReadyChange,
+  onRequestMore,
+  busy,
 }: {
   field: FormField;
   formId: string;
@@ -271,6 +291,8 @@ function FieldControl({
   onChange: (value: FormValue) => void;
   procedureId?: string;
   onMapReadyChange: (key: string, ready: boolean) => void;
+  onRequestMore: () => void;
+  busy: boolean;
 }) {
   const t = useT(chatDict);
   const readyChange = useCallback(
@@ -340,6 +362,19 @@ function FieldControl({
                 describedBy={describedBy}
                 invalid={invalid}
                 onReadyChange={readyChange}
+              />
+            );
+          case 'appointment':
+            return (
+              <AppointmentPicker
+                field={field}
+                value={str === APPOINTMENT_MORE ? '' : str}
+                onChange={onChange}
+                onRequestMore={onRequestMore}
+                busy={busy}
+                inputId={inputId}
+                describedBy={describedBy}
+                invalid={invalid}
               />
             );
           case 'textarea':

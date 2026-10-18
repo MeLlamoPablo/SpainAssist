@@ -1,6 +1,8 @@
 import {
+  APPOINTMENT_MORE,
   ASSISTANT_AGENT_ID,
   type ChatItem,
+  type FormField,
   type FormPrompt,
   type FormValue,
   type Language,
@@ -221,7 +223,8 @@ export class PromptManager {
           ((field.type === 'select' ||
             field.type === 'map-options' ||
             field.type === 'multiselect') &&
-            choices.some((choice) => !field.options?.some((option) => option.value === choice)))
+            choices.some((choice) => !field.options?.some((option) => option.value === choice))) ||
+          (field.type === 'appointment' && !appointmentAnswer(field, value))
         )
           throw new BridgeError('bad_request', `Invalid answer for ${key}.`);
       }
@@ -323,6 +326,13 @@ export class PromptManager {
   }
 }
 
+/** One of the slots offered, or a request for others. */
+function appointmentAnswer(field: FormField, value: FormValue): value is string {
+  return (
+    typeof value === 'string' && (value === APPOINTMENT_MORE || !!field.slots?.includes(value))
+  );
+}
+
 /** Keeps only declared fields with values of the right shape. */
 export function sanitizeResponse(
   prompt: Prompt,
@@ -354,6 +364,9 @@ export function sanitizeResponse(
     } else if (field.type === 'map-options') {
       if (typeof value === 'string' && field.options?.some((o) => o.value === value))
         values[field.key] = value;
+      else throw new UserError(t(language, 'invalidRequest'), 'bad_request');
+    } else if (field.type === 'appointment') {
+      if (appointmentAnswer(field, value)) values[field.key] = value;
       else throw new UserError(t(language, 'invalidRequest'), 'bad_request');
     } else if (typeof value === 'string') {
       values[field.key] = value;

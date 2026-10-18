@@ -205,6 +205,35 @@ describe('tools', () => {
       expect(bridge.callsTo('prompt.form')).toHaveLength(1);
     });
 
+    it('offers appointment slots in order and relays a request for more', async () => {
+      bridge.setHandler('prompt.form', () => ({
+        dismissed: false,
+        values: { cita: 'more' },
+        savedToVault: [],
+      }));
+      const result = await h.run('ask_user', {
+        title: 'Elige tu cita',
+        fields: [
+          {
+            key: 'cita',
+            label: 'Cita',
+            type: 'appointment',
+            slots: ['2026-10-20T19:00', '2026-10-19T09:00', '2026-10-20T19:00'],
+          },
+        ],
+      });
+      expect(bridge.callsTo('prompt.form')[0].params.fields).toMatchObject([
+        { slots: ['2026-10-19T09:00', '2026-10-20T19:00'] },
+      ]);
+      expect(textOf(result)).toContain('asked for more options');
+      const empty = await h.run('ask_user', {
+        title: 'Elige tu cita',
+        fields: [{ key: 'cita', label: 'Cita', type: 'appointment' }],
+      });
+      expect(empty.isError).toBe(true);
+      expect(bridge.callsTo('prompt.form')).toHaveLength(1);
+    });
+
     it('asks with a native form and returns the answers', async () => {
       bridge.setHandler('prompt.form', () => ({
         kind: 'form',

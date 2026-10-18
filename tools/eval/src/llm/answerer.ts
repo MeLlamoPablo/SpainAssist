@@ -11,6 +11,7 @@ import type {
 import { clampThinkingLevel } from '@earendil-works/pi-ai/models';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { classifyAgentError, configureModel, type PiCredential } from '@sa/agent';
+import { APPOINTMENT_MORE } from '@sa/shared';
 import { z } from 'zod';
 import type { EvalModelChoice, EvalProvider, PendingPrompt } from '../contracts';
 import type { CredentialSource } from './credentials';
@@ -174,6 +175,7 @@ const FIELD_HINTS: Record<string, string> = {
   boolean: 'true or false',
   number: 'a number',
   date: 'a date as YYYY-MM-DD',
+  appointment: 'one of the slots as YYYY-MM-DDTHH:MM, or "more" if none suits you',
 };
 
 function systemPrompt(request: AnswererRequest): string {
@@ -209,6 +211,7 @@ function userPrompt(request: AnswererRequest, fields: Field[]): string {
     ...(field.options?.length
       ? { options: field.options.map((o) => ({ value: o.value, label: o.label })) }
       : {}),
+    ...(field.slots?.length ? { slots: field.slots } : {}),
   }));
   return [
     'A form is shown to you:',
@@ -262,6 +265,9 @@ function fieldSchema(field: Field): z.ZodType<FormValue | null | undefined> {
       break;
     case 'date':
       schema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+      break;
+    case 'appointment':
+      schema = z.enum([APPOINTMENT_MORE, ...(field.slots ?? [])]);
       break;
     default:
       schema = z.string();

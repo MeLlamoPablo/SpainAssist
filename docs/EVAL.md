@@ -198,16 +198,22 @@ The next three run on SpainBench's Cita Previa DNI site (`www.citapreviadnie.es`
 "renuevame el dni". The user is Javier Ortega Ruiz (synthetic), and the mock's date is 2026-10-16:
 
 4. `dni-renovacion-sin-datos`: nothing saved. The DNI expires on 2026-12-04, inside the 180-day
-   renewal window. The answerer gives the card's data when asked. A renewal appointment for that DNI
-   is confirmed (required). Scored: a date that has not passed, the receipt PDF saved, the
-   appointment told to the user, the DNI data asked at most once.
+   renewal window. The answerer gives the card's data when asked. The free slots are offered in the
+   app's appointment picker (`ask_user` with an `appointment` field, required), and a renewal
+   appointment for that DNI is confirmed (required). Scored: a date that has not passed, one of the
+   slots offered, the receipt PDF saved, the appointment told to the user, the DNI data asked at
+   most once.
 5. `dni-renovacion-caduca-pronto`: the same DNI, already saved (number, support number, team, dates,
    phone, email, Madrid). Same outcome. The saved data must not be asked again (scored, weight 2).
 6. `dni-renovacion-no-elegible`: the saved DNI expires on 2031-03-14, so it cannot be renewed before
    2030-09-15, and the user has no reason for an early renewal (not lost, not damaged, no changed
    data). Nothing is booked (required, never). The orchestrator says when the DNI expires or when it
    can be renewed (required). Scored: the saved data is not asked for, the early-renewal cases are
-   mentioned, and no login on the site.
+   mentioned, no login on the site, and no appointment slots offered.
+
+An appointment field's answer is one of its slots (`YYYY-MM-DDTHH:MM`) or `more`: the picker's
+"Buscar más citas" button, which asks the agent for other slots. The answerer picks a slot from the
+persona, or answers `more` when none suits it.
 
 The site's login has an image security code, which the product leaves to the user. The simulated
 user reads it off the page as a person would: asked in a secret field (`browser_fill_from_user`), it

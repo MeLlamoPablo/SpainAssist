@@ -277,6 +277,8 @@ export interface PendingPrompt {
     type: string;
     label: string;
     options?: { value: string; label: string }[];
+    /** appointment: the free slots offered (YYYY-MM-DDTHH:MM); the answer is one, or "more". */
+    slots?: string[];
     secret?: boolean;
     /** The personal-data key the app stores the answer under (the form field's `vaultKey`). */
     vaultKey?: string;

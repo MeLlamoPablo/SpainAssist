@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   findOption,
+  findSlot,
   type PromptField,
   resolveFormAction,
   selectValues,
@@ -146,6 +147,22 @@ describe('findOption', () => {
     expect(findOption(select, 'CL@VE MOVIL')).toBe('cm');
     expect(findOption(select, 'nope')).toBeUndefined();
     expect(findOption({ key: 'x', type: 'text', label: 'x' }, 'cp')).toBeUndefined();
+  });
+});
+
+describe('findSlot', () => {
+  const field = {
+    key: 'cita',
+    type: 'appointment',
+    label: 'Cita',
+    slots: ['2026-10-19T09:00', '2026-10-20T19:00'],
+  };
+  it('takes an offered slot however it is written, or a request for more', () => {
+    expect(findSlot(field, '2026-10-20T19:00')).toBe('2026-10-20T19:00');
+    expect(findSlot(field, '2026-10-19 9:00')).toBe('2026-10-19T09:00');
+    expect(findSlot(field, 'Más')).toBe('more');
+    expect(findSlot(field, '2026-10-21T10:00')).toBeUndefined();
+    expect(findSlot(field, 'el lunes')).toBeUndefined();
   });
 });
 

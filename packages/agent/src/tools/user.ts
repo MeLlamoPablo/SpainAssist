@@ -1,4 +1,10 @@
-import { AGENT_PERSONAL_FIELD_KEYS, FormPrompt, PhoneCallPrompt } from '@sa/shared';
+import {
+  AGENT_PERSONAL_FIELD_KEYS,
+  APPOINTMENT_MAX_SLOTS,
+  APPOINTMENT_MORE,
+  FormPrompt,
+  PhoneCallPrompt,
+} from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
 import {
@@ -25,6 +31,7 @@ const FIELD_TYPES = [
   'boolean',
   'document',
   'province',
+  'appointment',
 ] as const;
 
 const FormField = Type.Object({
@@ -36,7 +43,7 @@ const FormField = Type.Object({
   label: Type.String({ minLength: 1, maxLength: 160, description: 'Question in plain words' }),
   type: StringEnum(FIELD_TYPES, {
     description:
-      'date = YYYY-MM-DD; document = the user picks or uploads a file; province = dropdown of all Spanish provinces (no options needed); map-options = physical places; give names and street addresses, the user picks one on a map. Use province only when it is missing from saved data/prior answers',
+      'date = YYYY-MM-DD; document = the user picks or uploads a file; province = dropdown of all Spanish provinces (no options needed); map-options = physical places; give names and street addresses, the user picks one on a map; appointment = free appointment slots (give slots), the user picks one in a calendar. Use province only when it is missing from saved data/prior answers',
   }),
   required: Type.Optional(Type.Boolean({ description: 'Default true' })),
   options: Type.Optional(
@@ -52,6 +59,13 @@ const FormField = Type.Object({
           'Required for select / multiselect / map-options. Each map option needs a place name (label) and its street address with number and municipality (address), from an official source. The app places each option on the map from its address and returns the chosen value.',
       },
     ),
+  ),
+  slots: Type.Optional(
+    Type.Array(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$' }), {
+      maxItems: APPOINTMENT_MAX_SLOTS,
+      description:
+        'Required for appointment: the free slots you found, as local times "YYYY-MM-DDTHH:MM" (e.g. "2026-10-19T09:30"). A reasonable spread over the next days or weeks, not every slot: the user can ask for more. Put the office, service or procedure in the label or message.',
+    }),
   ),
   placeholder: Type.Optional(Type.String({ maxLength: 200 })),
   help: Type.Optional(Type.String({ maxLength: 500, description: 'Short hint under the field' })),
@@ -224,18 +238,24 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
     defineSaTool({
       name: 'ask_user',
       label: 'Ask the user',
-      description:
-        'Ask the user for information with a native form (several fields at once). Read the current vault first: omit fields already saved or answered, even prefilled ones. If a filtered read misses needed data, read without keys before asking. Physical places use map-options with a name and street address each; the app checks every address in Spain before showing the form. If lookup fails, the tool returns an error without asking the user: research the failed places, find their street addresses/municipality, and retry map-options. Never ask the user to pick geocoding matches. Do not use select just because coordinates or addresses are missing. Set vaultKey on fields worth keeping: their answers are saved automatically. Use the field type that fits (date, phone, email, province, select…) rather than free text. For inputs that apply only to certain dropdown options, set visibleWhen: {field: "access", values: ["sms"]}; do not use conditional help text. NEVER use it for passwords, PINs or one-time codes (use browser_fill_from_vault / browser_fill_from_user). Waits until the user answers.',
+      description: `Ask the user for information with a native form (several fields at once). Read the current vault first: omit fields already saved or answered, even prefilled ones. If a filtered read misses needed data, read without keys before asking. Physical places use map-options with a name and street address each; the app checks every address in Spain before showing the form. If lookup fails, the tool returns an error without asking the user: research the failed places, find their street addresses/municipality, and retry map-options. Never ask the user to pick geocoding matches. Do not use select just because coordinates or addresses are missing. Appointment slots use type appointment with slots, never select or free text: the answer is the chosen slot, or "${APPOINTMENT_MORE}" when the user wants other options (then look for more slots, e.g. later dates or other offices, and ask again). Set vaultKey on fields worth keeping: their answers are saved automatically. Use the field type that fits (date, phone, email, province, select…) rather than free text. For inputs that apply only to certain dropdown options, set visibleWhen: {field: "access", values: ["sms"]}; do not use conditional help text. NEVER use it for passwords, PINs or one-time codes (use browser_fill_from_vault / browser_fill_from_user). Waits until the user answers.`,
       parameters: AskUserParams,
       async execute(_id, params, signal) {
         const fields = params.fields.map((f) =>
           f.vaultKey === 'addressProvince' && (f.type === 'text' || f.type === 'select')
             ? { ...f, type: 'province' as const, options: undefined }
-            : f,
+            : f.type === 'appointment' && f.slots
+              ? { ...f, slots: [...new Set(f.slots)].sort() }
+              : f,
         );
         for (const field of fields) {
           if ((field.type === 'select' || field.type === 'multiselect') && !field.options?.length) {
             return errorResult(`Field "${field.key}" is a ${field.type}: give it options.`);
+          }
+          if (field.type === 'appointment' && !field.slots?.length) {
+            return errorResult(
+              `Field "${field.key}" is an appointment: give it the free slots you found.`,
+            );
           }
         }
         const parsed = FormPrompt.safeParse({ kind: 'form', title: params.title, fields });
@@ -261,12 +281,23 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
             const lines = Object.entries(response.values).map(
               ([key, value]) => `- ${labels.get(key) ?? key} (${key}): ${formatValue(value)}`,
             );
+            const types = new Map(fields.map((f) => [f.key, f.type]));
+            const more = Object.entries(response.values)
+              .filter(
+                ([key, value]) => types.get(key) === 'appointment' && value === APPOINTMENT_MORE,
+              )
+              .map(([key]) => labels.get(key) ?? key);
             const saved = response.savedToVault ?? [];
             const vaultErrors = response.vaultErrors ?? [];
             return textResult(
               [
                 'The user answered:',
                 ...(lines.length > 0 ? lines : ['(no values)']),
+                ...(more.length > 0
+                  ? [
+                      `None of the slots offered for ${more.join(', ')} suit the user: they asked for more options. Look for other free slots (later dates, other times or offices) and ask again with ask_user, offering the new ones; keep the other answers. If there are no others, tell the user.`,
+                    ]
+                  : []),
                 ...(saved.length > 0 ? [`Saved to their data: ${saved.join(', ')}.`] : []),
                 ...(vaultErrors.length > 0
                   ? [

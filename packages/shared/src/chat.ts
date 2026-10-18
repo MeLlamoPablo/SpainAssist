@@ -27,8 +27,16 @@ export const FormFieldType = z.enum([
   'document', // value: a vault document id (user picks an existing document or uploads a new one)
   'secret', // masked input (e.g. an SMS code); never saved to the vault
   'province', // a Spanish province from the built-in list (provinces.ts); value: its name
+  'appointment', // one of `slots` (value: YYYY-MM-DDTHH:MM), or APPOINTMENT_MORE
 ]);
 export type FormFieldType = z.infer<typeof FormFieldType>;
+
+/** An appointment slot: local date and time, e.g. 2026-10-19T09:30. */
+export const APPOINTMENT_SLOT =
+  /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d$/;
+export const APPOINTMENT_MAX_SLOTS = 120;
+/** The answer of an appointment field when none of its slots suits the user: offer others. */
+export const APPOINTMENT_MORE = 'more';
 
 export const FormField = z.object({
   /** Machine key used in the response values. */
@@ -47,6 +55,8 @@ export const FormField = z.object({
     )
     .max(50)
     .optional(),
+  /** Required for appointments: the free slots offered, each as local time YYYY-MM-DDTHH:MM. */
+  slots: z.array(z.string().regex(APPOINTMENT_SLOT)).max(APPOINTMENT_MAX_SLOTS).optional(),
   placeholder: z.string().max(200).optional(),
   help: z.string().max(500).optional(),
   /** Show this field only when the named select field has one of these option values. */
@@ -93,6 +103,16 @@ const FormFields = z
             code: 'custom',
             path: [index, 'options'],
             message: 'Map options need unique nonempty values, a name and a street address.',
+          });
+        }
+      }
+      if (field.type === 'appointment') {
+        const slots = field.slots ?? [];
+        if (!slots.length || new Set(slots).size !== slots.length) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'slots'],
+            message: 'Appointments need unique slots (YYYY-MM-DDTHH:MM).',
           });
         }
       }

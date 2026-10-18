@@ -1,4 +1,5 @@
 import {
+  APPOINTMENT_MORE,
   type FormField,
   type FormValue,
   matchProvince,
@@ -7,11 +8,12 @@ import {
   type PromptResponse,
   visibleFormFields,
 } from '@sa/shared';
-
 import {
   IDENTITY_DOCUMENT_FIELDS,
   SCANNABLE_PERSONAL_KEYS,
 } from '../../../../../identity-documents';
+import type { Lang } from '../../../i18n';
+import { slotLabel } from './appointmentLogic';
 
 /** Pure helpers behind the form prompt card (kept React-free for tests). */
 
@@ -66,6 +68,9 @@ export function initialValues(fields: FormField[], personal: PersonalDataItem[] 
         break;
       case 'province':
         values[field.key] = raw ? (matchProvince(raw)?.value ?? '') : '';
+        break;
+      case 'appointment':
+        values[field.key] = raw && field.slots?.includes(raw) ? raw : '';
         break;
       default:
         values[field.key] = raw ?? '';
@@ -135,8 +140,9 @@ export function buildResponse(
 export function displayValue(
   field: FormField,
   value: FormValue | undefined,
-  labels: { yes: string; no: string; hidden: string },
+  labels: { yes: string; no: string; hidden: string; moreAppointments: string },
   documentName: (id: string) => string | undefined,
+  lang: Lang = 'es',
 ): string | null {
   if (field.type === 'secret') return `•••• (${labels.hidden})`;
   if (value === undefined) return null;
@@ -144,6 +150,8 @@ export function displayValue(
   const optionLabel = (v: string) => field.options?.find((o) => o.value === v)?.label ?? v;
   if (Array.isArray(value)) return value.map(optionLabel).join(', ');
   if (field.type === 'document') return documentName(value) ?? value;
+  if (field.type === 'appointment')
+    return value === APPOINTMENT_MORE ? labels.moreAppointments : slotLabel(value, lang);
   if (field.type === 'select' || field.type === 'map-options') return optionLabel(value);
   return value;
 }

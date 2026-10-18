@@ -58,6 +58,7 @@ export function toPendingPrompt(owner: string, item: PromptItem): PendingPrompt 
             ...(field.options
               ? { options: field.options.map(({ value, label }) => ({ value, label })) }
               : {}),
+            ...(field.slots ? { slots: [...field.slots] } : {}),
             ...(field.type === 'secret' ? { secret: true } : {}),
             // What the form logic of the UI reads: the simulator answers through the same logic.
             ...(field.vaultKey ? { vaultKey: field.vaultKey } : {}),

@@ -37,7 +37,7 @@ describe('form response privacy', () => {
       displayValue(
         fields[0]!,
         'private',
-        { yes: 'yes', no: 'no', hidden: 'hidden' },
+        { yes: 'yes', no: 'no', hidden: 'hidden', moreAppointments: 'more' },
         () => undefined,
       ),
     ).toBe('•••• (hidden)');

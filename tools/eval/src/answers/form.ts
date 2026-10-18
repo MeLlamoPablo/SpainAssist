@@ -1,4 +1,4 @@
-import { type FormValue, matchProvince } from '@sa/shared';
+import { APPOINTMENT_MORE, type FormValue, matchProvince } from '@sa/shared';
 import type { AnswerAction, PendingPrompt } from '../contracts';
 import { compilePattern, shorten, stripDiacritics, testPattern } from './text';
 
@@ -40,6 +40,20 @@ export function findOption(field: PromptField, raw: string): string | undefined 
   if (exact) return exact.value;
   const needle = foldKey(raw);
   return options.find((o) => foldKey(o.value) === needle || foldKey(o.label) === needle)?.value;
+}
+
+const MORE_WORDS = new Set(['more', 'mas', 'mas citas', 'otras', 'otras citas']);
+
+/**
+ * The appointment slot a raw value names ("2026-10-19T09:00", "2026-10-19 9:00"), or
+ * APPOINTMENT_MORE when the answer asks for other slots.
+ */
+export function findSlot(field: PromptField, raw: string): string | undefined {
+  if (MORE_WORDS.has(foldKey(raw))) return APPOINTMENT_MORE;
+  const match = /^(\d{4}-\d{2}-\d{2})[T\s]+(\d{1,2}):(\d{2})/.exec(raw.trim());
+  if (!match) return undefined;
+  const slot = `${match[1]}T${match[2]!.padStart(2, '0')}:${match[3]}`;
+  return field.slots?.includes(slot) ? slot : undefined;
 }
 
 function realDate(year: number, month: number, day: number): string | undefined {
@@ -87,6 +101,13 @@ function parseField(field: PromptField, raw: unknown): FieldResult {
       const value = findOption(field, text);
       return value === undefined
         ? fail(`"${shorten(text, 60)}" is not one of the options`)
+        : { ok: true, value };
+    }
+    case 'appointment': {
+      const text = scalarText(raw);
+      const value = text ? findSlot(field, text) : undefined;
+      return value === undefined
+        ? fail(`expected one of the slots (YYYY-MM-DDTHH:MM) or "${APPOINTMENT_MORE}"`)
         : { ok: true, value };
     }
     case 'multiselect': {

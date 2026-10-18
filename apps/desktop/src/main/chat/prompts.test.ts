@@ -78,3 +78,30 @@ it('ignores hidden map selections and enforces required visible selections', () 
     }),
   ).toThrow();
 });
+
+it('only accepts an offered appointment slot or a request for more', () => {
+  const prompt: FormPrompt = {
+    kind: 'form',
+    title: 'Cita',
+    allowDismiss: false,
+    fields: [
+      {
+        key: 'slot',
+        label: 'Cita',
+        type: 'appointment',
+        required: true,
+        slots: ['2026-10-19T09:00', '2026-10-20T19:00'],
+      },
+    ],
+  };
+  const answer = (slot: string) =>
+    sanitizeResponse(prompt, {
+      kind: 'form',
+      dismissed: false,
+      savedToVault: [],
+      values: { slot },
+    });
+  expect(answer('2026-10-20T19:00')).toMatchObject({ values: { slot: '2026-10-20T19:00' } });
+  expect(answer('more')).toMatchObject({ values: { slot: 'more' } });
+  expect(() => answer('2026-10-21T10:00')).toThrow();
+});

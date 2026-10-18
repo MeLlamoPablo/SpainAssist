@@ -100,7 +100,9 @@ function previewPrompt(item: PromptItem, state: State, documentId: string): Prom
                       ? '••••'
                       : field.type === 'document'
                         ? documentId
-                        : (field.options?.[0]?.value ?? 'Demo'));
+                        : field.type === 'appointment'
+                          ? (field.slots?.[0] ?? 'Demo')
+                          : (field.options?.[0]?.value ?? 'Demo'));
   return { ...item, status: 'answered', response: buildResponse(prompt.fields, values) };
 }
 
