@@ -88,6 +88,8 @@ type StorageState = Exclude<BrowserContextOptions['storageState'], string | unde
 const REF_RE = /^(?:f\d+)?e\d+$/;
 const DEFAULT_BUDGET = 24_000;
 const QUIET_MS = 350;
+/** The longest a click waits for a window it asked to open (`watchPopups`). */
+const POPUP_WAIT_MS = 5_000;
 /** Closing the pages of a context before the context itself, and the wait for either. */
 const PAGE_CLOSE_MS = 3_000;
 const CONTEXT_CLOSE_MS = 15_000;
@@ -226,15 +228,18 @@ export class PlaywrightBrowserService implements BrowserService {
       const page = await this.pageFor(s);
       const loc = await this.resolveRef(page, ref);
       const stopIntercept = this.interceptFileChooser(s, page);
+      const popups = await this.watchPopups(s, page);
       try {
         try {
           await loc.click();
         } catch (err) {
           throw toActionError(err, `click ${ref}`, s.secretVariants);
         }
+        await popups.arrived();
         return await this.observe(s);
       } finally {
         stopIntercept();
+        await popups.stop();
       }
     });
   }
@@ -1200,6 +1205,39 @@ export class PlaywrightBrowserService implements BrowserService {
       if (Date.now() >= deadline) return false;
       await sleep(250);
     }
+  }
+
+  /**
+   * Counts the windows the page asks to open (CDP `Page.windowOpen`: window.open, target=_blank
+   * links, forms) so `arrived` can wait for them to become tabs. Playwright only announces a popup
+   * once it has started, which on a busy machine can be after the opener looks settled.
+   */
+  private async watchPopups(
+    s: Session,
+    page: Page,
+  ): Promise<{ arrived(): Promise<void>; stop(): Promise<void> }> {
+    let requested = 0;
+    const popups: Page[] = [];
+    const onPopup = (popup: Page): void => void popups.push(popup);
+    page.on('popup', onPopup);
+    const cdp = await page
+      .context()
+      .newCDPSession(page)
+      .catch(() => undefined);
+    cdp?.on('Page.windowOpen', () => requested++);
+    await cdp?.send('Page.enable').catch(noop);
+    return {
+      arrived: async () => {
+        // Capped: a blocked popup is asked for but never opens.
+        const deadline = Date.now() + Math.min(this.settleTimeout, POPUP_WAIT_MS);
+        const ready = () => popups.length >= requested && popups.every((p) => s.pages.includes(p));
+        while (!ready() && Date.now() < deadline) await sleep(25);
+      },
+      stop: async () => {
+        page.off('popup', onPopup);
+        await cdp?.detach().catch(noop);
+      },
+    };
   }
 
   private interceptFileChooser(s: Session, page: Page): () => void {
