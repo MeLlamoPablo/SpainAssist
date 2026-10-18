@@ -323,6 +323,16 @@ AutoFirma builds the final algorithm from the key type, so `SHA512` with an RSA 
 - With filters, expired ones are shown unless `nonexpired:` is given.
 - (rfirma notes that an unknown filter disables the expiry filter.)
 
+**What `@sa/signer` does with them** (`packages/signer/src/filters.ts`, README "Certificate
+filters"). The filters narrow the approved credential's certificates: for the DNIe, FIRMA and,
+when the phone sends it (`sign.otherCertificate`), AUTENTICACIÓN. FIRMA is kept whenever it
+passes, and the user never picks. `selectCertificate` returns AUTENTICACIÓN when only it passes
+(`authcert:`, `keyusage.digitalsignature:true;keyusage.nonrepudiation:false`). Signatures are
+refused instead of signing with AUTENTICACIÓN, and with no match the page gets AutoFirma's
+"No se encontraron certificados con los que firmar". `ssl:`/`qualified:` choose the signing
+certificate paired with the given serial. Expired certificates are refused before the filters,
+whether or not `nonexpired:` is given. Unknown filters are ignored with a warning.
+
 **CAdES** (`CAdESExtraParams.java`): `contentTypeOid`, `contentDescription`, `includeMimeTypeAttribute`, `mimeType`, `policyIdentifier`, `policyIdentifierHash`, `policyIdentifierHashAlgorithm`, `policyQualifier`, `signingCertificateV2`, `includeSigningTimeAttribute` (default `true`), `includeContentHintAttribute` (default `true`), `includeOnlySignningCertificate` (sic), `precalculatedHashAlgorithm` (data *is* the hash → detached), `signerClaimedRoles` (`|`-separated), `signatureProductionCity`, `signatureProductionPostalCode`, `signatureProductionCountry`, `commitmentTypeIndications` plus `commitmentTypeIndication<n>Identifier` / `…CommitmentTypeQualifiers`, `tsaURL`…, `allowSignLTSignature`.
 
 **XAdES** (`XAdESExtraParams.java`)

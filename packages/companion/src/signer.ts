@@ -104,6 +104,11 @@ export interface PhoneNeed {
 export interface PhoneKey {
   /** DER, leaf first. */
   certificates: Buffer[];
+  /**
+   * The card's other certificate (`sign.otherCertificate`): FIRMA for a login, AUTENTICACIÓN
+   * otherwise. Undefined when the phone's app doesn't send it.
+   */
+  readonly otherCertificate?: Buffer;
   sign(
     data: Uint8Array,
     algorithm: CompanionAlgorithm,
@@ -129,6 +134,8 @@ interface Active {
   outbox: Map<string, DesktopToPhone>;
   verifiable: boolean;
   certificates?: Buffer[];
+  /** `sign.otherCertificate`, which the phone sends before `sign.certificate`. */
+  other?: Buffer;
   certificate: Waiter<Buffer[]>;
   signatures: Map<number, Waiter<Buffer> & { timer: ReturnType<typeof setTimeout> | undefined }>;
   nextSeq: number;
@@ -270,6 +277,10 @@ export class PhoneSigner {
         active.certificate.resolve(certificates);
         return;
       }
+      case 'sign.otherCertificate':
+        // Kept from the first one: a re-sent one is the same card's (`sign.certificate` checks).
+        active.other ??= Buffer.from(message.certificate, 'base64');
+        return;
       case 'sign.signature': {
         const waiter = active.signatures.get(message.seq);
         if (!waiter) return;
@@ -409,6 +420,9 @@ export class PhoneSigner {
   private key(active: Active, certificates: Buffer[]): PhoneKey {
     return {
       certificates,
+      get otherCertificate() {
+        return active.other;
+      },
       sign: (data, algorithm, check, prehashed) => {
         if (this.active !== active) return Promise.reject(new PhoneSignError('cancelled'));
         const seq = active.nextSeq++;

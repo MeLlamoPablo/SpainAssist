@@ -229,6 +229,14 @@ const STRINGS = {
     es: 'La app del móvil es más nueva que Spain Assist en el ordenador. Actualiza Spain Assist en el ordenador e inténtalo de nuevo.',
     en: 'The phone app is newer than Spain Assist on this computer. Update Spain Assist on the computer and try again.',
   },
+  dnieError_filter_no_match: {
+    es: '{host} no admite ninguno de los certificados de tu DNIe para esta operación. No se ha firmado nada.',
+    en: "{host} doesn't accept any of your DNIe's certificates for this. Nothing was signed.",
+  },
+  dnieError_authentication_only: {
+    es: '{host} pide firmar con el certificado de autenticación del DNIe, y Spain Assist solo firma documentos con el de firma. No se ha firmado nada.',
+    en: '{host} asks to sign with the DNIe authentication certificate, and Spain Assist signs documents only with the signing one. Nothing was signed.',
+  },
   dnieError_failed: {
     es: 'No se ha podido usar el DNIe. Vuelve a intentarlo.',
     en: "Couldn't use your DNIe. Try again.",

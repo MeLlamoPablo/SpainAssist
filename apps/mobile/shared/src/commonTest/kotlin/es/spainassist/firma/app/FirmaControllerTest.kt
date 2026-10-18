@@ -13,6 +13,7 @@ import es.spainassist.firma.protocol.Purpose
 import es.spainassist.firma.protocol.SignCancel
 import es.spainassist.firma.protocol.CancelReason
 import es.spainassist.firma.protocol.SignCertificate
+import es.spainassist.firma.protocol.SignOtherCertificate
 import es.spainassist.firma.protocol.SignDone
 import es.spainassist.firma.protocol.SignError
 import es.spainassist.firma.protocol.SignProgress
@@ -262,6 +263,54 @@ class FirmaControllerTest {
         )
         assertTrue(card.closed)
         assertTrue((h.controller.screen.value as Screen.Signing).connected)
+    }
+
+    @Test
+    fun sendsBothCertificatesOfTheCardOtherFirst() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val firma = byteArrayOf(1, 2, 3)
+        val autenticacion = byteArrayOf(4, 5, 6)
+        val id = h.request().requestId
+        // A certificate request: no PIN is used for either certificate.
+        val reader = FakeCard(certificate = firma, other = autenticacion, onSign = { _, _ -> error("no signature") })
+        h.link.deliver(h.request(purpose = Purpose.Certificate, pin = null))
+        h.approveWith(reader)
+        val expected = listOf(
+            SignOtherCertificate(id, Base64Std.encode(autenticacion)),
+            SignCertificate(id, listOf(Base64Std.encode(firma))),
+        )
+        assertEquals(expected, h.link.sent.filter { it is SignOtherCertificate || it is SignCertificate })
+        assertEquals(Purpose.Certificate, reader.purposeRead)
+        // Sent again after a reconnect, in the same order.
+        h.link.drop()
+        h.link.sent.clear()
+        h.link.connect()
+        assertEquals(expected, h.link.sent.filter { it is SignOtherCertificate || it is SignCertificate })
+        h.link.deliver(SignDone(id))
+        assertEquals(Step.Result(Outcome.CertificateShared), h.screen.step())
+        h.controller.dismissResult()
+
+        // A login: the other certificate is FIRMA; signing still uses the purpose's key.
+        val login = "2a1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"
+        val card = FakeCard(certificate = autenticacion, other = firma)
+        h.link.sent.clear()
+        h.link.deliver(h.request(id = login, purpose = Purpose.Login))
+        h.approveWith(card)
+        assertEquals(
+            listOf(SignOtherCertificate(login, Base64Std.encode(firma)), SignCertificate(login, listOf(Base64Std.encode(autenticacion)))),
+            h.link.sent.filter { it is SignOtherCertificate || it is SignCertificate },
+        )
+        h.link.deliver(SignDone(login))
+        h.controller.dismissResult()
+
+        // A card read without the other certificate: only `sign.certificate`, as before.
+        val plain = "3a1c3b9e-2d4a-4f8b-9c1d-5e7a2b3c4d5e"
+        h.link.sent.clear()
+        h.link.deliver(h.request(id = plain))
+        h.approveWith(FakeCard(certificate = firma))
+        assertTrue(h.link.sentOf<SignOtherCertificate>().isEmpty())
+        assertEquals(1, h.link.sentOf<SignCertificate>().size)
     }
 
     @Test

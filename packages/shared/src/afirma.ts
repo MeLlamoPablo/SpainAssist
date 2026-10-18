@@ -76,11 +76,27 @@ export interface ExternalSigningKey {
   credentialId: string;
   /** DER, leaf (the signing certificate) first. */
   certificates: Uint8Array[];
+  /**
+   * The credential's other certificates (DER leaves), which this key can't sign with: the
+   * DNIe's AUTENTICACIÓN certificate, when the phone sent it. Only for certificate filters.
+   */
+  otherCertificates?: Uint8Array[];
   /** Hashes `data` with `digest` and signs it. */
   sign(data: Uint8Array, digest: SignatureDigest, binding?: SignatureBinding): Promise<Uint8Array>;
-  /** The operation ended: `true` signed, `false` failed. Called exactly once. */
-  release(ok: boolean): void;
+  /**
+   * The operation ended: `true` signed, `false` failed. Called exactly once. `refusal` says why
+   * the signer refused the certificate the user approved (the site's certificate filters).
+   */
+  release(ok: boolean, refusal?: CertificateRefusal): void;
 }
+
+/**
+ * Why the site's certificate filters (AutoFirma's `filters=`) refused the approved certificate:
+ * - `no_match`: none of the credential's certificates matches;
+ * - `authentication_only`: only the DNIe's AUTENTICACIÓN certificate matches, and documents are
+ *   signed only with FIRMA.
+ */
+export type CertificateRefusal = 'no_match' | 'authentication_only';
 
 /** What the signer uses for one operation. Never leaves the main process. */
 export type SigningKey = P12SigningKey | ExternalSigningKey;

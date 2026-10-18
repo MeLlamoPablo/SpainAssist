@@ -320,6 +320,43 @@ describe('PhoneSigner', () => {
     expect(phone.connected).toBe(true);
   });
 
+  it("keeps the card's other certificate, which newer phones send first", async () => {
+    const t = setup();
+    const phone = t.connectPhone();
+    const other = crypto.randomBytes(280);
+    const pending = t.signer.request({ ...request, purpose: 'certificate' });
+    await until(() => t.phoneMessages.some((m) => m.type === 'sign.request'));
+    const requestId = (t.phoneMessages.at(-1) as { requestId: string }).requestId;
+    phone.send({ type: 'sign.otherCertificate', requestId, certificate: other.toString('base64') });
+    phone.send({ type: 'sign.certificate', requestId, certificates: [cert.toString('base64')] });
+    const key = await pending;
+    expect(key.certificates[0]?.equals(cert)).toBe(true);
+    expect(key.otherCertificate?.equals(other)).toBe(true);
+    key.finish(true);
+
+    // An older phone sends none.
+    const old = t.signer.request({ ...request, purpose: 'certificate' });
+    await until(() => t.phoneMessages.filter((m) => m.type === 'sign.request').length === 2);
+    const second = (t.phoneMessages.at(-1) as { requestId: string }).requestId;
+    phone.send({
+      type: 'sign.certificate',
+      requestId: second,
+      certificates: [cert.toString('base64')],
+    });
+    const oldKey = await old;
+    expect(oldKey.otherCertificate).toBeUndefined();
+    oldKey.finish(true);
+    // Why it is a message of its own: older desktops refuse unknown fields in sign.certificate.
+    expect(
+      PhoneToDesktop.safeParse({
+        type: 'sign.certificate',
+        requestId,
+        certificates: [cert.toString('base64')],
+        other: other.toString('base64'),
+      }).success,
+    ).toBe(false);
+  });
+
   it('carries the CAN, and the PIN when given, in the encrypted request only', async () => {
     const t = setup();
     const { seen } = autoPhone(t);

@@ -57,6 +57,8 @@ class FakeCardReader : CardReader {
 /** A DNIe: [script] decides what each open/sign does (null = succeed). */
 class FakeCard(
     private val certificate: ByteArray = byteArrayOf(1, 2, 3),
+    /** The card's other certificate (null: a phone that doesn't read it). */
+    private val other: ByteArray? = null,
     private val onOpen: (can: String) -> CardException? = { null },
     private val onSign: (data: ByteArray, pin: String) -> CardException? = { _, _ -> null },
 ) : Card {
@@ -70,6 +72,7 @@ class FakeCard(
         onOpen(can)?.let { throw it }
         return object : DnieSession {
             override val certificates = listOf(certificate)
+            override val otherCertificate = other
 
             override fun sign(data: ByteArray, algorithm: Algorithm, prehashed: Boolean): ByteArray {
                 onSign(data, pin())?.let { throw it }

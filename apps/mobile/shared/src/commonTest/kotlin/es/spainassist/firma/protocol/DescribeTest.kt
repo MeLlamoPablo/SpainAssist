@@ -24,6 +24,7 @@ class DescribeTest {
             describe(SignUnlock("r1", can = "654321", pin = "otherpin99", expiresAt = "2026-10-12T10:00:00Z")),
             describe(ToBeSigned("r1", 0, Algorithm.Sha256, data = "VEJTREFUQQ==")),
             describe(SignCertificate("r1", listOf("Q0VSVA=="))),
+            describe(SignOtherCertificate("r1", "Q0VSVA==")),
             describe(SignSignature("r1", 0, "U0lHTkFUVVJF")),
             describe(SignNeed("r1", Need.Pin, refused = true, triesLeft = 2)),
         )

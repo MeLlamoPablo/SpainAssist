@@ -62,8 +62,10 @@ class JmulticardCard(tag: Tag) : Card {
             throw CardException.CertificateExpired()
         }
         val key = dnie.getPrivateKey(alias) ?: throw CardException.NoCertificate().also { log("no private key under the alias") }
+        val other = otherCertificate(dnie, purpose == es.spainassist.firma.protocol.Purpose.Login, alias)
         return object : DnieSession {
             override val certificates = listOf(certificate.encoded)
+            override val otherCertificate = other
 
             override fun sign(data: ByteArray, algorithm: Algorithm, prehashed: Boolean): ByteArray =
                 guard {
@@ -82,6 +84,19 @@ class JmulticardCard(tag: Tag) : Card {
         val aliases = dnie.aliases.orEmpty().toList()
         return aliases.firstOrNull { it.contains(if (login) "autentic" else "firma", ignoreCase = true) }
             ?: aliases.firstOrNull { dnie.getCertificate(it)?.keyUsage?.getOrNull(if (login) 0 else 1) == true }?.takeIf { !login || dnie.getCertificate(it)?.keyUsage?.getOrNull(1) != true }
+    }
+
+    /**
+     * The certificate of the other purpose (FIRMA for login, AUTENTICACIÓN otherwise), for the
+     * desktop's certificate filters. jmulticard reads every certificate while it opens the card
+     * (after PACE, before any PIN): `getCertificate` is a lookup, with no PIN and no extra APDU.
+     * Never fails the request: null when it can't be read.
+     */
+    private fun otherCertificate(dnie: DnieNfc, login: Boolean, alias: String): ByteArray? = try {
+        certificateAlias(dnie, !login)?.takeIf { it != alias }?.let { dnie.getCertificate(it)?.encoded }
+    } catch (e: Exception) {
+        log("other certificate not read: ${e::class.simpleName}")
+        null
     }
 
     private fun answer(callback: Callback, can: String, pin: () -> String) {

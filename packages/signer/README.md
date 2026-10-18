@@ -13,7 +13,7 @@ RSA and ECDSA certificates work throughout PKCS#12 import and all local signing 
 | NONE/PKCS#1 | Raw RSA PKCS#1 or DER ECDSA signature |
 | XAdES | Enveloping, Enveloped, internally Detached; BES/EPES, FirmaAGE |
 | PAdES | Invisible incremental signature; classic or stream xref, co-sign by appending |
-| selectCertificate | Explicit approval then DER certificate in Base64 |
+| selectCertificate | Explicit approval then DER certificate in Base64, chosen by the certificate filters |
 | signBatchProcess | JSON local batches and remote JSON pre/post batches |
 | signBatch | Legacy XML `<signbatch>` against the site's BatchPresigner/BatchPostsigner; the page gets the Base64 result log |
 | signAndSaveToFile, file helpers | Inject native pickFiles/saveFile in createAfirmaHandler |
@@ -52,6 +52,34 @@ cryptographically offline; acceptance by particular production sedes remains unv
 - Inject `ctx.fetch` to enforce the application's remote URL policy.
 - File callbacks must show native dialogs; site-proposed paths are suggestions, never trusted
   paths.
+
+## Certificate filters
+
+AutoFirma's `filters=` (`;` = AND), `filters.1=`, `filters.2=`… (OR between groups) and
+`filter=` in the params of `selectCertificate`, the signatures, `signBatchProcess`'s
+`certFilters` and `signBatch` (`filters.ts`). They narrow the approved credential's certificates:
+its signing certificate, then the others it brings (`ExternalSigningKey.otherCertificates`: the
+DNIe's AUTENTICACIÓN, from phones that send it), when still valid. The user is never asked to
+choose:
+
+- `selectCertificate` returns the first that passes: FIRMA whenever it passes (as without
+  filters), AUTENTICACIÓN for `authcert:` or a key usage of digitalSignature without
+  nonRepudiation.
+- Signatures use only the signing certificate. When only another certificate passes, the
+  call fails with a "no certificate" error that names the authentication certificate, and the
+  key is released with `authentication_only` (the app tells the user). Signing with the DNIe's
+  authentication key is not supported.
+- Nothing passes (a `.p12` included): AutoFirma's "No se encontraron certificados con los que
+  firmar" (`AF501001`), released with `no_match`.
+
+Supported: `nonexpired:`, `authcert:`, `signingcert:`, `dnie:`, `sscd:`, `ssl:<serial>` and
+`qualified:<serial>` (the signing certificate with that hexadecimal serial, or the one paired
+with the certificate that has it), `thumbprint:<alg>:<hex>`, `encodedcert:<b64>`,
+`subject.contains:`, `issuer.contains:`, `subject.rfc2254:`, `issuer.rfc2254:` (and
+`.recurse`, on the leaf's issuer only), `keyusage.<usage>:true|false`, `policyid:<oids>` and
+`pseudonym:only|andothers`. Unknown filters (and `disableopeningexternalstores:`) are ignored,
+unknown ones with a warning in the log; a group made only of unknown filters lets everything
+through.
 
 Low-level builders, `readP12`/`openP12`, `buildAutoscriptShimSource` and `createAfirmaHandler`
 are the typed integration points. `readP12` returns PEM material and metadata; `openP12` also

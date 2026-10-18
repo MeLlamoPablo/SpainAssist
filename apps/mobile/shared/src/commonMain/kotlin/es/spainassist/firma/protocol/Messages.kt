@@ -203,6 +203,16 @@ data class SignCertificate(
     val certificates: List<String>,
 ) : PhoneToDesktop
 
+/**
+ * The card's other certificate (Base64 DER): FIRMA when the request reads AUTENTICACIÓN (login),
+ * AUTENTICACIÓN otherwise. Sent just before [SignCertificate], only for the site's certificate
+ * filters on the desktop. A message of its own: desktops without it drop it and go on, while an
+ * unknown field in `sign.certificate` would make them drop the certificate.
+ */
+@Serializable
+@SerialName("sign.otherCertificate")
+data class SignOtherCertificate(val requestId: String, val certificate: String) : PhoneToDesktop
+
 @Serializable
 @SerialName("sign.signature")
 data class SignSignature(val requestId: String, val seq: Int, val signature: String) : PhoneToDesktop

@@ -32,6 +32,13 @@ interface DnieSession {
     /** DER, leaf first; chosen for the requested purpose. */
     val certificates: List<ByteArray>
 
+    /**
+     * The card's other certificate (DER): FIRMA when [certificates] is AUTENTICACIÓN, and the
+     * other way round. Read with the CAN only, like [certificates]; null when the card has none.
+     * Nothing signs with it: the desktop uses it for the site's certificate filters.
+     */
+    val otherCertificate: ByteArray? get() = null
+
     /** PKCS#1 v1.5 over data, or a validated pre-hashed digest for login. Throws [CardException]. */
     fun sign(data: ByteArray, algorithm: Algorithm, prehashed: Boolean = false): ByteArray
 }

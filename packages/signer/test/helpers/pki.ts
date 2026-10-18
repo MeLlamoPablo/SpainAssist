@@ -226,6 +226,10 @@ interface IssueOptions {
   notBefore?: Date;
   notAfter?: Date;
   policies?: string[];
+  /** Key usage flags of an end-entity certificate (default digitalSignature | nonRepudiation). */
+  keyUsage?: number;
+  /** Adds qcStatements with QcCompliance and QcSSCD (DNIe FIRMA). */
+  qcSscd?: boolean;
 }
 
 function issueCertificate(opts: IssueOptions): Buffer {
@@ -248,7 +252,8 @@ function issueCertificate(opts: IssueOptions): Buffer {
       new x509.KeyUsage(
         opts.ca
           ? x509.KeyUsageFlags.keyCertSign | x509.KeyUsageFlags.cRLSign
-          : x509.KeyUsageFlags.digitalSignature | x509.KeyUsageFlags.nonRepudiation,
+          : (opts.keyUsage ??
+              x509.KeyUsageFlags.digitalSignature | x509.KeyUsageFlags.nonRepudiation),
       ),
       true,
     ),
@@ -275,6 +280,17 @@ function issueCertificate(opts: IssueOptions): Buffer {
           opts.policies.map((p) => new x509.PolicyInformation({ policyIdentifier: p })),
         ),
       ),
+    );
+  }
+  if (opts.qcSscd) {
+    // SEQUENCE { SEQUENCE { QcCompliance }, SEQUENCE { QcSSCD } }
+    const qc = Buffer.from('30143008060604008e4601013008060604008e460104', 'hex');
+    extensions.push(
+      new x509.Extension({
+        extnID: '1.3.6.1.5.5.7.1.3',
+        critical: false,
+        extnValue: new OctetString(qc),
+      }),
     );
   }
   const tbs = new x509.TBSCertificate({
@@ -354,4 +370,69 @@ export function rsaIdentity(): ReturnType<typeof createRsaIdentity> {
 export function ecIdentity(): TestIdentity {
   ecCache ??= createEcIdentity();
   return ecCache;
+}
+
+/** The DNIe's two certificates and their CA (like `AC DNIE 004`), with their keys. */
+export interface DnieTestCard {
+  caDer: Buffer;
+  firma: { certDer: Buffer; privateKey: KeyObject };
+  autenticacion: { certDer: Buffer; privateKey: KeyObject };
+}
+
+/**
+ * A real-looking DNIe 3.0: FIRMA (nonRepudiation, qualified, QcSSCD) and AUTENTICACIÓN
+ * (digitalSignature), issued by "AC DNIE 004, OU=DNIE, O=DIRECCION GENERAL DE LA POLICIA".
+ * `expired` makes both certificates expired.
+ */
+export function createDnieCard(opts: { expired?: boolean } = {}): DnieTestCard {
+  const ca = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const caDer = issueCertificate({
+    subject: [
+      ['2.5.4.6', 'ES'],
+      ['2.5.4.10', 'DIRECCION GENERAL DE LA POLICIA'],
+      ['2.5.4.11', 'DNIE'],
+      ['2.5.4.3', 'AC DNIE 004'],
+    ],
+    publicKey: ca.publicKey,
+    signingKey: ca.privateKey,
+    ca: true,
+    notBefore: new Date(Date.now() - 5 * 365 * 86400_000),
+  });
+  const validity = opts.expired
+    ? {
+        notBefore: new Date(Date.now() - 6 * 365 * 86400_000),
+        notAfter: new Date(Date.now() - 86400_000),
+      }
+    : {};
+  const holder = (purpose: string): [string, string][] => [
+    ['2.5.4.6', 'ES'],
+    ['2.5.4.5', HOLDER.id],
+    ['2.5.4.4', HOLDER.surname],
+    ['2.5.4.42', HOLDER.givenName],
+    ['2.5.4.3', `${HOLDER.surname}, ${HOLDER.givenName} (${purpose})`],
+  ];
+  const issue = (purpose: string, keyUsage: number, extra: Partial<IssueOptions>) => {
+    const pair = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    return {
+      privateKey: pair.privateKey,
+      certDer: issueCertificate({
+        subject: holder(purpose),
+        publicKey: pair.publicKey,
+        issuer: { certDer: caDer, key: ca.privateKey },
+        keyUsage,
+        ...validity,
+        ...extra,
+      }),
+    };
+  };
+  return {
+    caDer,
+    firma: issue('FIRMA', x509.KeyUsageFlags.nonRepudiation, {
+      policies: ['2.16.724.1.2.2.2.3'],
+      qcSscd: true,
+    }),
+    autenticacion: issue('AUTENTICACIÓN', x509.KeyUsageFlags.digitalSignature, {
+      policies: ['2.16.724.1.2.2.2.4'],
+    }),
+  };
 }

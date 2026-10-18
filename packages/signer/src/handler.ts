@@ -34,6 +34,12 @@ import {
 import { AfirmaError, CANCELLED_TYPE, toAfirmaError } from './errors';
 import { type ExtraParams, isTrue, parseExtraParams } from './extra-params';
 import {
+  type CertificateFilters,
+  describeFilters,
+  matchingCertificates,
+  readCertificateFilters,
+} from './filters';
+import {
   detectFormatForSign,
   detectFormatForSignature,
   type FormatFamily,
@@ -102,7 +108,7 @@ export interface AfirmaHandlerOptions {
   /** Largest document accepted (default 50 MB). */
   maxDataBytes?: number;
   /** Where to log notable choices (never data, hashes or signatures). Default: silent. */
-  logger?: { info(msg: string, data?: unknown): void };
+  logger?: { info(msg: string, data?: unknown): void; warn?(msg: string, data?: unknown): void };
 }
 
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
@@ -148,6 +154,19 @@ function argString(args: unknown[], i: number, what: string): string | null {
   if (typeof v === 'string') return v;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
   throw AfirmaError.invalidParameter(`Parametro no valido: ${what}`);
+}
+
+/**
+ * Params read only for their certificate filters (selectCertificate, batches): anything but a
+ * well-formed Properties text is no params, never an error.
+ */
+function looseParams(args: unknown[], i: number): ExtraParams {
+  const v = args[i];
+  try {
+    return typeof v === 'string' ? parseExtraParams(v) : {};
+  } catch {
+    return {};
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -331,6 +350,66 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     return signingAlgorithm(requested, keep);
   }
 
+  const warn = (msg: string, data?: unknown) =>
+    options.logger?.warn ? options.logger.warn(msg, data) : options.logger?.info(msg, data);
+
+  /** The page's certificate filters (AutoFirma's `filters=`), or null. */
+  function filtersOf(call: AfirmaCall, params: ExtraParams): CertificateFilters | null {
+    const filters = readCertificateFilters(params, { warn });
+    if (filters)
+      options.logger?.info('AutoFirma: certificate filters', {
+        host: hostOf(call.origin),
+        method: call.method,
+        filters: describeFilters(filters),
+      });
+    return filters;
+  }
+
+  /**
+   * The certificate to use among the approved credential's (its signing certificate first, then
+   * the others still valid: the DNIe's AUTENTICACIÓN) that pass the page's filters. The
+   * filters only narrow them: the signing certificate whenever it passes. A signature can only
+   * use the signing certificate: when only another one passes, it is refused. Releases the
+   * identity (with the refusal) before throwing AutoFirma's "no certificate" error.
+   */
+  function filteredCertificate(
+    call: AfirmaCall,
+    identity: SignerIdentity,
+    filters: CertificateFilters | null,
+    use: 'select' | 'sign',
+  ): Buffer {
+    if (!filters) return identity.certificateDer;
+    const at = now();
+    const others = identity.otherCertificatesDer.filter((der) => {
+      try {
+        const x509 = new crypto.X509Certificate(der);
+        return at >= new Date(x509.validFrom) && at <= new Date(x509.validTo);
+      } catch {
+        return false;
+      }
+    });
+    const candidates = [identity.certificateDer, ...others];
+    const matching = matchingCertificates(filters, candidates, at);
+    const first = matching[0];
+    if (first === 0 || (first !== undefined && use === 'select')) {
+      if (first !== 0)
+        options.logger?.info('AutoFirma: the filters choose another certificate', {
+          host: hostOf(call.origin),
+          method: call.method,
+        });
+      return candidates[first] as Buffer;
+    }
+    const refusal = first === undefined ? 'no_match' : 'authentication_only';
+    warn('AutoFirma: the certificate filters refuse the approved certificate', {
+      host: hostOf(call.origin),
+      method: call.method,
+      refusal,
+      filters: describeFilters(filters),
+    });
+    identity.release(false, refusal);
+    throw refusal === 'no_match' ? AfirmaError.noCertificate() : AfirmaError.authenticationOnly();
+  }
+
   /** Asks the user; the caller must `identity.release()` when the operation ends. */
   async function approve(
     ctx: AfirmaHandlerContext,
@@ -421,6 +500,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     },
   ): Promise<{ args: unknown[]; format: string }> {
     const params = parseExtraParams(input.params);
+    const filters = filtersOf(call, params);
     const spec: FormatSpec = parseFormat(input.format);
     const requestedFormat = spec.requested;
 
@@ -521,6 +601,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       documents: [document],
       verifiable,
     });
+    filteredCertificate(call, identity, filters, 'sign');
 
     const signed = await using(identity, () => {
       const algorithm = resolveAlgorithm(algorithmName, identity.keyType);
@@ -682,6 +763,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     call: AfirmaCall,
     ctx: AfirmaHandlerContext,
   ): Promise<unknown[]> {
+    const filters = filtersOf(call, looseParams(call.args, 0));
     const { identity } = await approve(ctx, {
       method: 'selectCertificate',
       format: '',
@@ -691,8 +773,9 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       documents: [],
       verifiable: false,
     });
+    const certificate = filteredCertificate(call, identity, filters, 'select');
     identity.release(true);
-    return [toBase64(identity.certificateDer)];
+    return [toBase64(certificate)];
   }
 
   async function batchOperation(call: AfirmaCall, ctx: AfirmaHandlerContext): Promise<unknown[]> {
@@ -703,6 +786,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     const preUrl = argString(call.args, 1, 'batchPreSignerUrl');
     const postUrl = argString(call.args, 2, 'batchPostSignerUrl');
     const local = call.args[5] === true;
+    const filters = filtersOf(call, looseParams(call.args, 3));
     const n = batch.singlesigns.length;
     if (!local && (!preUrl || !postUrl)) {
       throw AfirmaError.invalidParameter('No se han indicado los servicios de firma por lotes');
@@ -731,6 +815,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       verifiable: false,
       signatures: n,
     });
+    filteredCertificate(call, identity, filters, 'sign');
     const result: BatchResult = await using(identity, () => {
       return local
         ? localBatch(call, batch, stopOnError, identity)
@@ -762,6 +847,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     if (!preUrl || !postUrl) {
       throw AfirmaError.invalidParameter('No se han indicado los servicios de firma por lotes');
     }
+    const filters = filtersOf(call, looseParams(call.args, 3));
     if (batch.signs.length > 500)
       throw AfirmaError.invalidParameter('Lote de firma demasiado grande');
     // Reject an unsupported algorithm before the user is asked to approve.
@@ -787,6 +873,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       verifiable: false,
       signatures: n,
     });
+    filteredCertificate(call, identity, filters, 'sign');
     const result = await using(identity, () =>
       xmlBatchSign({
         batch: bytes,

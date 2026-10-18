@@ -168,6 +168,55 @@ describe('DNIe signatures with the phone', () => {
     expect(seen).not.toContain(CAN);
   });
 
+  it("hands over the card's other certificate and explains a refusal by the site's filters", async () => {
+    const { relay, app: a, procedureId } = await setup();
+    const other = crypto.randomBytes(240);
+    const first = a.services.browser.approveSignature(procedureId, summary);
+    await typeUnlock(a, procedureId);
+    await a.waitFor(() => a.services.companion!.status().state === 'waiting');
+    let sendOther = true;
+    const { received } = phone(
+      relay,
+      (await a.invoke('companion.status')).link as string,
+      (m, send) => {
+        if (m.type !== 'sign.request') return;
+        if (sendOther)
+          send({
+            type: 'sign.otherCertificate',
+            requestId: m.requestId,
+            certificate: other.toString('base64'),
+          });
+        send({
+          type: 'sign.certificate',
+          requestId: m.requestId,
+          certificates: [CERT.toString('base64')],
+        });
+      },
+    );
+    const key = (await first) as ExternalSigningKey;
+    expect(key.otherCertificates?.map((c) => Buffer.from(c).equals(other))).toEqual([true]);
+    // The signer refuses it: only AUTENTICACIÓN passes the site's filters.
+    key.release(false, 'authentication_only');
+    await a.waitFor(() => received.some((m) => m.type === 'sign.cancel'));
+    expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
+      type: 'notice',
+      level: 'warning',
+      text: t('es', 'dnieError_authentication_only', { host: 'sede.example.gob.es' }),
+    });
+
+    // An older phone sends only the certificate.
+    sendOther = false;
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    // The CAN stays; the PIN is saved only once the card has signed with it.
+    await typeUnlock(a, procedureId, { pin: PIN });
+    const second = (await approval) as ExternalSigningKey;
+    expect(second.otherCertificates).toBeUndefined();
+    second.release(false, 'no_match');
+    expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
+      text: t('es', 'dnieError_filter_no_match', { host: 'sede.example.gob.es' }),
+    });
+  });
+
   it('cancels on the desktop, and tells the phone', async () => {
     const { relay, app: a, procedureId } = await setup();
     const approval = a.services.browser.approveSignature(procedureId, summary);

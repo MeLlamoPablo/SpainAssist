@@ -18,6 +18,7 @@ fun describe(message: DesktopToPhone): String = when (message) {
 fun describe(message: PhoneToDesktop): String = when (message) {
     is SignProgress -> "sign.progress ${message.requestId} ${message.stage.name}"
     is SignCertificate -> "sign.certificate ${message.requestId} count=${message.certificates.size}"
+    is SignOtherCertificate -> "sign.otherCertificate ${message.requestId}"
     is SignSignature -> "sign.signature ${message.requestId} seq=${message.seq}"
     // The message is ours ("bad CAN"), never request data.
     is SignError -> "sign.error ${message.requestId} code=${message.code.name}" + (message.message?.let { " ($it)" } ?: "")

@@ -17,6 +17,7 @@ import es.spainassist.firma.protocol.PhoneToDesktop
 import es.spainassist.firma.protocol.Purpose
 import es.spainassist.firma.protocol.SignCancel
 import es.spainassist.firma.protocol.SignCertificate
+import es.spainassist.firma.protocol.SignOtherCertificate
 import es.spainassist.firma.protocol.SignDone
 import es.spainassist.firma.protocol.SignError
 import es.spainassist.firma.protocol.SignProgress
@@ -331,6 +332,9 @@ class FirmaController(
         val unlocks = Channel<SignUnlock>(Channel.UNLIMITED)
         var progress: Stage = Stage.Reviewing
         var certificates: List<String>? = null
+
+        /** The card's other certificate (Base64 DER), sent before [certificates]. */
+        var otherCertificate: String? = null
 
         /** What the phone asked the desktop for and still waits for (sent again after a reconnect). */
         var waiting: SignNeed? = null
@@ -653,6 +657,9 @@ class FirmaController(
                     log("card opened (${certificates.size} certificates)")
                     if (first == null) {
                         r.certificates = certificates
+                        // First, so that the desktop has it when the certificate arrives.
+                        r.otherCertificate = opened.otherCertificate?.let { Base64Std.encode(it) }
+                        r.otherCertificate?.let { send(SignOtherCertificate(r.request.requestId, it)) }
                         send(SignCertificate(r.request.requestId, certificates))
                     } else if (first.first() != certificates.first()) {
                         log("not the card read first")
@@ -814,6 +821,7 @@ class FirmaController(
         }
         if (r.finished) return
         send(SignProgress(id, r.progress))
+        r.otherCertificate?.let { send(SignOtherCertificate(id, it)) }
         r.certificates?.let { send(SignCertificate(id, it)) }
         for ((seq, signature) in r.signatures) send(SignSignature(id, seq, signature))
         r.waiting?.let(::send)

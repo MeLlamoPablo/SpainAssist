@@ -4,7 +4,12 @@
  * a `KeySigner`, so every format works with both.
  */
 import crypto, { type KeyObject } from 'node:crypto';
-import type { CertificateInfo, ExternalSigningKey, SignatureBinding } from '@sa/shared';
+import type {
+  CertificateInfo,
+  CertificateRefusal,
+  ExternalSigningKey,
+  SignatureBinding,
+} from '@sa/shared';
 import type { ResolvedAlgorithm } from './algorithms';
 import { certificateInfo } from './certificate';
 import { AfirmaError } from './errors';
@@ -30,10 +35,15 @@ export interface SignerIdentity {
   certificateDer: Buffer;
   /** Leaf first. */
   chainDer: Buffer[];
+  /**
+   * The credential's other certificates (DER), which this identity can't sign with: the DNIe's
+   * AUTENTICACIÓN. Only for the site's certificate filters.
+   */
+  otherCertificatesDer: Buffer[];
   info: CertificateInfo;
   signer: KeySigner;
-  /** Call once the operation ends, signed or not. */
-  release(ok: boolean): void;
+  /** Call once the operation ends, signed or not (`refusal`: the filters refused it). */
+  release(ok: boolean, refusal?: CertificateRefusal): void;
 }
 
 export function keyObjectSigner(key: KeyObject, keyType: KeyType): KeySigner {
@@ -49,6 +59,7 @@ export function p12Identity(identity: P12Identity): SignerIdentity {
     keyType: identity.keyType,
     certificateDer: identity.certificateDer,
     chainDer: identity.chainDer,
+    otherCertificatesDer: [],
     info: identity.info,
     signer: keyObjectSigner(identity.privateKey, identity.keyType),
     release: () => {},
@@ -73,12 +84,13 @@ export function externalIdentity(key: ExternalSigningKey): SignerIdentity {
     keyType,
     certificateDer,
     chainDer,
+    otherCertificatesDer: (key.otherCertificates ?? []).map((c) => Buffer.from(c)),
     info: certificateInfo(certificateDer),
     signer: {
       keyType,
       sign: async (data, algorithm, options) =>
         Buffer.from(await key.sign(data, algorithm.digest, options?.binding)),
     },
-    release: (ok) => key.release(ok),
+    release: (ok, refusal) => key.release(ok, refusal),
   };
 }

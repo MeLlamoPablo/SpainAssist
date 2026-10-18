@@ -13,6 +13,7 @@ import { DniAccessNumber, DniePin } from './vault';
  *   sign.request (with can, pin) ─▶ phone shows what and for whom, the user approves and holds
  *                   the card to the phone
  *   ◀─ sign.progress (reviewing → card → reading → signing), any number of times
+ *   ◀─ sign.otherCertificate (the card's other certificate, from newer phones; optional)
  *   ◀─ sign.certificate (read from the card, for `purpose: "document"` and `"certificate"`)
  *   sign.toBeSigned (seq 1..n) ─▶ ◀─ sign.signature (same seq), while the card stays near
  *   ◀─ sign.need, when the card refused the CAN or the PIN: the desktop asks the user and
@@ -260,6 +261,20 @@ export const CompanionSignCertificate = z.strictObject({
 });
 export type CompanionSignCertificate = z.infer<typeof CompanionSignCertificate>;
 
+/**
+ * The card's other certificate (DER leaf): FIRMA when the request reads AUTENTICACIÓN (login),
+ * AUTENTICACIÓN otherwise. Only for the site's certificate filters; nothing signs with it. The
+ * phone sends it just before `sign.certificate` (again after a reconnect). It is a message of
+ * its own so that desktops without it drop it ("companion message rejected") and go on: they
+ * accept no unknown fields in `sign.certificate`. Phones without it never send it.
+ */
+export const CompanionSignOtherCertificate = z.strictObject({
+  type: z.literal('sign.otherCertificate'),
+  requestId: RequestId,
+  certificate: Base64(16 * 1024),
+});
+export type CompanionSignOtherCertificate = z.infer<typeof CompanionSignOtherCertificate>;
+
 export const CompanionSignature = z.strictObject({
   type: z.literal('sign.signature'),
   requestId: RequestId,
@@ -330,6 +345,7 @@ export type CompanionSignNeed = z.infer<typeof CompanionSignNeed>;
 
 export const PhoneToDesktop = z.discriminatedUnion('type', [
   CompanionSignProgress,
+  CompanionSignOtherCertificate,
   CompanionSignCertificate,
   CompanionSignature,
   CompanionSignError,

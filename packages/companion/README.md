@@ -71,6 +71,8 @@ desktop                                            phone
 sign.request (documents, verifiable, can, pin?) ─▶ shows what, for whom; user approves and
                                                    holds the card
          ◀────────────────────────────────────    sign.progress reviewing / card / reading
+         ◀────────────────────────────────────    sign.otherCertificate (the card's other
+                                                   certificate; newer phones only)
          ◀────────────────────────────────────    sign.certificate (read from the card)
 sign.toBeSigned seq 1 (+ check) ───────────────▶   checks the binding, card signs
          ◀────────────────────────────────────    sign.need, if the card refused the CAN or
@@ -92,12 +94,21 @@ sign.done ───────────────────────�
   XAdES, triphase formats, precalculated hashes, cosignatures and countersignatures are not
   verifiable: the phone says so before the user approves. Documents over 12 MB are sent without
   their bytes, which also makes the request not verifiable.
+- **Both certificates.** Opening the card with the CAN gives both of its certificates, with no
+  PIN (jmulticard reads them all while it opens the card). Besides the request's one
+  (`sign.certificate`), the phone sends the other in `sign.otherCertificate`, just before it:
+  AUTENTICACIÓN for documents and certificate reads, FIRMA for logins. `PhoneKey.otherCertificate`
+  holds it, and the desktop hands AUTENTICACIÓN to `@sa/signer` for the site's certificate
+  filters (AutoFirma's `filters=`). Nothing signs with it: each request signs only with its
+  purpose's key. It is a message of its own, not a field of `sign.certificate`, because
+  desktops accept no unknown fields there: an older desktop drops `sign.otherCertificate`
+  ("companion message rejected") and goes on, and an older phone never sends it.
 - **The site.** `official` says whether the origin is on the app's list of official
   administration sites (`credentialAllowedOn('dnie', origin)`). The phone shows the host with a
   lock, or warns that it doesn't recognise the site; a request without the field gets no warning.
 - **Reconnects.** `PhoneSigner` keeps the request and every unanswered `sign.toBeSigned` in an
   outbox, and sends them again when a new session starts. The phone sends its last progress, the
-  certificate and every signature again. Both sides ignore duplicates (same request id, same seq),
+  other certificate, the certificate and every signature again. Both sides ignore duplicates (same request id, same seq),
   so the card never signs a blob twice. A certificate that changes after a reconnect ends the
   request with `wrong_card`.
 - **The CAN and the PIN**. The user types them on the desktop. `PhoneSignRequest.can`

@@ -13,6 +13,7 @@ import {
 } from '@sa/companion';
 import {
   type AfirmaSignatureSummary,
+  type CertificateRefusal,
   COMPANION_STALLED_MS,
   type CompanionAlgorithm,
   type CompanionCheck,
@@ -105,6 +106,12 @@ const NOTICES: Partial<Record<RefusalCode, StringKey>> = {
   relay_refused: 'dnieError_relay_refused',
   phone_outdated: 'dnieError_phone_outdated',
   desktop_outdated: 'dnieError_desktop_outdated',
+};
+
+/** What the user reads when the site's certificate filters refuse the DNIe's certificate. */
+const REFUSAL_NOTICES: Record<CertificateRefusal, StringKey> = {
+  no_match: 'dnieError_filter_no_match',
+  authentication_only: 'dnieError_authentication_only',
 };
 
 /** Why a DNIe login wasn't approved, for the agent. */
@@ -459,6 +466,8 @@ export class CompanionService {
       kind: 'external',
       credentialId: credential.id,
       certificates: dnieChain(key.certificates, 'signature'),
+      // The card's AUTENTICACIÓN, for the site's certificate filters (newer phones send it).
+      ...(!login && key.otherCertificate ? { otherCertificates: [key.otherCertificate] } : {}),
       sign: (data, digest, binding) =>
         key.sign(data, ALGORITHMS[digest], toCheck(binding), !!login).then(
           async (signature) => {
@@ -474,13 +483,23 @@ export class CompanionService {
             throw err;
           },
         ),
-      release: (ok) => {
+      release: (ok, refusal) => {
         if (released) return;
         released = true;
         key.finish(ok);
         settle(abort.signal.aborted ? 'cancelled' : ok ? 'signed' : 'failed');
+        if (refusal)
+          deps.logger.info('dnie certificate refused by the site filters', {
+            procedureId,
+            host,
+            refusal,
+          });
         if (!ok && !abort.signal.aborted)
-          deps.procedures.addNotice(procedureId, 'warning', t(lang, 'dnieError_failed'));
+          deps.procedures.addNotice(
+            procedureId,
+            'warning',
+            refusal ? t(lang, REFUSAL_NOTICES[refusal], { host }) : t(lang, 'dnieError_failed'),
+          );
       },
     };
   }
