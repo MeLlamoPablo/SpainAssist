@@ -53,7 +53,7 @@ cd apps/mobile
 ./gradlew :shared:testAndroidHostTest          # channel vectors, bindings, controller (JVM)
 ./gradlew :shared:compileKotlinIosSimulatorArm64  # the common code still builds for iOS
 ./gradlew :androidApp:assembleDebug            # es.spainassist.firma.debug, ws:// allowed
-./gradlew :androidApp:assembleRelease          # R8, wss:// only (sign it for distribution)
+./gradlew :androidApp:assembleRelease          # R8, wss:// only, unsigned (see "Releasing")
 ```
 
 - **Interop with the desktop**, without a phone or a card:
@@ -78,9 +78,64 @@ cd apps/mobile
 
 ## Releasing
 
-- **Licence.** Every APK must come with its complete source (see "Licence" below).
-- **App Links.** Set `ANDROID_CERT_SHA256` on the relay to the Play App Signing and upload key
-  fingerprints. Without them, links open the relay's `/p` page, which offers "Abrir en la app".
+Google Play with Play App Signing: Google keeps the app signing key and signs what users
+install. We sign each bundle with our **upload key**, which Play Console can reset if it's lost.
+
+**Once: the upload key.** Create it outside the repo and keep it (and its passwords) in the
+password manager. Never commit a keystore:
+
+```sh
+keytool -genkeypair -v -keystore ~/spainassist-upload.jks -alias upload \
+  -keyalg RSA -keysize 4096 -validity 9125 -dname "CN=Spain Assist"
+```
+
+Then add these repository secrets (Settings > Secrets and variables > Actions):
+
+| Secret | Value |
+| --- | --- |
+| `SA_UPLOAD_KEYSTORE_BASE64` | `base64 -i ~/spainassist-upload.jks \| pbcopy` |
+| `SA_UPLOAD_KEYSTORE_PASSWORD` | the keystore password |
+| `SA_UPLOAD_KEY_ALIAS` | `upload` |
+| `SA_UPLOAD_KEY_PASSWORD` | the key password (with `keytool`'s default PKCS12, the same as the keystore's) |
+
+**Signing and version in the build** (`androidApp/build.gradle.kts`). Nothing comes from the
+repo. Release builds are signed when `SA_UPLOAD_KEYSTORE` (a path to the .jks, or the .jks in
+base64), `SA_UPLOAD_KEYSTORE_PASSWORD`, `SA_UPLOAD_KEY_ALIAS` and `SA_UPLOAD_KEY_PASSWORD` are
+set, as environment variables or as the Gradle properties `saUploadKeystore`,
+`saUploadKeystorePassword`, `saUploadKeyAlias` and `saUploadKeyPassword`. With none of them,
+they are unsigned, as in CI; with only some, the build fails. The version is
+`-PappVersion=X.Y.Z` (or `SA_APP_VERSION`), and the versionCode X×10000 + Y×100 + Z (0.3.0 is
+300), unless `-PversionCode=N` (or `SA_VERSION_CODE`) sets it. It must be above 4, the last
+build numbered by hand; without a version, the build is 0.2.1 (4). Minor and patch stay below
+100.
+
+```sh
+SA_UPLOAD_KEYSTORE=~/spainassist-upload.jks SA_UPLOAD_KEYSTORE_PASSWORD=… SA_UPLOAD_KEY_ALIAS=upload \
+  SA_UPLOAD_KEY_PASSWORD=… ./gradlew :androidApp:bundleRelease -PappVersion=0.3.0
+```
+
+**Each release.** Tag a commit on `master` and push the tag:
+
+```sh
+git tag mobile-v0.3.0 && git push origin mobile-v0.3.0
+```
+
+`.github/workflows/mobile-release.yml` checks the tag and the secrets (it fails, naming the
+missing ones), builds `:androidApp:bundleRelease` with that version, checks the bundle is
+signed, and keeps `SpainAssist-X.Y.Z.aab` and R8's `mapping.txt` as the workflow artifact
+`android-bundle`. It doesn't upload to Play yet: upload the .aab in Play Console (Test and
+release > a track > Create new release) and the mapping file under App bundle explorer.
+
+- **Licence.** Every build must come with its complete source (see "Licence" below). The tag
+  is that source: `Licenses.SOURCE_URL` points at the public repo, so push the tag before
+  publishing the build, and never move or delete a released tag.
+- **App Links.** The Terraform variable `android_cert_sha256` (the relay's
+  `ANDROID_CERT_SHA256`) takes both SHA-256 fingerprints, comma-separated: the app signing
+  key's (Play Console > Test and release > App integrity > Play app signing) and the upload
+  key's (shown there too, or
+  `keytool -list -v -keystore ~/spainassist-upload.jks -alias upload | grep SHA256:`; the
+  workflow's "Check the signature" step prints it as well). Without them, links open the
+  relay's `/p` page, which offers "Abrir en la app".
 - **NFC.** The app requires `android.hardware.nfc`.
 
 ## The relay

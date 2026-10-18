@@ -1,11 +1,78 @@
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Base64
 import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+}
+
+/** A Gradle property (`-Pname=…` or `~/.gradle/gradle.properties`), else an environment variable. */
+fun setting(property: String, env: String): String? =
+    (providers.gradleProperty(property).orNull ?: providers.environmentVariable(env).orNull)?.takeIf { it.isNotBlank() }
+
+/**
+ * The version (README, "Releasing"): `-PappVersion=X.Y.Z` or `SA_APP_VERSION`, as the
+ * `mobile-vX.Y.Z` tag gives it. versionCode is X*10000 + Y*100 + Z unless `-PversionCode` or
+ * `SA_VERSION_CODE` sets it. Without them, the last values set by hand (0.2.1, 4).
+ */
+val appVersion = setting("appVersion", "SA_APP_VERSION")
+val appVersionCode: Int =
+    setting("versionCode", "SA_VERSION_CODE")?.let { it.toIntOrNull() ?: error("versionCode \"$it\" is not a number") }
+        ?: appVersion?.let { version ->
+            val parts = Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(version)?.destructured?.toList()?.map(String::toInt)
+                ?: error("appVersion \"$version\" is not X.Y.Z")
+            val (major, minor, patch) = parts
+            require(minor < 100 && patch < 100) { "appVersion $version: minor and patch must be below 100" }
+            major * 10000 + minor * 100 + patch
+        }
+        ?: 4
+// Builds 1 to 4 exist: Play refuses a versionCode it has seen, and installs refuse a downgrade.
+require(appVersion == null && appVersionCode == 4 || appVersionCode > 4) { "versionCode $appVersionCode must be above 4" }
+
+/**
+ * Release signing with the upload key (Play App Signing re-signs for users). Nothing comes from
+ * the repo: `SA_UPLOAD_KEYSTORE` (a path to the .jks, or the .jks in base64),
+ * `SA_UPLOAD_KEYSTORE_PASSWORD`, `SA_UPLOAD_KEY_ALIAS` and `SA_UPLOAD_KEY_PASSWORD`, or the
+ * Gradle properties `saUploadKeystore`, `saUploadKeystorePassword`, `saUploadKeyAlias` and
+ * `saUploadKeyPassword`. With none of them, release builds are unsigned.
+ */
+val uploadKeystore = setting("saUploadKeystore", "SA_UPLOAD_KEYSTORE")
+val uploadSecrets = mapOf(
+    "SA_UPLOAD_KEYSTORE_PASSWORD" to setting("saUploadKeystorePassword", "SA_UPLOAD_KEYSTORE_PASSWORD"),
+    "SA_UPLOAD_KEY_ALIAS" to setting("saUploadKeyAlias", "SA_UPLOAD_KEY_ALIAS"),
+    "SA_UPLOAD_KEY_PASSWORD" to setting("saUploadKeyPassword", "SA_UPLOAD_KEY_PASSWORD"),
+)
+if (uploadKeystore != null || uploadSecrets.values.any { it != null }) {
+    val missing = listOf("SA_UPLOAD_KEYSTORE").filter { uploadKeystore == null } + uploadSecrets.filterValues { it == null }.keys
+    require(missing.isEmpty()) { "Release signing is half set up: missing ${missing.joinToString()}" }
+}
+// A base64 keystore is written under build/ when a release is signed (decodeUploadKeystore).
+val uploadKeystoreBase64 = uploadKeystore?.takeUnless { file(it).isFile }?.also {
+    require(it.length > 100 && it.matches(Regex("""[A-Za-z0-9+/=\s]+"""))) { "SA_UPLOAD_KEYSTORE: no file at $it" }
+}
+val uploadKeystoreFile = uploadKeystore?.let {
+    if (uploadKeystoreBase64 == null) file(it) else layout.buildDirectory.file("upload-keystore/upload.jks").get().asFile
+}
+
+abstract class DecodeUploadKeystore : DefaultTask() {
+    @get:Input
+    abstract val base64: Property<String>
+
+    @get:OutputFile
+    abstract val keystore: RegularFileProperty
+
+    @TaskAction
+    fun decode() {
+        val bytes = try {
+            Base64.getDecoder().decode(base64.get().filterNot(Char::isWhitespace))
+        } catch (e: IllegalArgumentException) {
+            throw GradleException("SA_UPLOAD_KEYSTORE is not a .jks in base64", e)
+        }
+        keystore.get().asFile.writeBytes(bytes)
+    }
 }
 
 android {
@@ -16,13 +83,24 @@ android {
         applicationId = "es.spainassist.firma"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.2.1"
+        versionCode = appVersionCode
+        versionName = appVersion ?: "0.2.1"
         // The host of pairing links (App Links): the production relay.
         manifestPlaceholders["linkHost"] = "relay.spainassist.es"
     }
 
     buildFeatures { buildConfig = true }
+
+    signingConfigs {
+        if (uploadKeystoreFile != null) {
+            create("upload") {
+                storeFile = uploadKeystoreFile
+                storePassword = uploadSecrets.getValue("SA_UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias = uploadSecrets.getValue("SA_UPLOAD_KEY_ALIAS")
+                keyPassword = uploadSecrets.getValue("SA_UPLOAD_KEY_PASSWORD")
+            }
+        }
+    }
 
     buildTypes {
         debug {
@@ -32,6 +110,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("upload")
         }
     }
 
@@ -101,6 +180,15 @@ androidComponents {
         }
         variant.sources.assets?.addGeneratedSourceDirectory(notices, MergeGoogleNotices::outputDir)
     }
+}
+
+if (uploadKeystoreBase64 != null) {
+    val decode = tasks.register<DecodeUploadKeystore>("decodeUploadKeystore") {
+        base64.set(uploadKeystoreBase64)
+        keystore.set(uploadKeystoreFile)
+    }
+    // Every APK and bundle signing step comes after its validateSigning task.
+    tasks.matching { it.name.startsWith("validateSigning") }.configureEach { dependsOn(decode) }
 }
 
 dependencies {
