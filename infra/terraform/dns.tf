@@ -85,8 +85,8 @@ resource "aws_route53_record" "website_www" {
 }
 
 # E-mail on Google Workspace. The root's TXT set holds Google's domain verification and SPF
-# (Route 53 allows one TXT set per name). DKIM's key comes from the Admin console once Gmail
-# is active (Apps > Google Workspace > Gmail > Authenticate email).
+# (Route 53 allows one TXT set per name). DKIM's key comes from the Admin console (Apps >
+# Google Workspace > Gmail > Authenticate email, selector "google").
 resource "aws_route53_record" "mx" {
   zone_id = aws_route53_zone.main.zone_id
   name    = var.domain
@@ -104,6 +104,20 @@ resource "aws_route53_record" "root_txt" {
     "google-site-verification=O0XAvPSrUnLiXTYCiAroLUpj9kYthvy0iiAnTiMzsYs",
     "v=spf1 include:_spf.google.com ~all",
   ]
+}
+
+locals {
+  google_dkim = "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8lrxf8Fc9uZzAnS4XD1+wmsXoam0GGZFZGZsqfERi7xsxBXKfZ3UU9TceaJJYbjHBBpkuDcXZnvjtZOg4xxAiyC+QruLXwftK+K9pktk5obwqS4EARAGeQZpwpdNoIMG+zRB4FJ1XJ6txVOKuTjq6cxEsGpWbr/coz/4pUdI9hDJ+XVzgb/ggUGX5++lGaLuChljNlEjdccxagv1E+lV6hb44XrJI/BLceiSp7zJ/wp2+E/Ztg6OAjHJBcyg6r2LcEnl1vV+Xs8ayOHXmDKsoXKimWblDt0CtzrQlzh7lEklDrLubeAi7rSrveohdcYuOcYra72N8fNC6Aigy0OtLQIDAQAB"
+}
+
+# A TXT string holds at most 255 characters: Route 53 takes longer values as several quoted
+# strings in one record ("a""b"), which resolvers join back together.
+resource "aws_route53_record" "dkim" {
+  zone_id = aws_route53_zone.main.zone_id
+  name    = "google._domainkey.${var.domain}"
+  type    = "TXT"
+  ttl     = 3600
+  records = [join("\"\"", regexall(".{1,255}", local.google_dkim))]
 }
 
 # Report-only for now: tighten to p=quarantine once DKIM is on and mail flows.
