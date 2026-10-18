@@ -158,7 +158,7 @@ app's `VOTE_DECAY_END_DAYS`. So the deletion lives in the database and the clock
 the server.
 
 Entries carry `votes` (the net weight now, rounded). Agents vote with `feedback_vote`; the app
-sends those votes only when sharing learnings is on (flag and user setting).
+sends those votes only when the user's sharing setting is on.
 
 Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
 

@@ -167,16 +167,14 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
             </SectionCard>
           </div>
 
-          {info?.features.feedbackServer ? (
-            <SectionCard icon={Share2} title={t.learnings.title}>
-              <Switch
-                checked={settings.shareLearnings}
-                onCheckedChange={(shareLearnings) => void set({ shareLearnings })}
-                label={t.learnings.title}
-                description={t.learnings.body}
-              />
-            </SectionCard>
-          ) : null}
+          <SectionCard icon={Share2} title={t.learnings.title}>
+            <Switch
+              checked={settings.shareLearnings}
+              onCheckedChange={(shareLearnings) => void set({ shareLearnings })}
+              label={t.learnings.title}
+              description={t.learnings.body}
+            />
+          </SectionCard>
 
           {info?.features.errorReports ? (
             <SectionCard icon={Bug} title={t.errorReports.title}>

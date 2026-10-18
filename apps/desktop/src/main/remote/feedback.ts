@@ -39,7 +39,10 @@ export interface FeedbackInput {
 
 export interface FeedbackDeps {
   feedbackServerUrl?: string;
-  /** Sharing learnings is on (feature flag). Searching and rating them is always on. */
+  /**
+   * Sharing learnings is on (feature flag). Searching is always on; voting needs only the user's
+   * sharing setting.
+   */
   submitEnabled: boolean;
   /**
    * The user key (see UserKey), which the server checks before it accepts a learning or a vote,
@@ -207,7 +210,7 @@ export class FeedbackService {
     }
   }
 
-  /** Rates a learning; like sharing, needs the feature flag and the user's sharing setting. */
+  /** Rates a learning; needs the user's sharing setting and a user key. */
   async vote(params: { id: string; vote: FeedbackVote }): Promise<BridgeResults['feedback.vote']> {
     if (!this.deps.settings().shareLearnings) {
       return {

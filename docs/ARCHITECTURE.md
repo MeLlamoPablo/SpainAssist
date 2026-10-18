@@ -133,7 +133,7 @@ Packaged builds keep no scan images. Code: `apps/desktop/src/main/scanner/`. Res
 At the end of a procedure (or after friction) an agent can share a learning. It is scrubbed of PII
 twice on the device (patterns with checksums, and every value in the vault), then again on the
 server. Future agents search learnings and vote on the ones they used. Sharing is behind the
-`feedback-server` flag.
+`feedback-server` flag; voting only needs the user's sharing setting.
 
 ## 4. Users and our services
 
