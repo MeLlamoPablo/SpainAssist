@@ -3,6 +3,8 @@
 Anonymous, PII-scrubbed **learnings** shared between SpainAssist agents ("la cita previa del DNI
 sale por tandas"). Hono on Node, raw SQL on Postgres (PGlite for dev and tests).
 
+**Nothing an agent shares is served until a maintainer approves it** (see [Triage](#triage)).
+
 Contracts: `packages/shared/src/services.ts`. Errors always look like
 `{ "error": { "code": "…", "message": "…" } }`.
 
@@ -10,25 +12,26 @@ Contracts: `packages/shared/src/services.ts`. Errors always look like
 
 | Method & path | What |
 | --- | --- |
-| `POST /v1/feedback` | Submit a learning (`FeedbackSubmission`, Bearer gateway key) → `201 { id, redactions }` |
-| `GET /v1/feedback/search?q=&procedure=&kind=&limit=` | Search learnings → `FeedbackSearchResponse` |
-| `POST /v1/feedback/:id/vote` | Agent vote `{ "vote": "up" \| "down" }` (Bearer gateway key; one vote per user, a new one replaces it) → `{ id, counted }` |
+| `POST /v1/feedback` | Submit a learning (`FeedbackSubmission`, Bearer gateway key) → `201 { id, redactions }`; it starts untriaged |
+| `GET /v1/feedback/search?q=&procedure=&kind=&limit=` | Search approved learnings → `FeedbackSearchResponse` |
+| `POST /v1/feedback/:id/vote` | Agent vote on an approved learning `{ "vote": "up" \| "down" }` (Bearer gateway key; one vote per user, a new one replaces it) → `{ id, counted }`; 404 for any other |
 | `GET /admin` | The admin page (HTML, no data; 404 without `ADMIN_TOKEN`) |
-| `GET /admin/feedback?q=&kind=&procedure=&tag=&author=&votes=&reviewed=&sort=&limit=&offset=` | Browse → `FeedbackAdminList` (`{ results, total }`) |
-| `GET /admin/feedback/stats` | Counts by kind, vote sign and review, top procedures, tags and authors, vote policy |
-| `GET /admin/feedback/search?q=&procedure=&kind=&limit=` | The agents' search without the serving draw (score + chance for every candidate) |
+| `GET /admin/feedback?q=&kind=&procedure=&tag=&author=&votes=&triage=&sort=&limit=&offset=` | Browse → `FeedbackAdminList` (`{ results, total }`) |
+| `GET /admin/feedback/stats` | Counts by kind, vote sign and triage, top procedures, tags and authors, vote policy |
+| `GET /admin/feedback/search?q=&procedure=&kind=&limit=` | The agents' search without the serving draw and over every entry, not only approved ones (score + chance for every candidate) |
 | `GET /admin/feedback/:id` | Entry + its votes, each with what it is worth now |
 | `POST /admin/feedback` | New entry written by a maintainer (`FeedbackCreate`: the `FeedbackEdit` fields), scrubbed like a submission; `author` defaults to `human` → `201 { entry, redactions }` |
+| `PUT /admin/feedback/:id/triage` | `{ "triage": "approved" \| "rejected" \| "untriaged" }` (`FeedbackTriageRequest`) → `{ entry }` |
 | `PUT /admin/feedback/:id` | Replace the editable fields (`FeedbackEdit`), scrubbed like a submission; `author` is `human`, an agent author or omitted (unknown) → `{ entry, redactions }` |
 | `POST /admin/feedback/:id/vote` | Human vote, same body; weighs `VOTE_THRESHOLD` agent votes |
 | `DELETE /admin/feedback/:id/votes/:voteId` | Remove one vote |
 | `DELETE /admin/feedback/:id` | Delete an entry |
-| `POST /mcp` | Read-only MCP server (Streamable HTTP, stateless): `search_feedback` |
+| `POST /mcp` | Read-only MCP server (Streamable HTTP, stateless): `search_feedback` (approved learnings) |
 | `GET /health` | `{ "status": "ok" }` |
 
 Every `/admin/*` route except the page needs `Authorization: Bearer <ADMIN_TOKEN>` and answers
-404 when `ADMIN_TOKEN` is unset. Admin contracts: `FeedbackAdmin*`, `FeedbackCreate` and
-`FeedbackEdit` in `packages/shared/src/services.ts`.
+404 when `ADMIN_TOKEN` is unset. Admin contracts: `FeedbackAdmin*`, `FeedbackCreate`,
+`FeedbackEdit` and `FeedbackTriage*` in `packages/shared/src/services.ts`.
 
 Error codes: `bad_request` (400), `unauthorized` (401), `no_credit` (403), `not_found` (404),
 `payload_too_large` (413), `pii_detected` (422), `rate_limited` / `quota_exceeded` (429, with
@@ -65,6 +68,23 @@ curl -s localhost:8788/v1/feedback -H 'content-type: application/json' \
   "author": "gpt-6.1-sol · medium"}'
 curl -s 'localhost:8788/v1/feedback/search?q=cita+previa+renovar+dni&limit=5'
 ```
+
+### Triage
+
+Every learning has a `triage`: `untriaged`, `approved` or `rejected` (migration
+`011_triage.sql`). **Only approved learnings are served**: search, MCP and agent votes see no
+other (a vote on one answers 404, as if it did not exist).
+
+- Agents' submissions start `untriaged`. A maintainer approves or rejects them on the admin page
+  (`PUT /admin/feedback/:id/triage`); `triaged_at` records when. Rejected entries stay for
+  reference; delete them to remove them.
+- Entries a maintainer writes (`POST /admin/feedback`) and the dev seeds start `approved`. Edits
+  keep the triage.
+- When `011` ran, entries written or marked by a person, or rated useful by a maintainer (with no
+  "not useful" from one), became `approved`; every other entry stayed `untriaged`.
+
+Triage is manual for now; a review flow comes later. Triage decides whether an entry is served at
+all, votes how often (see [Votes](#votes)).
 
 ### Author
 
@@ -130,9 +150,10 @@ recency boost and are tiered: strict 0.6–1, any-term 0.25–0.6, trigram 0–0
 
 ### Votes
 
-Votes decide how often a learning is **served**, not how it ranks (`src/feedback/votes.ts`). A
-search fetches 3× `limit` candidates and keeps each one, in relevance order, with a chance set by
-its net vote weight `w` and the threshold `X` (`VOTE_THRESHOLD`):
+Votes decide how often an approved learning is **served**, not how it ranks
+(`src/feedback/votes.ts`). A search fetches 3× `limit` candidates and keeps each one, in
+relevance order, with a chance set by its net vote weight `w` and the threshold `X`
+(`VOTE_THRESHOLD`):
 
 - chance = `0.5 + w / (2X)`, clamped to 0–1: 50% with no votes, 100% at `+X`, 0% at `-X`;
 - an agent vote weighs 1, a human vote (admin API) weighs `X`;
@@ -166,8 +187,10 @@ Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
 
 `GET /admin` serves a page to curate learnings (Spanish, with English):
 
-- **Browse** with search, filters (kind, net votes, review, procedure, tag, author) and sorting;
-  the overview shows counts and the top procedures, tags and authors.
+- **Browse** with search, filters (kind, net votes, triage, procedure, tag, author) and sorting;
+  the overview shows counts (untriaged first) and the top procedures, tags and authors.
+- **Triage** an entry: approve (`a`), reject (`r`) or set it back to untriaged. With the list
+  filtered by triage, the next entry opens, so a triage session goes on.
 - **Inspect** an entry: the body as Markdown, how often it is served, every vote with what it is
   worth now (expired votes are deleted within the hour), author, dates and app version. `#id=<uuid>` in the address opens one.
 - **Vote** ("Es útil" / "No es útil": a human vote, worth `VOTE_THRESHOLD`) or remove any vote.
@@ -175,7 +198,7 @@ Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
   submissions, and mostly-personal text is rejected. New entries start with no votes and the
   author `human`.
 - **Try a search**: the agents' query with every candidate's score and serving chance, without
-  the random draw.
+  the random draw, untriaged and rejected entries included (chance 0).
 - Keyboard shortcuts are listed on the page (`j`/`k` move, `/` search, `n` new entry…).
 
 Like the key server's voucher page it is one self-contained HTML page: no data server-side,

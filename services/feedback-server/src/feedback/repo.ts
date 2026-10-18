@@ -1,4 +1,4 @@
-import type { FeedbackEntry, FeedbackKind, FeedbackSearchQuery } from '@sa/shared';
+import type { FeedbackEntry, FeedbackKind, FeedbackSearchQuery, FeedbackTriage } from '@sa/shared';
 import type { Db } from '../db/types';
 import { type Scored, type SearchSpec, tieredSearch } from '../search';
 import { type CastVote, serveChance, type VotePolicy, type Voter, voteWeight } from './votes';
@@ -18,7 +18,12 @@ export interface NewFeedback {
   author?: string;
   /** Only for seeds/imports; defaults to now(). */
   createdAt?: Date;
+  /** Defaults to untriaged (never served): submissions wait for a maintainer. */
+  triage?: FeedbackTriage;
 }
+
+/** Only approved entries are served to agents or take their votes. */
+const SERVED = "t.triage = 'approved'";
 
 /** How votes are weighed, and "now" (ms) for their decay. */
 export interface VoteContext {
@@ -73,8 +78,9 @@ export async function insertFeedback(db: Db, f: NewFeedback): Promise<string> {
   const { rows } = await db.query<{ id: string }>(
     `INSERT INTO feedback
        (procedure, administration, region, kind, title, body, tags, urls, app_version, author,
-        created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, coalesce($11::timestamptz, now()))
+        created_at, triage, triaged_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, coalesce($11::timestamptz, now()),
+             coalesce($12, 'untriaged'), CASE WHEN $12::text IS NULL THEN NULL ELSE now() END)
      RETURNING id::text AS id`,
     [
       f.procedure,
@@ -88,14 +94,15 @@ export async function insertFeedback(db: Db, f: NewFeedback): Promise<string> {
       f.appVersion ?? null,
       f.author ?? null,
       f.createdAt?.toISOString() ?? null,
+      f.triage ?? null,
     ],
   );
   return rows[0]!.id;
 }
 
 /**
- * Searches, then serves each hit with the chance its votes give it (see votes.ts), in relevance
- * order. `random` returns a number in [0, 1).
+ * Searches approved entries, then serves each hit with the chance its votes give it (see
+ * votes.ts), in relevance order. `random` returns a number in [0, 1).
  */
 export async function searchFeedback(
   db: Db,
@@ -103,7 +110,7 @@ export async function searchFeedback(
   votes: VoteContext,
   random: () => number = Math.random,
 ): Promise<FeedbackEntry[]> {
-  const rows = await searchCandidates(db, query, query.limit * CANDIDATES_PER_RESULT);
+  const rows = await searchCandidates(db, query, query.limit * CANDIDATES_PER_RESULT, true);
   const weights = await voteWeights(
     db,
     rows.map((r) => r.id),
@@ -119,18 +126,22 @@ export async function searchFeedback(
   return served;
 }
 
-/** Search hits in relevance order, before votes and the serving draw. */
+/**
+ * Search hits in relevance order, before votes and the serving draw; only approved entries when
+ * `servedOnly` (agents), every entry otherwise (the admin page).
+ */
 export function searchCandidates(
   db: Db,
   query: FeedbackSearchQuery,
   limit: number,
+  servedOnly: boolean,
 ): Promise<Scored<Row>[]> {
   const spec: SearchSpec = {
     table: 'feedback',
     columns: COLUMNS,
     key: 'id',
     filters: (param) => {
-      const where: string[] = [];
+      const where: string[] = servedOnly ? [SERVED] : [];
       if (query.procedure) {
         const $ = param(query.procedure);
         // Fuzzy procedure filter: same words (stemmed, accent-insensitive) or a similar name.
@@ -167,9 +178,9 @@ export async function addVote(
 }
 
 /**
- * Records a user's agent vote: one per user and entry. A different vote replaces the earlier one
+ * Records a user's agent vote on an approved entry: one per user and entry. A different vote replaces the earlier one
  * (and restarts its fading). True when the vote was stored, changed or renewed; false when the
- * user had already cast this vote and it still counts, or the entry does not exist. A vote cast
+ * user had already cast this vote and it still counts, or the entry is not served. A vote cast
  * at `expiredAt` or before no longer counts (and the next purge deletes it): the same vote again
  * renews it, as if it had been deleted already.
  */
@@ -183,7 +194,7 @@ export async function castVote(
   if (!UUID_RE.test(id)) return false;
   const { rows } = await db.query(
     `INSERT INTO feedback_votes (feedback_id, value, voter, user_id)
-     SELECT id, $2, 'agent', $3 FROM feedback WHERE id = $1::uuid
+     SELECT id, $2, 'agent', $3 FROM feedback t WHERE id = $1::uuid AND ${SERVED}
      ON CONFLICT (feedback_id, user_id) WHERE user_id IS NOT NULL
      DO UPDATE SET value = EXCLUDED.value, created_at = now()
        WHERE feedback_votes.value <> EXCLUDED.value OR feedback_votes.created_at <= $4::timestamptz
@@ -193,9 +204,12 @@ export async function castVote(
   return rows.length > 0;
 }
 
-export async function feedbackExists(db: Db, id: string): Promise<boolean> {
+/** Whether an entry exists and is served to agents (approved). */
+export async function feedbackServed(db: Db, id: string): Promise<boolean> {
   if (!UUID_RE.test(id)) return false;
-  const { rows } = await db.query('SELECT 1 FROM feedback WHERE id = $1::uuid', [id]);
+  const { rows } = await db.query(`SELECT 1 FROM feedback t WHERE id = $1::uuid AND ${SERVED}`, [
+    id,
+  ]);
   return rows.length > 0;
 }
 

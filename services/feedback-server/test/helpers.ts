@@ -72,6 +72,12 @@ export const submission = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/** Approves an entry (as a maintainer triaging it), so agents get it and can vote on it. */
+export async function approve(db: Db, id: string): Promise<string> {
+  await db.query("UPDATE feedback SET triage = 'approved', triaged_at = now() WHERE id = $1", [id]);
+  return id;
+}
+
 export async function truncate(db: Db): Promise<void> {
   await db.exec('TRUNCATE feedback CASCADE;');
 }

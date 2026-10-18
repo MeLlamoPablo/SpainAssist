@@ -5,7 +5,16 @@ import type { Db } from '../src/db/types';
 import { addVote } from '../src/feedback/repo';
 import { purgeExpiredVotes, voteExpiry } from '../src/feedback/retention';
 import { DEFAULT_VOTE_POLICY, decayFactor } from '../src/feedback/votes';
-import { ID_SECRET, makeApp, makeDb, postJson, submission, truncate, USER_KEY } from './helpers';
+import {
+  approve,
+  ID_SECRET,
+  makeApp,
+  makeDb,
+  postJson,
+  submission,
+  truncate,
+  USER_KEY,
+} from './helpers';
 
 const policy = DEFAULT_VOTE_POLICY; // decay from day 90 to day 365
 const DAY = 86_400_000;
@@ -20,7 +29,7 @@ beforeEach(() => truncate(db));
 
 async function create(app: ReturnType<typeof makeApp>) {
   const res = await postJson(app, '/v1/feedback', submission());
-  return FeedbackSubmitResponse.parse(await res.json()).id;
+  return approve(db, FeedbackSubmitResponse.parse(await res.json()).id);
 }
 
 async function vote(app: ReturnType<typeof makeApp>, id: string, v: 'up' | 'down', key = USER_KEY) {

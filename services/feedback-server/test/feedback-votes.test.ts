@@ -10,7 +10,7 @@ import {
   serveChance,
   voteWeight,
 } from '../src/feedback/votes';
-import { ID_SECRET, makeApp, makeDb, postJson, submission, truncate } from './helpers';
+import { approve, ID_SECRET, makeApp, makeDb, postJson, submission, truncate } from './helpers';
 
 const policy = DEFAULT_VOTE_POLICY; // threshold 5, decay from day 90 to day 365
 const DAY = 86_400_000;
@@ -25,7 +25,7 @@ beforeEach(() => truncate(db));
 
 async function create(app: ReturnType<typeof makeApp>, overrides: Record<string, unknown> = {}) {
   const res = await postJson(app, '/v1/feedback', submission(overrides));
-  return FeedbackSubmitResponse.parse(await res.json()).id;
+  return approve(db, FeedbackSubmitResponse.parse(await res.json()).id);
 }
 
 async function search(app: ReturnType<typeof makeApp>, q = 'cita previa', limit = 8) {

@@ -352,7 +352,14 @@ export type FeedbackVoteResponse = z.infer<typeof FeedbackVoteResponse>;
 export const FeedbackVoter = z.enum(['agent', 'human']);
 export type FeedbackVoter = z.infer<typeof FeedbackVoter>;
 
-/** GET /admin/feedback?q=&kind=&procedure=&tag=&author=&votes=&reviewed=&sort=&limit=&offset= */
+/**
+ * A maintainer's decision on an entry. Submissions start `untriaged`; only `approved` entries are
+ * served (search, MCP) or take agent votes. Entries maintainers write start `approved`.
+ */
+export const FeedbackTriage = z.enum(['untriaged', 'approved', 'rejected']);
+export type FeedbackTriage = z.infer<typeof FeedbackTriage>;
+
+/** GET /admin/feedback?q=&kind=&procedure=&tag=&author=&votes=&triage=&sort=&limit=&offset= */
 export const FeedbackAdminListQuery = z.object({
   /** Words in any text field (stemmed, accent-insensitive), a substring, or an id prefix. */
   q: z.string().trim().max(300).optional(),
@@ -364,8 +371,7 @@ export const FeedbackAdminListQuery = z.object({
   author: z.string().trim().max(120).optional(),
   /** Net vote weight now: above 0, below 0, or exactly 0 (including no votes). */
   votes: z.enum(['up', 'down', 'neutral']).optional(),
-  /** Whether a human (admin) has voted on it. */
-  reviewed: z.enum(['yes', 'no']).optional(),
+  triage: FeedbackTriage.optional(),
   sort: z.enum(['newest', 'oldest', 'votes', 'edited']).default('newest'),
   limit: z.coerce.number().int().min(1).max(500).default(50),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
@@ -376,7 +382,10 @@ export const FeedbackAdminEntry = FeedbackEntry.extend({
   appVersion: z.string().optional(),
   /** Last admin edit. */
   updatedAt: z.string().optional(),
-  /** Chance (0-1) that a search returning it serves it, from `votes`. */
+  triage: FeedbackTriage,
+  /** When a maintainer last triaged it (absent: never). */
+  triagedAt: z.string().optional(),
+  /** Chance (0-1) that a search returning it serves it, from `votes`; 0 unless approved. */
   chance: z.number(),
   /** Raw vote counts (before weights and decay). */
   upVotes: z.number().int().nonnegative(),
@@ -428,6 +437,13 @@ export const FeedbackCreate = FeedbackEdit.extend({
 });
 export type FeedbackCreate = z.infer<typeof FeedbackCreate>;
 
+/** PUT /admin/feedback/:id/triage → `{ entry }` (`FeedbackTriageResponse`). */
+export const FeedbackTriageRequest = z.object({ triage: FeedbackTriage });
+export type FeedbackTriageRequest = z.infer<typeof FeedbackTriageRequest>;
+
+export const FeedbackTriageResponse = z.object({ entry: FeedbackAdminEntry });
+export type FeedbackTriageResponse = z.infer<typeof FeedbackTriageResponse>;
+
 /** Answer to PUT /admin/feedback/:id (200) and POST /admin/feedback (201). */
 export const FeedbackEditResponse = z.object({
   entry: FeedbackAdminEntry,
@@ -447,8 +463,7 @@ export const FeedbackAdminStats = z.object({
     down: z.number().int().nonnegative(),
     neutral: z.number().int().nonnegative(),
   }),
-  /** Entries with at least one human vote. */
-  reviewed: z.number().int().nonnegative(),
+  triage: z.record(FeedbackTriage, z.number().int().nonnegative()),
   /** Most common procedures, tags and authors, most frequent first. */
   procedures: z.array(FacetCount),
   tags: z.array(FacetCount),

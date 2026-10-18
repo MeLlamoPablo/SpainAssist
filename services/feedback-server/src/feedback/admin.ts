@@ -7,6 +7,7 @@ import type {
   FeedbackAdminVote,
   FeedbackKind,
   FeedbackSearchQuery,
+  FeedbackTriage,
 } from '@sa/shared';
 import type { Db } from '../db/types';
 import {
@@ -25,6 +26,8 @@ import { decayFactor, serveChance, type Voter } from './votes';
 interface AdminRow extends Row {
   app_version: string | null;
   updated_at: Date | string | null;
+  triage: FeedbackTriage;
+  triaged_at: Date | string | null;
   weight: number;
   up_votes: number;
   down_votes: number;
@@ -65,7 +68,7 @@ class Query {
   }
 }
 
-const ADMIN_COLUMNS = `${COLUMNS}, t.app_version, t.updated_at,
+const ADMIN_COLUMNS = `${COLUMNS}, t.app_version, t.updated_at, t.triage, t.triaged_at,
   w.weight, w.up_votes, w.down_votes, w.human_votes`;
 
 function toAdminEntry(row: AdminRow, ctx: VoteContext, score?: number): FeedbackAdminEntry {
@@ -74,7 +77,10 @@ function toAdminEntry(row: AdminRow, ctx: VoteContext, score?: number): Feedback
     ...toEntry(row, weight, score),
     ...(row.app_version ? { appVersion: row.app_version } : {}),
     ...(row.updated_at ? { updatedAt: new Date(row.updated_at).toISOString() } : {}),
-    chance: Math.round(serveChance(weight, ctx.policy) * 1000) / 1000,
+    triage: row.triage,
+    ...(row.triaged_at ? { triagedAt: new Date(row.triaged_at).toISOString() } : {}),
+    chance:
+      row.triage === 'approved' ? Math.round(serveChance(weight, ctx.policy) * 1000) / 1000 : 0,
     upVotes: Number(row.up_votes),
     downVotes: Number(row.down_votes),
     humanVotes: Number(row.human_votes),
@@ -110,8 +116,7 @@ function where(q: Query, query: FeedbackAdminListQuery): string {
   if (query.votes === 'up') conditions.push(`w.weight >= ${EPSILON}`);
   if (query.votes === 'down') conditions.push(`w.weight <= -${EPSILON}`);
   if (query.votes === 'neutral') conditions.push(`abs(w.weight) < ${EPSILON}`);
-  if (query.reviewed === 'yes') conditions.push('w.human_votes > 0');
-  if (query.reviewed === 'no') conditions.push('w.human_votes = 0');
+  if (query.triage) conditions.push(`t.triage = ${q.param(query.triage)}`);
   return conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 }
 
@@ -197,13 +202,16 @@ export async function adminDetail(
   return { entry, votes };
 }
 
-/** The agents' search for an admin: every candidate in relevance order, no serving draw. */
+/**
+ * The agents' search for an admin: every candidate in relevance order, no serving draw, and
+ * entries agents don't get yet (not approved, with chance 0) too, so they can be triaged.
+ */
 export async function adminSearch(
   db: Db,
   query: FeedbackSearchQuery,
   ctx: VoteContext,
 ): Promise<FeedbackAdminEntry[]> {
-  const hits = await searchCandidates(db, query, query.limit);
+  const hits = await searchCandidates(db, query, query.limit, false);
   const rows = new Map(
     (
       await adminEntries(
@@ -242,6 +250,16 @@ export async function updateFeedback(db: Db, id: string, f: NewFeedback): Promis
   return rows.length > 0;
 }
 
+/** Sets an entry's triage; false if it does not exist. */
+export async function setTriage(db: Db, id: string, triage: FeedbackTriage): Promise<boolean> {
+  if (!UUID_RE.test(id)) return false;
+  const { rows } = await db.query(
+    'UPDATE feedback SET triage = $2, triaged_at = now() WHERE id = $1::uuid RETURNING id',
+    [id, triage],
+  );
+  return rows.length > 0;
+}
+
 /** Removes one vote of an entry (e.g. a mistaken human vote); false if there is no such vote. */
 export async function deleteVote(db: Db, id: string, voteId: string): Promise<boolean> {
   if (!UUID_RE.test(id) || !/^\d{1,18}$/.test(voteId)) return false;
@@ -257,15 +275,17 @@ const FACETS = 200;
 
 export async function adminStats(db: Db, ctx: VoteContext): Promise<FeedbackAdminStats> {
   const q = new Query(ctx);
-  const [kinds, votes, procedures, tags, authors] = await Promise.all([
+  const [kinds, triage, votes, procedures, tags, authors] = await Promise.all([
     db.query<{ kind: FeedbackKind; n: number }>(
       'SELECT kind, count(*)::int AS n FROM feedback GROUP BY kind',
     ),
-    db.query<{ up: number; down: number; neutral: number; reviewed: number }>(
+    db.query<{ triage: FeedbackTriage; n: number }>(
+      'SELECT triage, count(*)::int AS n FROM feedback GROUP BY triage',
+    ),
+    db.query<{ up: number; down: number; neutral: number }>(
       `SELECT count(*) FILTER (WHERE w.weight >= ${EPSILON})::int AS up,
               count(*) FILTER (WHERE w.weight <= -${EPSILON})::int AS down,
-              count(*) FILTER (WHERE abs(w.weight) < ${EPSILON})::int AS neutral,
-              count(*) FILTER (WHERE w.human_votes > 0)::int AS reviewed
+              count(*) FILTER (WHERE abs(w.weight) < ${EPSILON})::int AS neutral
        FROM feedback t ${q.votes()}`,
       q.params,
     ),
@@ -284,14 +304,16 @@ export async function adminStats(db: Db, ctx: VoteContext): Promise<FeedbackAdmi
   ]);
   const byKind: Record<FeedbackKind, number> = { tip: 0, friction: 0, gotcha: 0 };
   for (const r of kinds.rows) byKind[r.kind] = Number(r.n);
-  const v = votes.rows[0] ?? { up: 0, down: 0, neutral: 0, reviewed: 0 };
+  const byTriage: Record<FeedbackTriage, number> = { untriaged: 0, approved: 0, rejected: 0 };
+  for (const r of triage.rows) byTriage[r.triage] = Number(r.n);
+  const v = votes.rows[0] ?? { up: 0, down: 0, neutral: 0 };
   const facet = (rows: { value: string; n: number }[]) =>
     rows.map((r) => ({ value: r.value, count: Number(r.n) }));
   return {
     total: Object.values(byKind).reduce((a, b) => a + b, 0),
     kinds: byKind,
     votes: { up: Number(v.up), down: Number(v.down), neutral: Number(v.neutral) },
-    reviewed: Number(v.reviewed),
+    triage: byTriage,
     procedures: facet(procedures.rows),
     tags: facet(tags.rows),
     authors: facet(authors.rows),

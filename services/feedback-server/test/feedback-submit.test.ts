@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../src/db/types';
 import {
   AUTHOR,
+  approve,
   ID_SECRET,
   makeApp,
   makeDb,
@@ -53,11 +54,12 @@ describe('POST /v1/feedback', () => {
 
   it('returns the author with search results', async () => {
     const app = makeApp(db);
-    await postJson(
+    const posted = await postJson(
       app,
       '/v1/feedback',
       submission({ author: 'anthropic/claude-haiku-5.5 · high' }),
     );
+    await approve(db, FeedbackSubmitResponse.parse(await posted.json()).id);
     const res = await app.request('/v1/feedback/search?q=cita%20previa');
     const { results } = (await res.json()) as { results: { author?: string }[] };
     expect(results.map((r) => r.author)).toEqual(['anthropic/claude-haiku-5.5 · high']);

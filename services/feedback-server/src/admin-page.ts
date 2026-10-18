@@ -110,7 +110,9 @@ kbd { font: 11px var(--mono); border: 1px solid var(--line-strong); border-botto
 .score { color: var(--info-fg); background: var(--info-bg); border-color: var(--info-line); }
 .w-zero, .edited, .author { color: var(--off-fg); background: var(--off-bg); border-color: var(--off-line); }
 .author { max-width: 160px; overflow: hidden; text-overflow: ellipsis; font-weight: 400; }
-.reviewed { color: var(--accent-hover); font-weight: 500; }
+.triage-approved { color: var(--accent-hover); font-weight: 500; }
+.triage-untriaged { color: var(--warn-fg); font-weight: 500; }
+.triage-rejected { color: var(--subtle); text-decoration: line-through; }
 
 /* entry */
 .detail { max-width: 860px; margin: 0 auto; padding: 20px 24px 64px; display: grid; gap: 16px;
@@ -218,14 +220,14 @@ const T = {
     token: 'Token', enter: 'Entrar', badToken: 'Ese token no vale.',
     tabBrowse: 'Explorar', tabSearch: 'Probar búsqueda',
     searchPh: 'Busca en el texto, el trámite, las etiquetas… o pega un id',
-    kind: 'Tipo', votes: 'Votos', review: 'Revisión', sort: 'Orden', procedure: 'Trámite', tag: 'Etiqueta',
+    kind: 'Tipo', votes: 'Votos', triage: 'Triaje', sort: 'Orden', procedure: 'Trámite', tag: 'Etiqueta',
     author: 'Autor', a_human: 'Persona', a_unknown: 'No se sabe',
     authorHint: '«human» si lo escribió una persona, o «modelo · nivel», p. ej. gpt-6-luna · high. Vacío: no se sabe.',
     badAuthor: 'El autor tiene que ser «human» o «modelo · nivel», p. ej. gpt-6-luna · high.',
     all: 'Todos', allF: 'Todas', any: 'Cualquiera',
     k_tip: 'Consejo', k_friction: 'Problema', k_gotcha: 'Trampa',
     v_up: 'Positivos', v_down: 'Negativos', v_neutral: 'Neutros',
-    r_no: 'Sin revisar', r_yes: 'Revisados',
+    tr_untriaged: 'Sin triar', tr_approved: 'Aprobados', tr_rejected: 'Rechazados',
     s_newest: 'Más nuevos', s_oldest: 'Más antiguos', s_votes: 'Más votados', s_edited: 'Editados hace poco',
     clear: 'Quitar filtros', refresh: 'Actualizar', more: 'Cargar más', loading: 'Cargando…',
     count: (n, total) => (n < total ? n + ' de ' + total : String(total)) + (total === 1 ? ' aprendizaje' : ' aprendizajes'),
@@ -233,8 +235,18 @@ const T = {
     searchHint: 'Lo mismo que buscan los agentes, en orden de relevancia y sin sorteo: ves todos los candidatos con su puntuación y su probabilidad de salir.',
     searchQ: 'Búsqueda', searchQPh: 'p. ej. cita previa renovar dni', limit: 'Resultados', search: 'Buscar',
     searchEmpty: 'Ningún resultado para esta búsqueda.', searchShort: 'Escribe al menos 2 letras.',
-    reviewedMark: 'revisado',
+    m_untriaged: 'sin triar', m_approved: 'aprobado', m_rejected: 'rechazado',
     keys: 'Teclas', keyNav: 'moverse', keyFind: 'buscar', keyEdit: 'editar', keyVote: 'votar',
+    keyTriage: 'aprobar o rechazar',
+    triageTitle: 'Triaje', approve: 'Aprobar', reject: 'Rechazar', untriage: 'Dejar sin triar',
+    triageText: {
+      untriaged: 'Sin triar: los agentes no lo ven hasta que lo apruebes.',
+      approved: 'Aprobado: los agentes lo ven, tantas veces como digan los votos.',
+      rejected: 'Rechazado: los agentes no lo ven. Se queda aquí como referencia.',
+    },
+    triagedAt: (d) => 'Último triaje: ' + d + '.',
+    triaged: { untriaged: 'Sin triar', approved: 'Aprobado', rejected: 'Rechazado' },
+    notServed: 'No se sirve hasta que lo apruebes.',
     back: 'Lista', edit: 'Editar', del: 'Borrar', delAsk: '¿Borrar para siempre?', delYes: 'Sí, borrar',
     cancel: 'Cancelar', deleted: 'Aprendizaje borrado',
     edited: 'Editado', fTags: 'Etiquetas', fUrls: 'Enlaces', none: '—',
@@ -262,7 +274,7 @@ const T = {
     unsaved: 'Guarda o cancela la edición primero.',
     tooManyTags: 'Pon 10 etiquetas como mucho.', tooManyUrls: 'Pon 5 enlaces como mucho.',
     overviewTitle: 'Resumen', overviewHint: 'Elige un aprendizaje de la lista para verlo, votarlo o editarlo.',
-    st_total: 'aprendizajes', st_unreviewed: 'sin revisar', st_up: 'con votos positivos', st_down: 'con votos negativos',
+    st_total: 'aprendizajes', st_untriaged: 'sin triar', st_up: 'con votos positivos', st_down: 'con votos negativos',
     byKind: 'Por tipo', topProcedures: 'Trámites con más aprendizajes', topTags: 'Etiquetas más usadas',
     topAuthors: 'Quién los escribe',
     policyTitle: 'Cómo funcionan los votos',
@@ -281,14 +293,14 @@ const T = {
     token: 'Token', enter: 'Sign in', badToken: 'That token is not valid.',
     tabBrowse: 'Browse', tabSearch: 'Try a search',
     searchPh: 'Search text, procedure, tags… or paste an id',
-    kind: 'Kind', votes: 'Votes', review: 'Review', sort: 'Sort', procedure: 'Procedure', tag: 'Tag',
+    kind: 'Kind', votes: 'Votes', triage: 'Triage', sort: 'Sort', procedure: 'Procedure', tag: 'Tag',
     author: 'Author', a_human: 'Human', a_unknown: 'Unknown',
     authorHint: '“human” if a person wrote it, or “model · level”, e.g. gpt-6-luna · high. Empty: unknown.',
     badAuthor: 'The author must be “human” or “model · level”, e.g. gpt-6-luna · high.',
     all: 'All', allF: 'All', any: 'Any',
     k_tip: 'Tip', k_friction: 'Friction', k_gotcha: 'Gotcha',
     v_up: 'Positive', v_down: 'Negative', v_neutral: 'Neutral',
-    r_no: 'Not reviewed', r_yes: 'Reviewed',
+    tr_untriaged: 'Untriaged', tr_approved: 'Approved', tr_rejected: 'Rejected',
     s_newest: 'Newest', s_oldest: 'Oldest', s_votes: 'Most voted', s_edited: 'Recently edited',
     clear: 'Clear filters', refresh: 'Refresh', more: 'Load more', loading: 'Loading…',
     count: (n, total) => (n < total ? n + ' of ' + total : String(total)) + (total === 1 ? ' learning' : ' learnings'),
@@ -296,8 +308,18 @@ const T = {
     searchHint: 'The same search agents run, in relevance order and without the draw: you see every candidate with its score and its chance of being served.',
     searchQ: 'Query', searchQPh: 'e.g. cita previa renovar dni', limit: 'Results', search: 'Search',
     searchEmpty: 'No results for this search.', searchShort: 'Type at least 2 letters.',
-    reviewedMark: 'reviewed',
+    m_untriaged: 'untriaged', m_approved: 'approved', m_rejected: 'rejected',
     keys: 'Keys', keyNav: 'move', keyFind: 'search', keyEdit: 'edit', keyVote: 'vote',
+    keyTriage: 'approve or reject',
+    triageTitle: 'Triage', approve: 'Approve', reject: 'Reject', untriage: 'Mark untriaged',
+    triageText: {
+      untriaged: 'Untriaged: agents don’t get it until you approve it.',
+      approved: 'Approved: agents get it, as often as its votes say.',
+      rejected: 'Rejected: agents don’t get it. It stays here for reference.',
+    },
+    triagedAt: (d) => 'Last triaged: ' + d + '.',
+    triaged: { untriaged: 'Untriaged', approved: 'Approved', rejected: 'Rejected' },
+    notServed: 'Not served until you approve it.',
     back: 'List', edit: 'Edit', del: 'Delete', delAsk: 'Delete for good?', delYes: 'Yes, delete',
     cancel: 'Cancel', deleted: 'Learning deleted',
     edited: 'Edited', fTags: 'Tags', fUrls: 'Links', none: '—',
@@ -325,7 +347,7 @@ const T = {
     unsaved: 'Save or cancel the edit first.',
     tooManyTags: 'Use 10 tags at most.', tooManyUrls: 'Use 5 links at most.',
     overviewTitle: 'Overview', overviewHint: 'Pick a learning from the list to read, vote on or edit it.',
-    st_total: 'learnings', st_unreviewed: 'not reviewed', st_up: 'with positive votes', st_down: 'with negative votes',
+    st_total: 'learnings', st_untriaged: 'untriaged', st_up: 'with positive votes', st_down: 'with negative votes',
     byKind: 'By kind', topProcedures: 'Procedures with most learnings', topTags: 'Most used tags',
     topAuthors: 'Who wrote them',
     policyTitle: 'How votes work',
@@ -339,6 +361,7 @@ const T = {
   },
 };
 const KINDS = ['tip', 'friction', 'gotcha'];
+const TRIAGE = ['untriaged', 'approved', 'rejected'];
 const HUMAN = '${HUMAN_AUTHOR}';
 const AUTHOR_RE = /^(?:${HUMAN_AUTHOR}|[A-Za-z0-9][\\w.:\\/@+-]{0,99} · (?:${ThinkingLevel.options.join('|')}))$/;
 const PAGE = 50;
@@ -521,7 +544,7 @@ async function loadStats() {
 function renderHeaderStats() {
   if (!stats) return;
   $('header-stats').textContent = stats.total + ' ' + t('st_total') + ' · ' +
-    (stats.total - stats.reviewed) + ' ' + t('st_unreviewed');
+    stats.triage.untriaged + ' ' + t('st_untriaged');
 }
 
 function options(select, items, allLabel) {
@@ -537,11 +560,7 @@ function renderFilters() {
   options($('s-kind'), KINDS.map((kind) => [kind, t('k_' + kind)]), t('any'));
   const v = stats ? stats.votes : {};
   options($('f-votes'), ['up', 'down', 'neutral'].map((x) => [x, t('v_' + x) + (stats ? ' (' + v[x] + ')' : '')]), t('all'));
-  const reviewed = stats ? stats.reviewed : 0;
-  options($('f-review'), [
-    ['no', t('r_no') + (stats ? ' (' + (stats.total - reviewed) + ')' : '')],
-    ['yes', t('r_yes') + (stats ? ' (' + reviewed + ')' : '')],
-  ], t('allF'));
+  options($('f-triage'), TRIAGE.map((x) => [x, t('tr_' + x) + (stats ? ' (' + stats.triage[x] + ')' : '')]), t('all'));
   const sort = $('f-sort').value || 'newest';
   $('f-sort').replaceChildren(...['newest', 'oldest', 'votes', 'edited'].map((s) => el('option', { value: s }, t('s_' + s))));
   $('f-sort').value = sort;
@@ -556,7 +575,7 @@ function renderFilters() {
 
 function filterQuery(offset) {
   const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset), sort: $('f-sort').value || 'newest' });
-  const pairs = [['q', 'f-q'], ['kind', 'f-kind'], ['votes', 'f-votes'], ['reviewed', 'f-review'],
+  const pairs = [['q', 'f-q'], ['kind', 'f-kind'], ['votes', 'f-votes'], ['triage', 'f-triage'],
     ['procedure', 'f-procedure'], ['tag', 'f-tag'], ['author', 'f-author']];
   for (const [name, id] of pairs) {
     const value = $(id).value.trim();
@@ -568,7 +587,7 @@ function filterQuery(offset) {
 function setFilter(id, value) {
   if (!guardEdit()) return;
   setTab('browse');
-  for (const f of ['f-q', 'f-kind', 'f-votes', 'f-review', 'f-procedure', 'f-tag', 'f-author']) $(f).value = '';
+  for (const f of ['f-q', 'f-kind', 'f-votes', 'f-triage', 'f-procedure', 'f-tag', 'f-author']) $(f).value = '';
   const target = id && $(id);
   if (target instanceof HTMLSelectElement && ![...target.options].some((o) => o.value === value)) {
     target.append(el('option', { value }, id === 'f-author' ? authorLabel(value) : value));
@@ -600,12 +619,17 @@ function itemNode(e, withScore) {
       kindBadge(e.kind),
       weightBadge(e),
       withScore && typeof e.score === 'number' ? el('span', { class: 'badge score' }, e.score.toFixed(2)) : null,
-      e.humanVotes > 0 ? el('span', { class: 'reviewed' }, '✓ ' + t('reviewedMark')) : null,
+      triageMark(e.triage),
       authorBadge(e),
       el('time', { datetime: e.createdAt, title: fmtDate(e.createdAt) }, fmtAgo(e.createdAt))),
     el('span', { class: 'item-title' }, e.title),
     el('span', { class: 'item-sub' }, [e.procedure, e.region].filter(Boolean).join(' · ')));
   return el('li', {}, button);
+}
+
+function triageMark(triage) {
+  const sign = triage === 'approved' ? '✓ ' : triage === 'rejected' ? '✕ ' : '● ';
+  return el('span', { class: 'triage-' + triage }, sign + t('m_' + triage));
 }
 
 function renderList() {
@@ -773,7 +797,22 @@ function entryView(d) {
     el('div', { class: 'entry-body md' }, ...markdown(e.body, el)),
     facts.childNodes.length ? facts : null);
 
-  return el('div', { class: 'detail' }, bar, article, serveCard(e), votesCard(d), dataCard(e));
+  return el('div', { class: 'detail' }, bar, article, triageCard(e), serveCard(e), votesCard(d), dataCard(e));
+}
+
+function triageCard(e) {
+  const buttons = [['approved', 'approve', 'up'], ['rejected', 'reject', 'down'], ['untriaged', 'untriage', '']]
+    .filter(([state]) => state !== e.triage)
+    .map(([state, label, cls]) => {
+      const b = el('button', { type: 'button', class: cls }, t(label));
+      b.addEventListener('click', () => triage(state, b));
+      return b;
+    });
+  return el('section', { class: 'card' },
+    el('div', { class: 'serve-head' }, el('h3', {}, t('triageTitle')), triageMark(e.triage)),
+    el('p', { class: 'hint' }, t('triageText')[e.triage] +
+      (e.triagedAt ? ' ' + t('triagedAt')(fmtDate(e.triagedAt)) : '')),
+    el('div', { class: 'serve-actions' }, ...buttons));
 }
 
 function serveCard(e) {
@@ -791,7 +830,7 @@ function serveCard(e) {
     el('div', { class: 'serve-pct' }, fmtPct(e.chance)),
     el('div', { class: 'meter', role: 'img', 'aria-label': fmtPct(e.chance) }, fill),
     el('div', { class: 'meter-scale' }, el('span', {}, '−' + x), el('span', {}, '0'), el('span', {}, '+' + x)),
-    el('p', { class: 'hint' }, t('serveText')(fmtWeight(e.votes), x)),
+    el('p', { class: 'hint' }, e.triage === 'approved' ? t('serveText')(fmtWeight(e.votes), x) : t('notServed')),
     el('div', { class: 'serve-actions' }, up, down,
       el('span', { class: 'field-hint' }, t('voteHint')(x))));
 }
@@ -850,6 +889,27 @@ async function vote(direction, button) {
     toast(direction === 'up' ? t('votedUp') : t('votedDown'));
     await refreshAfterChange();
   } catch (err) { fail(err); if (button) button.disabled = false; }
+}
+
+async function triage(state, button) {
+  if (!selectedId || (detail && detail.entry.triage === state)) return;
+  if (button) button.disabled = true;
+  const id = selectedId;
+  try {
+    await api('PUT', '/admin/feedback/' + encodeURIComponent(id) + '/triage', { triage: state });
+    toast(t('triaged')[state]);
+  } catch (err) { fail(err); if (button) button.disabled = false; return; }
+  // Filtering by another state: the entry leaves the list, so a triage session goes on.
+  const filter = $('f-triage').value;
+  if (tab === 'browse' && filter && filter !== state) {
+    const index = entries.findIndex((e) => e.id === id);
+    const next = entries[index + 1] || entries[index - 1];
+    dropEntry(id);
+    loadStats().catch(fail);
+    if (next) { selectedId = null; select(next.id); } else closeDetail();
+    return;
+  }
+  await refreshAfterChange();
 }
 
 async function removeVote(voteId, button) {
@@ -1022,7 +1082,7 @@ function overview() {
   wrap.append(
     el('div', { class: 'stats' },
       stat(stats.total, t('st_total'), () => setFilter()),
-      stat(stats.total - stats.reviewed, t('st_unreviewed'), () => setFilter('f-review', 'no')),
+      stat(stats.triage.untriaged, t('st_untriaged'), () => setFilter('f-triage', 'untriaged')),
       stat(stats.votes.up, t('st_up'), () => setFilter('f-votes', 'up')),
       stat(stats.votes.down, t('st_down'), () => setFilter('f-votes', 'down'))),
     el('section', { class: 'card' }, el('h3', {}, t('byKind')),
@@ -1073,6 +1133,8 @@ document.addEventListener('keydown', (event) => {
     n: startNew,
     u: () => { if (detail) vote('up'); },
     d: () => { if (detail) vote('down'); },
+    a: () => { if (detail) triage('approved'); },
+    r: () => { if (detail) triage('rejected'); },
     Escape: () => { if (mode === 'delete' || confirmVote) { mode = 'view'; confirmVote = null; renderDetail(); } else closeDetail(); },
   };
   const action = keys[event.key];
@@ -1108,7 +1170,7 @@ $('f-q').addEventListener('input', () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => loadList(false).catch(fail), 250);
 });
-for (const id of ['f-kind', 'f-votes', 'f-review', 'f-sort', 'f-procedure', 'f-tag', 'f-author']) {
+for (const id of ['f-kind', 'f-votes', 'f-triage', 'f-sort', 'f-procedure', 'f-tag', 'f-author']) {
   $(id).addEventListener('change', () => loadList(false).catch(fail));
 }
 $('clear').addEventListener('click', () => setFilter());
@@ -1159,7 +1221,7 @@ const BODY = `
         <div class="two">
           <label><span data-t="kind"></span><select id="f-kind"></select></label>
           <label><span data-t="votes"></span><select id="f-votes"></select></label>
-          <label><span data-t="review"></span><select id="f-review"></select></label>
+          <label><span data-t="triage"></span><select id="f-triage"></select></label>
           <label><span data-t="sort"></span><select id="f-sort"></select></label>
           <label><span data-t="procedure"></span><input id="f-procedure" list="procedures" maxlength="200" autocomplete="off"></label>
           <label><span data-t="tag"></span><input id="f-tag" list="tags" maxlength="40" autocomplete="off"></label>
@@ -1191,7 +1253,8 @@ const BODY = `
       <div class="keys"><span data-t="keys"></span>: <kbd>j</kbd> <kbd>k</kbd> <span data-t="keyNav"></span> ·
         <kbd>/</kbd> <span data-t="keyFind"></span> · <kbd>n</kbd> <span data-t="keyNew"></span> ·
         <kbd>e</kbd> <span data-t="keyEdit"></span> ·
-        <kbd>u</kbd> <kbd>d</kbd> <span data-t="keyVote"></span></div>
+        <kbd>u</kbd> <kbd>d</kbd> <span data-t="keyVote"></span> ·
+        <kbd>a</kbd> <kbd>r</kbd> <span data-t="keyTriage"></span></div>
     </aside>
     <section class="pane-detail" id="detail" aria-live="polite"></section>
   </div>

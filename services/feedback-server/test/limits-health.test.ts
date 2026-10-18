@@ -1,5 +1,10 @@
+import { cp, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { SERVICE_DIR } from '../src/config';
 import { migrate } from '../src/db/migrate';
+import { openDb } from '../src/db/open';
 import type { Db } from '../src/db/types';
 import { makeApp, makeDb, postJson, submission, truncate } from './helpers';
 
@@ -75,7 +80,59 @@ describe('health and migrations', () => {
       '008_drop_outcome.sql',
       '009_vote_users.sql',
       '010_vote_retention.sql',
+      '011_triage.sql',
     ]);
+  });
+
+  it('011 approves the entries maintainers had vouched for, and nothing else', async () => {
+    const all = join(SERVICE_DIR, 'migrations');
+    const dir = await mkdtemp(join(tmpdir(), 'feedback-migrations-'));
+    const old = await openDb('pglite://memory');
+    try {
+      for (const name of await readdir(all)) {
+        if (name < '011') await cp(join(all, name), join(dir, name));
+      }
+      await migrate(old, dir);
+      const insert = async (title: string, author: string | null) =>
+        (
+          await old.query<{ id: string }>(
+            `INSERT INTO feedback (procedure, kind, title, body, author)
+             VALUES ('Renovación del DNI', 'tip', $1, 'Un texto de prueba.', $2) RETURNING id::text`,
+            [title, author],
+          )
+        ).rows[0]!.id;
+      const vote = (id: string, value: 1 | -1, voter: 'agent' | 'human') =>
+        old.query('INSERT INTO feedback_votes (feedback_id, value, voter) VALUES ($1, $2, $3)', [
+          id,
+          value,
+          voter,
+        ]);
+      const human = await insert('Escrito por una persona', 'human');
+      const liked = await insert('Útil según un mantenedor', 'gpt-6.1-sol · medium');
+      await vote(liked, 1, 'human');
+      const mixed = await insert('Opiniones encontradas', 'gpt-6.1-sol · medium');
+      await vote(mixed, 1, 'human');
+      await vote(mixed, -1, 'human');
+      const agentsOnly = await insert('Solo votos de agentes', null);
+      await vote(agentsOnly, 1, 'agent');
+      const plain = await insert('Sin votos', 'gpt-6.1-sol · medium');
+
+      expect(await migrate(old)).toEqual(['011_triage.sql']);
+      const { rows } = await old.query<{ id: string; triage: string; triaged: boolean }>(
+        'SELECT id::text, triage, triaged_at IS NOT NULL AS triaged FROM feedback',
+      );
+      const triage = Object.fromEntries(rows.map((r) => [r.id, [r.triage, r.triaged]]));
+      expect(triage).toEqual({
+        [human]: ['approved', true],
+        [liked]: ['approved', true],
+        [mixed]: ['untriaged', false],
+        [agentsOnly]: ['untriaged', false],
+        [plain]: ['untriaged', false],
+      });
+    } finally {
+      await old.close();
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('answers unknown routes with the API error shape', async () => {

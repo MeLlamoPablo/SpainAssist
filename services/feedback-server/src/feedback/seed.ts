@@ -3,8 +3,9 @@ import type { Db } from '../db/types';
 import { countFeedback, insertFeedback, type NewFeedback } from './repo';
 
 /**
- * Example learnings for development (DEV_SEED=1). Generic, PII-free, written by a human and
- * tagged "seed" so they can be told apart from real submissions (and deleted with the admin API).
+ * Example learnings for development (DEV_SEED=1). Generic, PII-free, written by a human,
+ * approved (so they are served) and tagged "seed" so they can be told apart from real submissions
+ * (and deleted with the admin API).
  */
 const SEED_TAG = 'seed';
 
@@ -143,6 +144,7 @@ export async function seedFeedback(db: Db, now = Date.now()): Promise<number> {
       ...entry,
       tags: [...entry.tags, SEED_TAG],
       author: HUMAN_AUTHOR,
+      triage: 'approved',
       createdAt: new Date(now - daysAgo * 86_400_000),
     });
   }

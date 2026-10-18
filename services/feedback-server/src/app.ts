@@ -21,6 +21,8 @@ import {
   type FeedbackSearchResponse,
   FeedbackSubmission,
   type FeedbackSubmitResponse,
+  FeedbackTriageRequest,
+  type FeedbackTriageResponse,
   FeedbackVoteRequest,
   type FeedbackVoteResponse,
 } from '@sa/shared';
@@ -38,13 +40,14 @@ import {
   adminSearch,
   adminStats,
   deleteVote,
+  setTriage,
   updateFeedback,
 } from './feedback/admin';
 import {
   addVote,
   castVote,
   deleteFeedback,
-  feedbackExists,
+  feedbackServed,
   insertFeedback,
   type NewFeedback,
   searchFeedback,
@@ -252,7 +255,8 @@ export function createApp(deps: AppDeps): Hono {
     const auth = await authorize(c, voteQuota);
     if ('response' in auth) return auth.response;
     const id = c.req.param('id').toLowerCase();
-    if (!(await feedbackExists(db, id))) return fail(c, 404, 'not_found', 'Feedback not found.');
+    // Entries not approved are never served, so to agents they don't exist.
+    if (!(await feedbackServed(db, id))) return fail(c, 404, 'not_found', 'Feedback not found.');
     const counted = await castVote(db, id, value, auth.user, voteExpiry(now(), policy));
     return c.json({ id, counted } satisfies FeedbackVoteResponse);
   });
@@ -325,7 +329,8 @@ export function createApp(deps: AppDeps): Hono {
   admin.post('/feedback', entryBodyLimit, async (c) => {
     const read = await readEntry(c, FeedbackCreate);
     if ('response' in read) return read.response;
-    const id = await insertFeedback(db, read.feedback);
+    // A maintainer wrote it: no need to triage it.
+    const id = await insertFeedback(db, { ...read.feedback, triage: 'approved' });
     const entry = await adminEntry(db, id, voteContext());
     if (!entry) return notFound(c); // deleted meanwhile
     return c.json({ entry, redactions: read.redactions } satisfies FeedbackEditResponse, 201);
@@ -338,6 +343,22 @@ export function createApp(deps: AppDeps): Hono {
     const entry = await adminEntry(db, id, voteContext());
     if (!entry) return notFound(c); // deleted meanwhile
     return c.json({ entry, redactions: read.redactions } satisfies FeedbackEditResponse);
+  });
+  // Triage: only approved entries are served to agents (submissions start untriaged).
+  admin.put('/feedback/:id/triage', bodyLimit({ maxSize: 1024 }), async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return fail(c, 400, 'bad_request', 'The body must be JSON.');
+    }
+    const parsed = FeedbackTriageRequest.safeParse(body);
+    if (!parsed.success) return fail(c, 400, 'bad_request', describe(parsed.error));
+    const id = c.req.param('id').toLowerCase();
+    if (!(await setTriage(db, id, parsed.data.triage))) return notFound(c);
+    const entry = await adminEntry(db, id, voteContext());
+    if (!entry) return notFound(c); // deleted meanwhile
+    return c.json({ entry } satisfies FeedbackTriageResponse);
   });
   // Human votes (maintainers): each weighs the vote threshold and is always counted.
   admin.post('/feedback/:id/vote', bodyLimit({ maxSize: 1024 }), async (c) => {

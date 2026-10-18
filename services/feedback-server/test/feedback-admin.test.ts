@@ -6,13 +6,14 @@ import {
   FeedbackAdminStats,
   FeedbackEditResponse,
   FeedbackSubmitResponse,
+  FeedbackTriageResponse,
 } from '@sa/shared';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from '../src/db/types';
 import { adminList } from '../src/feedback/admin';
 import { addVote } from '../src/feedback/repo';
 import { type CastVote, DEFAULT_VOTE_POLICY, voteWeight } from '../src/feedback/votes';
-import { AUTHOR, makeApp, makeDb, postJson, submission, truncate } from './helpers';
+import { AUTHOR, approve, makeApp, makeDb, postJson, submission, truncate } from './helpers';
 
 const TOKEN = 's3cret-token';
 const AUTH = { authorization: `Bearer ${TOKEN}` };
@@ -36,6 +37,15 @@ async function create(app: App, overrides: Record<string, unknown> = {}) {
 }
 
 const get = (app: App, path: string) => Promise.resolve(app.request(path, { headers: AUTH }));
+
+const triage = (app: App, id: string, body: unknown, headers: Record<string, string> = AUTH) =>
+  Promise.resolve(
+    app.request(`/admin/feedback/${id}/triage`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    }),
+  );
 
 async function list(app: App, params: Record<string, string> = {}) {
   const res = await get(app, `/admin/feedback?${new URLSearchParams(params)}`);
@@ -133,14 +143,17 @@ describe('GET /admin/feedback', () => {
     expect(last.results.map((e) => e.id)).toEqual([ids[0]]);
     const oldest = await list(app, { sort: 'oldest', limit: '1' });
     expect(oldest.results[0]!.id).toBe(ids[0]);
+    // Submissions start untriaged: never served, so their chance is 0.
     expect(first.results[0]).toMatchObject({
-      chance: 0.5,
+      triage: 'untriaged',
+      chance: 0,
       upVotes: 0,
       downVotes: 0,
       humanVotes: 0,
       votes: 0,
     });
     expect(first.results[0]!.updatedAt).toBeUndefined();
+    expect(first.results[0]!.triagedAt).toBeUndefined();
   });
 
   it('rejects bad queries', async () => {
@@ -162,7 +175,7 @@ describe('GET /admin/feedback', () => {
     expect((await list(app)).results.find((e) => e.id === agent)!.author).toBe(AUTHOR);
   });
 
-  it('filters by text, kind, procedure, tag, votes and review', async () => {
+  it('filters by text, kind, procedure, tag, votes and triage', async () => {
     const app = adminApp();
     const dni = await create(app);
     const padron = await create(app, {
@@ -183,6 +196,8 @@ describe('GET /admin/feedback', () => {
     });
     await addVote(db, dni, 1, 'agent');
     await addVote(db, padron, -1, 'human');
+    await approve(db, dni);
+    await db.query("UPDATE feedback SET triage = 'rejected' WHERE id = $1", [padron]);
 
     const ids = async (params: Record<string, string>) =>
       (await list(app, params)).results.map((e) => e.id).sort();
@@ -198,9 +213,11 @@ describe('GET /admin/feedback', () => {
     expect(await ids({ votes: 'up' })).toEqual([dni]);
     expect(await ids({ votes: 'down' })).toEqual([padron]);
     expect(await ids({ votes: 'neutral' })).toEqual([nie]);
-    expect(await ids({ reviewed: 'yes' })).toEqual([padron]);
-    expect(await ids({ reviewed: 'no' })).toEqual([dni, nie].sort());
-    expect(await ids({ reviewed: 'no', kind: 'tip' })).toEqual([dni]);
+    expect(await ids({ triage: 'approved' })).toEqual([dni]);
+    expect(await ids({ triage: 'rejected' })).toEqual([padron]);
+    expect(await ids({ triage: 'untriaged' })).toEqual([nie]);
+    expect(await ids({ triage: 'approved', kind: 'gotcha' })).toEqual([]);
+    expect((await get(app, '/admin/feedback?triage=maybe')).status).toBe(400);
     expect((await list(app, { votes: 'down' })).total).toBe(1);
 
     const sorted = await list(app, { sort: 'votes' });
@@ -238,7 +255,7 @@ describe('GET /admin/feedback', () => {
 describe('GET /admin/feedback/:id', () => {
   it('returns the entry with its votes, newest first, and what each is worth now', async () => {
     const app = adminApp();
-    const id = await create(app, { appVersion: '1.4.0' });
+    const id = await approve(db, await create(app, { appVersion: '1.4.0' }));
     await addVote(db, id, 1, 'agent', new Date(Date.now() - 2 * DAY));
     await addVote(db, id, -1, 'human', new Date(Date.now() - DAY));
     await addVote(db, id, 1, 'agent', new Date(Date.now() - 400 * DAY)); // expired
@@ -372,6 +389,7 @@ describe('POST /admin/feedback', () => {
       administration: 'Ayuntamiento de Madrid',
       tags: ['padrón', 'volante'],
       author: 'human',
+      triage: 'approved', // a maintainer wrote it
       votes: 0,
       chance: 0.5,
       upVotes: 0,
@@ -468,8 +486,8 @@ describe('votes and deletion', () => {
 
   it('deletes entries, which then leave search', async () => {
     const app = adminApp();
-    const id = await create(app);
-    await create(app);
+    const id = await approve(db, await create(app));
+    await approve(db, await create(app));
     const del = () => app.request(`/admin/feedback/${id}`, { method: 'DELETE', headers: AUTH });
     expect(await (await del()).json()).toEqual({ id, deleted: true });
     expect((await del()).status).toBe(404);
@@ -480,7 +498,7 @@ describe('votes and deletion', () => {
 });
 
 describe('GET /admin/feedback/stats', () => {
-  it('counts kinds, votes, reviews and facets', async () => {
+  it('counts kinds, votes, triage and facets', async () => {
     const app = adminApp();
     const a = await create(app, { tags: ['dni', 'cita previa'] });
     const b = await create(app, { kind: 'gotcha', tags: ['dni'] });
@@ -488,13 +506,14 @@ describe('GET /admin/feedback/stats', () => {
     await db.query('UPDATE feedback SET author = NULL WHERE id = $1::uuid', [c]);
     await addVote(db, a, 1, 'human');
     await addVote(db, b, -1, 'agent');
+    await approve(db, a);
     const res = await get(app, '/admin/feedback/stats');
     const stats = FeedbackAdminStats.parse(await res.json());
     expect(stats).toEqual({
       total: 3,
       kinds: { tip: 2, friction: 0, gotcha: 1 },
       votes: { up: 1, down: 1, neutral: 1 },
-      reviewed: 1,
+      triage: { untriaged: 2, approved: 1, rejected: 0 },
       procedures: [
         { value: 'Renovación del DNI', count: 2 },
         { value: 'Empadronamiento', count: 1 },
@@ -513,7 +532,7 @@ describe('GET /admin/feedback/search', () => {
   it('shows every candidate with its score and chance, without the serving draw', async () => {
     // A draw of 0.99 would hide everything below a 99% chance from agents.
     const app = makeApp(db, { adminToken: TOKEN, random: () => 0.99 });
-    const id = await create(app);
+    const id = await approve(db, await create(app));
     await addVote(db, id, -1, 'agent');
     expect(
       (
@@ -528,5 +547,64 @@ describe('GET /admin/feedback/search', () => {
     expect(results[0]!.score).toBeGreaterThan(0.6);
     expect(results[0]).toMatchObject({ votes: -1, chance: 0.4 });
     expect((await get(app, '/admin/feedback/search?q=a')).status).toBe(400);
+  });
+});
+
+describe('triage', () => {
+  const search = async (app: App) =>
+    (
+      (await (await app.request('/v1/feedback/search?q=cita%20previa')).json()) as {
+        results: { id: string }[];
+      }
+    ).results.map((r) => r.id);
+  const agentVote = async (app: App, id: string) =>
+    (await postJson(app, `/v1/feedback/${id}/vote`, { vote: 'up' })).status;
+
+  it('serves submissions to agents only once a maintainer approves them', async () => {
+    const app = adminApp();
+    const id = await create(app);
+    // Untriaged: agents neither get it nor can vote on it, but maintainers find it.
+    expect(await search(app)).toEqual([]);
+    expect(await agentVote(app, id)).toBe(404);
+    const found = FeedbackAdminSearchResponse.parse(
+      await (await get(app, '/admin/feedback/search?q=cita%20previa')).json(),
+    );
+    expect(found.results.map((e) => [e.id, e.triage, e.chance])).toEqual([[id, 'untriaged', 0]]);
+
+    const approved = await triage(app, id, { triage: 'approved' });
+    expect(approved.status).toBe(200);
+    const { entry } = FeedbackTriageResponse.parse(await approved.json());
+    expect(entry).toMatchObject({ id, triage: 'approved', chance: 0.5 });
+    expect(entry.triagedAt).toBeDefined();
+    expect(await search(app)).toEqual([id]);
+    expect(await agentVote(app, id)).toBe(200);
+
+    const rejected = FeedbackTriageResponse.parse(
+      await (await triage(app, id, { triage: 'rejected' })).json(),
+    );
+    expect(rejected.entry).toMatchObject({ triage: 'rejected', chance: 0, upVotes: 1 });
+    expect(await search(app)).toEqual([]);
+    expect(await agentVote(app, id)).toBe(404);
+
+    // Back to untriaged, and editing doesn't change the triage.
+    await triage(app, id, { triage: 'untriaged' });
+    expect((await put(app, id, edit())).status).toBe(200);
+    const detail = FeedbackAdminDetail.parse(
+      await (await get(app, `/admin/feedback/${id}`)).json(),
+    );
+    expect(detail.entry.triage).toBe('untriaged');
+    expect(await search(app)).toEqual([]);
+  });
+
+  it('validates the request and needs the admin token', async () => {
+    const app = adminApp();
+    const id = await create(app);
+    expect((await triage(app, id, { triage: 'maybe' })).status).toBe(400);
+    expect((await triage(app, id, '{')).status).toBe(400);
+    expect((await triage(app, UNKNOWN, { triage: 'approved' })).status).toBe(404);
+    expect((await triage(app, 'not-a-uuid', { triage: 'approved' })).status).toBe(404);
+    expect((await triage(app, id, { triage: 'approved' }, {})).status).toBe(401);
+    expect((await triage(makeApp(db), id, { triage: 'approved' })).status).toBe(404);
+    expect((await list(app, { triage: 'untriaged' })).total).toBe(1);
   });
 });
