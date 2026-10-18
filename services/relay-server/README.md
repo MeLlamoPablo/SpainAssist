@@ -43,6 +43,18 @@ The relay also pings every 20 s and drops sockets that miss a pong.
 | Rooms per client address | 20 |
 | Connections per client address | 40 |
 | Receiver backlog | 16 MiB, then the slow receiver is disconnected |
+| Backlog of all receivers | 512 MiB, then the receivers furthest behind are disconnected |
+| Open connections | 300 in total |
+
+**Memory.** Frames are forwarded at once, so what the relay holds is the receivers' backlog
+(`bufferedAmount`), plus up to one frame being received per socket. The total backlog is summed
+from every socket on each forwarded frame (no running count that could drift), and kept under
+`MAX_BUFFERED_MEGABYTES`; without it, 300 receivers × 16 MiB could reach 4.7 GiB. The
+per-receiver limit stays at 16 MiB because a document request (up to 24 MiB) arrives in one burst,
+and a phone on a slower link than the desktop's falls behind by a good part of it. Worst case:
+512 MiB of backlog + 300 × 1 MiB of incoming frames + ~100 MiB for Node ≈ 0.9 GiB, inside the
+container's 1 GiB (`infra/terraform/coolify.tf`). A disconnected receiver reconnects, and the desktop
+sends again what the phone hasn't answered, as after any dropped connection.
 
 **Privacy.** No personal data ever reaches the relay in clear: documents, certificates and
 signatures are inside the encrypted frames. The pairing payload is in the link's fragment, which
@@ -66,7 +78,9 @@ the QR too.
 | `INSTALL_URL` | Play Store page | Where "Instalar la app" points |
 | `ROOMS_PER_ADDRESS` / `CONNECTIONS_PER_ADDRESS` | 20 / 40 | Per client address |
 | `MAX_CONNECTIONS` | 300 | In total, all addresses |
-| `ROOM_MEGABYTES` | 512 | Bytes forwarded per room |
+| `ROOM_MEGABYTES` | 512 | Bytes forwarded per room (binary and text frames) |
+| `BUFFERED_MEGABYTES` | 16 | Backlog of one receiver before it is disconnected |
+| `MAX_BUFFERED_MEGABYTES` | 512 | Backlog of all receivers together |
 
 Local development: `corepack pnpm services` starts it on port 8794. `corepack pnpm dev:local`
 points the app at it and puts this machine's LAN address in the QR, so a real phone on the same

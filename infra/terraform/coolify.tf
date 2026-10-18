@@ -148,6 +148,9 @@ locals {
       port        = "8794"
       hosts       = local.all_hosts.relay
       watch_paths = concat(["services/relay-server/**"], local.workspace_paths)
+      # Rooms live in memory, so an OOM kill drops every pairing. Its own caps keep it under
+      # ~0.9 GiB (services/relay-server/README.md, "Memory").
+      memory = "1g"
     }
   }
 
@@ -233,7 +236,8 @@ resource "coolify_application_private_git" "app" {
   health_check_timeout      = 5
   health_check_retries      = 3
   health_check_start_period = 20
-  limits_memory             = "512m"
+  # Per app (`memory` in local.apps), else 512 MB.
+  limits_memory = lookup(each.value, "memory", "512m")
 
   depends_on = [github_repository_deploy_key.coolify]
 }

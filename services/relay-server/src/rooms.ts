@@ -11,8 +11,9 @@
  *   half-dead can reconnect at once.
  * - Both sides get `{"type":"peer","present":…}` on connect and whenever the other side comes
  *   or goes; `{"type":"ping"}` gets `{"type":"pong"}`.
- * - Limits: room lifetime, idle expiry, bytes per room, rooms and connections per address, and
- *   total open connections.
+ * - Limits: room lifetime, idle expiry, bytes per room, rooms and connections per address,
+ *   total open connections, and memory: each receiver's backlog and the backlog of all receivers
+ *   together (see `forward`).
  */
 import crypto from 'node:crypto';
 import { RELAY_CLOSE } from '@sa/shared';
@@ -41,8 +42,17 @@ export interface RoomLimits {
   connectionsPerAddress: number;
   /** Open connections in total, across all addresses (default 300). */
   maxConnections: number;
-  /** A receiver further behind than this is disconnected (default 16 MiB). */
+  /**
+   * A receiver further behind than this is disconnected (default 16 MiB). Not lower: a
+   * `sign.request` of up to 24 MiB arrives in one burst of fragments, and a phone on a slower
+   * downlink than the desktop's uplink falls behind by a good part of it.
+   */
   maxBuffered: number;
+  /**
+   * Bytes waiting to be sent to all receivers together (default 512 MiB). Above it, the
+   * receivers furthest behind are disconnected until the next frame fits.
+   */
+  maxBufferedTotal: number;
 }
 
 export const DEFAULT_LIMITS: RoomLimits = {
@@ -53,6 +63,7 @@ export const DEFAULT_LIMITS: RoomLimits = {
   connectionsPerAddress: 40,
   maxConnections: 300,
   maxBuffered: 16 * 1024 * 1024,
+  maxBufferedTotal: 512 * 1024 * 1024,
 };
 
 interface Room {
@@ -84,6 +95,8 @@ export class RoomRegistry {
   private readonly rooms = new Map<string, Room>();
   private readonly connections = new Map<string, number>();
   private totalConnections = 0;
+  /** Every attached socket until it closes or we terminate it (their backlogs are our memory). */
+  private readonly peers = new Set<Peer>();
   private readonly limits: RoomLimits;
 
   constructor(
@@ -158,6 +171,7 @@ export class RoomRegistry {
     r.lastActivity = now;
     this.connections.set(info.address, (this.connections.get(info.address) ?? 0) + 1);
     this.totalConnections++;
+    this.peers.add(socket);
 
     this.control(socket, { type: 'peer', present: this.isOpen(r[other]) });
     this.control(r[other], { type: 'peer', present: true });
@@ -166,25 +180,21 @@ export class RoomRegistry {
     return {
       onMessage: (data, isBinary) => {
         if (closed || r[role] !== socket) return;
-        r.lastActivity = this.now();
-        if (!isBinary) {
-          this.onText(socket, data);
-          return;
-        }
+        // Text frames count toward the room's bytes too, but only binary frames and pings are
+        // activity: anything else is ignored and mustn't keep a room alive.
         r.bytes += data.length;
         if (r.bytes > this.limits.roomBytes) {
           r.desktop?.close(RELAY_CLOSE.limited, 'room limit');
           r.phone?.close(RELAY_CLOSE.limited, 'room limit');
           return;
         }
-        const target = r[other];
-        if (!target || target.readyState !== OPEN) return;
-        if (target.bufferedAmount > this.limits.maxBuffered) {
-          // The receiver can't keep up (or its connection is dead): it will reconnect.
-          target.terminate();
+        if (!isBinary) {
+          if (this.onText(socket, data)) r.lastActivity = this.now();
           return;
         }
-        target.send(data);
+        r.lastActivity = this.now();
+        const target = r[other];
+        if (target && target.readyState === OPEN) this.forward(target, data);
       },
       onClose: () => {
         if (closed) return;
@@ -193,6 +203,7 @@ export class RoomRegistry {
         if (count > 0) this.connections.set(info.address, count);
         else this.connections.delete(info.address);
         this.totalConnections--;
+        this.peers.delete(socket);
         if (r[role] !== socket) return;
         r[role] = undefined;
         r.lastActivity = this.now();
@@ -221,6 +232,49 @@ export class RoomRegistry {
     this.rooms.clear();
   }
 
+  /**
+   * Sends a frame unless that would exceed a memory limit. The receivers' `bufferedAmount` (what
+   * `ws` and the kernel socket haven't accepted yet) is read afresh on every frame, so the total
+   * can't drift from the truth: there is no running count to keep in sync. Reading it for at most
+   * `maxConnections` sockets costs microseconds next to the frame itself.
+   *
+   * Worst case: `maxBufferedTotal` plus one frame, whatever the number of connections (300 ×
+   * 16 MiB would be 4.7 GiB without the total).
+   */
+  private forward(target: Peer, data: Buffer): void {
+    if (target.bufferedAmount > this.limits.maxBuffered) {
+      // The receiver can't keep up (or its connection is dead): it will reconnect.
+      this.evict(target);
+      return;
+    }
+    let total = data.length;
+    for (const peer of this.peers) total += peer.bufferedAmount;
+    if (total > this.limits.maxBufferedTotal) {
+      // Free memory by dropping the receivers furthest behind; they reconnect and resume.
+      const behind = [...this.peers]
+        .filter((peer) => peer.bufferedAmount > 0)
+        .sort((a, b) => b.bufferedAmount - a.bufferedAmount);
+      for (const peer of behind) {
+        if (total <= this.limits.maxBufferedTotal) break;
+        total -= peer.bufferedAmount;
+        this.evict(peer);
+        if (peer === target) return;
+      }
+      if (total > this.limits.maxBufferedTotal) {
+        // Only this frame is left over the limit (a total smaller than one frame).
+        this.evict(target);
+        return;
+      }
+    }
+    target.send(data);
+  }
+
+  private evict(peer: Peer): void {
+    // Its buffers are released as the socket is destroyed; stop counting them now.
+    this.peers.delete(peer);
+    peer.terminate();
+  }
+
   private expire(room: Room): void {
     this.rooms.delete(room.id);
     const desktop = room.desktop;
@@ -245,13 +299,16 @@ export class RoomRegistry {
     if (peer && peer.readyState === OPEN) peer.send(JSON.stringify(message));
   }
 
-  private onText(socket: Peer, data: Buffer): void {
-    if (data.length > 256) return;
+  /** Answers control messages; true for a ping. */
+  private onText(socket: Peer, data: Buffer): boolean {
+    if (data.length > 256) return false;
     try {
       const message = JSON.parse(data.toString('utf8')) as { type?: unknown };
-      if (message.type === 'ping') this.control(socket, { type: 'pong' });
+      if (message.type !== 'ping') return false;
+      this.control(socket, { type: 'pong' });
+      return true;
     } catch {
-      // ignore
+      return false;
     }
   }
 }

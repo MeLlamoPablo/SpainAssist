@@ -24,6 +24,18 @@ const Env = z.object({
     .int()
     .positive()
     .default(DEFAULT_LIMITS.roomBytes / 1024 / 1024),
+  /** Backlog of one receiver before it is disconnected. */
+  BUFFERED_MEGABYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_LIMITS.maxBuffered / 1024 / 1024),
+  /** Backlog of all receivers together (keep it well under the container's memory limit). */
+  MAX_BUFFERED_MEGABYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_LIMITS.maxBufferedTotal / 1024 / 1024),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
@@ -42,6 +54,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       connectionsPerAddress: e.CONNECTIONS_PER_ADDRESS,
       maxConnections: e.MAX_CONNECTIONS,
       roomBytes: e.ROOM_MEGABYTES * 1024 * 1024,
+      maxBuffered: e.BUFFERED_MEGABYTES * 1024 * 1024,
+      maxBufferedTotal: e.MAX_BUFFERED_MEGABYTES * 1024 * 1024,
     },
   };
 }

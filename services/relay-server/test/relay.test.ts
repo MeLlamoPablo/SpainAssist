@@ -3,7 +3,15 @@ import net, { type AddressInfo } from 'node:net';
 import { DesktopPairing, encodePairingLink, PhoneClient, PhoneSigner } from '@sa/companion';
 import { type DesktopToPhone, RELAY_CLOSE } from '@sa/shared';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createApp, createRelay, type Relay, type RelayOptions } from '../src';
+import {
+  createApp,
+  createRelay,
+  loadConfig,
+  type Peer,
+  type Relay,
+  type RelayOptions,
+  RoomRegistry,
+} from '../src';
 
 const relays: Relay[] = [];
 const sockets: WebSocket[] = [];
@@ -211,6 +219,119 @@ describe('relay rooms', () => {
       bad.addEventListener('close', (e) => resolve(e.code)),
     );
     expect(code).toBe(1006);
+  });
+});
+
+class FakePeer implements Peer {
+  readyState = 1;
+  bufferedAmount = 0;
+  sent: (string | Buffer)[] = [];
+  terminated = false;
+  send(data: string | Buffer): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    this.readyState = 3;
+  }
+  terminate(): void {
+    this.terminated = true;
+    this.readyState = 3;
+  }
+  get frames(): Buffer[] {
+    return this.sent.filter((d): d is Buffer => typeof d !== 'string');
+  }
+}
+
+/** A room with a fake desktop and phone; returns what the desktop sends through. */
+function pair(registry: RoomRegistry, address = '10.0.0.1') {
+  const id = room();
+  const desktop = new FakePeer();
+  const phone = new FakePeer();
+  const fromDesktop = registry.attach(desktop, { room: id, role: 'desktop', key: 'k', address });
+  const fromPhone = registry.attach(phone, { room: id, role: 'phone', address });
+  if (!fromDesktop || !fromPhone) throw new Error('not attached');
+  return { desktop, phone, fromDesktop, fromPhone };
+}
+
+describe('relay memory limits', () => {
+  it('disconnects a receiver further behind than maxBuffered', () => {
+    const registry = new RoomRegistry({ maxBuffered: 1000 });
+    const { phone, fromDesktop } = pair(registry);
+    phone.bufferedAmount = 1000;
+    fromDesktop.onMessage(Buffer.alloc(10), true);
+    expect(phone.frames).toHaveLength(1);
+    phone.bufferedAmount = 1001;
+    fromDesktop.onMessage(Buffer.alloc(10), true);
+    expect(phone.terminated).toBe(true);
+    expect(phone.frames).toHaveLength(1);
+  });
+
+  it('disconnects the receivers furthest behind when all backlogs together pass the cap', () => {
+    const registry = new RoomRegistry({ maxBuffered: 1000, maxBufferedTotal: 600 });
+    const a = pair(registry);
+    const b = pair(registry);
+    const c = pair(registry);
+    a.phone.bufferedAmount = 300;
+    b.phone.bufferedAmount = 200;
+    c.phone.bufferedAmount = 100;
+    // 600 + 0 fits; one byte more doesn't.
+    c.fromDesktop.onMessage(Buffer.alloc(0), true);
+    expect(c.phone.frames).toHaveLength(1);
+    c.fromDesktop.onMessage(Buffer.alloc(50), true);
+    expect(a.phone.terminated).toBe(true);
+    expect(b.phone.terminated).toBe(false);
+    expect(c.phone.terminated).toBe(false);
+    expect(c.phone.frames).toHaveLength(2);
+    // A terminated socket no longer counts, even before its close event.
+    c.phone.bufferedAmount = 350;
+    c.fromDesktop.onMessage(Buffer.alloc(50), true);
+    expect(b.phone.terminated).toBe(false);
+    expect(c.phone.frames).toHaveLength(3);
+  });
+
+  it('drops the frame when its own receiver is the one furthest behind', () => {
+    const registry = new RoomRegistry({ maxBuffered: 1000, maxBufferedTotal: 600 });
+    const a = pair(registry);
+    const b = pair(registry);
+    a.phone.bufferedAmount = 500;
+    b.desktop.bufferedAmount = 100;
+    a.fromDesktop.onMessage(Buffer.alloc(50), true);
+    expect(a.phone.terminated).toBe(true);
+    expect(a.phone.frames).toHaveLength(0);
+    expect(b.desktop.terminated).toBe(false);
+  });
+
+  it('stops counting a socket once it closes', () => {
+    const registry = new RoomRegistry({ maxBuffered: 1000, maxBufferedTotal: 600 });
+    const a = pair(registry);
+    const b = pair(registry);
+    a.phone.bufferedAmount = 590;
+    a.fromPhone.onClose();
+    b.fromDesktop.onMessage(Buffer.alloc(50), true);
+    expect(a.phone.terminated).toBe(false);
+    expect(b.phone.frames).toHaveLength(1);
+  });
+
+  it('counts text frames toward the room bytes', () => {
+    const registry = new RoomRegistry({ roomBytes: 1000 });
+    const { desktop, phone, fromPhone } = pair(registry);
+    const text = Buffer.from(JSON.stringify({ type: 'hello', pad: 'x'.repeat(280) }));
+    for (let i = 0; i < 3; i++) fromPhone.onMessage(text, false);
+    expect(phone.readyState).toBe(1);
+    fromPhone.onMessage(text, false);
+    expect(phone.readyState).toBe(3);
+    expect(desktop.readyState).toBe(3);
+    // A ping still gets its pong.
+    const other = pair(registry);
+    other.fromPhone.onMessage(Buffer.from('{"type":"ping"}'), false);
+    expect(other.phone.sent.at(-1)).toBe('{"type":"pong"}');
+  });
+
+  it('reads the limits from the environment', () => {
+    const { limits } = loadConfig({ BUFFERED_MEGABYTES: '8', MAX_BUFFERED_MEGABYTES: '256' });
+    expect(limits.maxBuffered).toBe(8 * 1024 * 1024);
+    expect(limits.maxBufferedTotal).toBe(256 * 1024 * 1024);
+    expect(loadConfig({}).limits.maxBufferedTotal).toBe(512 * 1024 * 1024);
   });
 });
 
