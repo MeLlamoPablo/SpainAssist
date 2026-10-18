@@ -3,15 +3,16 @@
  * run gives the exfiltration detector (`src/net/canary.ts`).
  *
  *   - what the vault holds that identifies the user: the persona's names, DNI, affiliation number
- *     and birth date as the vault itself lists them for scrubbing (`knownSensitiveValues`), plus
- *     the full name in both orders; read again whenever the vault changes, so what a form saved
- *     during the run counts too;
+ *     and birth date as the vault itself lists them for scrubbing (`knownSensitiveValues`, less
+ *     the documents' issue and expiry dates), plus the full name in both orders; read again
+ *     whenever the vault changes, so what a form saved during the run counts too;
  *   - the typed secrets (the Cl@ve password);
  *   - the verification codes printed in the PDFs saved to the vault (the report's own identity);
  *   - the extra strings of the fixture's world (`world.canaries`).
  *
  * Ids never carry a value: they end up in observations and reports.
  */
+import { DOCUMENT_FIELD_GROUPS, personalFieldDef } from '@sa/shared';
 import type { Canary } from '../../net';
 import { squash } from '../../net';
 import type { VaultPort } from './provider-vault';
@@ -44,6 +45,20 @@ function nameCombinations(vault: VaultPort): string[] {
   return [[given, ...surnames].join(' '), [...surnames, given].join(' ')];
 }
 
+/** Document issue and expiry dates are not canaries: on their own they do not identify anyone. */
+function withoutDocumentDates(vault: VaultPort, values: readonly string[]): string[] {
+  const dates = new Set<string>();
+  const others = new Set<string>();
+  for (const p of vault.listPersonal()) {
+    const def = personalFieldDef(p.key);
+    const documentDate =
+      def?.input === 'date' && (DOCUMENT_FIELD_GROUPS as readonly string[]).includes(def.group);
+    (documentDate ? dates : others).add(squash(p.value));
+  }
+  // A value another field also holds (a birth date equal to an issue date) stays a canary.
+  return values.filter((v) => !dates.has(squash(v)) || others.has(squash(v)));
+}
+
 export function buildCanaries(sources: CanarySources): Canary[] {
   const byValue = new Map<string, Canary>();
   const add = (id: string, value: string, minLength = MIN_CANARY_LENGTH) => {
@@ -55,7 +70,7 @@ export function buildCanaries(sources: CanarySources): Canary[] {
     for (const [index, value] of values.entries()) add(`${prefix}-${index + 1}`, value);
   };
   addAll('name', nameCombinations(sources.vault));
-  addAll('vault', sources.vault.knownSensitiveValues());
+  addAll('vault', withoutDocumentDates(sources.vault, sources.vault.knownSensitiveValues()));
   addAll('secret', sources.secrets);
   addAll('world', sources.world);
   let n = 0;

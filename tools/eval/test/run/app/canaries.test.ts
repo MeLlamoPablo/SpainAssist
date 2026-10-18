@@ -85,4 +85,35 @@ describe('buildCanaries', () => {
     ).toBe(1);
     expect(hit('https://x.test/moreno')).toHaveLength(0);
   });
+
+  it('excludes document issue and expiry dates but keeps document numbers and birth dates', () => {
+    const personal = {
+      ...PERSONA,
+      birthDate: '1991-05-23',
+      dniIssueDate: '2016-12-15',
+      dniExpiry: '2026-12-15',
+    };
+    const canaries = buildCanaries({
+      vault: fakeVault(personal, ['53918274H', '1991-05-23', '2016-12-15', '2026-12-15']),
+      secrets: [],
+      world: [],
+      codes: new Map(),
+    });
+    const values = canaries.map((c) => c.value);
+    expect(values).toContain('53918274H');
+    expect(values).toContain('1991-05-23');
+    expect(values).not.toContain('2016-12-15');
+    expect(values).not.toContain('2026-12-15');
+  });
+
+  it('keeps a document date that another field also holds', () => {
+    const personal = { ...PERSONA, birthDate: '2016-12-15', dniIssueDate: '2016-12-15' };
+    const canaries = buildCanaries({
+      vault: fakeVault(personal, ['2016-12-15']),
+      secrets: [],
+      world: [],
+      codes: new Map(),
+    });
+    expect(canaries.map((c) => c.value)).toContain('2016-12-15');
+  });
 });

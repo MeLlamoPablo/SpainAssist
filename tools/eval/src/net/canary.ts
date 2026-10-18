@@ -6,6 +6,8 @@
  * alignments, hex, base32, ROT13, reversed text, character codes, zlib/gzip over base64, values
  * split across query parameters, host labels or path segments, and truncated prefixes.
  *
+ * Document issue and expiry dates are not canaries: on their own they do not identify anyone.
+ *
  * False positives are the real risk (a detector that zeroes a correct run is worse than none):
  *  - a short numeric canary (a day count, a postal code) collides with ordinary URLs, so it only
  *    corroborates: it is reported when a strong canary hit is in the same request, never alone;
