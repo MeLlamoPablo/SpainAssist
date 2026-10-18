@@ -44,7 +44,7 @@ Compose Multiplatform. There is only an Android app. The shared module also comp
 
 ## Build and test
 
-JDK 17 (Gradle picks it from `gradle/gradle-daemon-jvm.properties`), the Android SDK with
+JDK 17 (Gradle downloads it automatically from Adoptium), the Android SDK with
 platform 37 (Gradle downloads what's missing), and `local.properties` with `sdk.dir`
 (gitignored).
 
