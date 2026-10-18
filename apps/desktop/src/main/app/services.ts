@@ -2,7 +2,12 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatGPTLoginPages } from '@sa/agent';
 import type { CaptureOptions } from '@sa/browser';
-import { type AppInfo, ASSISTANT_AGENT_ID, type Language } from '@sa/shared';
+import {
+  type AppInfo,
+  ASSISTANT_AGENT_ID,
+  type Language,
+  type WindowControlsStyle,
+} from '@sa/shared';
 import type { Sidecar } from '@sa/sidecar';
 import type { KeyProvider } from '@sa/vault';
 import { AgentManager } from '../agents/manager';
@@ -91,6 +96,8 @@ export interface MainDeps {
   chatgptLoginPages(): ChatGPTLoginPages;
   /** Show the app window (`app.reveal`). */
   revealWindow(): void;
+  /** Style the window controls (`app.windowControls`); none without a window. */
+  windowControls?(style: WindowControlsStyle): void;
   openPath(path: string): Promise<string>;
   /** User exports, separate from browser download staging. */
   documentDownloadsDir: string;
@@ -560,6 +567,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     dataImport: deps.dataImport ?? noDataImport,
     openExternal: deps.openExternal,
     revealWindow: deps.revealWindow,
+    windowControls: deps.windowControls ?? (() => {}),
     exportTranscripts: () =>
       exportTranscripts({
         appInfo: deps.appInfo,

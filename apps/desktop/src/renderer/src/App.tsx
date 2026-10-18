@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { PreviewTrafficLights } from './components/PreviewChrome';
+import { PreviewTrafficLights, PreviewWindowControls } from './components/PreviewChrome';
 import { Toaster } from './components/ui/toaster';
 import { TooltipProvider } from './components/ui/tooltip';
 import { Onboarding } from './features/onboarding/Onboarding';
@@ -8,7 +8,7 @@ import { MustUpdate } from './features/shell/MustUpdate';
 import { Shell } from './features/shell/Shell';
 import { useT } from './i18n';
 import { common } from './i18n/common';
-import { isMockApi } from './lib/api';
+import { api, isMockApi } from './lib/api';
 import { useAppStore } from './store/app';
 
 const Playground = lazy(() =>
@@ -33,6 +33,13 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
+
+  // Windows and Linux: white window controls over the onboarding's gradient, until it exits.
+  const controls =
+    !playground && !mustUpdate && dataImport !== 'offer' && !onboardingDone ? 'onboarding' : 'app';
+  useEffect(() => {
+    void api.invoke('app.windowControls', controls);
+  }, [controls]);
 
   return (
     <TooltipProvider>
@@ -61,6 +68,7 @@ export function App() {
       )}
       {!playground && !mustUpdate && dataImport === 'imported' && <DataImportDone />}
       {!playground && <PreviewTrafficLights />}
+      {!playground && <PreviewWindowControls style={controls} />}
       <Toaster closeLabel={t.close} />
     </TooltipProvider>
   );

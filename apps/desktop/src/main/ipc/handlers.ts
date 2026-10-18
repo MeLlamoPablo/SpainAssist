@@ -1,4 +1,4 @@
-import type { AppInfo, MapPoint } from '@sa/shared';
+import type { AppInfo, MapPoint, WindowControlsStyle } from '@sa/shared';
 import type { BrowserHolder } from '../browser/holder';
 import type { ChatService } from '../chat/service';
 import type { CompanionService } from '../companion/service';
@@ -47,6 +47,7 @@ export interface IpcServices {
   dataImport: DataImport;
   openExternal(url: string): Promise<void>;
   revealWindow(): void;
+  windowControls(style: WindowControlsStyle): void;
   /** Saves every stored transcript in a zip in Downloads; returns its file name. */
   exportTranscripts(): Promise<string>;
   deleteProcedure(id: string): Promise<void>;
@@ -74,6 +75,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
     await s.openExternal(url);
   });
   router.register('app.reveal', S['app.reveal'], () => s.revealWindow());
+  router.register('app.windowControls', S['app.windowControls'], (style) =>
+    s.windowControls(style),
+  );
   router.register('app.exportTranscripts', S['app.exportTranscripts'], () => s.exportTranscripts());
   router.register('updates.status', S['updates.status'], () => s.updates.status());
   router.register('dataImport.status', S['dataImport.status'], () => s.dataImport.status());

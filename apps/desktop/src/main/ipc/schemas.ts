@@ -37,6 +37,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'app.info': none,
   'app.openExternal': z.tuple([z.string().url().max(2000)]),
   'app.reveal': none,
+  'app.windowControls': z.tuple([z.enum(['onboarding', 'app'])]),
   'app.exportTranscripts': none,
   'updates.status': none,
   'dataImport.status': none,

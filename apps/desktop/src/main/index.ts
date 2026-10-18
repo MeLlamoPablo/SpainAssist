@@ -8,6 +8,7 @@ import {
   SA_EVENT_CHANNEL,
   SA_INVOKE_CHANNEL,
   setExtraTrustedHosts,
+  type WindowControlsStyle,
 } from '@sa/shared';
 import { Sidecar, sidecarBinaryPath } from '@sa/sidecar';
 import {
@@ -15,6 +16,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  nativeTheme,
   net,
   protocol,
   type Session,
@@ -22,6 +24,7 @@ import {
   session,
   shell,
   systemPreferences,
+  type TitleBarOverlayOptions,
 } from 'electron';
 import type { AppUpdater } from 'electron-updater';
 import { z } from 'zod';
@@ -184,7 +187,16 @@ function createWindow(): BrowserWindow {
     show: false,
     title: 'Spain Assist',
     icon: devIcon,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    // No system title bar: the app's headers are the title bar (`drag` areas). macOS insets its
+    // traffic lights; Windows and Linux draw their controls over the top-right corner.
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform === 'darwin'
+      ? {}
+      : {
+          titleBarOverlay: windowControls(
+            services?.settings.get().onboardingCompleted === false ? 'onboarding' : 'app',
+          ),
+        }),
     backgroundColor: '#faf9f7',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.cjs'),
@@ -225,6 +237,26 @@ function createWindow(): BrowserWindow {
   });
   void win.loadURL(devUrl ?? APP_ENTRY_URL);
   return win;
+}
+
+/** The style the renderer last asked for (`app.windowControls`). */
+let controlsStyle: WindowControlsStyle = 'app';
+
+/**
+ * Windows and Linux: the window controls, on a transparent background so the header under them
+ * shows through, as tall as that header (TopBar, the onboarding's language bar). The symbols
+ * use the palette's text colour (--sa-fg), or white over the onboarding's gradient.
+ */
+function windowControls(style: WindowControlsStyle): TitleBarOverlayOptions {
+  controlsStyle = style;
+  const symbolColor =
+    style === 'onboarding' ? '#ffffff' : nativeTheme.shouldUseDarkColors ? '#edebe7' : '#28211d';
+  return { color: '#00000000', symbolColor, height: style === 'onboarding' ? 52 : 64 };
+}
+
+function setWindowControls(win: BrowserWindow | undefined, style: WindowControlsStyle): void {
+  if (process.platform === 'darwin' || !win || win.isDestroyed()) return;
+  win.setTitleBarOverlay(windowControls(style));
 }
 
 /** Windows the renderer has asked to show. */
@@ -441,6 +473,7 @@ async function main(): Promise<void> {
       await shell.openExternal(url);
     },
     revealWindow: () => revealWindow(mainWindow),
+    windowControls: (style) => setWindowControls(mainWindow, style),
     openPath: (path) => shell.openPath(path),
     relaunch: () => {
       app.relaunch();
@@ -550,6 +583,8 @@ async function main(): Promise<void> {
   if (env.hideWindow) app.dock?.hide();
   else if (devIcon) app.dock?.setIcon(devIcon);
   mainWindow = createWindow();
+  // The symbols follow the system's light/dark mode, like the app's palette.
+  nativeTheme.on('updated', () => setWindowControls(mainWindow, controlsStyle));
   app.on('activate', () => {
     if (!mainWindow) mainWindow = createWindow();
   });

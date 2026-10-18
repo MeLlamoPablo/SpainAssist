@@ -922,6 +922,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       toast.info(tr('Microsoft Store de ejemplo', 'Example Microsoft Store'));
     },
     'app.reveal': () => {},
+    'app.windowControls': () => {},
     'app.exportTranscripts': () => 'SpainAssist-transcripts-2026-10-12.zip',
     'app.openExternal': (url) => {
       if (params.has('playground')) {

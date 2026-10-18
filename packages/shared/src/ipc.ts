@@ -48,6 +48,9 @@ export interface DnieUnlockValues {
  */
 export type InstallChannel = 'msix' | 'nsis' | 'dmg' | 'deb' | 'unpacked' | 'dev';
 
+/** Which screen the window controls sit over (`app.windowControls`). */
+export type WindowControlsStyle = 'onboarding' | 'app';
+
 export interface AppInfo {
   name: string;
   version: string;
@@ -143,6 +146,11 @@ export interface SaMethods {
    * up first; the renderer calls this once it can draw without stalls.
    */
   'app.reveal': [[], void];
+  /**
+   * Windows and Linux: styles the window controls (— ☐ ✕) drawn over the app's own title bar,
+   * white over the onboarding's gradient, the text colour over the app.
+   */
+  'app.windowControls': [[style: WindowControlsStyle], void];
   /**
    * Saves every stored transcript (the conversation, each procedure's activity log and agent
    * session) in a new .zip in Downloads, for analysis; returns its file name.

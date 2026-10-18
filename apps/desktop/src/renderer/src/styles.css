@@ -11,6 +11,15 @@
 
 @custom-variant dark (@media (prefers-color-scheme: dark));
 @custom-variant mac (&:where([data-platform="darwin"], [data-platform="darwin"] *));
+/* Windows and Linux, which draw the window controls (— ☐ ✕) over the top-right corner. */
+@custom-variant controls-right (
+  &:where(
+    [data-platform="win32"],
+    [data-platform="win32"] *,
+    [data-platform="linux"],
+    [data-platform="linux"] *
+  )
+);
 
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -230,6 +239,15 @@
 }
 
 /* Window chrome (Electron): draggable title-bar areas and the controls inside them. */
+:root {
+  /* Width of the window controls on Windows and Linux (Electron's Window Controls Overlay);
+     138px, Windows' three buttons, where there is no overlay (the browser preview). */
+  --sa-controls-width: calc(
+    100vw -
+    env(titlebar-area-x, 0px) -
+    env(titlebar-area-width, calc(100vw - 138px))
+  );
+}
 @utility drag {
   -webkit-app-region: drag;
   app-region: drag;

@@ -59,7 +59,7 @@ export function TopBar() {
   );
 
   return (
-    <header className="drag flex h-[64px] shrink-0 items-center gap-3 px-6 @min-[760px]:gap-4 @min-[760px]:px-8">
+    <header className="drag flex h-[64px] shrink-0 items-center gap-3 px-6 controls-right:pr-[calc(var(--sa-controls-width)+12px)] @min-[760px]:gap-4 @min-[760px]:px-8">
       <nav aria-label={t.nav} className="no-drag flex shrink-0 items-center gap-1">
         {TABS.map(({ kind, icon: Icon, key }) => {
           const active = view.kind === kind;

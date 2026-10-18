@@ -239,7 +239,7 @@ export function Onboarding({
       inert={exiting}
     >
       <LiquidGradient animate={!still} className="absolute inset-0 -z-10" />
-      <div className="drag flex h-[52px] shrink-0 items-center justify-end gap-3 px-5">
+      <div className="drag flex h-[52px] shrink-0 items-center justify-end gap-3 px-5 controls-right:pr-[calc(var(--sa-controls-width)+12px)]">
         <SegmentedControl
           size="sm"
           label={t.language}
