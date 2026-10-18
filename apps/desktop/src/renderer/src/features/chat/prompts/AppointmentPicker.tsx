@@ -137,11 +137,10 @@ export function AppointmentPicker({
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <Button
           size="sm"
-          variant="ghost"
+          variant="secondary"
           icon={CalendarSearch}
           disabled={busy}
           onClick={onRequestMore}
-          className="-ml-3"
           data-testid="appointment-more"
         >
           {t.prompt.appointmentMore}
