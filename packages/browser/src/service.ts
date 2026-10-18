@@ -1292,16 +1292,29 @@ export class PlaywrightBrowserService implements BrowserService {
     await this.settle(s, first, opts.initialWait ?? 100);
     await this.waitForBackgroundWork(s);
 
-    const page = this.livePage(s) ?? first;
-    const before = await collectPasswordValues(page);
-    let json: unknown = [];
+    let page = this.livePage(s) ?? first;
+    let before: Awaited<ReturnType<typeof collectPasswordValues>>;
+    let after: typeof before;
+    let json: unknown;
     let snapshotError: string | undefined;
-    try {
-      json = await this.captureSnapshot(page);
-    } catch (err) {
-      snapshotError = cleanPlaywrightMessage(errorMessage(err));
+    for (let attempt = 0; ; attempt++) {
+      before = await collectPasswordValues(page);
+      json = [];
+      snapshotError = undefined;
+      try {
+        json = await this.captureSnapshot(page);
+      } catch (err) {
+        snapshotError = cleanPlaywrightMessage(errorMessage(err));
+      }
+      after = before.count ? await collectPasswordValues(page) : before;
+      // A popup the action opened can be reported late (on a busy machine, after the settle
+      // above): if the active tab changed while the page was being read, observe that tab
+      // instead, so the snapshot, its refs and `tabs` all describe the same page.
+      const live = this.livePage(s);
+      if (!live || live === page || attempt >= 2) break;
+      page = live;
+      await this.settle(s, page, 0);
     }
-    const after = before.count ? await collectPasswordValues(page) : before;
     const rendered = renderSnapshot(json, {
       budget: this.budget,
       secrets: s.secretVariants,

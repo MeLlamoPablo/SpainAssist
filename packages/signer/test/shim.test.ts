@@ -1,21 +1,21 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { AFIRMA_NOTICE, type AfirmaCall, type AfirmaReply } from '@sa/shared';
 import { chromium } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { CANCELLED_TYPE } from '../src/errors';
 import { AUTOSCRIPT_SHIM_SOURCE } from '../src/shim';
 
-const executable = join(
-  homedir(),
-  'Library/Caches/ms-playwright/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
-);
+// chromium-headless-shell (Playwright's default for headless), installed alongside Chromium by
+// `playwright-core install chromium`. Not the full Chrome for Testing build: on macOS its
+// `browser.close()` sometimes takes several seconds (up to ~16 s under load), which made these
+// tests time out after they had passed. The shim only needs a real Blink, not the full browser.
+const installed = existsSync(chromium.executablePath());
+const launch = () => chromium.launch({ headless: true });
 const realScript = readFileSync(new URL('./fixtures/autoscript.min.js', import.meta.url), 'utf8');
 
-describe.skipIf(!existsSync(executable))('real Chromium AutoScript interception', () => {
+describe.skipIf(!installed)('real Chromium AutoScript interception', () => {
   it('preserves globals through double loads, callbacks, cancellation, iframes and strict CSP', async () => {
-    const browser = await chromium.launch({ executablePath: executable, headless: true });
+    const browser = await launch();
     try {
       const context = await browser.newContext();
       const calls: AfirmaCall[] = [];
@@ -137,7 +137,7 @@ describe.skipIf(!existsSync(executable))('real Chromium AutoScript interception'
   }, 20000);
 
   it('answers every call of a platform copy of autoscript (gsede 1.8.0) and stands in for unknown ones', async () => {
-    const browser = await chromium.launch({ executablePath: executable, headless: true });
+    const browser = await launch();
     try {
       const context = await browser.newContext();
       const calls: AfirmaCall[] = [];

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import type { BrowserObservation } from '@sa/shared';
+import type { Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestService, page, refOf, sendHtml, startServer, type TestServer } from './helpers';
 
@@ -269,6 +270,36 @@ describe('tabs, dialogs, downloads', () => {
     obs = await t.service.open('tabs', `${a.origin}/form`, { newTab: true });
     expect(obs.tabs).toHaveLength(3);
     expect(obs.tabs[2]).toMatchObject({ active: true, title: 'Formulario' });
+  });
+
+  it('observes a popup reported while the opener is being read (snapshot, refs and tabs agree)', async () => {
+    let obs = await t.service.open('late-pop', `${a.origin}/`);
+    // On a busy machine Playwright can report a popup after the settle, while the opener's
+    // snapshot is being captured. Simulate exactly that: open it from inside the capture.
+    const svc = t.service as unknown as { captureSnapshot(page: Page): Promise<unknown> };
+    const capture = svc.captureSnapshot;
+    let opened = false;
+    svc.captureSnapshot = async function (this: unknown, page: Page) {
+      if (!opened) {
+        opened = true;
+        const popup = page.context().waitForEvent('page');
+        await page.evaluate(() => void window.open('/popup'));
+        await popup;
+      }
+      return capture.call(this, page);
+    };
+    try {
+      obs = await t.service.snapshot('late-pop');
+    } finally {
+      Reflect.deleteProperty(svc, 'captureSnapshot');
+    }
+    expect(opened).toBe(true);
+    expect(obs.url).toBe(`${a.origin}/popup`);
+    expect(obs.snapshot).toContain('Ventana emergente');
+    expect(obs.tabs.map((x) => x.active)).toEqual([false, true]);
+    // The refs belong to the active tab.
+    obs = await t.service.click('late-pop', refOf(obs.snapshot, 'heading "Ventana emergente"'));
+    expect(obs.url).toBe(`${a.origin}/popup`);
   });
 
   it('accepts alerts, confirms and beforeunload, dismisses prompts, and reports them', async () => {
