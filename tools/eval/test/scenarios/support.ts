@@ -248,8 +248,6 @@ export class Site {
         return '{"success":true,"status":"completed"}';
       case 'procedure_update':
         return 'Plan card updated. Status: in_progress.';
-      case 'request_credential':
-        return `The user added their Cl@ve Permanente as credential ${CREDENTIAL}. Log in with browser_fill_from_vault.`;
       case 'browser_open': {
         const url = String(args.url);
         if (url.includes('/Informe+de+tu+vida+laboral')) return this.go('info');
@@ -276,12 +274,9 @@ export class Site {
           default:
             return this.view();
         }
-      case 'browser_fill_from_vault':
-        if (args.submit) {
-          this.logged = true;
-          return this.go('report');
-        }
-        return this.view();
+      case 'browser_login_clave':
+        this.logged = true;
+        return this.go('report');
       case 'download_save':
         return `Saved to the user's documents as "Informe de vida laboral.pdf" (id ${DOCUMENT}).`;
       case 'document_read':

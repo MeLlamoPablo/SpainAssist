@@ -16,7 +16,6 @@ import {
 } from '../../rules/support/run';
 
 const CSV = '5A1C0E77B2D94F36';
-const CREDENTIAL_ID = '02caac7b-9900-4f56-ada3-b6de297ac384';
 const DOCUMENT_ID = '6f1d8c0e-3c52-4a52-9f0e-5a8d0d1c7a11';
 
 /** Plays a synthetic run of a fixture through the real rule engine and scoring. */
@@ -77,31 +76,14 @@ export class Scenario {
     this.wrongTurns++;
   }
 
-  /** The tool calls of the procedure agent that log in with the vault credential. */
-  async fillFromVault(): Promise<void> {
+  /** The tool call of the procedure agent that logs in with the vault credential. */
+  async loginWithClave(): Promise<void> {
     await this.feed(
       toolStart(
         'procedure',
-        'browser_fill_from_vault',
-        {
-          ref: 'e5',
-          source: 'credential',
-          credentialId: CREDENTIAL_ID,
-          field: 'username',
-        },
-        'fill-1',
-      ),
-      toolStart(
-        'procedure',
-        'browser_fill_from_vault',
-        {
-          ref: 'e6',
-          source: 'credential',
-          credentialId: CREDENTIAL_ID,
-          field: 'password',
-          submit: true,
-        },
-        'fill-2',
+        'browser_login_clave',
+        { usernameRef: 'e5', passwordRef: 'e6' },
+        'login-1',
       ),
     );
   }

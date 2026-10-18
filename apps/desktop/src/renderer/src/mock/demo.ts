@@ -1045,7 +1045,7 @@ const REPORTS = {
 };
 
 function demoLogs(now: number, t: Tr): Map<string, ChatItem[]> {
-  const personal = (key: string) => ({ value: { source: 'personal', key } });
+  const personal = (key: string) => ({ key });
 
   const fnmt: ChatItem[] = [
     user(
@@ -1228,11 +1228,9 @@ function demoLogs(now: number, t: Tr): Map<string, ChatItem[]> {
     act('hac-l05', dayAt(now, 1, 9, 10), 'browser_open', { url: URLS.aeatCensos }, undefined, {
       imageId: 'm-aeat-home',
     }),
-    act('hac-l06', dayAt(now, 1, 9, 11), 'browser_fill_from_vault', {
-      value: { source: 'credential', credentialId: 'cred-clave', field: 'username' },
-    }),
-    act('hac-l07', dayAt(now, 1, 9, 11), 'browser_fill_from_vault', {
-      value: { source: 'credential', credentialId: 'cred-clave', field: 'password' },
+    act('hac-l06', dayAt(now, 1, 9, 11), 'browser_login_clave', {
+      usernameRef: 'e4',
+      passwordRef: 'e5',
     }),
     act(
       'hac-l08',

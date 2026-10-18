@@ -692,7 +692,7 @@ export function existingReply(p: ProcedureListItem, lang: Lang): string {
 // Demo procedures
 // ---------------------------------------------------------------------------------------------
 
-const personal = (key: string) => ({ value: { source: 'personal', key } });
+const personal = (key: string) => ({ key });
 
 /** The DNI agent after the user answers (or dismisses) "¿Dónde y cuándo quieres la cita?". */
 export function dniAfterForm(response: PromptResponse, lang: Lang): PStep[] {

@@ -128,8 +128,10 @@ describe('HostHooks (real host process)', () => {
           sessionFile: join(workDir, 'sessions', 'p1.jsonl'),
           language: 'es',
           model: { provider: 'custom', id: 'mock-model', baseUrl: llm.baseUrl },
-          // Community learnings, sharing included: the agent has every tool of TOOL_NAMES.
+          // Community learnings, sharing included, and the DNIe with the phone: the agent has
+          // every tool of TOOL_NAMES.
           feedback: { submit: true, vote: true },
+          dniePhone: true,
           ...options,
         },
         bridge: { url: bridge.url, token: bridge.token },

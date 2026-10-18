@@ -23,16 +23,13 @@ describe('BridgeClient', () => {
 
   it('maps error envelopes to BridgeError codes', async () => {
     bridge = await createFakeBridge({
-      'browser.fillFromVault': () => {
+      'browser.loginClave': () => {
         throw new FakeBridgeError('policy_denied', 'Not an allowed domain for Cl@ve', 403);
       },
     });
     const client = new BridgeClient({ url: bridge.url, token: bridge.token });
     const error = await client
-      .call('browser.fillFromVault', {
-        ref: 'e1',
-        value: { source: 'credential', credentialId: 'c1', field: 'password' },
-      })
+      .call('browser.loginClave', { usernameRef: 'e1', passwordRef: 'e2' })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(BridgeError);
     expect((error as BridgeError).code).toBe('policy_denied');

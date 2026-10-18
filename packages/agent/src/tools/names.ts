@@ -16,6 +16,7 @@ export const TOOL_NAMES = [
   'browser_click',
   'browser_type',
   'browser_fill_from_vault',
+  'browser_login_clave',
   'browser_fill_from_user',
   'browser_select',
   'browser_check',

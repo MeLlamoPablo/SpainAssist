@@ -869,6 +869,10 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'Plaza de ejemplo 3, Sevilla': { latitude: 37.388, longitude: -5.968 },
   };
 
+  /** The DNI/NIE of each Cl@ve Permanente (the demo's own one is the demo DNI). */
+  const claveUsernames = new Map<string, string>();
+  const claveUsername = (id: string) => claveUsernames.get(id) ?? '12345678Z';
+
   const handlers: Handlers = {
     'places.locateHome': () => ({ latitude: 37.375, longitude: -5.986 }),
     'places.pins': (itemId, fieldKey) => {
@@ -1312,9 +1316,25 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         usernameHint: maskValue(username),
       };
       state.credentials.push(cred);
+      claveUsernames.set(cred.id, username);
       emit({ type: 'vault.changed' });
       return cred;
     },
+    'vault.updateClave': async (id, input) => {
+      await sleep(500);
+      const username = input.username.trim().toUpperCase();
+      if (!/^([0-9]{8}[A-Z]|[XYZ][0-9]{7}[A-Z])$/.test(username))
+        throw new Error('El DNI o NIE no parece válido.');
+      const index = state.credentials.findIndex((c) => c.id === id);
+      const old = state.credentials[index];
+      if (old?.kind !== 'clave_permanente') throw new Error('No encontrado.');
+      const cred: CredentialSummary = { ...old, usernameHint: maskValue(username) };
+      state.credentials[index] = cred;
+      claveUsernames.set(id, username);
+      emit({ type: 'vault.changed' });
+      return cred;
+    },
+    'vault.claveUsername': (id) => claveUsername(id),
     'vault.addClaveMovil': () => {
       const existing = state.credentials.find((c) => c.kind === 'clave_movil');
       if (existing) return existing;

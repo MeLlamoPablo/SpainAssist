@@ -161,28 +161,15 @@ const RequestUserActionParams = Type.Object({
   doneLabel: Type.Optional(Type.String({ maxLength: 40 })),
 });
 
-/** `request_credential`'s parameters; the DNIe is offered only with the phone app (feature flag). */
-function requestCredentialParams(dniePhone: boolean) {
-  return Type.Object({
-    credential: StringEnum(dniePhone ? ['clave_permanente', 'dnie'] : ['clave_permanente'], {
-      description: dniePhone
-        ? 'clave_permanente (username and password) | dnie (the DNIe, read by the phone app)'
-        : 'clave_permanente (username and password)',
-    }),
-    title: Type.String({ minLength: 1, maxLength: 160 }),
-    message: Type.String({
-      minLength: 1,
-      maxLength: 2000,
-      description: 'Why this procedure needs it, in plain words',
-    }),
-  });
-}
-
-const CREDENTIAL_NAME = { clave_permanente: 'Cl@ve Permanente', dnie: 'DNIe' } as const;
-const CREDENTIAL_NEXT = {
-  clave_permanente: 'Log in with browser_fill_from_vault.',
-  dnie: "Log in with browser_use_certificate when the site asks for a client certificate, or click the login button when it signs with AutoFirma; the app pairs the phone if needed, don't ask the user to do it.",
-} as const;
+const RequestCredentialParams = Type.Object({
+  credential: StringEnum(['dnie'], { description: 'dnie (the DNIe, read by the phone app)' }),
+  title: Type.String({ minLength: 1, maxLength: 160 }),
+  message: Type.String({
+    minLength: 1,
+    maxLength: 2000,
+    description: 'Why this procedure needs it, in plain words',
+  }),
+});
 
 const RequestPhoneCallParams = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 160, description: 'e.g. "Llama a EMASESA"' }),
@@ -233,12 +220,12 @@ function formatValue(value: string | string[] | boolean): string {
   return value === '' ? '(empty)' : value;
 }
 
-export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolean } = {}) {
+export function userTools(bridge: BridgeTransport) {
   return [
     defineSaTool({
       name: 'ask_user',
       label: 'Ask the user',
-      description: `Ask the user for information with a native form (several fields at once). Read the current vault first: omit fields already saved or answered, even prefilled ones. If a filtered read misses needed data, read without keys before asking. Physical places use map-options with a name and street address each; the app checks every address in Spain before showing the form. If lookup fails, the tool returns an error without asking the user: research the failed places, find their street addresses/municipality, and retry map-options. Never ask the user to pick geocoding matches. Do not use select just because coordinates or addresses are missing. Appointment slots use type appointment with slots, never select or free text: the answer is the chosen slot, or "${APPOINTMENT_MORE}" when the user wants other options (then look for more slots, e.g. later dates or other offices, and ask again). Set vaultKey on fields worth keeping: their answers are saved automatically. Use the field type that fits (date, phone, email, province, select…) rather than free text. For inputs that apply only to certain dropdown options, set visibleWhen: {field: "access", values: ["sms"]}; do not use conditional help text. NEVER use it for passwords, PINs or one-time codes (use browser_fill_from_vault / browser_fill_from_user). Waits until the user answers.`,
+      description: `Ask the user for information with a native form (several fields at once). Read the current vault first: omit fields already saved or answered, even prefilled ones. If a filtered read misses needed data, read without keys before asking. Physical places use map-options with a name and street address each; the app checks every address in Spain before showing the form. If lookup fails, the tool returns an error without asking the user: research the failed places, find their street addresses/municipality, and retry map-options. Never ask the user to pick geocoding matches. Do not use select just because coordinates or addresses are missing. Appointment slots use type appointment with slots, never select or free text: the answer is the chosen slot, or "${APPOINTMENT_MORE}" when the user wants other options (then look for more slots, e.g. later dates or other offices, and ask again). Set vaultKey on fields worth keeping: their answers are saved automatically. Use the field type that fits (date, phone, email, province, select…) rather than free text. For inputs that apply only to certain dropdown options, set visibleWhen: {field: "access", values: ["sms"]}; do not use conditional help text. NEVER use it for passwords, PINs or one-time codes (use browser_login_clave / browser_fill_from_user). Waits until the user answers.`,
       parameters: AskUserParams,
       async execute(_id, params, signal) {
         const fields = params.fields.map((f) =>
@@ -357,7 +344,7 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
       name: 'request_user_action',
       label: 'Ask the user to act',
       description:
-        'Ask the user to do something you cannot do: solve a captcha, scan a QR or approve a Cl@ve Móvil request on their phone, a manual step in the browser, or something outside the computer (go to an office, sign on paper). Never to log in with a username and password: use request_credential. Waits until the user says it is done.',
+        'Ask the user to do something you cannot do: solve a captcha, scan a QR or approve a Cl@ve Móvil request on their phone, a manual step in the browser, or something outside the computer (go to an office, sign on paper). Never to log in with a username and password: use browser_login_clave (Cl@ve Permanente) or browser_fill_from_user (other sites). Waits until the user says it is done.',
       parameters: RequestUserActionParams,
       async execute(_id, params, signal) {
         return callBridge(
@@ -386,18 +373,18 @@ export function userTools(bridge: BridgeTransport, options: { dniePhone?: boolea
     defineSaTool({
       name: 'request_credential',
       label: 'Ask the user to add a login',
-      description: `Ask the user to add a login method in the app when a login needs it and vault_read lists none: their Cl@ve Permanente (DNI/NIE and password; the app's own form saves it, you never see the password)${options.dniePhone ? ' or their DNIe (read by the phone app; the app pairs the phone later, when you log in)' : ''}. Never tell the user to add it in Mis datos themselves. Returns the new credentialId. Waits for the user.`,
-      parameters: requestCredentialParams(options.dniePhone ?? false),
+      description:
+        'Ask the user to add their DNIe in the app when a login needs it and vault_read lists none (read by the phone app; the app pairs the phone later, when you log in). Never tell the user to add it in Mis datos themselves. Cl@ve Permanente is not added here: browser_login_clave asks for it. Returns the new credentialId. Waits for the user.',
+      parameters: RequestCredentialParams,
       async execute(_id, params, signal) {
-        const name = CREDENTIAL_NAME[params.credential];
         return callBridge(bridge, 'prompt.credential', params, signal, (response) =>
           response.credentialId
             ? textResult(
-                `The user added their ${name} as credential ${response.credentialId}. ${CREDENTIAL_NEXT[params.credential]}`,
+                `The user added their DNIe as credential ${response.credentialId}. Log in with browser_use_certificate when the site asks for a client certificate, or click the login button when it signs with AutoFirma; the app pairs the phone if needed, don't ask the user to do it.`,
                 { credentialId: response.credentialId },
               )
             : textResult(
-                `The user has no ${name}. Do not log in with it. Ask which other supported method they can use.`,
+                'The user has no DNIe. Do not log in with it. Ask which other supported method they can use.',
                 { credentialId: null },
               ),
         );

@@ -64,14 +64,15 @@ plus `ask_user`, `vault_read` and `vault_save`. Procedure agents have the rest:
 | `ask_user` | `prompt.form` | Structured fields, `vaultKey` answers are always saved to my data; `secret` fields are not exposed to the model |
 | `confirm_action` | `prompt.confirm` | `confirmKind`: action / submission / payment |
 | `request_user_action` | `prompt.userAction` | captcha, qr_scan, phone_approval, manual_step, offline |
-| `request_credential` | `prompt.credential` | The user adds a Cl@ve Permanente (or the DNIe, with `dniePhone`) in the app's own form; returns the credential id |
+| `request_credential` | `prompt.credential` | Only with `dniePhone`: the user adds their DNIe in the app; returns the credential id |
 | `request_phone_call` | `prompt.phoneCall` | The user phones an office; the app can record and transcribe the call. Returns the outcome, transcript and notes |
 | `vault_read`, `vault_save` | `vault.read`, `vault.save` | Values of personal data; credential summaries only |
 | `document_read` | `vault.document` | A saved document as text, image or PDF text plus page images (paged) |
 | `download_save` | `downloads.save` | Moves a temporary browser download into the vault under a readable name (extension kept) |
 | `browser_open`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_check`, `browser_press`, `browser_wait`, `browser_back`, `browser_upload` | `browser.*` | Result = compact observation text (URL, tabs, downloads, signatures, dialogs, page script errors, notes, then the snapshot). `details.imageId` carries the UI screenshot id |
-| `browser_fill_from_vault` | `browser.fillFromVault` | `source` personal (`key`) or credential (`credentialId`, `field`) |
-| `browser_fill_from_user` | `browser.fillFromUser` | One-time codes typed by the app; the model never sees them |
+| `browser_fill_from_vault` | `browser.fillFromVault` | Saved personal data (`key`) typed by the app |
+| `browser_login_clave` | `browser.loginClave` | Cl@ve Permanente login: types the saved DNI/NIE and password and submits; asks the user in the app's own form when none is saved, or to correct it with `rejected` |
+| `browser_fill_from_user` | `browser.fillFromUser` | One-time codes and passwords of sites other than Cl@ve, typed by the app and never saved; refused on Cl@ve password fields. The model never sees them |
 | `browser_tabs`, `browser_screenshot`, `browser_use_certificate`, `browser_close` | `browser.*` | Screenshot returns an image block (refused when the model has no vision) |
 | `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher; `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan; `mode` picks model and effort: `fast` → `gpt-6-luna`, `balanced` → `gpt-6.1-sol`, `deep` → `gpt-6-astra`, all at high effort | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
 | `exa_search`, `exa_fetch` | local (Exa's hosted MCP server, `mcp.exa.ai`): keyless free tier, or the user's optional key from `agent.exaKey` for higher limits | BYOK and custom endpoints only, instead of `web_research`. `exa_search`: `userLocation: "ES"`, `sources` `official` (default, `includeDomains` of Spanish administrations) or `any`, ≤ 10 results. `exa_fetch`: ≤ 5 URLs, 12,000 (≤ 30,000) characters each. A rejected key gives a research-blocker result that tells the user to fix or remove it |
@@ -123,7 +124,7 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
   types in the chat).
 - **Abort.** The bridge connection of a pending `prompt.*` / `browser.*` request is closed: mark
   the PromptItem cancelled.
-- **Bridge timeouts (host side).** None for `prompt.*`, `browser.fillFromVault`,
+- **Bridge timeouts (host side).** None for `prompt.*`, `browser.loginClave`,
   `browser.fillFromUser` and `browser.useCertificate` (they may wait for the user); 3 min for
   other `browser.*` calls (so a click must not block on a signature approval); 60 s for
   research/feedback; 30 s otherwise. Requests use plain `node:http` (no undici 300 s limits).

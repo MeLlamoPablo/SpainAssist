@@ -10,7 +10,7 @@ import {
 } from './chat';
 import { ProcedureUpdate } from './procedure';
 import { FeedbackKind, FeedbackVote } from './services';
-import { CredentialField, PersonalDataInput } from './vault';
+import { PersonalDataInput } from './vault';
 
 /**
  * Host bridge: the contract between the pi extension (running inside the agent child process)
@@ -96,13 +96,6 @@ export type BrowserObservation = z.infer<typeof BrowserObservation>;
 
 const Ref = z.string().min(1).max(32).describe('Element ref from the latest snapshot, e.g. "e12"');
 
-/** Where a value typed by the app comes from. The agent never sees secret values. */
-export const VaultValueRef = z.discriminatedUnion('source', [
-  z.object({ source: z.literal('personal'), key: z.string() }),
-  z.object({ source: z.literal('credential'), credentialId: z.string(), field: CredentialField }),
-]);
-export type VaultValueRef = z.infer<typeof VaultValueRef>;
-
 // ---------------------------------------------------------------------------------------------
 // Methods
 // ---------------------------------------------------------------------------------------------
@@ -177,7 +170,7 @@ export const BridgeParams = {
     /** Attach a screenshot of the current page (e.g. to show a QR inside the app). */
     attachScreenshot: z.boolean().default(false),
   }),
-  'prompt.credential': CredentialPrompt.omit({ kind: true }),
+  'prompt.credential': CredentialPrompt.omit({ kind: true, replaceId: true }),
   'prompt.phoneCall': PhoneCallPrompt.omit({ kind: true }),
 
   // --- vault ---------------------------------------------------------------------------------
@@ -207,15 +200,28 @@ export const BridgeParams = {
     text: z.string().max(5000),
     submit: z.boolean().default(false),
   }),
-  /** Type a vault value (personal data or credential field) without revealing it. */
+  /** Type a saved personal-data value without revealing it. */
   'browser.fillFromVault': z.object({
     ref: Ref,
-    value: VaultValueRef,
+    key: z.string().min(1).max(80),
     submit: z.boolean().default(false),
   }),
   /**
-   * Ask the user for a one-off secret (e.g. the Cl@ve SMS code) and type it straight into the
-   * page: the model never sees the value. Shown as a native prompt in the procedure's chat.
+   * Log in on a Cl@ve Permanente page: types the saved DNI/NIE and password and submits. Without a
+   * saved Cl@ve Permanente, or when the page `rejected` the saved password, the user first adds
+   * (or corrects) it in the app's own form. The model never sees either value.
+   */
+  'browser.loginClave': z.object({
+    usernameRef: Ref,
+    passwordRef: Ref,
+    rejected: z.boolean().default(false),
+    /** Why the procedure needs it, shown if the user has to add it. */
+    message: z.string().max(2000).optional(),
+  }),
+  /**
+   * Ask the user for a one-off secret (a code, or a password for a site other than Cl@ve) and
+   * type it straight into the page: the model never sees the value, and nothing is saved. Shown
+   * as a native prompt in the procedure's chat.
    */
   'browser.fillFromUser': z.object({
     ref: Ref,
@@ -349,6 +355,7 @@ export interface BridgeResults {
   'browser.click': BrowserObservation;
   'browser.type': BrowserObservation;
   'browser.fillFromVault': BrowserObservation;
+  'browser.loginClave': BrowserObservation;
   'browser.fillFromUser': BrowserObservation;
   'browser.select': BrowserObservation;
   'browser.check': BrowserObservation;

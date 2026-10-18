@@ -33,7 +33,7 @@ export interface ToolDeps {
   now?: () => Date;
   /** Community learnings: feedback_search, plus feedback_submit / feedback_vote when on. */
   feedback?: { submit: boolean; vote: boolean };
-  /** The DNIe through the phone app (feature flag): browser_use_certificate offers it. */
+  /** The DNIe through the phone app (feature flag): browser_use_certificate and request_credential offer it. */
   dniePhone?: boolean;
   /** Old page results are redacted from the context (see host/redaction.ts). */
   redactPages?: boolean;
@@ -50,12 +50,14 @@ export function createTools(deps: ToolDeps): AnyToolDefinition[] {
         ? !!deps.feedback?.submit
         : name === 'feedback_vote'
           ? !!deps.feedback?.vote
-          : true;
+          : name === 'request_credential'
+            ? !!deps.dniePhone
+            : true;
   return finish(
     TOOL_NAMES.filter(active),
     [
       ...procedureTools(deps.bridge),
-      ...userTools(deps.bridge, { dniePhone: deps.dniePhone ?? false }),
+      ...userTools(deps.bridge),
       ...vaultTools(deps.bridge, { timeZone: deps.timeZone }),
       ...documentTools(deps.bridge, { imagesSupported: deps.imagesSupported }),
       ...browserTools(deps.bridge, {

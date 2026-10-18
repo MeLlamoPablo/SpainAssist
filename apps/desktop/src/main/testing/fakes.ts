@@ -174,6 +174,17 @@ export class MemoryVault implements VaultPort {
     return summary;
   }
 
+  async updateClave(
+    id: string,
+    input: { username: string; password: string },
+  ): Promise<CredentialSummary> {
+    const entry = this.credentials.get(id);
+    if (entry?.secret.kind !== 'clave_permanente') throw new Error('Not a Cl@ve Permanente');
+    entry.summary = { ...entry.summary, usernameHint: maskValue(input.username) };
+    entry.secret = { kind: 'clave_permanente', ...input };
+    return entry.summary;
+  }
+
   async addClaveMovil(input?: { label?: string }): Promise<CredentialSummary> {
     const summary: CredentialSummary = {
       id: `c_${hex()}`,

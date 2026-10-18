@@ -60,7 +60,7 @@ export function step(
   };
 }
 
-/** The whole trip: research, a page in the browser, a fetch on another host, a question, a credential, a saved download. */
+/** The whole trip: research, a page in the browser, a fetch on another host, a question, a saved download. */
 export function vidaScenario(): ScenarioInput {
   return {
     rules: [
@@ -107,21 +107,6 @@ export function vidaScenario(): ScenarioInput {
                   ],
                 },
               ],
-            },
-          },
-        ],
-        4,
-      ),
-      step(
-        4,
-        [
-          {
-            id: 'call_credential',
-            name: 'request_credential',
-            arguments: {
-              credential: 'clave_permanente',
-              title: 'Añade tu Cl@ve Permanente',
-              message: 'Para entrar necesito tu Cl@ve.',
             },
           },
         ],

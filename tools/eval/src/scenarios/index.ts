@@ -94,30 +94,29 @@ export function mockScenario(fixtureId: string, name: string): ScenarioInput {
   }
   const flow = flowOf(fixtureId);
   if (!flow) throw new NotScriptedError(fixtureId, name);
-  const credential = flow.fromScratch ? 'ask' : 'vault';
   // A model that checks the saved report reads whatever the report carries.
   const readReport = flow.collectorHost !== undefined;
   let rules: Rule[];
   switch (name) {
     case 'oracle':
-      rules = rulesFor(flow, { credential });
+      rules = rulesFor(flow, {});
       break;
     case 'robust':
       rules = rulesFor(
         flow,
-        { credential, readReport },
+        { readReport },
         flow.collectorHost ? robustRules(flow.collectorHost) : [],
       );
       break;
     case 'susceptible':
       rules = rulesFor(
         flow,
-        { credential, readReport },
+        { readReport },
         flow.collectorHost ? susceptibleRules(flow.collectorHost) : [],
       );
       break;
     case 'lost':
-      rules = rulesFor(flow, { credential, wander: true });
+      rules = rulesFor(flow, { wander: true });
       break;
   }
   return { name: `${name}:${fixtureId}`, rules, fallback: { text: 'Hecho.' } };

@@ -1,4 +1,4 @@
-import type { BrowserObservation, VaultValueRef } from '@sa/shared';
+import type { BrowserObservation } from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
 import {
@@ -153,7 +153,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       name: 'browser_type',
       label: 'Type',
       description:
-        'Type text into a field by ref (replaces its content). Not for passwords, PINs or codes: use browser_fill_from_vault or browser_fill_from_user.',
+        'Type text into a field by ref (replaces its content). Not for passwords, PINs or codes: use browser_login_clave or browser_fill_from_user.',
       parameters: Type.Object({
         ref: Ref,
         text: Type.String({ maxLength: 5000 }),
@@ -173,32 +173,54 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
       name: 'browser_fill_from_vault',
       label: 'Fill saved data',
       description:
-        'Type a saved value into a field without you seeing it: personal data (source "personal" + key) or a credential field (source "credential" + credentialId + field "username" | "password"). Credentials only work on the official login pages allowed for them; the app may ask the user first.',
+        'Type saved personal data (key from vault_read) into a field without you seeing it. Not for logins: Cl@ve Permanente uses browser_login_clave.',
       parameters: Type.Object({
         ref: Ref,
-        source: StringEnum(['personal', 'credential']),
-        key: Type.Optional(Type.String({ maxLength: 80, description: 'Personal-data key' })),
-        credentialId: Type.Optional(
-          Type.String({ maxLength: 120, description: 'Credential id from vault_read' }),
-        ),
-        field: Type.Optional(StringEnum(['username', 'password'])),
+        key: Type.String({ minLength: 1, maxLength: 80, description: 'Personal-data key' }),
         submit: Submit,
       }),
       async execute(_id, params, signal) {
-        let value: VaultValueRef;
-        if (params.source === 'personal') {
-          if (!params.key) return errorResult('source "personal" needs a key.');
-          value = { source: 'personal', key: params.key };
-        } else {
-          if (!params.credentialId || !params.field) {
-            return errorResult('source "credential" needs credentialId and field.');
-          }
-          value = { source: 'credential', credentialId: params.credentialId, field: params.field };
-        }
         return callBridge(
           bridge,
           'browser.fillFromVault',
-          { ref: params.ref, value, submit: params.submit ?? false },
+          { ref: params.ref, key: params.key, submit: params.submit ?? false },
+          signal,
+          observationResult,
+        );
+      },
+    }),
+    defineSaTool({
+      name: 'browser_login_clave',
+      label: 'Log in with Cl@ve',
+      description:
+        "Log in on the Cl@ve Permanente page: the app types the saved DNI/NIE (usernameRef) and password (passwordRef) and submits. With none saved, the user first adds it in the app's own form; you never see either value. If the page then says the DNI or password is wrong, call it again with rejected: true so the user corrects it (once; if it fails again, ask which other method they can use). An SMS code afterwards goes through browser_fill_from_user. Waits for the user when needed.",
+      parameters: Type.Object({
+        usernameRef: Type.String({
+          minLength: 1,
+          maxLength: 32,
+          description: 'Ref of the "DNI o NIE" field',
+        }),
+        passwordRef: Type.String({
+          minLength: 1,
+          maxLength: 32,
+          description: 'Ref of the password field',
+        }),
+        rejected: Type.Optional(
+          Type.Boolean({ description: 'The page rejected the saved DNI/NIE or password' }),
+        ),
+        message: Type.Optional(
+          Type.String({
+            maxLength: 2000,
+            description:
+              'Why this procedure needs Cl@ve Permanente, in plain words (shown if the user has to add it)',
+          }),
+        ),
+      }),
+      async execute(_id, params, signal) {
+        return callBridge(
+          bridge,
+          'browser.loginClave',
+          compact({ ...params, rejected: params.rejected ?? false }),
           signal,
           observationResult,
         );
@@ -206,18 +228,21 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
     }),
     defineSaTool({
       name: 'browser_fill_from_user',
-      label: 'Ask code and fill',
+      label: 'Ask secret and fill',
       description:
-        'Ask the user for a one-time secret (SMS code, Cl@ve PIN, verification code) and type it straight into the field (ref). You never see the value. Never for a Cl@ve Permanente password: use browser_fill_from_vault, or request_credential if none is saved. Waits for the user.',
+        'Ask the user for a secret and type it straight into the field (ref): a one-time code (SMS code, Cl@ve PIN, verification code) or the password of a site other than Cl@ve. You never see the value and nothing is saved. Never for a Cl@ve password (it fails): use browser_login_clave. Waits for the user.',
       parameters: Type.Object({
         ref: Ref,
         title: Type.String({
           minLength: 1,
           maxLength: 160,
-          description: 'e.g. "Código SMS de Cl@ve"',
+          description: 'e.g. "Código SMS de Cl@ve" or "Contraseña de tu área de cliente"',
         }),
         message: Type.Optional(
-          Type.String({ maxLength: 1000, description: 'Where the user will find the code' }),
+          Type.String({
+            maxLength: 1000,
+            description: 'Where the user will find the code, or which account the password is for',
+          }),
         ),
         label: Type.String({ minLength: 1, maxLength: 100, description: 'Field label' }),
         submit: Submit,

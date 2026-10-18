@@ -16,6 +16,7 @@ export function toolHarness(bridge: FakeBridge, overrides: Partial<ToolDeps> = {
     bridge: new BridgeClient({ url: bridge.url, token: bridge.token }),
     imagesSupported: true,
     feedback: { submit: true, vote: true },
+    dniePhone: true,
     ...overrides,
   });
   return {

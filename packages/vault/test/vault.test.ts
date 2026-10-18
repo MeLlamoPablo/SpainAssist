@@ -385,6 +385,22 @@ describe('credentials', () => {
     expect(await vault.getCredentialSecret(movil.id)).toEqual({ kind: 'clave_movil' });
 
     expect((await vault.setCredentialPolicy(clave.id, 'ask')).policy).toBe('ask');
+    const corrected = await vault.updateClave(clave.id, {
+      username: '99999999r',
+      password: 'Nueva 2',
+    });
+    expect(corrected).toMatchObject({ id: clave.id, policy: 'ask', usernameHint: '•••••999R' });
+    expect(await vault.getCredentialSecret(clave.id)).toEqual({
+      kind: 'clave_permanente',
+      username: '99999999R',
+      password: 'Nueva 2',
+    });
+    await expect(
+      vault.updateClave(movil.id, { username: '99999999R', password: 'x' }),
+    ).rejects.toThrow();
+    await expect(
+      vault.updateClave(clave.id, { username: 'nope', password: 'x' }),
+    ).rejects.toThrow();
     now.t = new Date('2026-10-05T08:00:00Z');
     await vault.markCredentialUsed(clave.id);
     expect(vault.getCredential(clave.id)).toMatchObject({

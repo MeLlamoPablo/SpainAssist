@@ -220,6 +220,29 @@ export class VaultService {
     });
   }
 
+  /** Corrects a saved Cl@ve Permanente, keeping its id and policy. */
+  updateClave(id: string, input: AddClaveInput): Promise<CredentialSummary> {
+    return this.guard(async () => {
+      this.deps.logger.addSecret(input.password);
+      const summary = await this.deps.vault.updateClave(id, {
+        username: input.username.trim(),
+        password: input.password,
+      });
+      this.changed();
+      return summary;
+    });
+  }
+
+  /** The DNI/NIE of a saved Cl@ve Permanente, to prefill its form (never its password). */
+  claveUsername(id: string): Promise<string> {
+    return this.guard(async () => {
+      const secret = await this.deps.vault.getCredentialSecret(id);
+      if (secret.kind !== 'clave_permanente')
+        throw new UserError('Not a Cl@ve Permanente', 'bad_request');
+      return secret.username;
+    });
+  }
+
   addClaveMovil(): Promise<CredentialSummary> {
     return this.guard(async () => {
       const summary = await this.deps.vault.addClaveMovil();

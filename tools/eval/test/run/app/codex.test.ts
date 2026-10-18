@@ -5,7 +5,6 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PendingPrompt } from '../../../src/contracts';
-import { CLAVE_PASSWORD } from '../../../src/fixtures';
 import { vidaScenario } from './scripts';
 import {
   browserSuite,
@@ -41,14 +40,6 @@ browserSuite('a Codex run', () => {
         });
         return true;
       }
-      if (prompt.kind === 'credential') {
-        const credentialId = await app.addClave({
-          username: '53918274H',
-          password: CLAVE_PASSWORD,
-        });
-        await app.respond(prompt.itemId, { kind: 'credential', credentialId });
-        return true;
-      }
       return false;
     });
     prompts = stack.of('prompt_shown').map((o) => o.prompt);
@@ -63,7 +54,7 @@ browserSuite('a Codex run', () => {
 
   describe('a Codex run', () => {
     it('goes through the whole procedure like a voucher run', () => {
-      expect(prompts.map((p) => p.kind)).toEqual(['form', 'credential']);
+      expect(prompts.map((p) => p.kind)).toEqual(['form']);
       expect(stack.of('assistant_message').map((m) => m.agent)).toEqual([
         'assistant',
         'procedure',

@@ -73,11 +73,19 @@ const STRINGS = {
   // --- credential / certificate / signature prompts ------------------------------------------
   credentialTitle: { es: '¿Usar tu Cl@ve?', en: 'Use your Cl@ve?' },
   credentialMessage: {
-    es: 'El asistente quiere escribir tu {field} de Cl@ve en {host}.',
-    en: 'The assistant wants to type your Cl@ve {field} on {host}.',
+    es: 'El asistente quiere entrar con tu Cl@ve en {host}.',
+    en: 'The assistant wants to log in with your Cl@ve on {host}.',
   },
-  fieldUsername: { es: 'usuario', en: 'username' },
-  fieldPassword: { es: 'contraseña', en: 'password' },
+  claveMissingTitle: { es: 'Añade tu Cl@ve Permanente', en: 'Add your Cl@ve Permanente' },
+  claveMissingMessage: {
+    es: 'Para entrar necesito tu Cl@ve Permanente. Guárdala aquí: yo nunca veo la contraseña.',
+    en: 'To log in I need your Cl@ve Permanente. Save it here: I never see the password.',
+  },
+  claveRejectedTitle: { es: 'Revisa tu Cl@ve Permanente', en: 'Check your Cl@ve Permanente' },
+  claveRejectedMessage: {
+    es: 'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y vuelvo a intentarlo: yo nunca veo la contraseña.',
+    en: "Cl@ve didn't accept the saved password. Correct it here and I'll try again: I never see the password.",
+  },
   certificateTitle: { es: '¿Usar tu certificado digital?', en: 'Use your digital certificate?' },
   certificateMessage: {
     es: 'El asistente quiere identificarte con tu certificado digital en las webs oficiales de este trámite.',

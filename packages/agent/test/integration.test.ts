@@ -183,6 +183,7 @@ describe('agent host over RPC (integration)', () => {
       ...(research ? { research } : {}),
       // Community learnings, sharing included: the agent has both feedback tools.
       feedback: { submit: true, vote: true },
+      dniePhone: true,
     };
   }
 

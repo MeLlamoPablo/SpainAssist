@@ -15,8 +15,8 @@ import { PromptShell } from './PromptShell';
 
 /**
  * The agent needs a login method that isn't saved: the user adds it here, to the vault. A Cl@ve
- * Permanente through the app's own form; the DNIe in one click (the phone is paired later, by the
- * login's own card).
+ * Permanente through the app's own form (or corrects the saved one when the site rejected it);
+ * the DNIe in one click (the phone is paired later, by the login's own card).
  */
 export function CredentialPromptCard({
   item,
@@ -33,6 +33,7 @@ export function CredentialPromptCard({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const dnie = prompt.credential === 'dnie';
+  const fix = !dnie && !!prompt.replaceId;
 
   const respond = async (credentialId?: string) => {
     setBusy(true);
@@ -65,10 +66,14 @@ export function CredentialPromptCard({
   const answered = response?.credentialId
     ? dnie
       ? t.prompt.dnieAdded
-      : t.prompt.claveSaved
+      : fix
+        ? t.prompt.claveFixed
+        : t.prompt.claveSaved
     : dnie
       ? t.prompt.noDnieAnswer
-      : t.prompt.noClaveAnswer;
+      : fix
+        ? t.prompt.noFixAnswer
+        : t.prompt.noClaveAnswer;
 
   return (
     <PromptShell
@@ -94,7 +99,7 @@ export function CredentialPromptCard({
       {dnie ? <p className="mt-2 text-[13px] text-fg-muted">{t.prompt.dnieHint}</p> : null}
       <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
         <Button variant="ghost" disabled={busy} onClick={() => void respond()}>
-          {dnie ? t.prompt.noDnie : t.prompt.noClave}
+          {dnie ? t.prompt.noDnie : fix ? t.prompt.notNow : t.prompt.noClave}
         </Button>
         {dnie ? (
           <Button variant="primary" icon={IdCard} loading={busy} onClick={() => void addDnie()}>
@@ -107,7 +112,7 @@ export function CredentialPromptCard({
             loading={busy}
             onClick={() => setDialogOpen(true)}
           >
-            {tv.credentials.clave.add}
+            {fix ? t.prompt.fixClave : tv.credentials.clave.add}
           </Button>
         )}
       </div>
@@ -116,6 +121,7 @@ export function CredentialPromptCard({
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           onSaved={(credential) => respond(credential.id)}
+          replaceId={prompt.replaceId}
         />
       )}
     </PromptShell>

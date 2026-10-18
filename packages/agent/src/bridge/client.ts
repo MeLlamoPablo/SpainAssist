@@ -44,7 +44,7 @@ const WAITS_FOR_USER: ReadonlySet<string> = new Set([
   'prompt.form',
   'prompt.confirm',
   'prompt.userAction',
-  'browser.fillFromVault',
+  'browser.loginClave',
   'browser.fillFromUser',
   'browser.useCertificate',
 ]);

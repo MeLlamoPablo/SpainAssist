@@ -439,6 +439,16 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       'To log in to the example site I need your Cl@ve Permanente. Save it here: I never see the password.',
     ),
   });
+  addPrompt('credential-clave-fix', 'actions', 'Cl@ve Permanente rechazada', 'credential', {
+    kind: 'credential',
+    credential: 'clave_permanente',
+    title: t('Revisa tu Cl@ve Permanente', 'Check your Cl@ve Permanente'),
+    message: t(
+      'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y vuelvo a intentarlo: yo nunca veo la contraseña.',
+      "Cl@ve didn't accept the saved password. Correct it here and I'll try again: I never see the password.",
+    ),
+    replaceId: 'cred-clave',
+  });
   addPrompt('credential-dnie', 'actions', 'DNIe', 'credential', {
     kind: 'credential',
     credential: 'dnie',

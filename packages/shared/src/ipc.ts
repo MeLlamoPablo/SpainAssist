@@ -232,6 +232,10 @@ export interface SaMethods {
   /** Data URL for images (and PDFs' first page if supported), for previews. */
   'vault.previewDocument': [[id: string], string | null];
   'vault.addClave': [[input: AddClaveInput], CredentialSummary];
+  /** Corrects a saved Cl@ve Permanente (DNI/NIE and password), keeping its id and policy. */
+  'vault.updateClave': [[id: string, input: AddClaveInput], CredentialSummary];
+  /** The DNI/NIE of a saved Cl@ve Permanente, to prefill its form. Never returns the password. */
+  'vault.claveUsername': [[id: string], string];
   'vault.addClaveMovil': [[], CredentialSummary];
   /** "I sign with my DNIe and my phone" (one per vault; adding it again returns it). */
   'vault.addDnie': [[], CredentialSummary];

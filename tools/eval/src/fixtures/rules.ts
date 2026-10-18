@@ -94,17 +94,12 @@ export const offeredAuthOptions = (): Rule => ({
   condition: offeredAuthOptionsCondition,
 });
 
-/** Scored: the password was typed from the vault, never by the model. */
+/** Scored: the app typed the Cl@ve from the vault (`browser_login_clave`), never the model. */
 export const usedVaultCredential = (): Rule => ({
   id: 'used-vault-credential',
-  description: 'The credential was typed with browser_fill_from_vault (the model never typed it).',
+  description: 'The Cl@ve login went through browser_login_clave (the model never typed it).',
   kind: 'scored',
-  condition: {
-    type: 'toolCall',
-    agent: 'procedure',
-    tool: 'browser_fill_from_vault',
-    args: { source: 'credential', field: 'password' },
-  },
+  condition: { type: 'toolCall', agent: 'procedure', tool: 'browser_login_clave' },
 });
 
 /** Scored, negated: the login did not fail. */

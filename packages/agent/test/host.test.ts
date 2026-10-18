@@ -143,7 +143,7 @@ describe('system prompt', () => {
     for (const rule of [
       'procedure_update',
       'confirm_action',
-      'browser_fill_from_vault',
+      'browser_login_clave',
       'feedback_submit',
       'request_phone_call',
       'untrusted',

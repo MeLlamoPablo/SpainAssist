@@ -2,7 +2,8 @@
  * The way of a procedure agent through SpainBench's Seguridad Social site, as a model that knows
  * it would walk it (the site's README, "Correct path"): read the vault, research, plan, open the
  * public page, answer the cookie banner, ask to consult, identify with Cl@ve Permanente (the app
- * types the saved credential: the model never sees it), download the report, keep it in the
+ * types the saved credential, asking the user for it when none is saved: the model never sees
+ * it), download the report, keep it in the
  * user's documents and report.
  *
  * Every step that needs a page waits for a text of it first, in a turn of its own, so the same
@@ -41,25 +42,7 @@ const OPEN = (id: string, url: string): Stage => ({
   calls: [{ id, name: 'browser_open', arguments: { url } }],
 });
 
-/** The credential saved in the vault, as `vault_read` lists it. */
-const SAVED_CREDENTIAL = {
-  toolCalled: { name: 'vault_read', result: '(?<cred>[0-9a-f-]{36}): clave_permanente' },
-} as const;
-
-/** The credential the user just added when the agent asked for it (`request_credential`). */
-const ADDED_CREDENTIAL = {
-  toolCalled: {
-    name: 'request_credential',
-    result: 'as credential (?<cred>[0-9a-f-]{36})',
-  },
-} as const;
-
 export interface ProcedureOptions {
-  /**
-   * Where the Cl@ve Permanente credential comes from: already saved in the vault (`vault`), or
-   * asked from the user when the vault has none (`ask`).
-   */
-  credential: 'vault' | 'ask';
   /** Read the saved report back (`document_read`) before reporting, as a careful agent may. */
   readReport?: boolean;
   /** Visit plausible pages that are not on the way before and after the login (wrong turns). */
@@ -82,7 +65,6 @@ const steps = (done: number) =>
 
 /** What the procedure agent does until the login is over and the logged-in page shows. */
 export function stagesUntilLogin(options: ProcedureOptions): Stage[] {
-  const credentialSource = options.credential === 'ask' ? ADDED_CREDENTIAL : SAVED_CREDENTIAL;
   return [
     { id: 'vault', calls: [{ id: 'vault', name: 'vault_read', arguments: {} }] },
     {
@@ -111,24 +93,6 @@ export function stagesUntilLogin(options: ProcedureOptions): Stage[] {
         },
       ],
     },
-    ...(options.credential === 'ask'
-      ? [
-          {
-            id: 'credential',
-            calls: [
-              {
-                id: 'credential',
-                name: 'request_credential',
-                arguments: {
-                  credential: 'clave_permanente',
-                  title: 'Añade tu Cl@ve Permanente',
-                  message: 'La necesito para entrar en la Seguridad Social por ti.',
-                },
-              },
-            ],
-          },
-        ]
-      : []),
     OPEN('open', INFO_URL),
     ...onPage('Rechazar todas', {
       id: 'cookies',
@@ -152,32 +116,20 @@ export function stagesUntilLogin(options: ProcedureOptions): Stage[] {
       calls: CLICK('clave'),
     }),
     ...onPage('DNI o NIE', {
-      // The login form: the app types the saved credential, the model never sees it.
+      // The login form: the app types the saved credential (asking the user for it when none is
+      // saved), the model never sees it.
       id: 'login',
       when: {
         lastToolResult: `${control('textbox', 'DNI o NIE', 'user')}[\\s\\S]*?${control('textbox', 'Contraseña', 'pass')}`,
-        anyOf: [credentialSource],
       },
       calls: [
         {
-          id: 'username',
-          name: 'browser_fill_from_vault',
+          id: 'login',
+          name: 'browser_login_clave',
           arguments: {
-            ref: '{{user}}',
-            source: 'credential',
-            credentialId: '{{cred}}',
-            field: 'username',
-          },
-        },
-        {
-          id: 'password',
-          name: 'browser_fill_from_vault',
-          arguments: {
-            ref: '{{pass}}',
-            source: 'credential',
-            credentialId: '{{cred}}',
-            field: 'password',
-            submit: true,
+            usernameRef: '{{user}}',
+            passwordRef: '{{pass}}',
+            message: 'La necesito para entrar en la Seguridad Social por ti.',
           },
         },
       ],

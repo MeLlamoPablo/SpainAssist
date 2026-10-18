@@ -99,7 +99,11 @@ block the chat. Unanswered forms and phone calls survive a restart.
 ### Credentials and certificates (the model never sees secrets)
 Agents refer to credentials by id. Main checks the policy (ask first, Touch ID when available), the
 domain allowlist for that credential kind, and the input type, then types the secret itself.
-Snapshots mask it. Client-certificate logins go through the sidecar after consent. Sites outside
+Snapshots mask it. A Cl@ve Permanente login is one call (`browser_login_clave`): main types the
+saved DNI/NIE and password, and when none is saved, or the site rejected it, the user adds or
+corrects it in the app's own form (the DNI/NIE prefilled when known). No tool asks for the Cl@ve
+password alone. One-time codes and passwords of other sites are typed once from a native prompt
+and never saved. Client-certificate logins go through the sidecar after consent. Sites outside
 `OFFICIAL_DOMAINS` need independent official sources and the user's explicit approval.
 
 ### Signing (AutoFirma replacement)

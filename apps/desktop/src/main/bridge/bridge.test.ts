@@ -186,10 +186,7 @@ describe('bridge: prompts', () => {
 
   describe('prompt.credential', () => {
     /** The agent asks for a credential; the renderer answers with `credentialId`. */
-    async function askFor(
-      credential: 'clave_permanente' | 'dnie',
-      credentialId: string | undefined,
-    ) {
+    async function askFor(credential: 'dnie', credentialId: string | undefined) {
       const call = app.rpc(
         'prompt.credential',
         { credential, title: 'Añádelo', message: 'Lo necesito para entrar.' },
@@ -202,28 +199,17 @@ describe('bridge: prompts', () => {
       });
       return (await call).body;
     }
-    const askForClave = (credentialId: string | undefined) =>
-      askFor('clave_permanente', credentialId);
-
-    it('returns the id of the Cl@ve the user saved, never the secret', async () => {
-      const saved = await app.vault.addClave({ username: '12345678Z', password: 'S3cret!pass' });
-      const body = await askForClave(saved.id);
-      expect(body).toMatchObject({ ok: true, result: { credentialId: saved.id } });
-      expect(JSON.stringify(body)).not.toContain('S3cret!pass');
-    });
-
-    it('returns no id when the user has none or the id is not a saved Cl@ve', async () => {
-      expect((await askForClave(undefined)).result).toEqual({ kind: 'credential' });
-      expect((await askForClave('cred-unknown')).result).toEqual({ kind: 'credential' });
-    });
-
     it('returns the DNIe the user added, and not a credential of another kind', async () => {
       const dnie = await app.vault.addDnie();
       expect((await askFor('dnie', dnie.id)).result).toEqual({
         kind: 'credential',
         credentialId: dnie.id,
       });
-      expect((await askForClave(dnie.id)).result).toEqual({ kind: 'credential' });
+      const clave = await app.vault.addClave({ username: '12345678Z', password: 'S3cret!pass' });
+      const body = await askFor('dnie', clave.id);
+      expect(body.result).toEqual({ kind: 'credential' });
+      expect(JSON.stringify(body)).not.toContain('S3cret!pass');
+      expect((await askFor('dnie', undefined)).result).toEqual({ kind: 'credential' });
     });
 
     it('refuses to ask for the DNIe without the phone app', async () => {
@@ -458,10 +444,7 @@ describe('bridge: vault', () => {
     };
     await refused('vault.save', { items: [{ key: 'dniAccessNumber', value: '111111' }] });
     expect(app.vault.getPersonal('dniAccessNumber')?.value).toBe('654321');
-    await refused('browser.fillFromVault', {
-      ref: 'e1',
-      value: { source: 'personal', key: 'dniAccessNumber' },
-    });
+    await refused('browser.fillFromVault', { ref: 'e1', key: 'dniAccessNumber' });
     expect(app.browser.calls.some((c) => c.method === 'type')).toBe(false);
     for (const field of [
       { key: 'can', label: 'CAN', type: 'text', vaultKey: 'dniAccessNumber' },
@@ -493,17 +476,13 @@ describe('bridge: vault', () => {
       expect(response.body.error?.code, method).toBe(code);
       expect(JSON.stringify(response.body)).not.toContain('Abcd1234');
     };
-    // Typing: neither the credential (any field) nor a PIN kept as personal data.
-    for (const field of ['password', 'username'])
-      await refused(
-        'browser.fillFromVault',
-        { ref: 'e1', value: { source: 'credential', credentialId: dnie.id, field } },
-        'bad_request',
-      );
-    await refused('browser.fillFromVault', {
-      ref: 'e1',
-      value: { source: 'personal', key: 'custom.pin_dnie' },
-    });
+    // Typing: neither the credential nor a PIN kept as personal data.
+    await refused(
+      'browser.fillFromVault',
+      { ref: 'e1', value: { source: 'credential', credentialId: dnie.id, field: 'password' } },
+      'bad_request',
+    );
+    await refused('browser.fillFromVault', { ref: 'e1', key: 'custom.pin_dnie' });
     expect(app.browser.calls.some((c) => c.method === 'type')).toBe(false);
     // Saving: PINs are never personal data, and nothing reaches the credential.
     for (const key of ['custom.pin', 'custom.dnie-pin', 'custom.pin_dnie'])
@@ -613,37 +592,30 @@ describe('bridge: browser and credentials', () => {
     });
   });
 
-  const fill = (ref: string, field: 'username' | 'password' = 'password') =>
-    app.rpc(
-      'browser.fillFromVault',
-      { ref, value: { source: 'credential', credentialId, field } },
-      token,
-    );
+  const login = (params: { rejected?: boolean; message?: string } = {}, refs = ['e2', 'e1']) =>
+    app.rpc('browser.loginClave', { usernameRef: refs[0], passwordRef: refs[1], ...params }, token);
 
   const typed = () => app.browser.calls.filter((c) => c.method === 'type');
+  const expectFor = { frameOrigin: new URL(CLAVE_LOGIN).origin };
 
-  it('types the password into an official Cl@ve page as a secret and records the use', async () => {
-    const res = await fill('e1');
+  it('logs in on an official Cl@ve page: the DNI, then the password as a secret, and submits', async () => {
+    const res = await login();
     expect(res.body.ok).toBe(true);
     expect(res.body.result.url).toBeDefined();
-    expect(typed()).toEqual([
-      {
-        method: 'type',
-        procedureId,
-        args: [
-          'e1',
-          'S3cret!pass',
-          {
-            submit: false,
-            secret: true,
-            expect: { frameOrigin: new URL(CLAVE_LOGIN).origin, inputType: 'password' },
-          },
-        ],
-      },
+    expect(typed().map((c) => c.args)).toEqual([
+      [
+        'e2',
+        '12345678Z',
+        { submit: false, secret: true, expect: { ...expectFor, inputType: 'text' } },
+      ],
+      [
+        'e1',
+        'S3cret!pass',
+        { submit: true, secret: true, expect: { ...expectFor, inputType: 'password' } },
+      ],
     ]);
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
     expect(app.vault.getCredential(credentialId)?.lastUsedAt).toBeDefined();
-    expect((await fill('e2', 'username')).body.ok).toBe(true);
-    expect(typed()[1]?.args.slice(0, 2)).toEqual(['e2', '12345678Z']);
     expect(app.logLines.join('\n')).not.toContain('S3cret!pass');
     await app.services.procedures.flush();
     const transcript = await readFile(
@@ -654,7 +626,7 @@ describe('bridge: browser and credentials', () => {
     expect(JSON.stringify(app.services.conversation.transcript())).not.toContain('S3cret!pass');
   });
 
-  it('refuses phishing domains, plain http and unknown refs', async () => {
+  it('refuses phishing domains, plain http and unknown refs before asking anything', async () => {
     app.browser.refs.set('e3', {
       role: 'textbox',
       name: 'Contraseña',
@@ -667,26 +639,78 @@ describe('bridge: browser and credentials', () => {
       inputType: 'password',
       frameUrl: 'http://clave-dninbrt.seg-social.gob.es/IPUC2/Login',
     });
+    await app.vault.deleteCredential(credentialId);
     for (const ref of ['e3', 'e4']) {
-      const res = await fill(ref);
+      const res = await login({}, ['e2', ref]);
       expect(res).toMatchObject({
         status: 403,
         body: { ok: false, error: { code: 'policy_denied' } },
       });
     }
-    expect((await fill('e99')).body.error?.code).toBe('not_found');
+    expect((await login({}, ['e2', 'e99'])).body.error?.code).toBe('not_found');
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
     expect(typed()).toEqual([]);
   });
 
-  it('only types passwords into password fields', async () => {
-    const res = await fill('e2', 'password');
-    expect(res.body.error?.code).toBe('policy_denied');
+  it('types the password only into a password field and the DNI only outside one', async () => {
+    expect((await login({}, ['e2', 'e2'])).body.error?.code).toBe('policy_denied');
+    expect((await login({}, ['e1', 'e1'])).body.error?.code).toBe('policy_denied');
     expect(typed()).toEqual([]);
   });
 
-  it('asks before use when the policy is "ask" (decline -> user_rejected)', async () => {
+  it('asks the user to add their Cl@ve Permanente when none is saved, then logs in with it', async () => {
+    await app.vault.deleteCredential(credentialId);
+    const call = login({ message: 'La necesito para la vida laboral.' });
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const prompt = app.pendingPrompt(procedureId)!;
+    expect(prompt.prompt).toEqual({
+      kind: 'credential',
+      credential: 'clave_permanente',
+      title: 'Añade tu Cl@ve Permanente',
+      message: 'La necesito para la vida laboral.',
+    });
+    // The card's own form saves it; the agent never gets the values.
+    const added = await app.invoke('vault.addClave', { username: '87654321X', password: 'Otra!1' });
+    await app.invoke('chat.respond', prompt.id, { kind: 'credential', credentialId: added.id });
+    expect((await call).body.ok).toBe(true);
+    expect(typed().map((c) => c.args[1])).toEqual(['87654321X', 'Otra!1']);
+  });
+
+  it('says the user has no Cl@ve Permanente when they decline to add it', async () => {
+    await app.vault.deleteCredential(credentialId);
+    const call = login();
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, { kind: 'credential' });
+    const res = await call;
+    expect(res.body.error?.code).toBe('user_rejected');
+    expect(res.body.error?.message).toContain('no Cl@ve Permanente');
+    expect(typed()).toEqual([]);
+  });
+
+  it('lets the user correct a password the page rejected, keeping the same credential', async () => {
+    const call = login({ rejected: true });
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const prompt = app.pendingPrompt(procedureId)!;
+    expect(prompt.prompt).toMatchObject({
+      kind: 'credential',
+      credential: 'clave_permanente',
+      title: 'Revisa tu Cl@ve Permanente',
+      replaceId: credentialId,
+    });
+    expect(await app.invoke('vault.claveUsername', credentialId)).toBe('12345678Z');
+    await app.invoke('vault.updateClave', credentialId, {
+      username: '12345678Z',
+      password: 'N3w!pass',
+    });
+    await app.invoke('chat.respond', prompt.id, { kind: 'credential', credentialId });
+    expect((await call).body.ok).toBe(true);
+    expect(typed().map((c) => c.args[1])).toEqual(['12345678Z', 'N3w!pass']);
+    expect(app.vault.listCredentials()).toHaveLength(1);
+  });
+
+  it('asks once before use when the policy is "ask" (decline -> user_rejected)', async () => {
     await app.vault.setCredentialPolicy(credentialId, 'ask');
-    const call = fill('e1');
+    const call = login();
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
     const prompt = app.pendingPrompt(procedureId)!;
     expect(prompt.prompt).toMatchObject({
@@ -704,30 +728,34 @@ describe('bridge: browser and credentials', () => {
 
   it('types after approval, reuses the approval briefly, and re-checks the page after approval', async () => {
     await app.vault.setCredentialPolicy(credentialId, 'ask');
-    const call = fill('e2', 'username');
+    const call = login();
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
     await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
       kind: 'confirm',
       approved: true,
     });
+    // One question covers both fields.
     expect((await call).body.ok).toBe(true);
-    // Same credential + site right after: no second question.
-    expect((await fill('e1')).body.ok).toBe(true);
     expect(typed()).toHaveLength(2);
+    // Same credential + site right after: no second question.
+    expect((await login()).body.ok).toBe(true);
+    expect(typed()).toHaveLength(4);
 
     // A different site: asked again; the page turns into a phishing page while the user decides.
-    app.browser.refs.set('e5', {
+    const aeat = 'https://www2.agenciatributaria.gob.es/login';
+    app.browser.refs.set('e5', { role: 'textbox', name: 'DNI', inputType: 'text', frameUrl: aeat });
+    app.browser.refs.set('e6', {
       role: 'textbox',
       name: 'Contraseña',
       inputType: 'password',
-      frameUrl: 'https://www2.agenciatributaria.gob.es/login',
+      frameUrl: aeat,
     });
-    const second = fill('e5');
+    const second = login({}, ['e5', 'e6']);
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
     app.browser.refs.set('e5', {
       role: 'textbox',
-      name: 'Contraseña',
-      inputType: 'password',
+      name: 'DNI',
+      inputType: 'text',
       frameUrl: 'https://agenciatributaria.gob.es.phish.example/login',
     });
     await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
@@ -735,38 +763,36 @@ describe('bridge: browser and credentials', () => {
       approved: true,
     });
     expect((await second).body.error?.code).toBe('policy_denied');
-    expect(typed()).toHaveLength(2);
+    expect(typed()).toHaveLength(4);
   });
 
-  it('types personal data directly and refuses typing certificates or Cl@ve Móvil', async () => {
+  it('types personal data directly, and never a credential', async () => {
     await app.vault.setPersonal([{ key: 'documentNumber', value: '12345678Z' }], 'manual');
     const res = await app.rpc(
       'browser.fillFromVault',
-      { ref: 'e2', value: { source: 'personal', key: 'documentNumber' }, submit: true },
+      { ref: 'e2', key: 'documentNumber', submit: true },
       token,
     );
     expect(res.body.ok).toBe(true);
     expect(typed()[0]?.args).toEqual(['e2', '12345678Z', { submit: true }]);
-    const missing = await app.rpc(
+    const missing = await app.rpc('browser.fillFromVault', { ref: 'e2', key: 'iban' }, token);
+    expect(missing.body.error?.code).toBe('not_found');
+    const credential = await app.rpc(
       'browser.fillFromVault',
-      { ref: 'e2', value: { source: 'personal', key: 'iban' } },
+      { ref: 'e1', value: { source: 'credential', credentialId, field: 'password' } },
       token,
     );
-    expect(missing.body.error?.code).toBe('not_found');
-    const movil = await app.vault.addClaveMovil();
-    const cert = await app.vault.addCertificate({
-      fileName: 'a.p12',
-      p12: Buffer.from('x'),
-      passphrase: 'pw',
-    });
-    for (const id of [movil.id, cert.id]) {
-      const r = await app.rpc(
-        'browser.fillFromVault',
-        { ref: 'e1', value: { source: 'credential', credentialId: id, field: 'password' } },
-        token,
-      );
-      expect(r.body.error?.code).toBe('bad_request');
-    }
+    expect(credential.body.error?.code).toBe('bad_request');
+  });
+
+  it('prompt.credential leaves the Cl@ve Permanente to browser.loginClave', async () => {
+    const res = await app.rpc(
+      'prompt.credential',
+      { credential: 'clave_permanente', title: 'Añade tu Cl@ve', message: 'La necesito.' },
+      token,
+    );
+    expect(res.body.error?.code).toBe('bad_request');
+    expect(res.body.error?.message).toContain('browser_login_clave');
   });
 
   it('fillFromUser types a one-off secret that is never stored in the transcript or logs', async () => {
@@ -838,7 +864,7 @@ describe('bridge: browser and credentials', () => {
       token,
     );
     expect(res.body.error?.code).toBe('policy_denied');
-    expect(res.body.error?.message).toContain('request_credential');
+    expect(res.body.error?.message).toContain('browser_login_clave');
     expect(app.pendingPrompt(procedureId)).toBeUndefined();
     expect(typed()).toEqual([]);
   });
@@ -874,12 +900,12 @@ describe('bridge: browser and credentials', () => {
 
   it('binds credential approval to the original origin even if another allowed origin replaces it', async () => {
     await app.vault.setCredentialPolicy(credentialId, 'ask');
-    const call = fill('e1');
+    const call = login();
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    app.browser.refs.set('e1', {
+    app.browser.refs.set('e2', {
       role: 'textbox',
-      name: 'Contraseña',
-      inputType: 'password',
+      name: 'DNI',
+      inputType: 'text',
       frameUrl: 'https://www2.agenciatributaria.gob.es/login',
     });
     await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {

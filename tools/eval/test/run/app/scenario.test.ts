@@ -1,7 +1,7 @@
 /**
  * A procedure through the whole app, with the real pieces: the orchestrator starts a procedure,
  * its agent researches, browses a real hostname (mapped to the fake bench), fetches a page on
- * another host, asks a question, asks for a credential and saves a download; the test is the user.
+ * another host, asks a question and saves a download; the test is the user.
  * What it checks is what the run loop and the rules rely on: the observations, their shapes and
  * order, the network records of both paths, idleness and the files left behind.
  */
@@ -10,7 +10,6 @@ import { join } from 'node:path';
 import type { ChatRequest } from '@sa/mock-llm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { HostEvalConfig, PendingPrompt } from '../../../src/contracts';
-import { CLAVE_PASSWORD } from '../../../src/fixtures';
 import { readNetLog } from '../../../src/net';
 import { vidaScenario } from './scripts';
 import {
@@ -35,7 +34,6 @@ browserSuite('the app of a run, end to end', () => {
     idleRightAfterSend: undefined as boolean | undefined,
     formPrompt: undefined as PendingPrompt | undefined,
     idleWhileAsked: undefined as boolean | undefined,
-    credentialPrompt: undefined as PendingPrompt | undefined,
     pendingAtThatPoint: [] as PendingPrompt[],
     idleAfter: undefined as { holdMs: number; waitedMs: number; value: boolean } | undefined,
     quickIdleCheck: undefined as boolean | undefined,
@@ -52,20 +50,13 @@ browserSuite('the app of a run, end to end', () => {
 
     seen.formPrompt = await waitFor(() => app.pendingPrompts()[0], 'the question of the agent');
     seen.idleWhileAsked = app.idle();
+    seen.pendingAtThatPoint = app.pendingPrompts();
     await app.respond(seen.formPrompt.itemId, {
       kind: 'form',
       values: { metodo: 'clave_permanente' },
       dismissed: false,
       savedToVault: [],
     });
-
-    seen.credentialPrompt = await waitFor(
-      () => app.pendingPrompts().find((p) => p.kind === 'credential'),
-      'the credential request',
-    );
-    seen.pendingAtThatPoint = app.pendingPrompts();
-    const credentialId = await app.addClave({ username: '53918274H', password: CLAVE_PASSWORD });
-    await app.respond(seen.credentialPrompt.itemId, { kind: 'credential', credentialId });
 
     const holdMs = 400;
     const started = Date.now();
@@ -104,7 +95,6 @@ browserSuite('the app of a run, end to end', () => {
         'browser_open',
         'fetch_url',
         'ask_user',
-        'request_credential',
         'browser_open',
         'download_save',
         'procedure_update',
@@ -183,8 +173,8 @@ browserSuite('the app of a run, end to end', () => {
 
     it('shows every prompt once, in order, as the harness matches it', () => {
       const shown = stack.of('prompt_shown').map((o) => o.prompt);
-      expect(shown).toHaveLength(2);
-      const [form, credential] = shown as [PendingPrompt, PendingPrompt];
+      expect(shown).toHaveLength(1);
+      const [form] = shown as [PendingPrompt];
       expect(form).toEqual({
         itemId: expect.stringMatching(/^q_[0-9a-f]{16}$/),
         agent: 'procedure',
@@ -206,37 +196,26 @@ browserSuite('the app of a run, end to end', () => {
           },
         ],
       });
-      expect(credential).toEqual({
-        itemId: expect.stringMatching(/^q_[0-9a-f]{16}$/),
-        agent: 'procedure',
-        procedureId,
-        kind: 'credential',
-        title: 'Añade tu Cl@ve Permanente',
-        message: 'Para entrar necesito tu Cl@ve.',
-        credentialKind: 'clave_permanente',
-      });
       // The prompt the app waits on is the one the observation announced.
       expect(seen.formPrompt).toEqual(form);
-      expect(seen.credentialPrompt).toEqual(credential);
-      expect(seen.pendingAtThatPoint).toEqual([credential]);
-      expect(stack.app.counters().prompts).toBe(2);
+      expect(seen.pendingAtThatPoint).toEqual([form]);
+      expect(stack.app.counters().prompts).toBe(1);
     });
 
-    it('tells when the vault changes: the credential, then the saved document', () => {
+    it('tells when the vault changes: the saved document', () => {
       const changes = stack.of('vault_changed');
       const save = stack.of('tool_start').find((o) => o.tool === 'download_save');
       const saved = stack.of('tool_end').find((o) => o.tool === 'download_save');
-      expect(changes.length).toBeGreaterThanOrEqual(2);
-      expect(changes.some((c) => c.seq < (save?.seq ?? 0))).toBe(true);
+      expect(changes.length).toBeGreaterThanOrEqual(1);
       expect(changes.some((c) => c.seq > (save?.seq ?? 0) && c.seq < (saved?.seq ?? 0))).toBe(true);
     });
 
     it('counts the tool calls and the prompts', () => {
       expect(stack.app.counters()).toEqual({
         toolCalls: stack.of('tool_start').length,
-        prompts: 2,
+        prompts: 1,
       });
-      expect(stack.app.counters().toolCalls).toBe(9);
+      expect(stack.app.counters().toolCalls).toBe(8);
     });
   });
 

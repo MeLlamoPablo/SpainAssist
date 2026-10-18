@@ -456,20 +456,6 @@ describe('DNIe signatures with the phone', () => {
     expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
   });
 
-  it('tells agents how the DNIe logs in and signs instead of typing it', async () => {
-    const { app: a, dnie, token } = await setup();
-    const fill = await a.rpc(
-      'browser.fillFromVault',
-      { ref: 'e1', value: { source: 'credential', credentialId: dnie.id, field: 'password' } },
-      token,
-    );
-    expect(fill.body.error).toMatchObject({
-      code: 'bad_request',
-      message: expect.stringContaining('call browser_use_certificate with this credential'),
-    });
-    expect(fill.body.error?.message).not.toContain('cannot log in');
-  });
-
   it('is unavailable without a relay, and unpairs on request', async () => {
     app = await createTestApp();
     const { procedureId } = await app.procedureWithToken();
@@ -1029,12 +1015,6 @@ describe('without the dnie-phone feature flag', () => {
       code: 'bad_request',
       message: expect.stringContaining('DNIe through the phone is not available'),
     });
-    const fill = await a.rpc(
-      'browser.fillFromVault',
-      { ref: 'e1', value: { source: 'credential', credentialId: dnie.id, field: 'password' } },
-      token,
-    );
-    expect(fill.body.error?.message).toContain('DNIe through the phone is not available');
     expect(a.pendingPrompt(procedureId)).toBeUndefined();
 
     // AutoFirma: with only the DNIe saved, there is no certificate to offer.

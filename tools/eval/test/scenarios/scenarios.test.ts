@@ -222,15 +222,13 @@ describe('the stages of a procedure agent', () => {
   });
 
   it('has the way of the site in the first and the last stages', () => {
-    const ids = procedureStages({ credential: 'vault' }).map((stage) => stage.id);
+    const ids = procedureStages({}).map((stage) => stage.id);
     expect(ids.slice(0, 5)).toEqual(['vault', 'research', 'plan', 'open', 'cookies-ready']);
     expect(ids.slice(-5)).toEqual(['download', 'downloaded', 'save', 'done', 'report']);
-    expect(procedureStages({ credential: 'ask' }).map((stage) => stage.id)).toContain('credential');
+    // The login asks for a missing Cl@ve itself: no stage of its own.
     expect(ids).not.toContain('credential');
     expect(ids).not.toContain('read-report');
-    expect(procedureStages({ credential: 'vault', readReport: true }).map((s) => s.id)).toContain(
-      'read-report',
-    );
+    expect(procedureStages({ readReport: true }).map((s) => s.id)).toContain('read-report');
   });
 });
 
@@ -329,8 +327,7 @@ describe('the procedure agent against the stand-in of the site', () => {
       'browser_wait',
       'browser_click',
       'browser_wait',
-      'browser_fill_from_vault',
-      'browser_fill_from_vault',
+      'browser_login_clave',
       'browser_wait',
       'browser_click',
       'browser_wait',
@@ -342,22 +339,10 @@ describe('the procedure agent against the stand-in of the site', () => {
     expect(
       calls.filter((call) => call.name === 'browser_click').map((call) => call.args.ref),
     ).toEqual(['e9', 'e45', 'e176', 'f3e46', 'f11e75']);
-    const fills = calls.filter((call) => call.name === 'browser_fill_from_vault');
-    expect(fills.map((call) => call.args)).toEqual([
-      {
-        ref: 'f7e26',
-        source: 'credential',
-        credentialId: '02caac7b-9900-4f56-ada3-b6de297ac384',
-        field: 'username',
-      },
-      {
-        ref: 'f7e29',
-        source: 'credential',
-        credentialId: '02caac7b-9900-4f56-ada3-b6de297ac384',
-        field: 'password',
-        submit: true,
-      },
-    ]);
+    expect(calls.find((call) => call.name === 'browser_login_clave')?.args).toMatchObject({
+      usernameRef: 'f7e26',
+      passwordRef: 'f7e29',
+    });
     expect(calls.find((call) => call.name === 'download_save')?.args).toEqual({
       downloadId: 'dl_0123456789abcdef',
       name: 'Informe de vida laboral',
@@ -368,26 +353,18 @@ describe('the procedure agent against the stand-in of the site', () => {
     expect(site.wrongTurns).toBe(0);
   });
 
-  it('asks the user for the credential when the vault has none, and uses the one it is given', async () => {
+  it('logs in the same way when the vault has none: the login itself asks the user', async () => {
     const scripted = await play(mockScenario('vida-laboral-sin-datos', 'oracle'));
     const site = new Site({ vault: VAULT.empty });
-    const { replies, names } = await runProcedure(scripted.procedure(), site);
-    expect(names.slice(0, 5)).toEqual([
+    const { names } = await runProcedure(scripted.procedure(), site);
+    expect(names.slice(0, 4)).toEqual([
       'vault_read',
       'web_research',
       'procedure_update',
-      'request_credential',
       'browser_open',
     ]);
-    const calls = replies.flatMap((reply) => reply.calls);
-    expect(calls.find((call) => call.name === 'request_credential')?.args).toMatchObject({
-      credential: 'clave_permanente',
-    });
-    const fills = calls.filter((call) => call.name === 'browser_fill_from_vault');
-    expect(fills.map((call) => call.args.credentialId)).toEqual([
-      '02caac7b-9900-4f56-ada3-b6de297ac384',
-      '02caac7b-9900-4f56-ada3-b6de297ac384',
-    ]);
+    expect(names).not.toContain('request_credential');
+    expect(names.filter((name) => name === 'browser_login_clave')).toHaveLength(1);
     expect(site.done).toBe(true);
   });
 

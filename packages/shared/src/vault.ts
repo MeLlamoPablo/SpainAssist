@@ -512,10 +512,6 @@ export const CredentialSummary = z.object({
 });
 export type CredentialSummary = z.infer<typeof CredentialSummary>;
 
-/** Fields of a credential the agent may ask the app to type into a page (never revealed). */
-export const CredentialField = z.enum(['username', 'password']);
-export type CredentialField = z.infer<typeof CredentialField>;
-
 // ---------------------------------------------------------------------------------------------
 // Overview (transparency screen)
 // ---------------------------------------------------------------------------------------------

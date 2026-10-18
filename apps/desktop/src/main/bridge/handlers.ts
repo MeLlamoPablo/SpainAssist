@@ -371,6 +371,39 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     return response;
   }
 
+  /** A field of an official Cl@ve login page; the password only into a password input. */
+  async function checkClaveField(pid: string, ref: string, field: 'username' | 'password') {
+    const info = await browserCall((b) => b.describeRef(pid, ref));
+    if (!info)
+      throw new BridgeError(
+        'not_found',
+        'Element not found: take a new snapshot and use a fresh ref.',
+      );
+    if (!credentialAllowedOn('clave_permanente', info.frameUrl))
+      throw new BridgeError(
+        'policy_denied',
+        `Cl@ve credentials can only be typed on official Cl@ve login pages over https. This field is on ${hostOf(info.frameUrl)}, which is not allowed.`,
+      );
+    if (field === 'password' && info.inputType !== 'password')
+      throw new BridgeError('policy_denied', 'A password can only be typed into a password field.');
+    if (field === 'username' && info.inputType === 'password')
+      throw new BridgeError(
+        'policy_denied',
+        'The DNI/NIE goes into the username field, not the password field.',
+      );
+    return info;
+  }
+
+  /** The Cl@ve Permanente to log in with: the most recently used one. */
+  function savedClave(): CredentialSummary | undefined {
+    return deps
+      .vault()
+      .listCredentials()
+      .filter((c) => c.kind === 'clave_permanente')
+      .sort((a, b) => (b.lastUsedAt ?? b.createdAt).localeCompare(a.lastUsedAt ?? a.createdAt))[0];
+  }
+
+  /** Types one field of a saved Cl@ve Permanente, asking first when its policy says so. */
   async function fillCredential(
     ctx: BridgeContext,
     params: { ref: string; credentialId: string; field: 'username' | 'password'; submit: boolean },
@@ -378,40 +411,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     const pid = ctx.procedureId;
     const vault = deps.vault();
     const credential = requireCredential(params.credentialId);
-    if (credential.kind === 'certificate')
-      throw new BridgeError(
-        'bad_request',
-        'Certificates are not typed into pages: use browser_use_certificate.',
-      );
-    if (credential.kind === 'dnie')
-      throw new BridgeError(
-        'bad_request',
-        "The DNIe and its PIN are never typed into pages: the DNIe works through the paired phone. To log in, call browser_use_certificate with this credential, then click the site's certificate (or DNIe) login button; the user approves on their phone and holds the card to it. To sign, nothing is needed: when the site asks for an AutoFirma signature, the app offers the DNIe and the user approves on their phone.",
-      );
-    if (credential.kind !== 'clave_permanente')
-      throw new BridgeError(
-        'bad_request',
-        'Cl@ve Móvil has no stored secret: the user approves on their phone (use request_user_action).',
-      );
-    const check = async () => {
-      const info = await browserCall((b) => b.describeRef(pid, params.ref));
-      if (!info)
-        throw new BridgeError(
-          'not_found',
-          'Element not found: take a new snapshot and use a fresh ref.',
-        );
-      if (!credentialAllowedOn(credential.kind, info.frameUrl))
-        throw new BridgeError(
-          'policy_denied',
-          `Cl@ve credentials can only be typed on official Cl@ve login pages over https. This field is on ${hostOf(info.frameUrl)}, which is not allowed.`,
-        );
-      if (params.field === 'password' && info.inputType !== 'password')
-        throw new BridgeError(
-          'policy_denied',
-          'A password can only be typed into a password field.',
-        );
-      return info;
-    };
+    const check = () => checkClaveField(pid, params.ref, params.field);
     const info = await check();
     if (credential.policy === 'ask') {
       const host = hostOf(info.frameUrl);
@@ -420,10 +420,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         `${pid}:${credential.id}:${host}`,
         {
           title: t(lang(), 'credentialTitle'),
-          message: t(lang(), 'credentialMessage', {
-            field: t(lang(), params.field === 'password' ? 'fieldPassword' : 'fieldUsername'),
-            host,
-          }),
+          message: t(lang(), 'credentialMessage', { host }),
           details: [
             { label: t(lang(), 'detailCredential'), value: credential.label },
             { label: t(lang(), 'detailWebsite'), value: host },
@@ -571,7 +568,12 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     },
 
     'prompt.credential': async (params, ctx) => {
-      if (params.credential === 'dnie' && !deps.dniePhone)
+      if (params.credential === 'clave_permanente')
+        throw new BridgeError(
+          'bad_request',
+          'Log in with browser_login_clave: it asks the user for their Cl@ve Permanente when none is saved.',
+        );
+      if (!deps.dniePhone)
         throw new BridgeError('bad_request', 'The DNIe with the phone is not available.');
       const prompt: CredentialPrompt = { kind: 'credential', ...params };
       const response = await deps.prompts.ask(ctx.procedureId, prompt, { signal: ctx.signal });
@@ -693,21 +695,59 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         b.type(ctx.procedureId, params.ref, params.text, { submit: params.submit }),
       ),
     'browser.fillFromVault': async (params, ctx) => {
-      const { value } = params;
-      if (value.source === 'personal') {
-        refuseHiddenKey(value.key);
-        const item = deps.vault().getPersonal(value.key);
-        if (!item)
-          throw new BridgeError('not_found', `No personal data saved under "${value.key}".`);
-        return observe(ctx.procedureId, (b) =>
-          b.type(ctx.procedureId, params.ref, item.value, { submit: params.submit }),
-        );
+      refuseHiddenKey(params.key);
+      const item = deps.vault().getPersonal(params.key);
+      if (!item)
+        throw new BridgeError('not_found', `No personal data saved under "${params.key}".`);
+      return observe(ctx.procedureId, (b) =>
+        b.type(ctx.procedureId, params.ref, item.value, { submit: params.submit }),
+      );
+    },
+    'browser.loginClave': async (params, ctx) => {
+      const pid = ctx.procedureId;
+      // Check the page before asking the user anything.
+      for (const [ref, field] of [
+        [params.usernameRef, 'username'],
+        [params.passwordRef, 'password'],
+      ] as const)
+        await checkClaveField(pid, ref, field);
+      let credentialId = savedClave()?.id;
+      if (!credentialId || params.rejected) {
+        const replaceId = params.rejected ? credentialId : undefined;
+        const prompt: CredentialPrompt = {
+          kind: 'credential',
+          credential: 'clave_permanente',
+          title: t(lang(), replaceId ? 'claveRejectedTitle' : 'claveMissingTitle'),
+          message: (
+            params.message ?? t(lang(), replaceId ? 'claveRejectedMessage' : 'claveMissingMessage')
+          ).slice(0, 2000),
+          ...(replaceId ? { replaceId } : {}),
+        };
+        const response = await deps.prompts.ask(pid, prompt, { signal: ctx.signal });
+        const added =
+          response.kind === 'credential' && response.credentialId
+            ? deps.vault().getCredential(response.credentialId)
+            : undefined;
+        if (added?.kind !== 'clave_permanente')
+          throw new BridgeError(
+            'user_rejected',
+            replaceId
+              ? 'The user did not correct their Cl@ve Permanente. Do not retry it: ask which other supported method they can use.'
+              : 'The user has no Cl@ve Permanente. Ask which other supported method they can use.',
+          );
+        credentialId = added.id;
       }
+      await fillCredential(ctx, {
+        ref: params.usernameRef,
+        credentialId,
+        field: 'username',
+        submit: false,
+      });
       return fillCredential(ctx, {
-        ref: params.ref,
-        credentialId: value.credentialId,
-        field: value.field,
-        submit: params.submit,
+        ref: params.passwordRef,
+        credentialId,
+        field: 'password',
+        submit: true,
       });
     },
     'browser.fillFromUser': async (params, ctx) => {
@@ -723,7 +763,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       if (info.inputType === 'password' && credentialAllowedOn('clave_permanente', info.frameUrl))
         throw new BridgeError(
           'policy_denied',
-          'This is the Cl@ve Permanente password: never ask the user for it. Use browser_fill_from_vault with a saved Cl@ve Permanente, or request_credential (credential clave_permanente) if none is saved.',
+          "This is the Cl@ve Permanente password: never ask the user for it. Log in with browser_login_clave: it types the saved Cl@ve Permanente, or asks the user for it in the app's own form.",
         );
       const host = hostOf(info.frameUrl);
       const note = t(lang(), 'fillFromUserNote', { host });

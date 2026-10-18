@@ -179,6 +179,12 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
     s.vault.previewDocument(id),
   );
   router.register('vault.addClave', S['vault.addClave'], (input) => s.vault.addClave(input));
+  router.register('vault.updateClave', S['vault.updateClave'], (id, input) =>
+    s.vault.updateClave(id, input),
+  );
+  router.register('vault.claveUsername', S['vault.claveUsername'], (id) =>
+    s.vault.claveUsername(id),
+  );
   router.register('vault.addClaveMovil', S['vault.addClaveMovil'], () => s.vault.addClaveMovil());
   router.register('vault.addDnie', S['vault.addDnie'], () => s.vault.addDnie());
   router.register('vault.setDniePin', S['vault.setDniePin'], (id, pin) =>

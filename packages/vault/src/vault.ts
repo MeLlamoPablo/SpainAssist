@@ -483,6 +483,26 @@ export class Vault {
     });
   }
 
+  /** Corrects a saved Cl@ve Permanente (e.g. after the site rejected its password). */
+  async updateClave(
+    id: string,
+    input: { username: string; password: string },
+  ): Promise<CredentialSummary> {
+    return this.lock.run(async () => {
+      if (!input || typeof input.username !== 'string' || typeof input.password !== 'string') {
+        throw invalid('Username and password are required');
+      }
+      const username = compactId(input.username);
+      if (!isSpanishId(username)) throw invalid('The Cl@ve username must be a valid DNI or NIE');
+      if (!input.password || input.password.length > 256) throw invalid('Invalid password');
+      const updated = await this.updateCredential(id, (c) => {
+        if (c.kind !== 'clave_permanente') throw invalid('Not a Cl@ve Permanente credential');
+        return { ...c, username, password: input.password };
+      });
+      return summarize(updated);
+    });
+  }
+
   async addClaveMovil(input: { label?: string } = {}): Promise<CredentialSummary> {
     return this.lock.run(async () => {
       const credential: StoredCredential = {

@@ -44,7 +44,7 @@ export function pausedAfterLogin(fixtureId: string): ScenarioInput {
       relay,
       ...orchestratorRules({ askMethod: fromScratch }),
       ...sequence(PROCEDURE_AGENT, 'p', [
-        ...stagesUntilLogin({ credential: fromScratch ? 'ask' : 'vault' }),
+        ...stagesUntilLogin({}),
         {
           id: 'asks-to-go-on',
           text: 'He entrado con tu Cl@ve Permanente. ¿Sigo con la descarga de tu vida laboral?',
@@ -116,7 +116,7 @@ export function resumedAfterLogin(fixtureId: string): ScenarioInput {
  */
 export function asksProvince(fixtureId: string): ScenarioInput {
   const { fromScratch } = flow(fixtureId);
-  const stages = procedureStages({ credential: fromScratch ? 'ask' : 'vault' });
+  const stages = procedureStages({});
   const plan = stages.findIndex((stage) => stage.id === 'plan');
   stages.splice(plan + 1, 0, {
     id: 'asks-province',

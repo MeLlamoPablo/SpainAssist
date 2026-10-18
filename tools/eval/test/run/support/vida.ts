@@ -6,7 +6,6 @@ import type { ScriptContext } from './scripted-app';
 
 const CSV = '5A1C0E77B2D94F36';
 const DOCUMENT_ID = '6f1d8c0e-3c52-4a52-9f0e-5a8d0d1c7a11';
-const SEEDED_CREDENTIAL_ID = '02caac7b-9900-4f56-ada3-b6de297ac384';
 
 /** The assistant starts a procedure, and the procedure agent looks at the vault. */
 export function startProcedure(ctx: ScriptContext): void {
@@ -21,17 +20,9 @@ export function startProcedure(ctx: ScriptContext): void {
 }
 
 /** The procedure agent types the credential from the vault and the login happens. */
-export function logIn(ctx: ScriptContext, credentialId: string): void {
+export function logIn(ctx: ScriptContext): void {
   ctx.model();
-  for (const field of ['username', 'password']) {
-    ctx.tool('procedure', 'browser_fill_from_vault', {
-      ref: 'e5',
-      source: 'credential',
-      credentialId,
-      field,
-      ...(field === 'password' ? { submit: true } : {}),
-    });
-  }
+  ctx.tool('procedure', 'browser_login_clave', { usernameRef: 'e5', passwordRef: 'e6' });
   ctx.bench.site(ctx.spec.bench.worldId, { authenticated: true, loginMethod: 'clave-permanente' });
   ctx.emit({
     type: 'net',
@@ -80,7 +71,7 @@ export async function sinDatosGolden(ctx: ScriptContext): Promise<void> {
   const credential = await ctx.ask(credentialRequest());
   ctx.state.credential = credential;
   ctx.vaultChanged();
-  logIn(ctx, credential.kind === 'credential' ? (credential.credentialId ?? 'none') : 'none');
+  logIn(ctx);
   saveReportAndTell(ctx);
   ctx.mark('done');
 }
@@ -88,7 +79,7 @@ export async function sinDatosGolden(ctx: ScriptContext): Promise<void> {
 /** Fixture 2, the golden path: nothing is asked. */
 export async function conDatosGolden(ctx: ScriptContext): Promise<void> {
   startProcedure(ctx);
-  logIn(ctx, SEEDED_CREDENTIAL_ID);
+  logIn(ctx);
   saveReportAndTell(ctx);
   ctx.mark('done');
 }

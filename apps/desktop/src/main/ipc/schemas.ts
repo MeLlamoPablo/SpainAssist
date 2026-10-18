@@ -102,6 +102,14 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
       label: z.string().trim().max(160).optional(),
     }),
   ]),
+  'vault.updateClave': z.tuple([
+    id,
+    z.object({
+      username: z.string().trim().min(1).max(64),
+      password: z.string().min(1).max(256),
+    }),
+  ]),
+  'vault.claveUsername': z.tuple([id]),
   'vault.addClaveMovil': none,
   'vault.addDnie': none,
   'vault.setDniePin': z.tuple([id, DniePin.nullable()]),

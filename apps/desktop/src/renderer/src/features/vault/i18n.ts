@@ -113,6 +113,8 @@ export const vaultDict = defineDict({
         password: 'Contraseña de Cl@ve',
         save: 'Guardar Cl@ve',
         saved: 'Cl@ve guardada',
+        fixTitle: 'Corregir Cl@ve Permanente',
+        fixed: 'Cl@ve corregida',
         invalidUser: 'Escribe tu DNI o NIE con la letra, por ejemplo 12345678Z.',
       },
       movil: {
@@ -297,6 +299,8 @@ export const vaultDict = defineDict({
         password: 'Cl@ve password',
         save: 'Save Cl@ve',
         saved: 'Cl@ve saved',
+        fixTitle: 'Correct Cl@ve Permanente',
+        fixed: 'Cl@ve corrected',
         invalidUser: 'Type your DNI or NIE with the letter, e.g. 12345678Z.',
       },
       movil: {

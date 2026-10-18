@@ -294,6 +294,11 @@ export function activityLabel(
     }
     case 'browser_fill_from_vault':
       return fillFromVaultLabel(args, ctx);
+    case 'browser_login_clave':
+      return {
+        text: es ? 'Entrando con tu Cl@ve Permanente' : 'Logging in with your Cl@ve Permanente',
+        icon: KeyRound,
+      };
     case 'browser_fill_from_user': {
       const label = str(args.label);
       return {
@@ -398,7 +403,8 @@ export function activityLabel(
 
 function fillFromVaultLabel(args: Record<string, unknown>, ctx: ActivityContext): ActivityLabel {
   const es = ctx.lang === 'es';
-  const value = (args.value ?? {}) as Record<string, unknown>;
+  // Older procedures logged `value: {source, key | credentialId + field}`.
+  const value = (args.value ?? { source: 'personal', key: args.key }) as Record<string, unknown>;
   if (value.source === 'credential') {
     const kind =
       typeof value.credentialId === 'string' ? ctx.credentialKind?.(value.credentialId) : undefined;

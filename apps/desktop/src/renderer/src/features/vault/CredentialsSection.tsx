@@ -691,10 +691,13 @@ export function ClaveDialog({
   open,
   onOpenChange,
   onSaved,
+  replaceId,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onSaved?: (credential: CredentialSummary) => void | Promise<void>;
+  /** Corrects this saved Cl@ve Permanente (prefilled with its DNI/NIE) instead of adding one. */
+  replaceId?: string;
 }) {
   const t = useT(vaultDict);
   const tc = useT(common);
@@ -705,10 +708,26 @@ export function ClaveDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // The DNI/NIE comes prefilled when Mis datos knows it: the user only adds the password.
+  const [knownUser, setKnownUser] = useState<string>();
   useEffect(() => {
-    if (open && savedUser) setUsername((u) => u || savedUser);
-  }, [open, savedUser]);
+    if (!open || !replaceId) return;
+    let live = true;
+    api
+      .invoke('vault.claveUsername', replaceId)
+      .then((user) => live && setKnownUser(user))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [open, replaceId]);
+  const prefill = replaceId ? knownUser : savedUser;
+  // Its DNI/NIE arrives a moment later when correcting: the password takes the focus anyway.
+  const focusPassword = !!(replaceId || savedUser);
+
+  // The DNI/NIE comes prefilled when it is known: the user only types the password.
+  useEffect(() => {
+    if (open && prefill) setUsername((u) => u || prefill);
+  }, [open, prefill]);
 
   const reset = () => {
     setUsername('');
@@ -725,10 +744,12 @@ export function ClaveDialog({
     if (!password) return;
     setBusy(true);
     try {
-      const credential = await api.invoke('vault.addClave', { username: user, password });
+      const credential = replaceId
+        ? await api.invoke('vault.updateClave', replaceId, { username: user, password })
+        : await api.invoke('vault.addClave', { username: user, password });
       await reloadVault();
       await onSaved?.(credential);
-      toast.success(t.credentials.clave.saved);
+      toast.success(replaceId ? t.credentials.clave.fixed : t.credentials.clave.saved);
       reset();
       onOpenChange(false);
     } catch (err) {
@@ -745,7 +766,7 @@ export function ClaveDialog({
         if (!o) reset();
         onOpenChange(o);
       }}
-      title={t.credentials.clave.dialogTitle}
+      title={replaceId ? t.credentials.clave.fixTitle : t.credentials.clave.dialogTitle}
       description={t.credentials.clave.dialogLead}
       closeLabel={tc.close}
       width="sm"
@@ -787,7 +808,7 @@ export function ClaveDialog({
               aria-describedby={describedBy}
               aria-invalid={invalid || undefined}
               className="uppercase tracking-wider"
-              autoFocus={!savedUser}
+              autoFocus={!focusPassword}
             />
           )}
         </Field>
@@ -799,7 +820,7 @@ export function ClaveDialog({
               onChange={(e) => setPassword(e.target.value)}
               revealLabel={tchat.prompt.reveal}
               hideLabel={tchat.prompt.hide}
-              autoFocus={!!savedUser}
+              autoFocus={focusPassword}
             />
           )}
         </Field>

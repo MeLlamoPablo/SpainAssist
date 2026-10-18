@@ -244,6 +244,8 @@ export const CredentialPrompt = z.object({
   title: z.string().min(1).max(160),
   /** Why the procedure needs it, in plain words. */
   message: z.string().min(1).max(2000),
+  /** A saved Cl@ve Permanente the site rejected: the user corrects it instead of adding one. */
+  replaceId: z.string().optional(),
 });
 export type CredentialPrompt = z.infer<typeof CredentialPrompt>;
 

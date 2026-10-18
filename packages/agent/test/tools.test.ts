@@ -154,15 +154,11 @@ describe('tools', () => {
     it('offers no way to read, type, save or ask for the DNIe PIN', async () => {
       const tools = JSON.stringify(h.tools.map((t) => [t.description, t.parameters]));
       expect(tools).not.toMatch(/dniePin|DNIe PIN|PIN del DNIe/i);
-      // Credentials type a username or a password, never a PIN.
-      const fill = h.tools.find((t) => t.name === 'browser_fill_from_vault')!;
+      // Only the Cl@ve Permanente is typed from a credential: its DNI/NIE and password.
       expect(
-        (fill.parameters as { properties: { field: { enum: string[] } } }).properties.field.enum,
-      ).toEqual(['username', 'password']);
-      const value = { source: 'credential', credentialId: 'cred_dnie', field: 'pin' };
-      expect(BridgeParams['browser.fillFromVault'].safeParse({ ref: 'e1', value }).success).toBe(
-        false,
-      );
+        BridgeParams['browser.fillFromVault'].safeParse({ ref: 'e1', credentialId: 'cred_dnie' })
+          .success,
+      ).toBe(false);
       // The app refuses PIN keys; the agent hears its safety policy, never the value.
       bridge.setHandler('vault.save', () => {
         throw new FakeBridgeError('policy_denied', 'PINs are secrets, not personal data', 403);
@@ -398,28 +394,27 @@ describe('tools', () => {
       expect(textOf(result)).toContain('hecho');
     });
 
-    it('asks the user to save their Cl@ve and returns only the credential id', async () => {
-      bridge.setHandler('prompt.credential', () => ({ kind: 'credential', credentialId: 'c1' }));
-      const saved = await h.run('request_credential', {
-        credential: 'clave_permanente',
-        title: 'Añade tu Cl@ve',
-        message: 'La necesito para entrar.',
+    it('logs in with Cl@ve Permanente in one call, the app asking for what is missing', async () => {
+      bridge.setHandler('browser.loginClave', () => observation);
+      await h.run('browser_login_clave', {
+        usernameRef: 'e4',
+        passwordRef: 'e5',
+        message: 'La necesito para entrar en la Seguridad Social.',
       });
-      expect(bridge.callsTo('prompt.credential')[0]?.params).toEqual({
-        credential: 'clave_permanente',
-        title: 'Añade tu Cl@ve',
-        message: 'La necesito para entrar.',
-      });
-      expect(textOf(saved)).toContain('credential c1');
-      expect(textOf(saved)).toContain('browser_fill_from_vault');
-
-      bridge.setHandler('prompt.credential', () => ({ kind: 'credential' }));
-      const none = await h.run('request_credential', {
-        credential: 'clave_permanente',
-        title: 'x',
-        message: 'y',
-      });
-      expect(textOf(none)).toContain('no Cl@ve Permanente');
+      await h.run('browser_login_clave', { usernameRef: 'e4', passwordRef: 'e5', rejected: true });
+      expect(bridge.callsTo('browser.loginClave').map((c) => c.params)).toEqual([
+        {
+          usernameRef: 'e4',
+          passwordRef: 'e5',
+          rejected: false,
+          message: 'La necesito para entrar en la Seguridad Social.',
+        },
+        { usernameRef: 'e4', passwordRef: 'e5', rejected: true },
+      ]);
+      const credential = JSON.stringify(
+        h.tools.find((t) => t.name === 'request_credential')?.parameters,
+      );
+      expect(credential).not.toContain('clave_permanente');
     });
 
     it('asks for the DNIe only with the phone app, and logs in with it', async () => {
@@ -428,7 +423,7 @@ describe('tools', () => {
           toolHarness(bridge, deps).tools.find((t) => t.name === 'request_credential')?.parameters,
         );
       expect(credentialParam({ dniePhone: true })).toContain('dnie');
-      expect(credentialParam({})).not.toContain('dnie');
+      expect(credentialParam({ dniePhone: false })).toBeUndefined();
 
       bridge.setHandler('prompt.credential', () => ({ kind: 'credential', credentialId: 'd1' }));
       const added = await toolHarness(bridge, { dniePhone: true }).run('request_credential', {
@@ -723,43 +718,20 @@ describe('tools', () => {
 
     it('fills vault values by reference only', async () => {
       bridge.setHandler('browser.fillFromVault', () => observation);
-      await h.run('browser_fill_from_vault', {
-        ref: 'e5',
-        source: 'credential',
-        credentialId: 'cred_1',
-        field: 'password',
-      });
-      await h.run('browser_fill_from_vault', {
-        ref: 'e6',
-        source: 'personal',
-        key: 'dniNumber',
-        submit: true,
-      });
+      await h.run('browser_fill_from_vault', { ref: 'e6', key: 'dniNumber', submit: true });
       expect(bridge.callsTo('browser.fillFromVault').map((c) => c.params)).toEqual([
-        {
-          ref: 'e5',
-          value: { source: 'credential', credentialId: 'cred_1', field: 'password' },
-          submit: false,
-        },
-        { ref: 'e6', value: { source: 'personal', key: 'dniNumber' }, submit: true },
+        { ref: 'e6', key: 'dniNumber', submit: true },
       ]);
-      const invalid = await h.run('browser_fill_from_vault', { ref: 'e5', source: 'credential' });
-      expect(invalid.isError).toBe(true);
     });
 
     it('explains policy and browser errors', async () => {
-      bridge.setHandler('browser.fillFromVault', () => {
+      bridge.setHandler('browser.loginClave', () => {
         throw new FakeBridgeError('policy_denied', 'evil.example is not allowed for Cl@ve', 403);
       });
       bridge.setHandler('browser.click', () => {
         throw new FakeBridgeError('browser_error', 'Ref e9 not found', 400);
       });
-      const denied = await h.run('browser_fill_from_vault', {
-        ref: 'e1',
-        source: 'credential',
-        credentialId: 'c',
-        field: 'password',
-      });
+      const denied = await h.run('browser_login_clave', { usernameRef: 'e1', passwordRef: 'e2' });
       expect(textOf(denied)).toContain("Blocked by the app's safety policy");
       const clicked = await h.run('browser_click', { ref: 'e9' });
       expect(clicked.isError).toBe(true);
@@ -819,7 +791,7 @@ describe('tools', () => {
 
     it('offers the DNIe in the paired phone only with its feature flag', () => {
       expect(description({ dniePhone: true })).toContain('or DNIe in the paired phone');
-      expect(description({})).not.toContain('DNIe');
+      expect(description({ dniePhone: false })).not.toContain('DNIe');
       expect(description({ dniePhone: false })).toContain("the user's digital certificate");
     });
   });

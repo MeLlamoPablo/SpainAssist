@@ -27,10 +27,9 @@ afterEach(() => env?.dispose());
 async function phase1(ctx: ScriptContext): Promise<void> {
   startProcedure(ctx);
   await ctx.ask(methodsPrompt());
-  const credential = await ctx.ask(credentialRequest('cred-1'));
+  await ctx.ask(credentialRequest('cred-1'));
   ctx.vaultChanged();
-  const id = credential.kind === 'credential' ? (credential.credentialId ?? 'none') : 'none';
-  logIn(ctx, id);
+  logIn(ctx);
   // A wrong turn on the way, which both runs must count.
   ctx.bench.wrongTurn(ctx.spec.runId);
   ctx.bench.emit(ctx.spec.runId, 'wrong_turn', { path: '/missing/1' });
