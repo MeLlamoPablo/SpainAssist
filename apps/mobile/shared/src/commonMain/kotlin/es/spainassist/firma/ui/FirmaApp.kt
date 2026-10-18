@@ -518,7 +518,6 @@ private fun ReviewStep(r: Review, nfc: NfcAvailability, actions: FirmaActions, p
         Actions {
             away()
             NfcBanner(nfc, actions)
-            if (!login && !certificateOnly && !r.verifiable) Banner(stringResource(Res.string.review_unchecked), Tone.Info, live = false)
             Primary(
                 stringResource(if (login) Res.string.review_login else if (certificateOnly) Res.string.review_share else Res.string.review_sign),
                 onClick = actions::approve,

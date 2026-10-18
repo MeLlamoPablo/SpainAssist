@@ -73,7 +73,6 @@ class PreviewActivity : ComponentActivity() {
             "ordenador-desconectado" to Preview(Screen.Home(ready, LinkStatus.DesktopAway)),
             "revisar" to signing(document, Step.Review),
             "revisar-desconocido" to signing(document.copy(official = false), Step.Review),
-            "revisar-sin-comprobar" to signing(document.copy(verifiable = false), Step.Review),
             "revisar-varios" to signing(several, Step.Review),
             "certificado-revisar" to signing(review(Purpose.Certificate), Step.Review),
             "pin" to signing(document, Step.WaitForComputer(Need.Pin, refused = true, triesLeft = 2)),

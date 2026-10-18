@@ -43,7 +43,6 @@
     <string name="review_title_certificate">Share your certificate with</string>
     <string name="review_certificate_body">Nothing is signed: it only shares which certificate you have.</string>
     <string name="review_signatures">%1$d signatures</string>
-    <string name="review_unchecked">Your computer prepares the signature: this phone can’t check that it matches exactly this document.</string>
     <string name="review_no_data">The document is too large to show here.</string>
     <string name="doc_pdf">PDF document</string>
     <string name="doc_xml">XML document</string>
