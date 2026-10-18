@@ -1004,7 +1004,10 @@ describe('ChatGPT plan models', () => {
 
   it('asks once an hour, and callers at the same time share one request', async () => {
     let now = Date.parse('2026-10-18T09:00:00.000Z');
-    const fetch = openai(() => modelList(['gpt-test-luna']));
+    let fail = false;
+    const fetch = openai(() =>
+      fail ? new Response('', { status: 503 }) : modelList(['gpt-test-luna']),
+    );
     app = await createTestApp({ fetch, clock: () => new Date(now) });
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
@@ -1018,6 +1021,14 @@ describe('ChatGPT plan models', () => {
     now += 2 * 60_000;
     expect((await providers.agentModel()).id).toBe('gpt-test-luna');
     expect(listRequests(fetch)).toBe(2);
+
+    // A failed check after the hour keeps the same account's last pick, as the status shows.
+    fail = true;
+    now += 61 * 60_000;
+    expect((await providers.agentModel()).id).toBe('gpt-test-luna');
+    expect((await providers.agentModel()).id).toBe('gpt-test-luna');
+    expect(providers.status().model).toBe('gpt-test-luna');
+    expect(listRequests(fetch)).toBe(3);
   });
 
   it('keeps the default model when the list is unavailable, and asks again a minute later', async () => {
@@ -1071,6 +1082,30 @@ describe('ChatGPT plan models', () => {
     expect(answers).toHaveLength(2);
   });
 
+  it("asks the new account when the previous account's lookup fails", async () => {
+    const answers: ((res: Response) => void)[] = [];
+    const fetch = openai(
+      () =>
+        new Promise<Response>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    app = await createTestApp({ fetch });
+    await app.invoke('providers.loginChatGPT');
+    const providers = app.services.providers;
+
+    const first = providers.agentModel();
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    await app.invoke('providers.loginChatGPT');
+    // The old account's failure neither answers for the new account nor holds it back.
+    answers[0]?.(new Response('', { status: 503 }));
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]?.(modelList(['gpt-test-luna']));
+    expect((await first).id).toBe('gpt-test-luna');
+    expect(providers.status().model).toBe('gpt-test-luna');
+    expect(answers).toHaveLength(2);
+  });
+
   it('keeps the default model without a usable credential, and asks nothing', async () => {
     const fetch = openai(() => modelList(['gpt-test-luna']));
     app = await createTestApp({ fetch });
@@ -1110,6 +1145,13 @@ describe('ChatGPT plan models', () => {
 
     await app.invoke('providers.redeemVoucher', 'VALID-CODE');
     expect((await providers.agentModel()).id).toBe('test/voucher-model');
+    // An OpenAI API key runs on pi's `openai` provider too, but keeps the user's model.
+    await app.invoke('providers.setByok', {
+      provider: 'openai',
+      apiKey: 'sk-byok-test',
+      model: 'gpt-6.1-sol',
+    });
+    expect(await providers.agentModel()).toEqual({ provider: 'openai', id: 'gpt-6.1-sol' });
     await app.invoke('providers.setCustom', {
       baseUrl: 'http://127.0.0.1:11434/v1',
       api: 'openai-completions',

@@ -885,7 +885,7 @@ export class ProviderManager {
   /**
    * The ChatGPT procedure model: the first of `chatgptModels` the account's plan offers (Plus has
    * no gpt-6.1-sol). Kept for an hour and shared by callers at the same time. When OpenAI can't
-   * say, the app's default model, without asking again for a minute.
+   * say, the account's last pick or the app's default model, without asking again for a minute.
    */
   private async chatgptModel(): Promise<string> {
     const now = this.deps.clock().getTime();
@@ -894,7 +894,9 @@ export class ProviderManager {
     }
     if (this.chatgptPickFetch) return this.chatgptPickFetch;
     const fallback = this.deps.lib.defaultModels.chatgpt;
-    if (now - this.chatgptPickFailedAt < CHATGPT_MODELS_RETRY_MS) return fallback;
+    // Cleared on every provider change, so a pick here is always this account's.
+    const known = () => this.chatgptPick?.id ?? fallback;
+    if (now - this.chatgptPickFailedAt < CHATGPT_MODELS_RETRY_MS) return known();
     const generation = this.chatgptPickGeneration;
     const current = () => generation === this.chatgptPickGeneration;
     const lookup = (async () => {
@@ -921,8 +923,9 @@ export class ProviderManager {
         category = typeof listError === 'string' ? listError : 'credential';
       }
       this.deps.logger.warn('chatgpt model list unavailable', { category });
-      if (current()) this.chatgptPickFailedAt = this.deps.clock().getTime();
-      return fallback;
+      if (!current()) return this.chatgptModel();
+      this.chatgptPickFailedAt = this.deps.clock().getTime();
+      return known();
     })().finally(() => {
       if (this.chatgptPickFetch === lookup) this.chatgptPickFetch = undefined;
     });
