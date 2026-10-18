@@ -119,14 +119,10 @@ export function AppointmentPicker({
                   value={slot}
                   aria-label={slotLabel(slot, lang)}
                   className={cn(
-                    'group inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-line-strong/70 bg-surface text-[14px] font-medium text-fg tabular-nums shadow-xs transition-colors duration-150',
+                    'inline-flex h-10 items-center justify-center rounded-lg border border-line-strong/70 bg-surface text-[14px] font-medium text-fg tabular-nums shadow-xs transition-colors duration-150',
                     'hover:border-fg-subtle data-[state=on]:border-accent data-[state=on]:bg-accent data-[state=on]:text-accent-fg',
                   )}
                 >
-                  <span
-                    className="size-2 rounded-full bg-st-done-dot group-data-[state=on]:bg-accent-fg"
-                    aria-hidden
-                  />
                   {slot.slice(11, 16)}
                 </ToggleGroup.Item>
               ))}
