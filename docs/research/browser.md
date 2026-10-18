@@ -373,7 +373,7 @@ await page.getByLabel('Adjuntar documento').setInputFiles({ name: 'dni.pdf', mim
 
 | Option | Pros | Cons |
 |---|---|---|
-| **Playwright's Chrome for Testing** (`chromium`, r1243 = 153.0.8010.12): **chosen** | The exact build 1.63 is tested against; same on every OS. Headed works on F5-protected sites `[live]`. | About 360 MB on disk (measured, macOS arm64). The app bundles it; Google's redistribution terms are still to be confirmed. Shows as a separate "Google Chrome for Testing" app/window. |
+| **Playwright's Chrome for Testing** (`chromium`, r1243 = 153.0.8010.12): **chosen** | The exact build 1.63 is tested against; same on every OS. Headed works on F5-protected sites `[live]`. | About 360 MB on disk (measured, macOS arm64). The app bundles it; Google publishes no redistribution licence, a risk we accept. Shows as a separate "Google Chrome for Testing" app/window. |
 | `channel: 'chrome' \| 'msedge'` | No download; real branded Chrome. Worked, with certificates, on this Mac with Chrome 154 `[lab]`. | Not installed everywhere. Version drift (1.63 tested with Chrome 153). Enterprise policies can interfere (Playwright docs). |
 | Electron's own Chromium (e.g. a `WebContentsView` + `webContents.debugger` CDP, or `connectOverCDP` to the app's own `--remote-debugging-port`) | Nothing to download; true in-app view. | Loses the Playwright API or `clientCertificates`. A debugging port lets any local process take over the app. Rejected. |
 

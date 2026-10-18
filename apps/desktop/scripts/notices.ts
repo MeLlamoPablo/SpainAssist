@@ -77,8 +77,8 @@ const PERMISSIVE = new Set([
  */
 const DECIDED: Record<string, string> = {
   // The agent's browser: Google's Chrome for Testing build of Chromium, which
-  // playwright-core pins. Its redistribution terms are still to be confirmed.
-  'LicenseRef-Chrome-for-Testing': 'Redistribution terms still to be confirmed',
+  // playwright-core pins. Google publishes no redistribution licence; we accept that risk.
+  'LicenseRef-Chrome-for-Testing': 'No redistribution licence; risk accepted',
 };
 
 /** Whether a component's licence may ship: permissive, or allowed by a decision. */
