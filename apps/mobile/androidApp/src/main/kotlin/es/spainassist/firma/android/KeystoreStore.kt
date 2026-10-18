@@ -12,8 +12,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Small values (the pairing, the CAN) encrypted with an AES-GCM key that never leaves the
- * Android Keystore. A value that no longer decrypts (key reset, restored data) is dropped.
+ * Pairing secrets encrypted with an AES-GCM key that never leaves the Android Keystore.
+ * A value that no longer decrypts (key reset, restored data) is dropped.
  */
 class KeystoreStore(context: Context) : SecureStore {
     private val prefs = context.getSharedPreferences("firma-store", Context.MODE_PRIVATE)

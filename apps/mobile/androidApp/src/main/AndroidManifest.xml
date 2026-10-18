@@ -10,7 +10,7 @@
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
-    <!-- Pairing secrets and the CAN live in the Keystore-encrypted store: never back them up. -->
+    <!-- Pairing secrets live in the Keystore-encrypted store: never back them up. -->
     <application
         android:name=".android.FirmaApplication"
         android:allowBackup="false"
