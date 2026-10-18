@@ -342,6 +342,89 @@ describe('structured answers', () => {
     expect(t.app.responses).toEqual([]);
   });
 
+  describe('typed answers', () => {
+    const typed = (id = 'type-code'): AnswerGroup =>
+      group('code', {
+        id,
+        match: { kind: 'form' },
+        action: { type: 'typed', value: 'SPAIN' },
+      });
+    // What `browser_fill_from_user` asks: one secret field, `value`.
+    const fillFromUser = (itemId = 'form-fill'): PendingPrompt =>
+      prompt({
+        itemId,
+        title: 'Escribe el código de seguridad',
+        fields: [{ key: 'value', type: 'secret', label: 'Código de seguridad', secret: true }],
+      });
+
+    it("fills the form's secret field, as browser_fill_from_user asks", async () => {
+      const t = setup({ answerGroups: [typed()] });
+      t.show(fillFromUser());
+      await t.sim.settled();
+      expect(t.fatal).toEqual([]);
+      expect(t.app.responses[0]).toMatchObject({
+        itemId: 'form-fill',
+        response: { kind: 'form', values: { value: 'SPAIN' }, dismissed: false },
+      });
+      expect(t.answered()).toMatchObject([
+        { itemId: 'form-fill', answerId: 'type-code', by: 'structured' },
+      ]);
+    });
+
+    it('fills the secret field of a form that has other fields too', async () => {
+      const t = setup({ answerGroups: [typed()] });
+      t.show(dataForm());
+      await t.sim.settled();
+      expect(t.fatal).toEqual([]);
+      expect(t.app.responses[0]!.response).toMatchObject({
+        kind: 'form',
+        values: { codigo: 'SPAIN' },
+      });
+    });
+
+    it('fills the only text field of a form without a secret one', async () => {
+      const t = setup({ answerGroups: [typed()] });
+      t.show(
+        prompt({
+          itemId: 'form-text',
+          title: 'Caracteres de la imagen',
+          fields: [
+            { key: 'captcha', type: 'text', label: 'Caracteres' },
+            { key: 'acepto', type: 'boolean', label: 'Acepto' },
+          ],
+        }),
+      );
+      await t.sim.settled();
+      expect(t.fatal).toEqual([]);
+      expect(t.app.responses[0]!.response).toMatchObject({
+        kind: 'form',
+        values: { captcha: 'SPAIN' },
+      });
+    });
+
+    it.each([
+      ['no text field', [{ key: 'acepto', type: 'boolean', label: 'Acepto' }]],
+      [
+        'two text fields',
+        [
+          { key: 'a', type: 'text', label: 'A' },
+          { key: 'b', type: 'text', label: 'B' },
+        ],
+      ],
+    ] as const)('is a fixture bug on a form with %s and no secret field', async (_name, fields) => {
+      const t = setup({ answerGroups: [typed('bad-typed')] });
+      t.show(prompt({ itemId: 'form-x', title: 'Datos', fields: fields.map((f) => ({ ...f })) }));
+      await t.sim.settled();
+      expect(t.app.responses).toEqual([]);
+      expect(t.fatal).toHaveLength(1);
+      expect(t.fatal[0]).toBeInstanceOf(SimulatorError);
+      expect((t.fatal[0] as SimulatorError).code).toBe('invalid_answer');
+      expect(t.fatal[0]!.message).toMatch(
+        /bad-typed.*no secret field and not exactly one text field/s,
+      );
+    });
+  });
+
   it('creates the credential first, registers the password as a secret and answers with the id', async () => {
     const t = setup({
       answerGroups: [

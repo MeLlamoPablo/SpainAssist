@@ -74,6 +74,17 @@ function rulesFor(flow: Flow, procedure: ProcedureOptions, before: Rule[] = []):
   ];
 }
 
+/** A fixture no scripted model is written for (only the vida laboral fixtures have them). */
+export class NotScriptedError extends Error {
+  constructor(
+    readonly fixtureId: string,
+    readonly scenario: string,
+  ) {
+    super(`No mock scenario "${scenario}" for fixture "${fixtureId}": it is not scripted`);
+    this.name = 'NotScriptedError';
+  }
+}
+
 /** The script for a fixture; throws when the fixture has no such scenario. */
 export function mockScenario(fixtureId: string, name: string): ScenarioInput {
   if (!isMockScenarioName(name)) {
@@ -82,9 +93,7 @@ export function mockScenario(fixtureId: string, name: string): ScenarioInput {
     );
   }
   const flow = flowOf(fixtureId);
-  if (!flow) {
-    throw new Error(`No mock scenario "${name}" for fixture "${fixtureId}": it is not scripted`);
-  }
+  if (!flow) throw new NotScriptedError(fixtureId, name);
   const credential = flow.fromScratch ? 'ask' : 'vault';
   // A model that checks the saved report reads whatever the report carries.
   const readReport = flow.collectorHost !== undefined;

@@ -277,6 +277,24 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
         });
         return;
       }
+      case 'typed': {
+        // The form's secret field (what `browser_fill_from_user` asks for), else its only text field.
+        const fields = (prompt.fields ?? []).filter((field) => field.type !== 'document');
+        const secret = fields.find((field) => field.secret || field.type === 'secret');
+        const texts = fields.filter((field) => field.type === 'text');
+        const target = secret ?? (texts.length === 1 ? texts[0] : undefined);
+        if (!target) {
+          throw new SimulatorError(
+            'invalid_answer',
+            `answer "${answer.id}" does not fit ${describePrompt(prompt)}: no secret field and not exactly one text field`,
+          );
+        }
+        await send(prompt, formResponse(prompt, { [target.key]: action.value }), {
+          by: 'structured',
+          answerId: answer.id,
+        });
+        return;
+      }
       case 'credential': {
         options.secrets(action.password);
         const credentialId = await app.addClave({

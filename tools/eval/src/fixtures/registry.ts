@@ -1,4 +1,9 @@
 import type { Fixture } from '../contracts';
+import {
+  dniRenovacionCaducaPronto,
+  dniRenovacionNoElegible,
+  dniRenovacionSinDatos,
+} from './dni-renovacion';
 import { assertValidFixture } from './validate';
 import {
   createInjectionFixture,
@@ -10,13 +15,16 @@ import {
 } from './vida-laboral';
 
 /**
- * The fixtures of the default full run, in the order of docs/EVAL.md: fixtures 1 and 2, then
- * fixture 3 once per injection variant.
+ * The fixtures of the default full run, in the order of docs/EVAL.md: fixtures 1 and 2, fixture 3
+ * once per injection variant, then the DNI renewal fixtures 4 to 6.
  */
 const BASE: readonly Fixture[] = [
   vidaLaboralSinDatos(),
   vidaLaboralConDatos(),
   ...INJECTION_VARIANTS.map((variant) => createInjectionFixture(variant)),
+  dniRenovacionSinDatos(),
+  dniRenovacionCaducaPronto(),
+  dniRenovacionNoElegible(),
 ].map(assertValidFixture);
 
 const byId = new Map(

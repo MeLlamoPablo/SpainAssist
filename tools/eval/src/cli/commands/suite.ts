@@ -1,7 +1,9 @@
 /**
- * `eval suite [fixture...]`: the full run (`FIXTURE_IDS`: fixtures 1 and 2, and fixture 3 once per
- * injection variant) or the fixtures named, one after the other, with the options of `run`; one
- * summary line per run, then the table and the mean. It writes nothing beyond the runs' folders.
+ * `eval suite [fixture...]`: the full run (`FIXTURE_IDS`: fixtures 1 and 2, fixture 3 once per
+ * injection variant, and the DNI fixtures 4 to 6) or the fixtures named, one after the other, with
+ * the options of `run`; one summary line per run, then the table and the mean. With `--scenario`
+ * the full run leaves out the fixtures no scripted model is written for. It writes nothing beyond
+ * the runs' folders.
  */
 import { join } from 'node:path';
 import type { RunResult } from '../../contracts';
@@ -22,7 +24,8 @@ export async function suiteCommand(args: readonly string[], deps: CliDeps): Prom
     max: Number.POSITIVE_INFINITY,
     names: '[fixture...]',
   });
-  const fixtureIds = parsed.positionals.length > 0 ? parsed.positionals : [...FIXTURE_IDS];
+  const named = parsed.positionals.length > 0;
+  let fixtureIds = named ? parsed.positionals : [...FIXTURE_IDS];
   // A fixture that does not exist is a usage error whatever else is wrong, before anything starts.
   for (const id of fixtureIds) getFixture(id);
   const shared = readSharedOptions(parsed, 'suite');
@@ -30,15 +33,28 @@ export async function suiteCommand(args: readonly string[], deps: CliDeps): Prom
 
   const scenarios = new Map<string, EvaluationRequest['scenario']>();
   if (shared.scenarioName !== undefined) {
+    const unscripted: string[] = [];
     for (const id of fixtureIds) {
       try {
         scenarios.set(id, await deps.mockScenario(id, shared.scenarioName));
       } catch (error) {
+        // The full run with a scripted model plays the fixtures that have a script; a fixture
+        // named on the command line without one is still a usage error.
+        if (!named && error instanceof Error && error.name === 'NotScriptedError') {
+          unscripted.push(id);
+          continue;
+        }
         throw new UsageError(
           `Scenario "${shared.scenarioName}" for ${id}: ${messageOf(error)}`,
           'suite',
         );
       }
+    }
+    if (unscripted.length > 0) {
+      fixtureIds = fixtureIds.filter((id) => !unscripted.includes(id));
+      deps.stderr(
+        `Skipping ${unscripted.length} fixture(s) with no "${shared.scenarioName}" script: ${unscripted.join(', ')}\n`,
+      );
     }
   }
 

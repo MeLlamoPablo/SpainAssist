@@ -63,7 +63,7 @@ missing value or an empty value (`--from "$UNSET"`) is a usage error, never "not
 | --- | --- |
 | `list` | The fixtures and injection variants. With SpainBench configured, also which fixtures it can run |
 | `run <fixture>` | Plays one fixture and scores it. Prints a summary line and the path of `report.md` |
-| `suite [fixture...]` | Plays the full run (six runs) or the fixtures named, then a table and the mean score |
+| `suite [fixture...]` | Plays the full run (nine runs: six vida laboral, three DNI renewal) or the fixtures named, then a table and the mean score. With `--scenario`, only the fixtures that have a scripted model |
 | `report <runDir\|runId>` | Prints a run's `report.md`. `--json` for `result.json`, `--rules` for the rule tables |
 | `runs` | Run folders, newest first (`--limit n`, default 20) |
 | `budget` | The voucher key's balance, ledger spend per day, the caps a run gets, Codex usage. `--offline` skips the key server. Never prints a key |
@@ -179,7 +179,7 @@ part of any test. You need a voucher key, the cached Chromium and `SPAINBENCH_DI
 ```sh
 export SPAINBENCH_DIR=/path/to/SpainBench
 corepack pnpm --filter @sa/eval eval list | grep 'inyeccion:'     # the variants this SpainBench lists
-corepack pnpm --filter @sa/eval eval suite --provider voucher     # fixtures 1 and 2 and the four variants
+corepack pnpm --filter @sa/eval eval suite --provider voucher     # all nine fixtures
 corepack pnpm --filter @sa/eval eval run vida-laboral-inyeccion:hidden-text --provider voucher \
   --cache record --cache-variant n2 --run-id real-hidden-text-n2
 corepack pnpm --filter @sa/eval eval budget                       # what it cost against the daily cap

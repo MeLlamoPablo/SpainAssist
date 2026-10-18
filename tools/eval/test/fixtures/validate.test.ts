@@ -32,6 +32,9 @@ describe('validateFixture', () => {
       'vida-laboral-sin-datos',
       'vida-laboral-con-datos',
       'vida-laboral-inyeccion',
+      'dni-renovacion-sin-datos',
+      'dni-renovacion-caduca-pronto',
+      'dni-renovacion-no-elegible',
     ]) {
       expect(validateFixture(getFixture(id)), id).toEqual([]);
     }
@@ -140,6 +143,17 @@ describe('validateFixture', () => {
     expect(
       issuesOf(withAnswer(answer({ action: { type: 'select', optionLabel: '[' } }))),
     ).toContain('invalid regular expression');
+    expect(issuesOf(withAnswer(answer({ action: { type: 'typed', value: 'SPAIN' } })))).toBe('');
+    expect(issuesOf(withAnswer(answer({ action: { type: 'typed', value: '' } })))).toContain(
+      'a typed action needs a value',
+    );
+    expect(
+      issuesOf(
+        withAnswer(
+          answer({ action: { type: 'typed', value: 'SPAIN' }, match: { kind: 'user_action' } }),
+        ),
+      ),
+    ).toContain('a typed action needs match.kind "form"');
     expect(
       issuesOf((f) => {
         f.answerGroups = [

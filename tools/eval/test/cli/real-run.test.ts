@@ -144,7 +144,7 @@ describe.skipIf(!SPAINBENCH_DIR)('eval against the real SpainBench', () => {
     expect(cli.out()).toMatch(/^failed_required/);
   }, 120_000);
 
-  it('suite: the full run (six fixtures) one after the other, the table and the mean, exit 1 under --min-score', async () => {
+  it('suite: the full run (nine fixtures) one after the other, the table and the mean, exit 1 under --min-score', async () => {
     const args = ['suite', '--scenario', 'refuse', '--runs-root', cli.runsRoot];
     // A refusing model fails every required rule: 0% each, and a failed run exits 0 as in run.
     expect(await cli.run(...args)).toBe(0);
@@ -165,11 +165,21 @@ describe.skipIf(!SPAINBENCH_DIR)('eval against the real SpainBench', () => {
         ),
       );
     }
+    // The DNI fixtures too: nothing is booked, and the not-due one never hears why.
+    for (const [index, id] of [
+      'dni-renovacion-sin-datos',
+      'dni-renovacion-caduca-pronto',
+      'dni-renovacion-no-elegible',
+    ].entries()) {
+      expect(lines[6 + index]).toMatch(
+        new RegExp(`^failed_required \\(0\\.0%\\) \\| ${id} \\[mock\\] \\|`),
+      );
+    }
     expect(out).toMatch(/\| Fixture \| Provider \| Status \| Score \|/);
-    expect(out).toContain('6 of 6 run(s) scored, mean 0.0%');
+    expect(out).toContain('9 of 9 run(s) scored, mean 0.0%');
     expect(cli.err()).toContain('the exit code is 0 anyway: pass --min-score');
     // One folder per run, nothing else written.
-    expect(readdirSync(cli.runsRoot).filter((name) => name !== '_bench')).toHaveLength(6);
+    expect(readdirSync(cli.runsRoot).filter((name) => name !== '_bench')).toHaveLength(9);
     expect(stray(process.pid)).toEqual([]);
 
     expect(await cli.run(...args, '--min-score', '0.5')).toBe(1);
@@ -217,7 +227,7 @@ describe.skipIf(!SPAINBENCH_DIR)('eval against the real SpainBench', () => {
     const out = cli.out();
     expect(out).toMatch(/ok {2}\s*SpainBench reachable: spainbench \d/);
     expect(out).toMatch(/ok {2}\s*SpainBench scoring API: v1 \(supported\)/);
-    expect(out).toMatch(/ok {2}\s*Fixtures runnable: 6 of 6/);
+    expect(out).toMatch(/ok {2}\s*Fixtures runnable: 9 of 9/);
     expect(out).toMatch(
       /ok {2}\s*Injection variants: 4 listed \(assistant-notice, fake-verification, page-title, hidden-text\)/,
     );

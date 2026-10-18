@@ -15,7 +15,13 @@ const ALL_VARIANTS = ['assistant-notice', 'fake-verification', 'page-title', 'hi
   (id) => ({ id, summary: 'a variant' }),
 );
 
-function server(version = benchVersion({ injections: ALL_VARIANTS })) {
+/** The fake's sites plus the Cita Previa DNI mock: every fixture's site. */
+const ALL_SITES = {
+  ...benchVersion().sites,
+  'citapreviadni-es': { version: '1', contentHash: 'd'.repeat(64) },
+};
+
+function server(version = benchVersion({ sites: ALL_SITES, injections: ALL_VARIANTS })) {
   const state = { stopped: 0 };
   const openBench = async (_target: unknown, options: { logFile: string }) =>
     ({
@@ -53,7 +59,7 @@ describe('eval doctor', () => {
     expect(line(out, 'SpainBench reachable')).toMatch(/^ok .*spainbench 0\.3\.0 \(started here\)/);
     expect(line(out, 'SpainBench scoring API')).toMatch(/^ok .*v1 \(supported\)/);
     expect(line(out, 'Fixtures runnable')).toMatch(
-      /^ok .*6 of 6 \(vida-laboral-sin-datos, vida-laboral-con-datos, vida-laboral-inyeccion:assistant-notice, vida-laboral-inyeccion:fake-verification, vida-laboral-inyeccion:page-title, vida-laboral-inyeccion:hidden-text\)/,
+      /^ok .*9 of 9 \(vida-laboral-sin-datos, vida-laboral-con-datos, vida-laboral-inyeccion:assistant-notice, vida-laboral-inyeccion:fake-verification, vida-laboral-inyeccion:page-title, vida-laboral-inyeccion:hidden-text, dni-renovacion-sin-datos, dni-renovacion-caduca-pronto, dni-renovacion-no-elegible\)/,
     );
     expect(line(out, 'Injection variants')).toMatch(
       /^ok .*4 listed \(assistant-notice, fake-verification, page-title, hidden-text\)/,
@@ -143,12 +149,26 @@ describe('eval doctor', () => {
 
   it('fails when a fixture cannot run on this SpainBench, naming the fixture and the reason', async () => {
     // The default fake lists page-title and hidden-text only: the other two variants cannot run.
-    const bench = server(benchVersion());
+    const bench = server(benchVersion({ sites: ALL_SITES }));
     cli = makeCli({ env: SPAINBENCH, deps: { openBench: bench.openBench } });
     expect(await cli.run('doctor')).toBe(1);
     expect(line(cli.out(), 'Fixtures runnable')).toMatch(
-      /^FAIL .*4 of 6; vida-laboral-inyeccion:assistant-notice: the server does not list injection variant "assistant-notice"/,
+      /^FAIL .*7 of 9; vida-laboral-inyeccion:assistant-notice: the server does not list injection variant "assistant-notice"/,
     );
+  });
+
+  it('fails when SpainBench does not serve the Cita Previa DNI site, naming the DNI fixtures', async () => {
+    // The default fake serves the Seguridad Social and FNMT sites only.
+    const bench = server(benchVersion({ injections: ALL_VARIANTS }));
+    cli = makeCli({ env: SPAINBENCH, deps: { openBench: bench.openBench } });
+    expect(await cli.run('doctor')).toBe(1);
+    const runnable = line(cli.out(), 'Fixtures runnable');
+    expect(runnable).toMatch(
+      /^FAIL .*6 of 9; dni-renovacion-sin-datos: the server has no site "citapreviadni-es"/,
+    );
+    expect(runnable).toContain('dni-renovacion-caduca-pronto: the server has no site');
+    expect(runnable).toContain('dni-renovacion-no-elegible: the server has no site');
+    expect(runnable).not.toContain('vida-laboral');
   });
 
   it('warns when SpainBench lists no injection variant', async () => {

@@ -55,6 +55,7 @@ import {
 import { maskHomeInTree } from './home-paths';
 import { ensureEvalHostBundle, type HostBundleOptions } from './host-bundle';
 import { Observers } from './observers';
+import { offlinePlaces } from './places';
 import { copyProfile, isEmptyDirectory, profileDirOf, seedVault } from './profile';
 import { toPendingPrompt } from './prompts';
 import { openRunVault, type VaultPort } from './provider-vault';
@@ -626,6 +627,7 @@ export async function createEvalAppWith(
       documentDownloadsDir: neutral.exports,
       logsDir: join(runDir, 'logs'),
       env: { keyServerUrl: KEY_SERVER_PLACEHOLDER },
+      places: offlinePlaces(),
       language: spec.fixture.language ?? 'es',
       keySeed: PROFILE_KEY_SEED,
       providerLib: createProviderLib(spec.provider, spec.models, deps),

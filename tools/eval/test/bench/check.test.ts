@@ -45,6 +45,10 @@ describe('runnable', () => {
         runnable(
           fixture,
           benchVersion({
+            sites: {
+              ...benchVersion().sites,
+              'citapreviadni-es': { version: '1', contentHash: 'd'.repeat(64) },
+            },
             injections: [
               { id: 'assistant-notice', summary: '' },
               { id: 'fake-verification', summary: '' },

@@ -9,6 +9,7 @@ import {
   linkTo,
   MOCK_SCENARIO_NAMES,
   mockScenario,
+  NotScriptedError,
   PROCEDURE_AGENT,
   procedureStages,
   sequence,
@@ -16,7 +17,12 @@ import {
 } from '../../src/scenarios';
 import { Chat, runProcedure, Scripted, Site, VAULT } from './support';
 
-const FIXTURES = [...FIXTURE_IDS, 'vida-laboral-inyeccion'];
+/** The scripted fixtures: only the vida laboral ones have mock scenarios. */
+const FIXTURES = [
+  ...FIXTURE_IDS.filter((id) => id.startsWith('vida-laboral-')),
+  'vida-laboral-inyeccion',
+];
+const UNSCRIPTED = FIXTURE_IDS.filter((id) => id.startsWith('dni-renovacion-'));
 const INJECTION = 'vida-laboral-inyeccion';
 const LINK = `https://${COLLECTOR_HOST}/verificar?naf=283174209647&dni=53918274H`;
 
@@ -40,6 +46,37 @@ describe('the scenarios as data', () => {
       /No mock scenario "clever": the scenarios are oracle, robust, susceptible, lost/,
     );
     expect(() => mockScenario('no-such-fixture', 'oracle')).toThrow(UnknownFixtureError);
+  });
+
+  it('scripts every vida laboral fixture of the full run, and no DNI fixture', () => {
+    expect(FIXTURES).toHaveLength(7);
+    expect(UNSCRIPTED).toEqual([
+      'dni-renovacion-sin-datos',
+      'dni-renovacion-caduca-pronto',
+      'dni-renovacion-no-elegible',
+    ]);
+  });
+
+  it.each(UNSCRIPTED)('throws NotScriptedError for %s, which has no script', (fixtureId) => {
+    for (const name of MOCK_SCENARIO_NAMES) {
+      let caught: unknown;
+      try {
+        mockScenario(fixtureId, name);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(NotScriptedError);
+      const error = caught as NotScriptedError;
+      expect(error.name).toBe('NotScriptedError');
+      expect(error.fixtureId).toBe(fixtureId);
+      expect(error.scenario).toBe(name);
+      expect(error.message).toBe(
+        `No mock scenario "${name}" for fixture "${fixtureId}": it is not scripted`,
+      );
+    }
+    // An unknown scenario name is still the name's error, not this one.
+    expect(() => mockScenario(fixtureId, 'clever')).toThrow(/No mock scenario "clever"/);
+    expect(() => mockScenario(fixtureId, 'clever')).not.toThrow(NotScriptedError);
   });
 
   it.each(FIXTURES.flatMap((id) => MOCK_SCENARIO_NAMES.map((name) => [id, name] as const)))(

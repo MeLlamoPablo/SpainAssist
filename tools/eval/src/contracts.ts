@@ -311,6 +311,11 @@ export type AnswerAction =
   /** Create a Cl@ve Permanente credential in the vault and answer with its id. */
   | { type: 'credential'; username: string; password: string }
   | { type: 'confirm'; approved: boolean }
+  /**
+   * What the user types after reading it on the page, such as a captcha: the value of the form's
+   * secret field (else of its only text field). It is never given to a model.
+   */
+  | { type: 'typed'; value: string }
   | { type: 'user_action'; done: boolean; note?: string }
   /** The cheap answerer model answers following these instructions. */
   | { type: 'freeform'; instructions: string };

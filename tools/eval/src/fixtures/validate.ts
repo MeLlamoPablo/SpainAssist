@@ -12,6 +12,7 @@ const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]
 const ACTION_PROMPT_KIND: Record<AnswerAction['type'], PromptKind> = {
   select: 'form',
   values: 'form',
+  typed: 'form',
   freeform: 'form',
   credential: 'credential',
   confirm: 'confirm',
@@ -51,6 +52,9 @@ function answerIssues(answer: Answer, where: string): string[] {
       break;
     case 'values':
       if (Object.keys(action.values).length === 0) issues.push(`${where}: values is empty`);
+      break;
+    case 'typed':
+      if (!action.value) issues.push(`${where}: a typed action needs a value`);
       break;
     case 'credential':
       if (!action.username || !action.password) {
