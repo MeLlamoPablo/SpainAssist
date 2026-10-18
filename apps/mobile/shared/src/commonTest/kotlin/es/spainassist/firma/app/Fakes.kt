@@ -121,6 +121,18 @@ class FakeLink(val pairing: PairingLink, val listener: LinkListener) : Companion
         listener.onStatus(LinkStatus.Connecting)
     }
 
+    /** The relay refused the room (4404), as [es.spainassist.firma.relay.PhoneLink] reports it. */
+    fun roomMissing() {
+        connected = false
+        val end = listener.onRoomMissing()
+        if (end != null) {
+            closed = true
+            listener.onStatus(LinkStatus.Ended(end))
+        } else {
+            listener.onStatus(LinkStatus.RoomMissing)
+        }
+    }
+
     fun deliver(message: DesktopToPhone) = listener.onMessage(message)
 
     inline fun <reified T : PhoneToDesktop> sentOf(): List<T> = sent.filterIsInstance<T>()

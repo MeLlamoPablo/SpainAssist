@@ -9,8 +9,11 @@
  * phone as the key, and checks every signature the phone returns. Every request carries the CAN
  * and the PIN, as the user types them on the desktop: the card's, except for PAdES, which carries
  * a wrong CAN and a wrong PIN. The phone tries each wrong one once and asks the desktop for a new
- * one (`sign.need`), answered as if the user typed it (`sign.unlock`). Needs JDK 17 and the
- * Android SDK (apps/mobile); offline once Gradle has its dependencies.
+ * one (`sign.need`), answered as if the user typed it (`sign.unlock`). Before the login, the
+ * relay restarts (as on a deploy, losing its rooms), and the desktop stays away until the relay
+ * has refused the phone's room (4404): the phone must keep its pairing and sign the login once the
+ * desktop recreates the room. Needs JDK 17 and the Android SDK (apps/mobile); offline once Gradle
+ * has its dependencies.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -29,7 +32,7 @@ import type {
   SignatureDigest,
 } from '@sa/shared';
 import { afirmaHandler } from '@sa/signer';
-import { createRelay } from '../src';
+import { createRelay, type Relay } from '../src';
 
 const ALGORITHMS: Record<SignatureDigest, CompanionAlgorithm> = {
   sha1: 'SHA1withRSA',
@@ -102,9 +105,25 @@ async function main(): Promise<void> {
   const certificate = readFileSync(join(work, 'cert.der'));
   const publicKey = new crypto.X509Certificate(certificate).publicKey;
 
-  const relay = createRelay();
-  await new Promise<void>((resolve) => relay.server.listen(0, '127.0.0.1', resolve));
+  // The relay's log, for the restart: `phone refused` is a 4404 once the rooms are gone.
+  let onRelayLog = (_line: string) => {};
+  const startRelay = async (port = 0): Promise<Relay> => {
+    const relay = createRelay({ log: (line) => onRelayLog(line) });
+    await new Promise<void>((resolve, reject) => {
+      relay.server.once('error', reject);
+      relay.server.listen(port, '127.0.0.1', resolve);
+    });
+    return relay;
+  };
+  let relay = await startRelay();
   const { port } = relay.server.address() as AddressInfo;
+  // While set, the desktop's connections go nowhere (a desktop that hasn't reconnected yet).
+  let desktopAway = false;
+  const DesktopWebSocket = class extends WebSocket {
+    constructor(url: string | URL, options?: never) {
+      super(desktopAway ? 'ws://127.0.0.1:9/away' : url, options);
+    }
+  };
   let signer: PhoneSigner | undefined;
   const pairing = new DesktopPairing({
     relayUrl: `ws://127.0.0.1:${port}`,
@@ -112,6 +131,7 @@ async function main(): Promise<void> {
     onMessage: (m) => signer?.onMessage(m),
     onSession: () => signer?.onSession(),
     onStatus: (s) => console.log(`desktop: pairing ${s.state}`),
+    socket: { WebSocket: DesktopWebSocket as typeof WebSocket, backoffMs: () => 250 },
   });
   signer = new PhoneSigner(pairing);
   const phoneSigner = signer;
@@ -212,6 +232,37 @@ async function main(): Promise<void> {
       console.log(`desktop: ${c.args[2]} failed: ${reply.errorMessage}`);
     }
   }
+  // A deploy: the relay restarts and forgets the room. The phone comes back first and is refused.
+  // First let the last `sign.done` reach the phone: one lost in the restart leaves the phone's
+  // request open, and it would answer the login with `busy`.
+  await new Promise((r) => setTimeout(r, 1_000));
+  desktopAway = true;
+  await relay.close();
+  const refused = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('The phone never knocked on the restarted relay')),
+      30_000,
+    );
+    onRelayLog = (line) => {
+      if (line !== 'phone refused') return;
+      clearTimeout(timer);
+      resolve();
+    };
+  });
+  relay = await startRelay(port);
+  console.log('interop: relay restarted');
+  try {
+    await Promise.race([
+      refused,
+      exited.then((c) => Promise.reject(new Error(`Gradle exited during the restart (${c})`))),
+    ]);
+  } catch (err) {
+    gradle.kill();
+    throw err;
+  }
+  onRelayLog = () => {};
+  console.log('interop: the relay refused the phone (no room yet); the desktop reconnects');
+  desktopAway = false;
   const login = await phoneSigner.request({
     purpose: 'login',
     origin: 'https://sede.example.gob.es',
@@ -253,4 +304,7 @@ async function main(): Promise<void> {
   );
 }
 
-void main();
+main().catch((err: unknown) => {
+  console.error(err);
+  process.exit(1);
+});

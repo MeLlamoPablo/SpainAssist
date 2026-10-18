@@ -68,7 +68,9 @@ typealias LinkFactory = (pairing: PairingLink, hello: Hello, listener: LinkListe
  * thread on Android); card I/O runs on IO threads.
  *
  * Pairing: a scanned or opened link is confirmed by the user, stored encrypted, and restored on
- * the next launch until it expires. Signing: review → hold the card → open it with the CAN and
+ * the next launch until it expires. A relay that doesn't know the room (it restarted, and the
+ * desktop hasn't reconnected yet) doesn't end it: the phone waits for the desktop until the
+ * pairing expires, or for [ROOM_MISSING_MAX_MS] at most. Signing: review → hold the card → open it with the CAN and
  * PIN the user typed on the desktop (they come with the request; the phone never asks for them,
  * never stores them, and drops them when the request ends) → read the certificate → sign each
  * `sign.toBeSigned` while the card stays near, checking each one against the reviewed documents
@@ -168,6 +170,7 @@ class FirmaController(
             store.put(KEY_PAIRING, next.encode())
             store.put(KEY_PAIRED_AT, platform.now().toString())
             store.remove(KEY_EXPIRES)
+            store.remove(KEY_MISSING_SINCE)
             notice = null
             connect(next)
         }
@@ -189,11 +192,13 @@ class FirmaController(
         }
     }
 
+    /** When the stored pairing ends: the desktop's `expiresAt`, or 72 h after pairing. */
+    private fun pairingExpiresAt(): Long? = store.get(KEY_EXPIRES)?.toLongOrNull()
+        ?: store.get(KEY_PAIRED_AT)?.toLongOrNull()?.let { it + PAIRING_MAX_MS }
+
     private fun stored(): PairingLink? {
         val payload = store.get(KEY_PAIRING) ?: return null
-        val expired = store.get(KEY_EXPIRES)?.toLongOrNull()?.let { platform.now() > it }
-            ?: store.get(KEY_PAIRED_AT)?.toLongOrNull()?.let { platform.now() > it + PAIRING_MAX_MS }
-            ?: true
+        val expired = pairingExpiresAt()?.let { platform.now() > it } ?: true
         if (expired) {
             log("stored pairing expired")
             clearPairing()
@@ -225,6 +230,9 @@ class FirmaController(
                 if (link === created) onDesktopMessage(message)
             }
 
+            override fun onRoomMissing(): LinkStatus.Ended.Reason? =
+                if (link === created) roomMissing() else LinkStatus.Ended.Reason.Unpaired
+
             override fun onSession() {
                 if (link === created) {
                     active?.let {
@@ -240,8 +248,30 @@ class FirmaController(
         render()
     }
 
+    /**
+     * The relay refused the room (4404). Rooms live in the relay's memory, and only the desktop
+     * creates them: after a relay restart (every deploy) the room is back when the desktop
+     * reconnects, within seconds if it's on, or when it wakes up. Keep the pairing and wait,
+     * until it expires or the room has been missing for [ROOM_MISSING_MAX_MS] (the desktop
+     * doesn't keep a pairing across its own restarts, so a room missing that long is most likely
+     * gone). The start of the wait is stored, so restarting the app doesn't reset it.
+     */
+    private fun roomMissing(): LinkStatus.Ended.Reason? {
+        val now = platform.now()
+        if (pairingExpiresAt()?.let { now > it } != false) return LinkStatus.Ended.Reason.Expired
+        val since = store.get(KEY_MISSING_SINCE)?.toLongOrNull()
+            ?: now.also { store.put(KEY_MISSING_SINCE, it.toString()) }
+        if (now - since > ROOM_MISSING_MAX_MS) return LinkStatus.Ended.Reason.NotFound
+        log("room not found on the relay for ${(now - since) / 1000} s: waiting for the desktop")
+        return null
+    }
+
     private fun onLinkStatus(status: LinkStatus) {
         linkStatus = status
+        // The relay has the room again.
+        if (status is LinkStatus.Connected || status == LinkStatus.DesktopAway || status is LinkStatus.Outdated) {
+            store.remove(KEY_MISSING_SINCE)
+        }
         active?.takeIf { !it.finished && status !is LinkStatus.Connected }?.let {
             log("link ${status::class.simpleName} during ${it.request.requestId}")
         }
@@ -280,6 +310,7 @@ class FirmaController(
         store.remove(KEY_PAIRING)
         store.remove(KEY_PAIRED_AT)
         store.remove(KEY_EXPIRES)
+        store.remove(KEY_MISSING_SINCE)
     }
 
     override fun openNfcSettings() = platform.openNfcSettings()
@@ -830,9 +861,12 @@ class FirmaController(
         const val KEY_PAIRING = "pairing"
         const val KEY_PAIRED_AT = "pairedAt"
         const val KEY_EXPIRES = "pairingExpiresAt"
+        const val KEY_MISSING_SINCE = "roomMissingSince"
         private val CAN_PATTERN = Regex("[0-9]{6}")
         val PIN_LENGTH = 8..16
         const val PAIRING_MAX_MS = 72 * 60 * 60_000L
+        /** How long the relay may not know the room before the phone gives the pairing up. */
+        const val ROOM_MISSING_MAX_MS = 24 * 60 * 60_000L
         /** Waiting for the user to type a CAN or PIN on the desktop. */
         const val UNLOCK_WAIT_MS = 5 * 60_000L
         /** Waiting for the card again after it moved. */

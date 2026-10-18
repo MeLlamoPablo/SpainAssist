@@ -62,6 +62,8 @@ cd apps/mobile
   as the DNIe), and signs CAdES, PAdES and XAdES through `@sa/signer`. Every signature is
   verified. The desktop sends the card's CAN and PIN with CAdES, XAdES and the login, and wrong
   ones with PAdES: the phone must try each wrong one once and ask the desktop for a new one.
+  Before the login it restarts the relay with the desktop held away, so the phone is refused
+  its room (4404) first: it must keep the pairing and sign once the desktop is back.
 - **On a phone, against a local desktop:** `corepack pnpm services` starts the relay on
   `0.0.0.0:8794`. `corepack pnpm dev:local` makes the desktop put this machine's LAN address in
   the QR. Install the debug APK and scan. Both must be on the same Wi-Fi, and the debug build
@@ -80,6 +82,16 @@ cd apps/mobile
 - **App Links.** Set `ANDROID_CERT_SHA256` on the relay to the Play App Signing and upload key
   fingerprints. Without them, links open the relay's `/p` page, which offers "Abrir en la app".
 - **NFC.** The app requires `android.hardware.nfc`.
+
+## The relay
+
+The relay keeps rooms in memory, and only the desktop creates them, so after a relay restart
+(every deploy) the phone may come back first and be refused (4404). That doesn't end the
+pairing: the phone shows "your computer isn't connected" and retries, backing off to a minute,
+until the desktop recreates the room. It gives up when the pairing expires, or after the room
+has been missing for 24 hours (the desktop doesn't keep a pairing across its own restarts);
+`FirmaController.roomMissing` has the rule. An expired room (4408), another phone taking the
+room (4409) and the desktop's "Desvincular" still end it at once.
 
 ## Logins and protocol
 

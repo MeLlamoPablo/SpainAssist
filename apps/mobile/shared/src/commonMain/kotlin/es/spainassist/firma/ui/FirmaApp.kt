@@ -399,7 +399,7 @@ private fun HomeScreen(s: Screen.Home, actions: FirmaActions, openLicenses: () -
             NfcBanner(s.nfc, actions)
             when (s.link) {
                 is LinkStatus.Connected -> Banner(stringResource(Res.string.home_connected), Tone.Done)
-                LinkStatus.DesktopAway -> Banner(stringResource(Res.string.home_away), Tone.Attention)
+                LinkStatus.DesktopAway, LinkStatus.RoomMissing -> Banner(stringResource(Res.string.home_away), Tone.Attention)
                 is LinkStatus.Outdated -> Banner(stringResource(Res.string.home_outdated), Tone.Blocked)
                 else -> Banner(stringResource(Res.string.home_connecting), Tone.Info)
             }

@@ -598,4 +598,80 @@ class FirmaControllerTest {
         assertEquals(StartNotice.DesktopUnpaired, (h.screen as Screen.Start).notice)
         assertTrue(PhoneBye.toString().isNotEmpty())
     }
+
+    private fun Harness.pairUntil(expiresIn: Long) {
+        controller.onLink(testLink())
+        controller.confirmPairing()
+        link.connect(expiresAt = Instant.fromEpochMilliseconds(platform.clock + expiresIn).toString())
+    }
+
+    @Test
+    fun keepsThePairingWhileTheRelayHasLostTheRoom() = runTest {
+        val h = Harness(this)
+        h.pairUntil(FirmaController.PAIRING_MAX_MS)
+        val request = h.request()
+        h.link.deliver(request)
+        // The relay restarted: it doesn't know the room until the desktop reconnects.
+        h.link.roomMissing()
+        assertEquals(Step.Review, h.screen.step())
+        h.platform.clock += 60 * 60_000L
+        h.link.roomMissing()
+        assertFalse(h.link.closed)
+        assertTrue(h.platform.store.values.containsKey(FirmaController.KEY_PAIRING))
+        assertTrue(h.platform.store.values.containsKey(FirmaController.KEY_MISSING_SINCE))
+
+        // The desktop is back: same pairing, same link, and the request goes on.
+        h.link.connect()
+        assertEquals(1, h.spy.links.size)
+        assertNull(h.platform.store.get(FirmaController.KEY_MISSING_SINCE))
+        assertEquals(Step.Review, h.screen.step())
+        h.link.deliver(SignCancel(request.requestId, CancelReason.Cancelled))
+        h.controller.dismissResult()
+
+        // On the home screen it reads as "your computer isn't connected".
+        h.link.roomMissing()
+        assertEquals(LinkStatus.RoomMissing, (h.screen as Screen.Home).link)
+        // A new process keeps waiting (and remembers since when).
+        val spy = LinkSpy()
+        val again = FirmaController(h.platform, TestScope(h.dispatcher), h.dispatcher, spy.factory)
+        assertIs<Screen.Home>(again.screen.value)
+        assertEquals(1, spy.last.started)
+        spy.last.roomMissing()
+        assertIs<Screen.Home>(again.screen.value)
+        spy.last.connect()
+        assertIs<LinkStatus.Connected>((again.screen.value as Screen.Home).link)
+    }
+
+    @Test
+    fun givesUpOnAMissingRoomOnceThePairingExpires() = runTest {
+        val h = Harness(this)
+        h.pairUntil(60 * 60_000L)
+        h.link.roomMissing()
+        assertIs<Screen.Home>(h.screen)
+        h.platform.clock += 61 * 60_000L
+        h.link.roomMissing()
+        assertTrue(h.link.closed)
+        assertEquals(StartNotice.PairingExpired, (h.screen as Screen.Start).notice)
+        assertNull(h.platform.store.get(FirmaController.KEY_PAIRING))
+        assertNull(h.platform.store.get(FirmaController.KEY_MISSING_SINCE))
+    }
+
+    @Test
+    fun givesUpOnARoomMissingForADay() = runTest {
+        val h = Harness(this)
+        h.pairUntil(FirmaController.PAIRING_MAX_MS)
+        h.link.roomMissing()
+        // The relay had the room again (the desktop was there for a while): the wait starts over.
+        h.platform.clock += 20 * 60 * 60_000L
+        h.link.listener.onStatus(LinkStatus.DesktopAway)
+        h.link.roomMissing()
+        h.platform.clock += 20 * 60 * 60_000L
+        h.link.roomMissing()
+        assertIs<Screen.Home>(h.screen)
+        h.platform.clock += 4 * 60 * 60_000L + 1
+        h.link.roomMissing()
+        assertTrue(h.link.closed)
+        assertEquals(StartNotice.PairingEnded, (h.screen as Screen.Start).notice)
+        assertNull(h.platform.store.get(FirmaController.KEY_PAIRING))
+    }
 }

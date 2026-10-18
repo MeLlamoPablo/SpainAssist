@@ -36,7 +36,14 @@ sealed interface RelayState {
 
     data class Open(val peer: Boolean) : RelayState
 
-    /** Gave up: the room is gone, expired, or another phone took this one's place. */
+    /**
+     * The relay doesn't know the room (4404). Rooms live in the relay's memory: after a restart
+     * one comes back when the desktop reconnects, and only the desktop can create it. Still
+     * trying, with a longer backoff; whoever listens decides when to give up ([RelayTransport.stop]).
+     */
+    data object Missing : RelayState
+
+    /** Gave up: the room expired, or another phone took this one's place. */
     data class Closed(val reason: Reason) : RelayState {
         enum class Reason { NotFound, Expired, Replaced }
     }
@@ -57,8 +64,9 @@ class RelayEvents(val onState: (RelayState) -> Unit, val onFrame: (ByteArray) ->
 /**
  * The phone's connection to the relay (packages/companion/src/relay-socket.ts): reconnects with
  * backoff, reports whether the desktop is there, and keeps the connection alive with
- * `{"type":"ping"}` every 20 s (no pong in 10 s = reconnect). Callbacks run in [scope], which
- * the caller keeps serial.
+ * `{"type":"ping"}` every 20 s (no pong in 10 s = reconnect). A room the relay doesn't know
+ * ([RelayState.Missing]) is retried every [missingBackoffMs] (up to a minute): the relay may have
+ * restarted before the desktop came back. Callbacks run in [scope], which the caller keeps serial.
  */
 class RelaySocket(
     private val client: HttpClient,
@@ -69,6 +77,7 @@ class RelaySocket(
     private val pingIntervalMs: Long = 20_000,
     private val pongTimeoutMs: Long = 10_000,
     private val backoffMs: (Int) -> Long = ::defaultBackoff,
+    private val missingBackoffMs: (Int) -> Long = ::missingBackoff,
     /** Debug log; never given the room id (it lets anyone knock on the room). */
     private val log: (String) -> Unit = {},
 ) : RelayTransport {
@@ -114,6 +123,7 @@ class RelaySocket(
 
     private suspend fun run() {
         var attempt = 0
+        var missing = 0
         while (scope.isActive && !stopped) {
             events.onState(RelayState.Connecting)
             var code: Short? = null
@@ -159,8 +169,19 @@ class RelaySocket(
             }
             session = null
             if (stopped) return
+            if (code != RelayClose.NOT_FOUND) missing = 0
             when (code) {
-                RelayClose.NOT_FOUND, RelayClose.UNAUTHORIZED -> {
+                RelayClose.NOT_FOUND -> {
+                    events.onState(RelayState.Missing)
+                    // The listener may have stopped us.
+                    if (stopped) return
+                    val wait = missingBackoffMs(missing++)
+                    log("room not found: retrying in $wait ms")
+                    delay(wait)
+                    continue
+                }
+                // Only desktops present a key; a phone never gets this.
+                RelayClose.UNAUTHORIZED -> {
                     events.onState(RelayState.Closed(RelayState.Closed.Reason.NotFound))
                     return
                 }
@@ -193,7 +214,9 @@ class RelaySocket(
     }
 }
 
-private fun defaultBackoff(attempt: Int): Long {
-    val base = minOf(15_000L, 500L shl minOf(attempt, 5))
-    return base / 2 + Random.nextLong(base / 2 + 1)
-}
+private fun defaultBackoff(attempt: Int): Long = jittered(minOf(15_000L, 500L shl minOf(attempt, 5)))
+
+/** 1–2 s, 2–4 s… up to 30–60 s: the desktop recreates its room within 15 s of being online. */
+private fun missingBackoff(attempt: Int): Long = jittered(minOf(60_000L, 2_000L shl minOf(attempt, 5)))
+
+private fun jittered(base: Long): Long = base / 2 + Random.nextLong(base / 2 + 1)

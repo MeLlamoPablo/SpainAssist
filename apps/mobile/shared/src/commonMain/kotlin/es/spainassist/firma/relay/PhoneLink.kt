@@ -29,6 +29,12 @@ sealed interface LinkStatus {
     /** Connected to the relay; the desktop app isn't (closed, asleep, offline). */
     data object DesktopAway : LinkStatus
 
+    /**
+     * The relay doesn't know the room: it restarted and the desktop hasn't reconnected yet (or the
+     * desktop's pairing is gone). Retrying; the UI shows it as [DesktopAway].
+     */
+    data object RoomMissing : LinkStatus
+
     data class Connected(val welcome: Welcome) : LinkStatus
 
     /** The desktop speaks another protocol version: one of the apps needs an update. */
@@ -46,6 +52,12 @@ interface LinkListener {
 
     /** A new session started: send again what the desktop may have missed. */
     fun onSession()
+
+    /**
+     * The relay doesn't know the room ([RelayState.Missing]), on every refused attempt. Null keeps
+     * the pairing and tries again; a reason ends it.
+     */
+    fun onRoomMissing(): LinkStatus.Ended.Reason?
 }
 
 /**
@@ -143,7 +155,12 @@ class PhoneLink(
                     },
                 ),
             )
-            RelayState.Connecting -> setStatus(LinkStatus.Connecting)
+            RelayState.Missing -> {
+                val end = listener.onRoomMissing()
+                if (end != null) finish(LinkStatus.Ended(end)) else setStatus(LinkStatus.RoomMissing)
+            }
+            // Each retry of a missing room would flash "connecting": keep showing it missing.
+            RelayState.Connecting -> if (status != LinkStatus.RoomMissing) setStatus(LinkStatus.Connecting)
             // With the desktop there, wait for its CHALLENGE.
             is RelayState.Open -> if (!state.peer) setStatus(LinkStatus.DesktopAway)
         }

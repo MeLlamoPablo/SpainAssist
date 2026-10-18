@@ -57,6 +57,8 @@ class PhoneLinkTest {
                 }
 
                 override fun onSession() = Unit
+
+                override fun onRoomMissing(): LinkStatus.Ended.Reason? = null
             },
             log = { logs += it },
         )
@@ -100,5 +102,81 @@ class PhoneLinkTest {
         val line = logs.single { it.startsWith("companion message rejected") }
         assertFalse(line.contains("918273"), line)
         assertFalse(line.contains("requestId"), line)
+    }
+
+    private class Wired(val link: PhoneLink, val relay: RelayEvents, val statuses: List<LinkStatus>, val stopped: () -> Boolean)
+
+    private fun wire(onRoomMissing: () -> LinkStatus.Ended.Reason?): Wired {
+        val desktop = Crypto.generateKeyPair()
+        val pairing = PairingLink("ws://127.0.0.1:8794", ByteArray(16), ByteArray(32) { 7 }, desktop.publicKey)
+        var events: RelayEvents? = null
+        var stopped = false
+        val statuses = ArrayList<LinkStatus>()
+        val link = PhoneLink(
+            pairing,
+            Hello(app = "1.0.0", platform = "android", device = "Test phone"),
+            transport = { e ->
+                events = e
+                object : RelayTransport {
+                    override fun start() = Unit
+
+                    override fun stop() {
+                        stopped = true
+                    }
+
+                    override fun send(frame: ByteArray): Boolean = true
+                }
+            },
+            listener = object : LinkListener {
+                override fun onStatus(status: LinkStatus) {
+                    statuses += status
+                }
+
+                override fun onMessage(message: DesktopToPhone) = Unit
+
+                override fun onSession() = Unit
+
+                override fun onRoomMissing() = onRoomMissing()
+            },
+        )
+        return Wired(link, events!!, statuses, { stopped })
+    }
+
+    @Test
+    fun waitsForAMissingRoomWhileTheListenerKeepsThePairing() {
+        var asked = 0
+        val w = wire { asked++; null }
+        w.link.start()
+        w.relay.onState(RelayState.Connecting)
+        // The relay restarted and the desktop isn't back: keep trying, quietly.
+        w.relay.onState(RelayState.Missing)
+        w.relay.onState(RelayState.Connecting)
+        w.relay.onState(RelayState.Missing)
+        assertEquals(2, asked)
+        assertEquals(listOf<LinkStatus>(LinkStatus.RoomMissing), w.statuses)
+        assertFalse(w.stopped())
+        // The desktop recreated the room.
+        w.relay.onState(RelayState.Connecting)
+        w.relay.onState(RelayState.Open(peer = false))
+        assertEquals(LinkStatus.DesktopAway, w.statuses.last())
+    }
+
+    @Test
+    fun endsOnAMissingRoomWhenTheListenerGivesUp() {
+        val w = wire { LinkStatus.Ended.Reason.Expired }
+        w.link.start()
+        w.relay.onState(RelayState.Missing)
+        assertEquals(LinkStatus.Ended(LinkStatus.Ended.Reason.Expired), w.statuses.last())
+        assertTrue(w.stopped())
+
+        // Expired, replaced: final as before, without asking.
+        for (reason in listOf(RelayState.Closed.Reason.Expired, RelayState.Closed.Reason.Replaced)) {
+            var asked = false
+            val other = wire { asked = true; null }
+            other.relay.onState(RelayState.Closed(reason))
+            assertIs<LinkStatus.Ended>(other.statuses.last())
+            assertTrue(other.stopped())
+            assertFalse(asked)
+        }
     }
 }
