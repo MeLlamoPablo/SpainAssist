@@ -17,7 +17,7 @@ import {
 
 /**
  * Free appointment slots in day columns (only days with slots), paged by as many columns as fit.
- * "Buscar más citas" answers the form at once, asking the agent for other slots.
+ * "Buscar más" answers the form at once, asking the agent for other slots.
  */
 export function AppointmentPicker({
   field,
@@ -130,20 +130,26 @@ export function AppointmentPicker({
           );
         })}
       </ToggleGroup.Root>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      {/* The same columns as the days: the button is as wide as one. */}
+      <div
+        className="grid items-center gap-3"
+        style={{ gridTemplateColumns: `repeat(${perPage}, minmax(0, 1fr))` }}
+      >
         <Button
           size="sm"
-          variant="secondary"
+          variant="ghost"
           icon={CalendarSearch}
           disabled={busy}
           onClick={onRequestMore}
+          className="w-full"
           data-testid="appointment-more"
         >
           {t.prompt.appointmentMore}
         </Button>
         {value ? (
           <p
-            className="flex min-w-0 items-center gap-2 text-[13.5px] font-medium text-fg"
+            style={{ gridColumn: '2 / -1' }}
+            className="flex min-w-0 items-center justify-end gap-2 text-[13.5px] font-medium text-fg"
             data-testid="appointment-chosen"
           >
             <CalendarCheck size={16} className="shrink-0 text-accent-text" aria-hidden />

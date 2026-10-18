@@ -212,7 +212,7 @@ The next three run on SpainBench's Cita Previa DNI site (`www.citapreviadnie.es`
    mentioned, no login on the site, and no appointment slots offered.
 
 An appointment field's answer is one of its slots (`YYYY-MM-DDTHH:MM`) or `more`: the picker's
-"Buscar más citas" button, which asks the agent for other slots. The answerer picks a slot from the
+"Buscar más" button, which asks the agent for other slots. The answerer picks a slot from the
 persona, or answers `more` when none suits it.
 
 The site's login has an image security code, which the product leaves to the user. The simulated
