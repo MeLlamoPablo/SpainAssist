@@ -161,7 +161,8 @@ With `clientCertificates`, adding a certificate means recreating the context and
   - None of the government certificate hosts found below needs it: they all ask during the initial handshake `[live]`.
 - **TLS 1.3 post-handshake auth** is not supported by Chrome, so sites can't depend on it. Node's client doesn't enable it either.
 - **Origins not listed** are handled by Chromium itself. Headless sends no certificate.
-  - In **headed** Chrome, a native "Select a certificate" dialog can appear when the OS store has matching identities, and Playwright cannot click it (issues #33230, #31906) (UNVERIFIED for our Chromium on macOS).
+  - In **headed** Chrome, a native "Select a certificate" dialog appears when the OS store has identities, and Playwright cannot click it (issues #33230, #31906). Seen in the field on Windows on 2026-10-19 (an FNMT certificate and a work account's MS-Organization-Access certificate in the store, ClicSalud+'s `ws235.juntadeandalucia.es`): the dialog stayed open, and the tab ignored the agent's clicks until it was closed.
+  - So the sidecar never lets Chromium see a certificate request: before tunnelling to a host for the first time it probes the handshake, and hosts that ask are intercepted with no certificate until one is enabled (`packages/sidecar/go/probe.go`). The probe can't see renegotiation-based requests (§9.1 caveats).
   - The documented trick of "list a dummy origin to force 'no certificate'" **broke in 1.61** (issue #42546). Its fix (#42547) was **reverted on 2026-10-02** (#43074). So don't rely on it, and list every certificate host explicitly.
 
 ### 1.9 Error signals `[lab]`
@@ -526,6 +527,9 @@ validation.
   code, UNVERIFIED).
 - `idp.seg-social.es`: Seguridad Social login (Importass goes idp → ipce → idp), seen live on
   2026-10-12.
+- `ws235.juntadeandalucia.es`: Junta de Andalucía's certificate login (ClicSalud+'s "Certificado
+  digital o DNIe" goes to `/authenticationFacade?action=validateCert`), TLS 1.2, seen live on
+  2026-10-20. The request is optional: the handshake completes without a certificate.
 
 **No certificate request during the handshake** on: `pasarela.clave.gob.es`, `se-pasarela.clave.gob.es`, `clave-dninbrt.seg-social.gob.es`, `sede.agenciatributaria.gob.es`, AEAT `www2/www3/www6/www9/www11/www12`, `sede.seg-social.gob.es`, `portal.seg-social.gob.es`, `sede-tu.seg-social.gob.es`, `w6/w7.seg-social.es`, `sede.dgt.gob.es`, `sedeapl.dgt.gob.es`, `sedeclave.dgt.gob.es`, `sede.sepe.gob.es`, `citaprevia-sede.sepe.gob.es`, `www1.sedecatastro.gob.es`, `www.sedecatastro.gob.es`, `carpetaciudadana.gob.es`, `rec.redsara.es`, `dehu.redsara.es`, `valide.redsara.es`, `sede.administracion.gob.es`, `sede.administracionespublicas.gob.es`, `sede.mjusticia.gob.es`, `sede.policia.gob.es`, `www.sede.fnmt.gob.es`, `www.cert.fnmt.es`, `sede.madrid.es`, `servpub.madrid.es`, `valid.aoc.cat`, `sede.registradores.org`.
 

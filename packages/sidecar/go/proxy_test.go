@@ -106,6 +106,12 @@ type seen struct {
 
 func newUpstream(t *testing.T, maxVersion uint16) *upstream {
 	t.Helper()
+	return newSite(t, maxVersion, tls.RequestClientCert)
+}
+
+// newSite is a site that asks for a client certificate as clientAuth says.
+func newSite(t *testing.T, maxVersion uint16, clientAuth tls.ClientAuthType) *upstream {
+	t.Helper()
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s := seen{Version: r.TLS.Version, Host: r.Host, XFF: r.Header.Get("X-Forwarded-For")}
 		if len(r.TLS.PeerCertificates) > 0 {
@@ -113,7 +119,7 @@ func newUpstream(t *testing.T, maxVersion uint16) *upstream {
 		}
 		_ = json.NewEncoder(w).Encode(s)
 	}))
-	srv.TLS = &tls.Config{ClientAuth: tls.RequestClientCert, MaxVersion: maxVersion}
+	srv.TLS = &tls.Config{ClientAuth: clientAuth, MaxVersion: maxVersion}
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	roots := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
@@ -294,15 +300,77 @@ func isHandshake(m outMessage) bool { return m.Type == "event" && m.Event == "ha
 // --- Tests ------------------------------------------------------------------------------------
 
 func TestTunnelsByDefault(t *testing.T) {
-	up := newUpstream(t, 0)
+	up := newSite(t, 0, tls.NoClientCert)
 	h := newHarness(t, up.roots)
 	c := h.client("s1", password)
 	resp, s, _ := c.fetch(t, up.URL+"/")
-	if resp.StatusCode != 200 || s.CN != "" {
+	if resp.StatusCode != 200 || s.CN != "" || resp.Header.Get("X-Sa-Certificate-Requested") != "" {
 		t.Fatalf("got %d %+v", resp.StatusCode, s)
 	}
 	if c.lastSPKI() != spkiOf(up.Certificate().Raw) {
 		t.Fatal("the browser should see the site's own certificate")
+	}
+}
+
+// A site that asks for a certificate never asks the browser (Chromium would show its own
+// picker): the sidecar answers with none, over TLS 1.2 and 1.3.
+func TestSitesThatAskForACertificateGetNone(t *testing.T) {
+	for _, version := range []uint16{tls.VersionTLS12, tls.VersionTLS13} {
+		up := newSite(t, version, tls.RequestClientCert)
+		h := newHarness(t, up.roots)
+		c := h.client("s1", password)
+		for i := 0; i < 2; i++ {
+			resp, s, body := c.fetch(t, up.URL+"/")
+			if resp.StatusCode != 200 || s.CN != "" || resp.Header.Get("X-Sa-Certificate-Requested") != "none" {
+				t.Fatalf("TLS %x: got %d %s", version, resp.StatusCode, body)
+			}
+		}
+		if c.lastSPKI() != h.p.spki {
+			t.Fatalf("TLS %x: the browser should see the sidecar's pinned key", version)
+		}
+	}
+}
+
+func TestSitesThatRequireACertificateSaySo(t *testing.T) {
+	up := newSite(t, tls.VersionTLS12, tls.RequireAnyClientCert)
+	h := newHarness(t, up.roots)
+	resp, _, body := h.client("s1", password).fetch(t, up.URL+"/")
+	if resp.StatusCode != http.StatusBadGateway || resp.Header.Get("X-Sa-Certificate-Error") != "no_certificate" {
+		t.Fatalf("got %d %q %s", resp.StatusCode, resp.Header.Get("X-Sa-Certificate-Error"), body)
+	}
+	if !strings.Contains(body, "Esta web pide un certificado digital") {
+		t.Fatalf("body: %s", body)
+	}
+	ev, ok := h.desk.last(func(m outMessage) bool { return m.Event == "upstream_error" })
+	if !ok || ev.Session != "s1" || ev.Code != "no_certificate" || ev.Identity != "" {
+		t.Fatalf("event: %+v", ev)
+	}
+}
+
+func TestEachHostIsProbedOnce(t *testing.T) {
+	up := newUpstream(t, 0)
+	h := newHarness(t, up.roots)
+	var handshakes sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		handshakes.Add(1)
+		go func() {
+			defer handshakes.Done()
+			h.p.asksForCertificate(context.Background(), up.target)
+		}()
+	}
+	handshakes.Wait()
+	if len(h.p.probes) != 1 || !h.p.probes[up.target].asks {
+		t.Fatalf("probes: %+v", h.p.probes)
+	}
+	// An unreachable host is asked again next time.
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	dead := ln.Addr().String()
+	ln.Close()
+	if h.p.asksForCertificate(context.Background(), dead) {
+		t.Fatal("an unreachable host doesn't ask")
+	}
+	if _, kept := h.p.probes[dead]; kept {
+		t.Fatal("an unreachable host's probe should not be kept")
 	}
 }
 
@@ -350,11 +418,11 @@ func TestLocalKeyIsPresentedOnlyToEnabledHosts(t *testing.T) {
 		t.Fatalf("upstream handshakes: %d, want 1 (connection reuse)", n)
 	}
 
-	// Another session (another browser context) isn't intercepted.
+	// Another session (another browser context) presents no certificate.
 	other := h.client("s2", password)
-	_, s, _ := other.fetch(t, up.URL+"/")
-	if s.CN != "" || other.lastSPKI() != spkiOf(up.Certificate().Raw) {
-		t.Fatalf("session s2 was intercepted: %+v", s)
+	resp, s, _ := other.fetch(t, up.URL+"/")
+	if s.CN != "" || resp.Header.Get("X-Sa-Certificate-Requested") != "none" {
+		t.Fatalf("session s2 presented the certificate: %+v", s)
 	}
 }
 
@@ -535,18 +603,18 @@ func TestEndedSessionsStayEnded(t *testing.T) {
 	}
 }
 
-func TestEnablingAHostClosesItsTunnels(t *testing.T) {
+func TestEnablingAHostClosesItsConnections(t *testing.T) {
 	up := newUpstream(t, 0)
 	h := newHarness(t, up.roots)
 	c := h.client("s1", password)
 	if _, s, _ := c.fetch(t, up.URL+"/"); s.CN != "" {
-		t.Fatal("expected a tunnel first")
+		t.Fatal("expected no certificate first")
 	}
 	ca := newCA(t)
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	cert := newClient(t, ca, "PRUEBA EC", key)
 	h.configure(t, "s1", []string{up.target}, &identitySpec{ID: "cert-1", Chain: []string{b64(cert.der)}, Key: pkcs8(t, key)})
-	// The kept-alive tunnel was closed: the next request goes through a new, intercepted one.
+	// The kept-alive connection was closed: the next request goes through a new one.
 	time.Sleep(50 * time.Millisecond)
 	if _, s, _ := c.fetch(t, up.URL+"/"); s.CN != "PRUEBA EC" {
 		t.Fatalf("expected the certificate after enabling it, got %+v", s)
@@ -555,7 +623,26 @@ func TestEnablingAHostClosesItsTunnels(t *testing.T) {
 	h.configure(t, "s1", nil, nil)
 	time.Sleep(50 * time.Millisecond)
 	if _, s, _ := c.fetch(t, up.URL+"/"); s.CN != "" {
-		t.Fatalf("expected a tunnel after disabling, got %+v", s)
+		t.Fatalf("expected no certificate after disabling, got %+v", s)
+	}
+}
+
+func TestEnablingAHostClosesItsTunnels(t *testing.T) {
+	up := newSite(t, 0, tls.NoClientCert)
+	h := newHarness(t, up.roots)
+	c := h.client("s1", password)
+	c.fetch(t, up.URL+"/")
+	if c.lastSPKI() != spkiOf(up.Certificate().Raw) {
+		t.Fatal("expected a tunnel first")
+	}
+	ca := newCA(t)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	cert := newClient(t, ca, "PRUEBA EC", key)
+	h.configure(t, "s1", []string{up.target}, &identitySpec{ID: "cert-1", Chain: []string{b64(cert.der)}, Key: pkcs8(t, key)})
+	time.Sleep(50 * time.Millisecond)
+	c.fetch(t, up.URL+"/")
+	if c.lastSPKI() != h.p.spki {
+		t.Fatal("the tunnel should have been closed and the host intercepted")
 	}
 }
 

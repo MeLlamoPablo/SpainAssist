@@ -8,7 +8,8 @@
  * intercepts only those, presenting the certificate with a key it holds (a .p12) or one that signs
  * elsewhere (the DNIe in the phone). Chromium trusts the sidecar's per-launch key for them through
  * an SPKI pin, so no certificate error is ignored for any other origin, and nothing needs a new
- * context: cookies, storage and open pages stay as they are.
+ * context: cookies, storage and open pages stay as they are. Hosts that ask for a certificate
+ * none is enabled for are intercepted too and get none: Chromium would open its own picker.
  */
 import { BrowserError } from './errors';
 
@@ -25,6 +26,7 @@ export const CERTIFICATE_ORIGINS: readonly string[] = Object.freeze([
   'https://w2.seg-social.es', // Seguridad Social certificate services
   'https://ipce.seg-social.es', // Seguridad Social certificate login
   'https://idp.seg-social.es', // Seguridad Social login (Importass, seen live on 2026-10-12)
+  'https://ws235.juntadeandalucia.es', // Junta de Andalucía certificate login (ClicSalud+, 2026-10-20)
 ]);
 
 /**

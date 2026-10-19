@@ -20,6 +20,7 @@ import {
 
 let pki: TestPki;
 let site: Site;
+let plainSite: Site;
 let binaryPath: string;
 const running: Sidecar[] = [];
 
@@ -27,6 +28,7 @@ beforeAll(async () => {
   binaryPath = await sidecarBinary();
   pki = makePki();
   site = await startSite(pki);
+  plainSite = await startSite(pki, { requestCert: false });
 }, 120_000);
 
 afterEach(async () => {
@@ -35,6 +37,7 @@ afterEach(async () => {
 
 afterAll(async () => {
   await site?.close();
+  await plainSite?.close();
 });
 
 async function start(
@@ -67,11 +70,20 @@ function phoneKey(log: string[], options: { decline?: boolean } = {}) {
 describe('Sidecar', () => {
   it('tunnels by default: the client sees the site itself', async () => {
     const sidecar = await start();
+    const res = await getThrough(sidecar, 's1', `${plainSite.url}/`);
+    expect(res.status).toBe(200);
+    expect(res.spki).toBe(spkiOf(pki.server.certDer));
+    expect(res.headers['x-sa-certificate-requested']).toBeUndefined();
+    expect(sidecar.launchArgs).toEqual([`--ignore-certificate-errors-spki-list=${sidecar.spki}`]);
+  });
+
+  it('answers a certificate request with none until one is enabled', async () => {
+    const sidecar = await start();
     const res = await getThrough(sidecar, 's1', `${site.url}/`);
     expect(res.status).toBe(200);
     expect(JSON.parse(res.body).cn).toBeNull();
-    expect(res.spki).toBe(spkiOf(pki.server.certDer));
-    expect(sidecar.launchArgs).toEqual([`--ignore-certificate-errors-spki-list=${sidecar.spki}`]);
+    expect(res.spki).toBe(sidecar.spki);
+    expect(res.headers['x-sa-certificate-requested']).toBe('none');
   });
 
   it('signs handshakes with a remote key, once per connection', async () => {

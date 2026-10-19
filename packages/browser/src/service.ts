@@ -1537,6 +1537,15 @@ export class PlaywrightBrowserService implements BrowserService {
     const contentType = headers['content-type'] ?? '';
     if (/application\/(?:x-)?pdf/i.test(contentType)) {
       this.captureInlinePdf(s, page, response, headers);
+    } else if (headers['x-sa-certificate-requested'] === 'none') {
+      // The site asked for a client certificate and the sidecar presented none (Chromium never
+      // sees the request: it would open its own certificate picker).
+      try {
+        if (response.request().isNavigationRequest() && response.frame() === page.mainFrame())
+          s.notes.push(certificateRequestedNote(hostOf(response.url())));
+      } catch {
+        // The frame is gone.
+      }
     } else if (headers['x-sa-certificate-error'] && response.status() === 502) {
       // The sidecar's page when a certificate login failed upstream (packages/sidecar).
       const code = headers['x-sa-certificate-error'];

@@ -16,6 +16,7 @@ import (
 //   - unavailable: the certificate isn't enabled or ready (e.g. the phone isn't paired);
 //   - timeout: the signer didn't answer in time;
 //   - rejected: the site refused the certificate (a TLS alert from the server);
+//   - no_certificate: the site requires a certificate and none is enabled for it (probe.go);
 //   - server_certificate: the site's own certificate isn't valid;
 //   - unreachable: no connection to the site;
 //   - failed: anything else (the card failed, a signature didn't verify...).
@@ -71,6 +72,7 @@ var pages = map[string]pageText{
 			"unavailable":        "El certificado no está disponible para esta web ahora mismo.",
 			"timeout":            "El certificado no respondió a tiempo.",
 			"rejected":           "La web no ha aceptado el certificado.",
+			"no_certificate":     "Esta web pide un certificado digital y no hay ninguno activado para ella.",
 			"server_certificate": "El certificado de seguridad de esta web no es válido. No sigas.",
 			"unreachable":        "No se pudo conectar con la web.",
 		},
@@ -86,6 +88,7 @@ var pages = map[string]pageText{
 			"unavailable":        "The certificate isn't available for this website right now.",
 			"timeout":            "The certificate didn't answer in time.",
 			"rejected":           "The website didn't accept the certificate.",
+			"no_certificate":     "This website asks for a digital certificate and none is enabled for it.",
 			"server_certificate": "This website's security certificate isn't valid. Don't continue.",
 			"unreachable":        "Couldn't connect to the website.",
 		},

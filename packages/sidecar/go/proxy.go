@@ -44,6 +44,9 @@ type proxy struct {
 
 	mitm  *connListener
 	plain *httputil.ReverseProxy
+	// anonymous serves intercepted hosts that ask for a certificate none is enabled for.
+	anonymous *httputil.ReverseProxy
+	probeState
 
 	// lang: the app's language for error pages ("es", "en"), from config and "language" messages.
 	lang atomic.Value
@@ -88,6 +91,7 @@ func newProxy(cfg inMessage, desk desktop) (*proxy, error) {
 		sessions: map[string]*session{},
 		mitm:     newConnListener(),
 	}
+	p.probes = map[string]*probe{}
 	p.setLanguage(cfg.Language)
 	if len(cfg.Roots) > 0 {
 		p.roots = x509.NewCertPool()
@@ -112,6 +116,7 @@ func newProxy(cfg inMessage, desk desktop) (*proxy, error) {
 		},
 		ErrorLog: quiet,
 	}
+	p.anonymous = p.newAnonymous()
 	intercepted := &http.Server{
 		Handler:           http.HandlerFunc(p.handleIntercepted),
 		ConnContext:       mitmContext,
@@ -180,13 +185,29 @@ func (p *proxy) connect(w http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	intercept := s.intercepts(target)
+	anonymous := false
 	var upstream net.Conn
 	if !intercept {
 		// Dial before answering, so a site that is down fails the CONNECT and the app can tell
-		// the browser why (Chromium itself only reports a failed tunnel).
+		// the browser why (Chromium itself only reports a failed tunnel). Meanwhile, check that
+		// the site doesn't ask for a client certificate (probe.go).
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		upstream, err = p.dialer.DialContext(ctx, "tcp", target)
+		dialed := make(chan error, 1)
+		go func() {
+			var err error
+			upstream, err = p.dialer.DialContext(ctx, "tcp", target)
+			dialed <- err
+		}()
+		anonymous = p.asksForCertificate(r.Context(), target)
+		err = <-dialed
 		cancel()
+		if anonymous {
+			if upstream != nil {
+				upstream.Close()
+				upstream = nil
+			}
+			err = nil
+		}
 		if err != nil {
 			code := netErrorCode(err)
 			p.desk.send(outMessage{
@@ -221,8 +242,8 @@ func (p *proxy) connect(w http.ResponseWriter, r *http.Request, s *session) {
 		early, _ := rw.Reader.Peek(n)
 		client = &prefixConn{Conn: conn, prefix: append([]byte(nil), early...)}
 	}
-	if intercept {
-		p.intercept(client, s, target)
+	if intercept || anonymous {
+		p.intercept(client, s, target, anonymous)
 	} else {
 		p.tunnel(client, upstream, s, target)
 	}
@@ -242,7 +263,8 @@ func (p *proxy) tunnel(client, upstream net.Conn, s *session, target string) {
 }
 
 // intercept finishes TLS with the browser and hands the connection to the intercepted server.
-func (p *proxy) intercept(client net.Conn, s *session, target string) {
+// Anonymous: the host asks for a certificate and none is enabled for it.
+func (p *proxy) intercept(client net.Conn, s *session, target string, anonymous bool) {
 	hostname, _, _ := net.SplitHostPort(target)
 	tlsConn := tls.Server(client, &tls.Config{
 		MinVersion: tls.VersionTLS12,
@@ -251,8 +273,9 @@ func (p *proxy) intercept(client net.Conn, s *session, target string) {
 			return p.leaf(hostname)
 		},
 	})
-	mc := &mitmConn{Conn: tlsConn, session: s.id, target: target}
-	mc.untrack = s.track(target, true, mc)
+	mc := &mitmConn{Conn: tlsConn, session: s.id, target: target, anonymous: anonymous}
+	// An anonymous connection changes handling, like a tunnel, when a certificate is enabled.
+	mc.untrack = s.track(target, !anonymous, mc)
 	p.mitm.push(mc)
 }
 
@@ -304,7 +327,12 @@ func (p *proxy) handleIntercepted(w http.ResponseWriter, r *http.Request) {
 	}
 	// A session that ended while the request was in flight stays ended.
 	var id *identity
-	if s := p.lookup(mc.session); s != nil {
+	s := p.lookup(mc.session)
+	if s != nil && mc.anonymous {
+		p.anonymous.ServeHTTP(w, r)
+		return
+	}
+	if s != nil {
 		id = s.identityFor(mc.target)
 	}
 	if id == nil {
@@ -394,6 +422,15 @@ func (p *proxy) endSession(id string) {
 	}
 }
 
+// directIntercepted sends an intercepted request to the host the browser connected to.
+func directIntercepted(r *http.Request) {
+	r.URL.Scheme = "https"
+	if mc, ok := r.Context().Value(mitmKey{}).(*mitmConn); ok {
+		r.URL.Host = mc.target
+	}
+	forwardHeaders(r)
+}
+
 // forwardHeaders keeps the request as the browser sent it: no X-Forwarded-For, no Go user agent.
 func forwardHeaders(r *http.Request) {
 	r.Header["X-Forwarded-For"] = nil
@@ -447,8 +484,10 @@ type mitmConn struct {
 	net.Conn
 	session string
 	target  string
-	untrack func()
-	once    sync.Once
+	// anonymous: intercepted without a certificate (probe.go).
+	anonymous bool
+	untrack   func()
+	once      sync.Once
 }
 
 func (c *mitmConn) Close() error {

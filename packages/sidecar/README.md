@@ -12,6 +12,12 @@ holding the key (`docs/research/dnie.md` §2).
   browser-level DevTools handler). Connections are plain TCP tunnels, so Chromium checks every
   site's certificate itself. A site that can't be reached fails the tunnel, and
   `networkError(session, host)` says why the way Chromium would (`ERR_CONNECTION_REFUSED`...).
+- Chromium never sees a client certificate request: headed, it would show its own picker of the
+  OS store's certificates, which the agent can't answer (`docs/research/browser.md` §1.8). The
+  first time a host is tunnelled, the sidecar probes its handshake (`go/probe.go`, once per
+  launch). A host that asks for a certificate is intercepted and gets none, and its responses
+  carry `X-Sa-Certificate-Requested: none` (a `no_certificate` error page if it requires one), so
+  the browser service can tell the agent to enable a certificate.
 - `configure(session, hosts, identity)` turns on a client certificate for some hosts of one
   session. Those connections are intercepted: the sidecar finishes TLS with the browser using a
   per-launch key Chromium trusts (`launchArgs`, an SPKI pin), and talks to the real host itself

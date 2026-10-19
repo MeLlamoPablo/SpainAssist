@@ -6,7 +6,10 @@
 export const CLIENT_CERT_NET_ERROR = /ERR_BAD_SSL_CLIENT_AUTH_CERT|ERR_SSL_CLIENT_AUTH_[A-Z_]+/;
 
 export function certificateRequestedNote(host: string): string {
-  return `${host || 'The site'} asked for a client certificate and none was presented. If the user has a digital certificate or a DNIe, call browser_use_certificate, then open the page again.`;
+  const call = host
+    ? `call browser_use_certificate with origins ["https://${host}"]`
+    : 'call browser_use_certificate with the origin of the site in origins';
+  return `${host || 'The site'} asked for a client certificate and none was presented. If the user has a digital certificate or a DNIe, ${call}, then open the page again.`;
 }
 
 /**
@@ -26,6 +29,8 @@ export function certificateFailedNote(host: string, code: string, detail: string
       return `The certificate login to ${site} timed out${why}. With a DNIe, the user must keep the card on the phone until the page loads. Then try again.`;
     case 'rejected':
       return `${site} did not accept the certificate${why}. It may be expired, revoked or not accepted by this site.`;
+    case 'no_certificate':
+      return certificateRequestedNote(host);
     case 'server_certificate':
       return `${site} has an invalid security certificate${why}: do not continue.`;
     case 'unreachable':

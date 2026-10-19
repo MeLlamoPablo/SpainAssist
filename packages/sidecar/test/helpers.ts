@@ -92,7 +92,7 @@ export function signDigest(key: crypto.KeyObject, hash: SidecarHash, digest: Buf
   );
 }
 
-// --- A site that asks for a client certificate ------------------------------------------------
+// --- A site that asks for a client certificate (unless requestCert is false) -------------------
 
 export interface Site {
   url: string;
@@ -100,12 +100,15 @@ export interface Site {
   close(): Promise<void>;
 }
 
-export async function startSite(pki: TestPki): Promise<Site> {
+export async function startSite(
+  pki: TestPki,
+  { requestCert = true }: { requestCert?: boolean } = {},
+): Promise<Site> {
   const server = https.createServer(
     {
       key: pki.server.key.export({ type: 'pkcs8', format: 'pem' }),
       cert: pki.server.certPem,
-      requestCert: true,
+      requestCert,
       rejectUnauthorized: false,
       ca: [pki.caPem],
       maxVersion: 'TLSv1.2',

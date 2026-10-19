@@ -115,7 +115,7 @@ func (p *proxy) newIdentity(session string, spec identitySpec) (*identity, error
 		DisableCompression:    true,
 	}
 	id.proxy = &httputil.ReverseProxy{
-		Director:      id.direct,
+		Director:      directIntercepted,
 		Transport:     id.transport,
 		FlushInterval: -1,
 		ErrorHandler:  id.fail,
@@ -139,14 +139,6 @@ func (id *identity) same(spec identitySpec) bool {
 
 func (id *identity) close() {
 	id.transport.CloseIdleConnections()
-}
-
-func (id *identity) direct(r *http.Request) {
-	r.URL.Scheme = "https"
-	if mc, ok := r.Context().Value(mitmKey{}).(*mitmConn); ok {
-		r.URL.Host = mc.target
-	}
-	forwardHeaders(r)
 }
 
 // fail answers the browser when the upstream request failed: a page that says why, and a header
