@@ -175,8 +175,14 @@ the IP. The relay and the dashboard are on `<domain>` only.
   Decider, which that list lacks, is registered by hand. Without a price, calls cost $0 and escape
   key budgets, so the same module rejects chat calls to models without one (OpenRouter's routers
   such as `openrouter/auto`, free models, and models LiteLLM's own list lacks if OpenRouter's
-  cannot be loaded): budget reservation needs a price to check a call's worst case. The container
-  log shows `sa_pricing: registered N OpenRouter prices`.
+  cannot be loaded): budget reservation needs a price to check a call's worst case.
+  A missing chat price triggers one refresh and recheck before rejection, off the event loop.
+  Concurrent misses share the refresh; miss-triggered attempts (including failures) are limited
+  to one per minute per process across all model names. Already priced calls proceed immediately.
+  The container log shows `sa_pricing: registered N OpenRouter prices`.
+
+  Offline pricing callback tests: `python3 -m unittest discover -s infra/tests -v` (standard
+  library only; LiteLLM, FastAPI, the catalog request and the startup thread are mocked).
 
 ### Requirements
 

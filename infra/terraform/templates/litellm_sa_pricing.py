@@ -1,11 +1,13 @@
 # Loaded by LiteLLM as a callback module (litellm_settings.callbacks: ["sa_pricing.handler"]).
 # Registers OpenRouter's own prices (https://openrouter.ai/api/v1/models) for every model it
-# serves, at start and then every few hours, so spend reaches key budgets and a new model needs no
-# deploy. LiteLLM's remote price list lags behind OpenRouter and its prices may be stale; OpenRouter
+# serves, at start, every few hours and on a chat price miss, so spend reaches key budgets and
+# a new model needs no deploy. LiteLLM's remote price list lags behind OpenRouter and its prices may be stale; OpenRouter
 # is what we are billed.
+import asyncio
 import json
 import sys
 import threading
+import time
 import urllib.request
 
 import litellm
@@ -14,6 +16,9 @@ from litellm.integrations.custom_logger import CustomLogger
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 REFRESH_SECONDS = 6 * 60 * 60
+MISS_REFRESH_SECONDS = 60
+_refresh_lock = threading.Lock()
+_last_miss_refresh = float("-inf")
 
 # Not in OpenRouter's model list: Perplexity Decider (document scan screening) through
 # /openrouter/alpha/decisions. The app calls the alias that follows Perplexity's latest Flash
@@ -101,16 +106,24 @@ def fetch_models() -> list:
         return json.load(response)["data"]
 
 
-def refresh() -> None:
-    """Registers OpenRouter's current prices. On failure, the prices already registered stay."""
-    try:
-        prices = openrouter_prices(fetch_models())
-    except Exception as error:  # noqa: BLE001: any failure keeps the previous prices
-        # Printed: the proxy runs with LITELLM_LOG=ERROR, and this is no request error.
-        print(f"sa_pricing: could not load OpenRouter prices: {error}", file=sys.stderr, flush=True)
-        return
-    litellm.register_model(prices)
-    print(f"sa_pricing: registered {len(prices)} OpenRouter prices", file=sys.stderr, flush=True)
+def refresh(*, on_miss: bool = False) -> None:
+    """Keep cached prices on failure; serialize refreshes and throttle catalog misses globally."""
+    global _last_miss_refresh
+    with _refresh_lock:
+        if on_miss and time.monotonic() - _last_miss_refresh < MISS_REFRESH_SECONDS:
+            return
+        try:
+            prices = openrouter_prices(fetch_models())
+            litellm.register_model(prices)
+        except Exception as error:  # noqa: BLE001: any failure keeps the previous prices
+            # Printed: the proxy runs with LITELLM_LOG=ERROR, and this is no request error.
+            print(f"sa_pricing: could not load OpenRouter prices: {error}", file=sys.stderr, flush=True)
+        else:
+            print(f"sa_pricing: registered {len(prices)} OpenRouter prices", file=sys.stderr, flush=True)
+        finally:
+            if on_miss:
+                # Also throttle failures and different unknown names, without a per-model cache.
+                _last_miss_refresh = time.monotonic()
 
 
 def refresh_forever() -> None:
@@ -141,13 +154,22 @@ class PricedModelsOnly(CustomLogger):
     model), free models, and models LiteLLM's own list lacks while OpenRouter's cannot be loaded.
     """
 
+    def __init__(self):
+        super().__init__()
+        self._miss_lock = asyncio.Lock()
+
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         model = data.get("model")
         if call_type in CHAT_CALL_TYPES and isinstance(model, str) and not has_price(model):
-            raise HTTPException(
-                status_code=400,
-                detail={"error": f"Model {model} is not available: its price is unknown."},
-            )
+            # Coalesce concurrent misses; fetching the public catalog must not block chat traffic.
+            async with self._miss_lock:
+                if not has_price(model):
+                    await asyncio.to_thread(refresh, on_miss=True)
+            if not has_price(model):
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": f"Model {model} is not available: its price is unknown."},
+                )
         return data
 
 
