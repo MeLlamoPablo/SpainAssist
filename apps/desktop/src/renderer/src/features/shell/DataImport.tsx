@@ -33,6 +33,10 @@ const dict = defineDict({
 
 /** How often the screen checks whether the old version is gone. */
 const POLL_MS = 1500;
+/** After the window gets focus back, how long the uninstall gets to finish before the button returns. */
+const CANCEL_CHECK_MS = 6000;
+/** How long the uninstaller's prompt gets to appear before the button returns. */
+const NO_PROMPT_MS = 15_000;
 
 /**
  * The Microsoft Store build while the GitHub (NSIS) install is on this Windows account: nothing
@@ -81,9 +85,34 @@ export function StoreMigration() {
   }, [state, runImport]);
 
   const uninstall = async () => {
-    await api.invoke('dataImport.uninstall').catch(() => {});
     setWaiting(true);
+    await api.invoke('dataImport.uninstall').catch(() => {});
   };
+
+  // The uninstaller runs outside the app, so its exit can't be watched. The window gets focus
+  // back when its prompt closes: if the old version is still there a moment later, the user
+  // cancelled. Without a prompt taking focus (none opened), the button comes back on its own.
+  useEffect(() => {
+    if (!waiting) return;
+    let left = false;
+    let timer = setTimeout(() => setWaiting(false), NO_PROMPT_MS);
+    const onBlur = () => {
+      left = true;
+      clearTimeout(timer);
+    };
+    const onFocus = () => {
+      if (!left) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => setWaiting(false), CANCEL_CHECK_MS);
+    };
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [waiting]);
 
   return (
     <div className="drag flex h-full items-center justify-center bg-surface p-8">
@@ -101,7 +130,12 @@ export function StoreMigration() {
         <p className="mt-2 text-[14px] text-fg-muted">{t.migrate}</p>
         <div className="mt-6 flex justify-center">
           {state === 'uninstall' ? (
-            <Button variant="primary" icon={Trash2} onClick={() => void uninstall()}>
+            <Button
+              variant="primary"
+              icon={Trash2}
+              disabled={waiting}
+              onClick={() => void uninstall()}
+            >
               {t.uninstall}
             </Button>
           ) : failed ? (
