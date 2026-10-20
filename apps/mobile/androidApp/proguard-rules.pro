@@ -1,3 +1,9 @@
+# ML Kit discovers Firebase registrars from manifest metadata and constructs them by reflection.
+# Its dependency rule keeps the classes only; R8 also needs the no-argument constructors kept.
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}
+
 # jmulticard looks some classes up by name (TextInputCallback fallback, ASN.1 structures) and
 # its bundled BouncyCastle registers algorithms through reflection: keep them whole.
 -keep class es.gob.jmulticard.** { *; }
