@@ -246,8 +246,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
           // BYOK and custom endpoints research with Exa, keyless or with the user's key.
           ...(providers.researchesWithExa() ? { exa: true } : {}),
         },
-        // Everyone reads community learnings. Sharing and rating them needs a user key (one vote
-        // per user and learning), which the server checks.
+        // Community learnings respect the sharing setting at call time. Sharing and rating also
+        // need a user key (one vote per user and learning), which the server checks.
         ...(env.feedbackServerUrl
           ? {
               feedback: {

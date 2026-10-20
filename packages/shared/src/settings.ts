@@ -182,7 +182,7 @@ export type Language = z.infer<typeof Language>;
 export const Settings = z.object({
   language: Language,
   onboardingCompleted: z.boolean(),
-  /** Share anonymous, PII-scrubbed community learnings and error reports (when enabled by flag). */
+  /** Give and receive anonymous community learnings; allow scrubbed error reports when flagged on. */
   shareLearnings: z.boolean(),
   provider: ProviderConfig.optional(),
 });

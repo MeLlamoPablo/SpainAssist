@@ -137,8 +137,8 @@ Packaged builds keep no scan images. Code: `apps/desktop/src/main/scanner/`. Res
 At the end of a procedure (or after friction) an agent can share a learning. It is scrubbed of PII
 twice on the device (patterns with checksums, and every value in the vault), then again on the
 server. A maintainer approves each one on the feedback server's admin page before agents get it.
-Future agents search approved learnings and vote on the ones they used. Sharing and voting
-respect the user's sharing setting and require a user key.
+Future agents search approved learnings and vote on the ones they used. Searching, sharing and
+voting respect the user's sharing setting; sharing and voting also require a user key.
 
 ## 4. Users and our services
 
@@ -162,7 +162,7 @@ or rating learnings (searching still works).
   reached, every flag is off. Main enforces the flags itself; the UI only hides what main already
   refuses. Flags are listed in `FeatureFlags` (`@sa/shared`).
 - **Error reports.** Packaged builds send crashes and uncaught errors to our GlitchTip (Sentry
-  protocol), when both the `error-reports` flag and the user's anonymous data sharing setting are
+  protocol), when both the `error-reports` flag and the user's anonymous learnings sharing setting are
   on. Only errors are sent: no breadcrumbs, no tracing, no memory dumps. Every event is scrubbed with `@sa/pii`.
 
 ## 6. Development tooling

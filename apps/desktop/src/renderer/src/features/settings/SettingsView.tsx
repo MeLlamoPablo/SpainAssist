@@ -5,8 +5,10 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { BrandMark, BrandName } from '../../components/brand';
 import { Button } from '../../components/ui/button';
 import { SegmentedControl, Switch } from '../../components/ui/controls';
+import { Dialog } from '../../components/ui/dialog';
 import { Card, Pill } from '../../components/ui/misc';
 import { useT } from '../../i18n';
+import { common } from '../../i18n/common';
 import { api, errorMessage } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { type SettingsSection, useAppStore } from '../../store/app';
@@ -32,6 +34,9 @@ async function update(patch: SettingsPatch) {
 
 export function SettingsView({ section }: { section?: SettingsSection }) {
   const t = useT(settingsDict);
+  const tc = useT(common);
+  const [confirmStopSharing, setConfirmStopSharing] = useState(false);
+  const [savingSharing, setSavingSharing] = useState(false);
   const settings = useAppStore((s) => s.settings);
   const info = useAppStore((s) => s.info);
   const kind = useAppStore((s) => s.provider?.kind);
@@ -69,6 +74,24 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
       toast.error(errorMessage(err));
     }
   };
+
+  const stopSharing = async () => {
+    setSavingSharing(true);
+    try {
+      await update({ shareLearnings: false });
+      setConfirmStopSharing(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSavingSharing(false);
+    }
+  };
+
+  const sharingSavings = voucherConnected
+    ? t.learnings.savings.voucher
+    : chatGptConnected
+      ? t.learnings.savings.chatgpt
+      : t.learnings.savings.byok;
 
   return (
     <div className="flex h-full flex-col">
@@ -161,7 +184,10 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
           <SectionCard icon={Share2} title={t.learnings.title}>
             <Switch
               checked={settings.shareLearnings}
-              onCheckedChange={(shareLearnings) => void set({ shareLearnings })}
+              onCheckedChange={(shareLearnings) => {
+                if (shareLearnings) void set({ shareLearnings: true });
+                else setConfirmStopSharing(true);
+              }}
               ariaLabel={t.learnings.title}
               description={t.learnings.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             />
@@ -187,6 +213,39 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
           </div>
         </div>
       </div>
+      <Dialog
+        open={confirmStopSharing}
+        onOpenChange={(open) => {
+          if (!savingSharing) setConfirmStopSharing(open);
+        }}
+        title={t.learnings.stopTitle}
+        closeLabel={tc.close}
+        footer={
+          <div className="flex w-full flex-wrap justify-end gap-2">
+            <Button
+              variant="ghost"
+              className="text-danger hover:text-danger"
+              loading={savingSharing}
+              onClick={() => void stopSharing()}
+            >
+              {t.learnings.stopSharing}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={savingSharing}
+              onClick={() => setConfirmStopSharing(false)}
+            >
+              {t.learnings.keepSharing}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-[14px] leading-relaxed text-fg-muted">
+          <p>{t.learnings.stopBody[0]}</p>
+          <p>{sharingSavings}</p>
+          <p>{t.learnings.stopBody[1]}</p>
+        </div>
+      </Dialog>
     </div>
   );
 }

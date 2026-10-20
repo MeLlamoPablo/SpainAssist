@@ -76,6 +76,7 @@ export class FeedbackService {
     procedure?: string;
     limit?: number;
   }): Promise<BridgeResults['feedback.search']> {
+    if (!this.deps.settings().shareLearnings) return { results: [] };
     const vault = this.deps.vault();
     const q = scrubOutgoing(this.deps.pii, vault, params.query).text.trim();
     if (q.length < 2) return { results: [] };

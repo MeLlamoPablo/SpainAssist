@@ -121,11 +121,24 @@ export const settingsDict = defineDict({
       body: 'El idioma de la app y de mis respuestas.',
     },
     learnings: {
-      title: 'Compartir datos anónimos',
+      title: 'Compartir aprendizajes anónimos',
       body: [
         'El asistente comparte información sobre trámites para hacerlos cada vez mejor. Nunca se incluyen tus datos.',
         'Al compartir, también te beneficias de los aprendizajes de otros usuarios.',
       ],
+      stopTitle: 'Dejar de compartir aprendizajes anónimos',
+      stopBody: [
+        'Ahora mismo, tu agente es más eficiente porque aprende de los demás.',
+        'Al dejar de compartir aprendizajes anónimos, tu agente dejará también de recibirlos de los demás, por lo que su rendimiento se verá afectado negativamente.',
+      ],
+      savings: {
+        voucher: 'Gracias a esa información, tarda menos tiempo y gasta menos créditos.',
+        chatgpt:
+          'Gracias a esa información, tarda menos tiempo y consume menos de tus límites de ChatGPT.',
+        byok: 'Gracias a esa información, tarda menos tiempo y reduce el uso de la IA.',
+      },
+      keepSharing: 'Seguir compartiendo',
+      stopSharing: 'Dejar de compartir',
     },
     history: {
       title: 'Exportar historial',
@@ -260,11 +273,24 @@ export const settingsDict = defineDict({
       body: 'The language of the app and of my answers.',
     },
     learnings: {
-      title: 'Share anonymous data',
+      title: 'Share anonymous learnings',
       body: [
         'The assistant shares information about procedures to make them better every time. Your data is never included.',
         'By sharing, you also benefit from what other users have learned.',
       ],
+      stopTitle: 'Stop sharing anonymous learnings',
+      stopBody: [
+        'Right now, your agent is more efficient because it learns from others.',
+        'If you stop sharing anonymous learnings, your agent will also stop receiving them from others, which will negatively affect its performance.',
+      ],
+      savings: {
+        voucher: 'Thanks to that information, it takes less time and uses fewer credits.',
+        chatgpt:
+          'Thanks to that information, it takes less time and uses less of your ChatGPT allowance.',
+        byok: 'Thanks to that information, it takes less time and reduces AI usage.',
+      },
+      keepSharing: 'Keep sharing',
+      stopSharing: 'Stop sharing',
     },
     history: {
       title: 'Export history',

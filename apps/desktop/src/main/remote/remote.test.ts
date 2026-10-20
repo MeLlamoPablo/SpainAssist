@@ -217,6 +217,17 @@ describe('feedback.submit', () => {
     expect(search).toMatchObject({ status: 503, body: { error: { code: 'unavailable' } } });
   });
 
+  it('stops receiving community learnings immediately when sharing is off, and resumes when on', async () => {
+    const { app, fetch, token } = await setup(() => jsonResponse(200, { results: [] }));
+    await app.invoke('settings.update', { shareLearnings: false });
+    const off = await app.rpc('feedback.search', { query: 'cita dni' }, token);
+    expect(off.body.result).toEqual({ results: [] });
+    expect(fetch.requests).toEqual([]);
+    await app.invoke('settings.update', { shareLearnings: true });
+    await app.rpc('feedback.search', { query: 'cita dni' }, token);
+    expect(fetch.requests).toHaveLength(1);
+  });
+
   it('feedback.search scrubs the query', async () => {
     const { app, fetch, token } = await setup(() => jsonResponse(200, { results: [] }));
     const res = await app.rpc(
