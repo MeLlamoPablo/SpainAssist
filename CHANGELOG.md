@@ -3,6 +3,61 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.3.0 (2026-10-21)
+
+Installed apps update to it, except on macOS (below). What changed since 0.3.0-beta; with
+0.3.0-beta's list, everything since 0.2.1.
+
+### App
+
+- **macOS: signed, notarized and self-updating.** The app and its DMG are signed with our
+  Developer ID and notarized by Apple, so macOS opens them without warnings, and the app now
+  updates itself. Copies from before 0.3.0 can't update to it: download it once. On the first
+  start, macOS may ask once for your login password to unlock the app's saved data. (33c6d5d,
+  a608bd0, 88e4934)
+- **macOS: a new installer.** The DMG has a new design, and the app installs itself in
+  Applications on its first start, then offers to move the installer to the Trash. A new app
+  icon that fills the macOS 26 shape. (e6fb7be, cecf9b1, 575dfb4, 96fff34, 0e1fb4d, 3be6b9b,
+  dceb8ff, 93b1b38, 5ffd2a2)
+- **Windows and Linux: no system title bar.** The app's own header is the title bar, with the
+  window buttons (and Snap Layouts) blended in, in light and dark mode. (06e845c)
+- **Microsoft Store version:** while the GitHub version is installed, it asks you to uninstall
+  that one first, then brings its data over and restarts. (6d1dcec, d61977b)
+- **Appointments:** when a site offers several free slots, the app shows them in a picker, one
+  column per day, and you choose one or ask it to look for more. (2226670, f989a33, 20ed35e,
+  04adce3, f242251)
+- **Cl@ve Permanente logins** fill in your saved DNI/NIE and password in one step, and ask you
+  in the app when nothing is saved; the password is never asked for on its own. Passwords of
+  other sites are typed once and never saved. (365f351, 0500f1e, c4e7d41)
+- **Signing follows the site's certificate filters**, as AutoFirma does, and the phone now sends
+  both DNIe certificates, so sites that ask for the authentication certificate work too.
+  (dc23d99)
+- **Sites that ask for a client certificate** no longer open Chromium's own certificate picker
+  on Windows, which left the login stuck. (df99c2d)
+- **ChatGPT Go and Plus accounts** work: procedures, the assistant, research and the document
+  scanner use a model the account's plan offers, instead of failing on one it doesn't. The
+  models each role uses come from a file in the repository, so they can change without a new
+  release. (bb066d0, b850001, b0bf25c, 358a521, e16b9ae, dbc9953, e9420c3)
+- **Settings:** error reports follow the anonymous sharing switch, and turning off anonymous
+  community learnings asks first. (4f83ac9, f0bd533, f44d941)
+
+### Phone app
+
+- The QR scanner no longer crashes in release builds. (e5d49c7)
+- The "⋯" menu shows on the dark theme. (4b4230e)
+
+### Services and maintenance
+
+- Feedback server: learnings are shared with agents only once a maintainer approves them; the
+  feature flag that turned it on is gone. (26dd94e, 7e81e98)
+- LiteLLM refreshes OpenRouter prices when a model is missing from its list. (dffd7d3, 5b06b2e)
+- The key server reads the models file and redeploys when it changes. (e9420c3, f8e92a1)
+- Relay: a 1 GB memory limit. (081393d)
+- Release signing: Apple certificate and API key in GitHub Actions secrets through Terraform,
+  and the Android upload key. (342d561, 7b82101, 2f6bfb5, e62524b)
+- SpainBench: document dates are no longer leak canaries. (022db05)
+- Version 0.3.0 everywhere except the phone app. (479a8e2)
+
 ## 0.3.0-beta (2026-10-18)
 
 A prerelease: GitHub Releases only, installed apps don't update to it.
