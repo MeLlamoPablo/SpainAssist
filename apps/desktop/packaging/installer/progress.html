@@ -20,6 +20,8 @@
     .progress { position: relative; height: 4px; border-radius: 4px; background: #e8ddd1; overflow: hidden; }
     .progress::after { content: ''; position: absolute; width: 26%; height: 100%; border-radius: inherit; background: #c8402a; animation: preparing 1.5s ease-in-out infinite alternate; }
     @keyframes preparing { from { left: 0; } to { left: 74%; } }
+    /* The bar takes the button's place, centred in its 44px (the margin collapses with the 20px below the text). */
+    #opening .progress { margin-top: 40px; }
     a { display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: 12px; background: #c8402a; color: #fff; font-size: 15px; font-weight: 500; text-decoration: none; box-shadow: 0 1px 2px rgb(58 26 20 / 0.12); -webkit-app-region: no-drag; transition: background-color 150ms; }
     a:hover { background: #b33722; }
     a:active { transform: translateY(1px); }
@@ -36,13 +38,13 @@
       <div class="progress" role="progressbar" aria-label="Instalando Spain Assist"></div>
     </section>
     <section id="installed">
-      <h1>Ya está en Aplicaciones</h1>
-      <p>El instalador ya no hace falta.</p>
+      <h1>¡Listo!</h1>
+      <p>Se ha instalado Spain Assist</p>
       <a href="#opening">Mover el instalador a la papelera</a>
     </section>
     <section id="opening">
-      <h1>Abriendo Spain Assist</h1>
-      <p>Un momento.</p>
+      <h1>¡Listo!</h1>
+      <p>Se ha instalado Spain Assist</p>
       <div class="progress" role="progressbar" aria-label="Abriendo Spain Assist"></div>
     </section>
   </main>
