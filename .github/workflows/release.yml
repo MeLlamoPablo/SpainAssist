@@ -162,8 +162,9 @@ jobs:
       matrix:
         include:
           # arm64 on macOS 26: on macos-15, Xcode 26's actool crashed compiling the Icon
-          # Composer icon ("The tool closed the connection (AssetCatalogAgent-AssetRuntime)"),
-          # every time on v0.3.0. There is no Intel macOS 26 image; macos-15-intel compiles it.
+          # Composer icon ("The tool closed the connection (AssetCatalogAgent-AssetRuntime)") in
+          # two of v0.3.0's three attempts. There is no Intel macOS 26 image; macos-15-intel
+          # compiled it every time.
           - arch: arm64
             runner: macos-26
           - arch: x64
