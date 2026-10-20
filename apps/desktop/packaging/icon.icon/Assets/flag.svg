@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="488" viewBox="0 0 720 488">
+  <defs>
+    <clipPath id="flag">
+      <rect width="720" height="488" rx="90"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#flag)">
+    <path fill="#c60b1e" d="M0 0h720v488H0z"/>
+    <path fill="#ffc400" d="M0 122h720v244H0z"/>
+  </g>
+</svg>

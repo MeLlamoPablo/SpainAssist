@@ -170,6 +170,10 @@ const config: Configuration = {
   mac: {
     target: ['dmg', 'zip'],
     category: 'public.app-category.productivity',
+    // Icon Composer bundle: actool (Xcode 26+) compiles it to Assets.car, the full-bleed Liquid
+    // Glass icon macOS 26 wants (it puts transparent icon.png on a gray plate), plus an .icns
+    // for older macOS and the dmg. Other platforms keep packaging/icon.png.
+    icon: 'packaging/icon.icon',
     // Without a certificate: ad-hoc, which Apple Silicon needs to run the app at all. The hardened
     // runtime needs a real identity (library validation would reject Electron's frameworks).
     ...(macSigning ? {} : { identity: '-' }),

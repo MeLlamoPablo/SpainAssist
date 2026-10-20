@@ -172,6 +172,10 @@ jobs:
       - name: Set the app version from the tag
         working-directory: apps/desktop
         run: npm pkg set version=${{ needs.check.outputs.version }}
+      # The app icon is an Icon Composer bundle (packaging/icon.icon): only Xcode 26's actool
+      # compiles it, and the macOS 15 images select an older Xcode by default.
+      - name: Select Xcode 26
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
       - name: Check the signing secrets
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -257,6 +261,9 @@ jobs:
       - name: Set the app version from the tag
         working-directory: apps/desktop
         run: npm pkg set version=${{ needs.check.outputs.version }}
+      # The dmg's volume icon is compiled from packaging/icon.icon too (see build-mac).
+      - name: Select Xcode 26
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
       - uses: actions/download-artifact@v5
         with:
           name: mac-app-notarized-${{ matrix.arch }}
