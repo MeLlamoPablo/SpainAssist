@@ -16,6 +16,18 @@ timeout=30m
 
 staple() { xcrun stapler staple "$target" > /dev/null 2>&1; }
 
+# Once Apple has accepted: the ticket download from CloudKit can drop ("The network connection
+# was lost", exit 68, seen on a runner) or lag behind the acceptance, so try a few times.
+staple_accepted() {
+  for attempt in 1 2 3 4 5; do
+    xcrun stapler staple "$target" && return 0
+    echo "$name: stapling failed (attempt $attempt), retrying"
+    sleep $((attempt * 15))
+  done
+  echo "::error::Apple accepted $name but its ticket could not be stapled. Re-run this job: it staples without submitting again."
+  return 1
+}
+
 check() {
   if [[ $target == *.app ]]; then
     spctl --assess -vvv --type exec "$target"
@@ -35,12 +47,14 @@ pending=$(xcrun notarytool history "${auth[@]}" --output-format json |
     'first(.history[] | select(.name == $name and .status == "In Progress") | .id) // empty')
 if [[ -n $pending ]]; then
   echo "$name: waiting for submission $pending from an earlier run"
-  xcrun notarytool wait "$pending" "${auth[@]}" --timeout "$timeout" || true
-  if staple; then
+  waited=$(xcrun notarytool wait "$pending" "${auth[@]}" --timeout "$timeout" \
+    --output-format json || true)
+  if [[ $(jq -r '.status // empty' <<< "$waited") == Accepted ]]; then
+    staple_accepted
     check
     exit 0
   fi
-  echo "$name: that submission was not for these bytes, submitting"
+  echo "$name: that submission was not accepted in time, submitting again"
 fi
 
 # notarytool takes a zip, dmg or pkg, not a bare .app.
@@ -63,5 +77,5 @@ if [[ $status != Accepted ]]; then
   echo "::error::Notarization of $name: ${status:-no result} (notarytool exit $code). Re-run this job: it picks up a late ticket instead of submitting again."
   exit 1
 fi
-xcrun stapler staple "$target"
+staple_accepted
 check

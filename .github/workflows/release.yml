@@ -280,10 +280,18 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           ARCH: ${{ matrix.arch }}
+        # Signing the dmg asks Apple's timestamp server, which can drop a request ("A timestamp was
+        # expected but was not found", seen on a runner): try three times. Each try is a clean build.
         run: |
-          corepack pnpm exec electron-builder --mac dmg zip "--$ARCH" \
-            --prepackaged "$RUNNER_TEMP/app/Spain Assist.app" \
-            -c.mac.notarize=false -c.dmg.sign=true --publish never
+          for attempt in 1 2 3; do
+            rm -rf dist
+            corepack pnpm exec electron-builder --mac dmg zip "--$ARCH" \
+              --prepackaged "$RUNNER_TEMP/app/Spain Assist.app" \
+              -c.mac.notarize=false -c.dmg.sign=true --publish never && break
+            [[ $attempt == 3 ]] && exit 1
+            echo "::warning::Building the dmg failed (attempt $attempt), retrying"
+            sleep 30
+          done
           mv dist/latest-mac.yml "dist/latest-mac-$ARCH.yml"
       - uses: actions/upload-artifact@v4
         with:
