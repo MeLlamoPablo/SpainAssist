@@ -71,6 +71,11 @@ describe('automatic macOS installation', () => {
     expect(await installMacApp(false)).toBe(true);
     expect(mocks.win.loadFile).toHaveBeenCalledWith('/app/resources/installer/progress.html');
     expect(mocks.win.show).toHaveBeenCalled();
+    expect(mocks.identifyInstaller).toHaveBeenCalledWith(
+      [],
+      'manifest',
+      '/Volumes/Spain Assist/Spain Assist.app',
+    );
     expect(mocks.rememberInstaller).toHaveBeenCalledWith(
       '/tmp/sa-install-test',
       { image: '/Downloads/app.dmg', mount: '/Volumes/Spain Assist' },

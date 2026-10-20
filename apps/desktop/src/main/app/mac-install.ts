@@ -49,8 +49,9 @@ export async function installMacApp(e2e: boolean): Promise<boolean> {
   await win.webContents.capturePage();
   try {
     try {
-      const manifest = await bundleManifest(bundlePath());
-      const source = await identifyInstaller(await mountedDiskImages(), manifest);
+      const sourceBundle = bundlePath();
+      const manifest = await bundleManifest(sourceBundle);
+      const source = await identifyInstaller(await mountedDiskImages(), manifest, sourceBundle);
       if (source) await rememberInstaller(userData, source, manifest);
     } catch (error) {
       // Failure to identify the DMG cannot prevent installation; never guess what to trash.

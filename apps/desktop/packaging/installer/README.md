@@ -25,6 +25,8 @@ Electron's native bundle mover without an extra install confirmation. Successful
 quits the source and relaunches the installed app. A private one-shot record identifies
 the original DMG by mount, exact signed-build resource manifest, file identity and size.
 The installed instance ejects the source and moves that exact DMG to Trash automatically.
+When multiple mounted DMGs contain the same build, the running bundle's volume identifies
+the source. A translocated app still requires a unique manifest match.
 Cleanup failure is nonblocking and never deletes a guessed filename. There is no
 cleanup preference or completion screen. Development, tests and other platforms skip it.
 

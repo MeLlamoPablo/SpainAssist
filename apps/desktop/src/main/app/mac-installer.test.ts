@@ -43,10 +43,38 @@ describe('macOS installer identity and cleanup', () => {
     const read = vi.fn(async (path: string) =>
       path.includes('/Other/') ? 'b'.repeat(64) : manifest,
     );
-    expect(await identifyInstaller(images, manifest, read)).toEqual({
+    expect(
+      await identifyInstaller(images, manifest, '/private/translocated/Spain Assist.app', read),
+    ).toEqual({
       image: '/Downloads/renamed.dmg',
       mount: '/Volumes/Spain Assist',
     });
+  });
+
+  it('uses the running app volume when multiple DMGs contain the same signed build', async () => {
+    const images = [
+      image('/Desktop/test-v2.dmg', '/Volumes/Spain Assist'),
+      image('/Desktop/test-v3.dmg', '/Volumes/Spain Assist 1'),
+    ];
+    expect(
+      await identifyInstaller(
+        images,
+        manifest,
+        '/Volumes/Spain Assist 1/Spain Assist.app',
+        async () => manifest,
+      ),
+    ).toEqual({ image: '/Desktop/test-v3.dmg', mount: '/Volumes/Spain Assist 1' });
+  });
+
+  it('still checks the manifest of the running volume before recording it', async () => {
+    expect(
+      await identifyInstaller(
+        [image('/Desktop/test.dmg', '/Volumes/Spain Assist')],
+        manifest,
+        '/Volumes/Spain Assist/Spain Assist.app',
+        async () => 'b'.repeat(64),
+      ),
+    ).toBeUndefined();
   });
 
   it('never guesses between identical mounted builds or includes unrelated image types', async () => {
@@ -55,6 +83,7 @@ describe('macOS installer identity and cleanup', () => {
       await identifyInstaller(
         [image('/a.dmg', '/Volumes/A'), image('/b.dmg', '/Volumes/B')],
         manifest,
+        '/private/translocated/Spain Assist.app',
         read,
       ),
     ).toBeUndefined();
@@ -62,6 +91,7 @@ describe('macOS installer identity and cleanup', () => {
       await identifyInstaller(
         [image('/a.sparseimage', '/Volumes/A'), image('/a.dmg', '/private/translocated')],
         manifest,
+        undefined,
         read,
       ),
     ).toBeUndefined();

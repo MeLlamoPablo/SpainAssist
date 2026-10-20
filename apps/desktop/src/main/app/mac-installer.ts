@@ -54,6 +54,7 @@ export async function bundleManifest(bundle: string): Promise<string> {
 export async function identifyInstaller(
   images: DiskImage[],
   manifest: string,
+  sourceBundle?: string,
   readManifest = bundleManifest,
 ): Promise<{ image: string; mount: string } | undefined> {
   const matches: { image: string; mount: string }[] = [];
@@ -70,6 +71,13 @@ export async function identifyInstaller(
       }
     }
   }
+  // Different DMGs can contain the same signed app (for example, artwork-only updates).
+  // Prefer the actual running bundle's volume; retain the unique-manifest fallback for
+  // App Translocation, where the executable path no longer points into /Volumes.
+  const sourceMatches = matches.filter(
+    ({ mount }) => join(mount, 'Spain Assist.app') === sourceBundle,
+  );
+  if (sourceMatches.length === 1) return sourceMatches[0];
   return matches.length === 1 ? matches[0] : undefined;
 }
 
