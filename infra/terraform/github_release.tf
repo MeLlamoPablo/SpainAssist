@@ -20,7 +20,7 @@ resource "github_actions_secret" "release" {
   # By name: for_each can't take a map with sensitive values.
   for_each = toset(keys(local.release_secrets))
 
-  repository      = split("/", var.github_repository)[1]
-  secret_name     = each.key
-  plaintext_value = local.release_secrets[each.key]
+  repository  = split("/", var.github_repository)[1]
+  secret_name = each.key
+  value       = local.release_secrets[each.key]
 }
