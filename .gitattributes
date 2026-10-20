@@ -6,3 +6,5 @@ infra/terraform/terraform.tfvars filter=git-crypt diff=git-crypt
 infra/terraform/terraform.tfstate filter=git-crypt diff=git-crypt
 # Scanner eval fixtures: real ID document photos, recorded scans and their ground truth.
 tools/scan-eval/fixtures/** filter=git-crypt diff=git-crypt
+# Terraform secret files: Apple signing certificate (.p12) and notarization API key (.p8).
+infra/terraform/secrets/** filter=git-crypt diff=git-crypt

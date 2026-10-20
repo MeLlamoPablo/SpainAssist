@@ -11,7 +11,7 @@ Tests must never contact real government sites or paid APIs: use `apps/mock-sede
 - **git-crypt in worktrees**: the key lives only in the main checkout, so in a worktree run git
   with `-c filter.git-crypt.smudge=cat -c filter.git-crypt.clean=cat -c
   filter.git-crypt.required=false` (also for `git worktree remove`), and never stage
-  `infra/terraform/terraform.tfvars` or `terraform.tfstate` there. Only the main checkout
+  `infra/terraform/terraform.tfvars`, `terraform.tfstate` or `infra/terraform/secrets/` there. Only the main checkout
   changes those files.
 - Always work on your own branch/worktree. When your task is done, merge your changes back to the trunk branch automatically, without human consent. Then clean up the worktree. This ensures parallel agents can work on multiple features whilst not adding friction. Never push.
 - The trunk is `master`, the branch checked out in the main checkout. A fresh worktree may be
