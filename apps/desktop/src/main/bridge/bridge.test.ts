@@ -524,6 +524,34 @@ describe('bridge: vault', () => {
   });
 });
 
+describe('bridge: research', () => {
+  it('research.scrub removes vault values and recognizable personal data, not the municipality', async () => {
+    await app.vault.setPersonal(
+      [
+        { key: 'givenName', value: 'Lucía' },
+        { key: 'surname1', value: 'Ferrández' },
+        { key: 'addressMunicipality', value: 'Alcorcón' },
+      ],
+      'manual',
+    );
+    const res = await app.rpc(
+      'research.scrub',
+      {
+        text: 'Renovar el NIE de Lucía Ferrández (X1234567L), vive en Alcorcón, tel. 612 345 678',
+      },
+      token,
+    );
+    expect(res.status).toBe(200);
+    const { text, redactions } = res.body.result;
+    for (const value of ['Lucía', 'Ferrández', 'X1234567L', '612 345 678']) {
+      expect(text).not.toContain(value);
+    }
+    expect(text).toContain('Renovar el NIE de');
+    expect(text).toContain('vive en Alcorcón');
+    expect(redactions).toBeGreaterThanOrEqual(4);
+  });
+});
+
 describe('bridge: downloads', () => {
   async function download(name: string) {
     const path = join(app.dir, name);

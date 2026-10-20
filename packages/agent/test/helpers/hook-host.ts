@@ -102,11 +102,12 @@ if (config.egress) {
 if (config.research === 'key-server') {
   hooks.research = {
     backend: 'key server',
-    tools: ({ language }) => [
+    tools: ({ language, scrub }) => [
       createKeyServerResearchTool({
         keyServerUrl: 'https://research.spain.test',
         apiKey: async () => 'sk-stub-key',
         language,
+        scrub,
         fetch: researchFetch,
       }),
     ],
@@ -114,10 +115,11 @@ if (config.research === 'key-server') {
 } else if (config.research === 'exa') {
   hooks.research = {
     backend: 'exa',
-    tools: ({ language }) =>
+    tools: ({ language, scrub }) =>
       createExaTools({
         apiKey: async () => undefined,
         language,
+        scrub,
         fetch: (async () => {
           throw new Error('not reachable in this test');
         }) as typeof fetch,

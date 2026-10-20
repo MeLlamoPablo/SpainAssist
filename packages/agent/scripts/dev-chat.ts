@@ -113,6 +113,17 @@ const handlers: Record<string, Handler> = {
       vault[item.key] = item.value;
     return { saved: (params.items as { key: string }[]).map((i) => i.key) };
   },
+  // The app scrubs with @sa/pii; here only the in-memory vault's values are removed.
+  'research.scrub': (params) => {
+    let text = String(params.text);
+    let redactions = 0;
+    for (const value of Object.values(vault)) {
+      if (value.length < 3 || !text.includes(value)) continue;
+      redactions += text.split(value).length - 1;
+      text = text.replaceAll(value, '[DATO PERSONAL]');
+    }
+    return { text, redactions };
+  },
   'feedback.search': () => ({ results: [] }),
   'feedback.submit': (params) => {
     console.log(dim(`\n[feedback] ${JSON.stringify(params)}\n`));

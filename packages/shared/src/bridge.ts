@@ -273,6 +273,14 @@ export const BridgeParams = {
   /** Rates a learning from feedback.search (by its id). */
   'feedback.vote': z.object({ id: z.string().min(1).max(64), vote: FeedbackVote }),
 
+  // --- research ----------------------------------------------------------------------------
+  /**
+   * Removes personal data from text the agent host is about to send off the device (web
+   * research queries), like feedback: regex plus exact match against the vault. The host sends
+   * only the returned text, and nothing when this call fails.
+   */
+  'research.scrub': z.object({ text: z.string().max(100_000) }),
+
   // --- agent host internals (not tools) ------------------------------------------------------
   /**
    * Current inference credential for this agent process, in pi-ai `Credential` shape
@@ -370,6 +378,7 @@ export interface BridgeResults {
   'feedback.search': { results: import('./services').FeedbackEntry[] };
   'feedback.submit': { submitted: boolean; id?: string; redactions: number; reason?: string };
   'feedback.vote': { counted: boolean; reason?: string };
+  'research.scrub': { text: string; redactions: number };
   'agent.credential': { credential: Record<string, unknown> | null };
   'agent.refreshCredential': { credential: Record<string, unknown> | null };
   'agent.exaKey': { key: string | null };

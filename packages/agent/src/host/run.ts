@@ -9,6 +9,7 @@ import { parseLiteLLMSpendHeaders } from '../providers/services';
 import { createChatGPTResearchTool } from '../research/chatgpt-research';
 import { createExaTools } from '../research/exa';
 import { createKeyServerResearchTool } from '../research/key-server-research';
+import { bridgeScrub } from '../research/scrub';
 import type { AnyToolDefinition } from '../tools/common';
 import { createAssistantTools, createTools } from '../tools/index';
 import { BridgeCredentialStore } from './credentials';
@@ -92,6 +93,8 @@ export async function runHost(
   // stub (hooks) replaces both the choice and the tools, for procedure agents only.
   const stub = assistant ? undefined : hooks.research;
   const keyServerUrl = config.research.keyServerUrl;
+  // Queries leave the device: the app removes personal data from them first.
+  const scrub = bridgeScrub(bridge);
   const research = stub
     ? stub.backend
     : await researchBackend(
@@ -99,7 +102,7 @@ export async function runHost(
         async () => (await credentials.read(config.model.provider))?.type === 'oauth',
       );
   if (stub) {
-    tools.push(...stub.tools({ config, bridge, language: config.language }));
+    tools.push(...stub.tools({ config, bridge, language: config.language, scrub }));
   } else if (research === 'key server' && keyServerUrl) {
     tools.push(
       createKeyServerResearchTool({
@@ -109,6 +112,7 @@ export async function runHost(
           return credential?.type === 'api_key' ? credential.key : undefined;
         },
         language: config.language,
+        scrub,
       }),
     );
   } else if (research === 'chatgpt') {
@@ -122,6 +126,7 @@ export async function runHost(
           baseUrl: model.baseUrl,
         }),
         language: config.language,
+        scrub,
       }),
     );
   } else if (research === 'exa') {
@@ -129,6 +134,7 @@ export async function runHost(
       ...createExaTools({
         apiKey: async () => (await bridge.call('agent.exaKey', {})).key ?? undefined,
         language: config.language,
+        scrub,
         ...(config.research.exaBaseUrl ? { baseUrl: config.research.exaBaseUrl } : {}),
       }),
     );

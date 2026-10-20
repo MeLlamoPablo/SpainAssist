@@ -4,6 +4,7 @@ import { ResearchMode } from '@sa/shared';
 import { Type } from 'typebox';
 import { defineSaTool, errorResult, StringEnum, textResult } from '../tools/common';
 import { WEB_RESEARCH_TOOL_NAME } from '../tools/names';
+import { anonymizeQuery, type ScrubOutgoing } from './scrub';
 
 const MAX_WAIT_MS = 30 * 60_000;
 
@@ -33,6 +34,8 @@ export interface ChatGPTResearchOptions {
   /** The research model of a mode, configured on the agent's provider. */
   model: (id: string) => Model<Api>;
   language: 'es' | 'en';
+  /** Removes personal data from the query before it is sent. */
+  scrub: ScrubOutgoing;
   models?: Readonly<Record<ResearchMode, ResearchModel>>;
 }
 
@@ -68,7 +71,7 @@ export function createChatGPTResearchTool(options: ChatGPTResearchOptions) {
     name: WEB_RESEARCH_TOOL_NAME,
     label: options.language === 'es' ? 'Investigación en la web' : 'Web research',
     description:
-      "Research a procedure on the web using official sources. This call waits for the final result and streams progress to the app; do not poll or start duplicate research while waiting. Each call uses the user's ChatGPT plan. Include everything known about the user that may matter, anonymized: never names, ID or document numbers, street addresses, phone numbers, emails or exact birth dates.",
+      "Research a procedure on the web using official sources. This call waits for the final result and streams progress to the app; do not poll or start duplicate research while waiting. Each call uses the user's ChatGPT plan. Include everything known about the user that may matter, anonymized: never names, ID or document numbers, street addresses, phone numbers, emails or exact birth dates. The app also removes the personal data it recognizes before sending.",
     parameters: Type.Object({
       query: Type.String({
         minLength: 1,
@@ -97,6 +100,8 @@ export function createChatGPTResearchTool(options: ChatGPTResearchOptions) {
         );
       try {
         requestSignal.throwIfAborted();
+        const anonymized = await anonymizeQuery(options.scrub, params.query, requestSignal);
+        if ('error' in anonymized) return anonymized.error;
         const model = options.model(choice.id);
         const schema = params.outputSchema
           ? `\n\nAnswer only with one JSON value that matches this JSON Schema, with the source URLs inside it:\n${JSON.stringify(params.outputSchema)}`
@@ -108,7 +113,7 @@ export function createChatGPTResearchTool(options: ChatGPTResearchOptions) {
             {
               systemPrompt: INSTRUCTIONS,
               messages: [
-                { role: 'user', content: `${params.query}${schema}`, timestamp: Date.now() },
+                { role: 'user', content: `${anonymized.query}${schema}`, timestamp: Date.now() },
               ],
             },
             {
