@@ -1,0 +1,42 @@
+# Notarizes a signed .app or .dmg with the App Store Connect API key and staples the ticket.
+# Idempotent (notarize.sh): a re-run staples a ticket Apple already issued instead of submitting.
+name: Notarize
+description: Notarizes and staples a signed macOS app or disk image, reusing an earlier run's ticket.
+
+inputs:
+  path:
+    description: The signed .app or .dmg.
+    required: true
+  name:
+    description: Submission name in Apple's notary history, unique per artifact (e.g. SpainAssist-mac-arm64.dmg).
+    required: true
+  api-key:
+    description: The App Store Connect API key (.p8 contents).
+    required: true
+  api-key-id:
+    description: Its Key ID.
+    required: true
+  api-issuer:
+    description: Its Issuer ID.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Notarize ${{ inputs.name }}
+      shell: bash
+      env:
+        APPLE_API_KEY_P8: ${{ inputs.api-key }}
+        APPLE_API_KEY_ID: ${{ inputs.api-key-id }}
+        APPLE_API_ISSUER: ${{ inputs.api-issuer }}
+        TARGET: ${{ inputs.path }}
+        NAME: ${{ inputs.name }}
+      run: |
+        if [[ -z "$APPLE_API_KEY_P8" ]]; then
+          echo "::error::The notarization secrets are missing: apply infra/terraform (github_release.tf)"
+          exit 1
+        fi
+        # notarytool takes the key as a file.
+        export APPLE_API_KEY="$RUNNER_TEMP/AuthKey.p8"
+        printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY"
+        bash "$GITHUB_ACTION_PATH/notarize.sh" "$TARGET" "$NAME"

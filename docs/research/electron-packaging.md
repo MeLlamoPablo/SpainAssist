@@ -243,8 +243,25 @@ doesn't record: measurements, checks in the packaged app, and open points.
 - **Verified 2026-10-20 (local signed build, arm64, 0.3.0-beta).** Notarization succeeds with the
   bundled Chrome for Testing: `spctl -a -t exec` says `accepted, source=Notarized Developer ID`,
   the ticket is stapled to the app, and CfT carries our Developer ID with the hardened runtime.
-  `package:mac` took 13 min, mostly notarization. The dmg itself stays unsigned and unstapled
+  `package:mac` took 13 min, mostly notarization. Its dmg stays unsigned and unstapled
   (`dmg.sign` is off by default); Gatekeeper checks the stapled app inside it.
+- **Releases notarize the dmg too, in four jobs per CPU** (release.yml): sign the .app
+  (`package:mac:app`), notarize it, build dmg + zip from it with `--prepackaged`, notarize the
+  dmg. Each job starts from the previous one's artifact, so re-running a failed notarization
+  never rebuilds. Verified 2026-10-20 (arm64, locally with the jobs' commands):
+  - `ditto -c -k --sequesterRsrc --keepParent` carries the .app between jobs with its signature
+    intact (GitHub's artifact upload alone drops symlinks and permissions).
+  - Tickets are keyed by the signed bytes: `stapler staple` on a fresh copy of the same signed
+    app or dmg fetches the ticket of an earlier, accepted submission, without submitting.
+    `.github/actions/notarize` staples first, then waits for an in-progress submission of the
+    same name, and only then submits.
+  - `--prepackaged <app>` (non-MAS mac) skips pack, signing and notarization: the app's CDHash
+    and stapled ticket are the same inside the dmg and the zip.
+  - A signed but unnotarized dmg is worse than an unsigned one (`spctl -t open` says
+    `rejected, source=Unnotarized Developer ID`); notarized and stapled, it is
+    `accepted, source=Notarized Developer ID`. Each submission took about 2.5 min.
+  - Stapling changes the dmg after electron-builder hashed it into `latest-mac.yml`; the release
+    job hashes every listed file again.
 - **Keychain on the switch to signing.** The safeStorage keychain item was created by an ad-hoc
   build, so the first signed launch asks for the login password to release it (verified: the
   app waits on SecurityAgent). "Always Allow" adds the Developer ID app, and later signed

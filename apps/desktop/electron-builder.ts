@@ -4,6 +4,8 @@
  *   corepack pnpm --filter @sa/desktop package       # installers for this OS and CPU
  *   corepack pnpm --filter @sa/desktop package:dir   # only the unpacked app, to check it
  *   corepack pnpm --filter @sa/desktop package:msix  # the Microsoft Store package (Windows x64)
+ *   corepack pnpm --filter @sa/desktop package:mac:app  # only the signed .app, not notarized:
+ *     release.yml's first macOS step (it notarizes, packages and notarizes the dmg in later jobs)
  *
  * - Package on the OS and CPU you ship for (one CI runner each): native modules such as
  *   @napi-rs/canvas are installed for this machine only, so `beforePack` refuses other targets.

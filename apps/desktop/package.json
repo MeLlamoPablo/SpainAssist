@@ -30,6 +30,7 @@
     "package": "corepack pnpm build && node scripts/package.mjs --publish never",
     "package:dir": "corepack pnpm build && node scripts/package.mjs --dir --publish never",
     "package:mac": "corepack pnpm build && node scripts/package.mjs --mac --publish never",
+    "package:mac:app": "corepack pnpm build && node scripts/package.mjs --mac dir -c.mac.notarize=false --publish never",
     "package:win": "corepack pnpm build && node scripts/package.mjs --win --x64 --publish never",
     "package:linux": "corepack pnpm build && node scripts/package.mjs --linux --x64 --publish never",
     "package:msix": "corepack pnpm build && node scripts/package.mjs --win appx --x64 --publish never",

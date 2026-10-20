@@ -20,8 +20,13 @@
 # Actions secrets `infra/terraform/github_release.tf` sets (CSC_LINK, CSC_KEY_PASSWORD,
 # APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER): without them the macOS builds fail rather
 # than ship unsigned, because signed apps update themselves and Squirrel.Mac only installs updates
-# signed by the same Developer ID. Each macOS runner writes a `latest-mac.yml` for its own CPU; the
-# release merges them into one that lists both zips (electron-updater picks the one for the Mac).
+# signed by the same Developer ID. Each CPU goes through four jobs, each from the previous one's
+# artifact, so a failed or stalled notarization is re-run on its own ("Re-run failed jobs") without
+# rebuilding or resigning anything:
+#   build-mac (sign the .app) -> notarize-app -> package-mac (dmg + zip, signed dmg) -> notarize-dmg
+# The notarize jobs (.github/actions/notarize) staple a ticket Apple already issued for the same
+# bytes before they submit anything. Each CPU writes a `latest-mac.yml`; the release merges them
+# into one that lists both zips (electron-updater picks the one for the Mac).
 # Windows builds are unsigned for now: signing turns on when its secrets are passed as the
 # environment variables `apps/desktop/electron-builder.ts` reads. Linux has no code signing:
 # SHA256SUMS.txt covers the .deb.
@@ -78,12 +83,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS arm64
-            runner: macos-15
-            script: package:mac
-          - name: macOS x64
-            runner: macos-15-intel
-            script: package:mac
           - name: Windows x64
             runner: windows-2025
             script: package:win
@@ -130,45 +129,15 @@ jobs:
       - name: Set the app version from the tag
         working-directory: apps/desktop
         run: npm pkg set version=${{ needs.check.outputs.version }}
-      # notarytool takes the API key as a file (docs/research/electron-packaging.md §6.6).
-      - if: runner.os == 'macOS'
-        name: Write the notarization key
-        env:
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-        run: |
-          if [[ -z "$CSC_LINK" || -z "$APPLE_API_KEY_P8" ]]; then
-            echo "::error::The macOS signing secrets are missing: apply infra/terraform (github_release.tf)"
-            exit 1
-          fi
-          key="$RUNNER_TEMP/AuthKey.p8"
-          printf '%s\n' "$APPLE_API_KEY_P8" > "$key"
-          echo "APPLE_API_KEY=$key" >> "$GITHUB_ENV"
       - name: Package
         env:
-          # electron-builder 26 only finds the identity in CSC_LINK with auto-discovery on (or
-          # CSC_NAME); it then searches only the temporary keychain it imports CSC_LINK into,
-          # never the runner's. Off elsewhere: no identity from a runner's keychain.
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'macOS' }}
-          # macOS only: Windows would take CSC_LINK as its own certificate.
-          CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
-          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
-          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          # Never pick up an identity from a runner's certificate store.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: corepack pnpm --filter @sa/desktop run ${{ matrix.script }}
-      # Both macOS runners write `latest-mac.yml`: keep them apart until the release merges them.
-      - if: runner.os == 'macOS'
-        name: Name the update file after the CPU
-        working-directory: apps/desktop/dist
-        run: mv latest-mac.yml "latest-mac-$(uname -m).yml"
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ runner.os }}-${{ runner.arch }}
           path: |
-            apps/desktop/dist/*.dmg
-            apps/desktop/dist/*.zip
-            apps/desktop/dist/*.zip.blockmap
-            apps/desktop/dist/latest-mac-*.yml
             apps/desktop/dist/*.exe
             apps/desktop/dist/*.exe.blockmap
             apps/desktop/dist/latest.yml
@@ -185,9 +154,173 @@ jobs:
           # Long enough to upload to Partner Center after a release.
           retention-days: 30
 
+  build-mac:
+    name: Build macOS ${{ matrix.arch }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Set the app version from the tag
+        working-directory: apps/desktop
+        run: npm pkg set version=${{ needs.check.outputs.version }}
+      - name: Check the signing secrets
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+        run: |
+          if [[ -z "$CSC_LINK" ]]; then
+            echo "::error::The macOS signing secrets are missing: apply infra/terraform (github_release.tf)"
+            exit 1
+          fi
+      - name: Build and sign the app
+        env:
+          # electron-builder 26 only finds the identity in CSC_LINK with auto-discovery on (or
+          # CSC_NAME); it then searches only the temporary keychain it imports CSC_LINK into,
+          # never the runner's.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: corepack pnpm --filter @sa/desktop run package:mac:app
+      # ditto keeps the bundle's symlinks, permissions and extended attributes; an artifact of the
+      # bare folder would lose them and break the signature.
+      - name: Pack the signed app
+        working-directory: apps/desktop/dist
+        run: ditto -c -k --sequesterRsrc --keepParent mac*/"Spain Assist.app" signed-app.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-app-signed-${{ matrix.arch }}
+          path: apps/desktop/dist/signed-app.zip
+          if-no-files-found: error
+          # Already compressed.
+          compression-level: 0
+          retention-days: 7
+
+  notarize-app:
+    name: Notarize the macOS ${{ matrix.arch }} app
+    needs: build-mac
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    runs-on: macos-15
+    # notarize.sh waits up to 30 min for Apple; a re-run picks up a late ticket.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: mac-app-signed-${{ matrix.arch }}
+          path: ${{ runner.temp }}/signed
+      - name: Unpack the signed app
+        run: ditto -x -k "$RUNNER_TEMP/signed/signed-app.zip" "$RUNNER_TEMP/app"
+      - uses: ./.github/actions/notarize
+        with:
+          path: ${{ runner.temp }}/app/Spain Assist.app
+          name: SpainAssist-mac-${{ matrix.arch }}.app.zip
+          api-key: ${{ secrets.APPLE_API_KEY_P8 }}
+          api-key-id: ${{ secrets.APPLE_API_KEY_ID }}
+          api-issuer: ${{ secrets.APPLE_API_ISSUER }}
+      - name: Pack the notarized app
+        working-directory: ${{ runner.temp }}/app
+        run: ditto -c -k --sequesterRsrc --keepParent "Spain Assist.app" "$RUNNER_TEMP/notarized-app.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-app-notarized-${{ matrix.arch }}
+          path: ${{ runner.temp }}/notarized-app.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  package-mac:
+    name: Package macOS ${{ matrix.arch }}
+    needs: [check, notarize-app]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Set the app version from the tag
+        working-directory: apps/desktop
+        run: npm pkg set version=${{ needs.check.outputs.version }}
+      - uses: actions/download-artifact@v5
+        with:
+          name: mac-app-notarized-${{ matrix.arch }}
+          path: ${{ runner.temp }}/notarized
+      - name: Unpack the notarized app
+        run: ditto -x -k "$RUNNER_TEMP/notarized/notarized-app.zip" "$RUNNER_TEMP/app"
+      # --prepackaged only builds the dmg and zip from the stapled app: no pack, no re-signing
+      # (its signature and ticket stay as notarized). The dmg is signed here and notarized next;
+      # a signed dmg that isn't notarized is worse than an unsigned one, so never ship it alone.
+      - name: Build the dmg and zip
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          corepack pnpm exec electron-builder --mac dmg zip "--$ARCH" \
+            --prepackaged "$RUNNER_TEMP/app/Spain Assist.app" \
+            -c.mac.notarize=false -c.dmg.sign=true --publish never
+          mv dist/latest-mac.yml "dist/latest-mac-$ARCH.yml"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-dist-${{ matrix.arch }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.zip.blockmap
+            apps/desktop/dist/latest-mac-*.yml
+          if-no-files-found: error
+          retention-days: 7
+
+  notarize-dmg:
+    name: Notarize the macOS ${{ matrix.arch }} dmg
+    needs: package-mac
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: mac-dist-${{ matrix.arch }}
+          path: ${{ runner.temp }}/installers
+      - uses: ./.github/actions/notarize
+        with:
+          path: ${{ runner.temp }}/installers/SpainAssist-mac-${{ matrix.arch }}.dmg
+          name: SpainAssist-mac-${{ matrix.arch }}.dmg
+          api-key: ${{ secrets.APPLE_API_KEY_P8 }}
+          api-key-id: ${{ secrets.APPLE_API_KEY_ID }}
+          api-issuer: ${{ secrets.APPLE_API_ISSUER }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-macOS-${{ matrix.arch }}
+          path: ${{ runner.temp }}/installers/*
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: Publish the release
-    needs: [check, build]
+    needs: [check, build, notarize-dmg]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -198,11 +331,18 @@ jobs:
           path: installers
           merge-multiple: true
       # electron-updater on a Mac reads one `latest-mac.yml`, and picks the arm64 or x64 zip in it.
+      # Stapling changed each dmg after electron-builder hashed it: hash every listed file again.
       - name: Merge the macOS update files
         working-directory: installers
         run: |
-          yq '.files += load("latest-mac-arm64.yml").files' latest-mac-x86_64.yml > latest-mac.yml
-          rm latest-mac-arm64.yml latest-mac-x86_64.yml
+          yq '.files += load("latest-mac-arm64.yml").files' latest-mac-x64.yml > latest-mac.yml
+          rm latest-mac-arm64.yml latest-mac-x64.yml
+          for url in $(yq '.files[].url' latest-mac.yml); do
+            export URL=$url
+            export SHA=$(openssl dgst -sha512 -binary "$url" | base64 -w0)
+            export SIZE=$(stat -c %s "$url")
+            yq -i '(.files[] | select(.url == strenv(URL))) |= (.sha512 = strenv(SHA) | .size = env(SIZE))' latest-mac.yml
+          done
           cat latest-mac.yml
       - name: Write checksums
         working-directory: installers
