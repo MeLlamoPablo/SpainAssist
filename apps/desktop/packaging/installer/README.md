@@ -5,6 +5,8 @@ The supplied `shader.png` is the user's exported “Background Shader@3x.png”.
 
 - `dmg.html` reproduces screen 01 without Finder's title bar, app icon or filename.
   Finder supplies the real draggable/openable app at (360, 260), with a 112 pt icon.
+  A 200 pt cream card (`#f2eae0`, 24 pt corners, black `0 10px 30px` shadow)
+  sits behind the icon and Finder's black filename, matching the Framer design.
 - `progress.html` reproduces screen 04 beneath the native title bar. It has an
   indeterminate CSS animation and respects reduced motion.
 - `background.tiff` contains 1× and 2× representations at 720 × 442 pt. `background.png`
