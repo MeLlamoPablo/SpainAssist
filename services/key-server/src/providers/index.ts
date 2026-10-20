@@ -12,6 +12,7 @@ export function createProvisioner(config: ServerConfig): KeyProvisioner {
         models: litellm.keyModels,
         searchTools: config.searchTools,
         deciderModel: config.deciderModel,
+        voucherDeciderModel: config.voucherDeciderModel,
       })
     : new MockProvisioner({ baseUrl: config.mockLlmBaseUrl });
 }

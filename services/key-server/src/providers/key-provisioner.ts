@@ -188,8 +188,10 @@ export interface LiteLLMProvisionerOptions {
   models?: readonly string[];
   /** Search tools voucher keys may call. Empty: every search tool on the proxy. */
   searchTools?: readonly string[];
-  /** OpenRouter id of the scan decider: the only model of decider keys. */
+  /** OpenRouter id of the scan decider of ChatGPT users: the only model of decider keys. */
   deciderModel: string;
+  /** The scan decider of voucher users, added to voucher keys' models. Default: deciderModel. */
+  voucherDeciderModel?: string;
   fetch?: FetchLike;
   timeoutMs?: number;
 }
@@ -245,6 +247,7 @@ export class LiteLLMProvisioner implements KeyProvisioner {
 
   async create(request: ProvisionKeyRequest): Promise<ProvisionedKey> {
     const { deciderModel } = this.options;
+    const voucherDecider = this.options.voucherDeciderModel ?? deciderModel;
     const voucherModels = this.options.models ?? [];
     // LiteLLM checks the body's `model` on pass-through routes too, so the decider must be in
     // the list, like the call-transcription model. An empty list means every model.
@@ -252,7 +255,7 @@ export class LiteLLMProvisioner implements KeyProvisioner {
       request.scope === 'decider'
         ? [deciderModel, TRANSCRIPTION_MODEL]
         : voucherModels.length > 0
-          ? [...new Set([...voucherModels, deciderModel, TRANSCRIPTION_MODEL])]
+          ? [...new Set([...voucherModels, voucherDecider, TRANSCRIPTION_MODEL])]
           : [];
     const body: Record<string, unknown> = {
       key_alias: request.alias,

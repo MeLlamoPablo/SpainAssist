@@ -45,11 +45,12 @@ export {
   revokeChatGPTCredential,
 } from './providers/chatgpt';
 export {
-  ASSISTANT_MODELS,
-  DEFAULT_MODELS,
+  BUNDLED_MODEL_LISTS,
   type FixedModel,
   listByokProviders,
   listProviderModels,
+  type ModelLists,
+  parseModelLists,
 } from './providers/models';
 export {
   getChatGPTKey,

@@ -1,4 +1,4 @@
-import { CustomApi, Language, ThinkingLevel } from '@sa/shared';
+import { CustomApi, Language, ResearchMode, ThinkingLevel } from '@sa/shared';
 import { z } from 'zod';
 
 /**
@@ -58,6 +58,13 @@ export const AgentHostConfigSchema = z.object({
        * (bridge `agent.exaKey`), never through this config.
        */
       exa: z.boolean().optional(),
+      /**
+       * ChatGPT plans: the model and reasoning effort of each `web_research` mode, those of the
+       * models file the account's plan offers. Default: each mode's first bundled model.
+       */
+      chatgptModels: z
+        .record(ResearchMode, z.object({ id: z.string().min(1), thinkingLevel: ThinkingLevel }))
+        .optional(),
       /** Exa MCP base URL override (tests). Default https://mcp.exa.ai. */
       exaBaseUrl: z.string().url().optional(),
       /** BOE open-data API base URL override (tests). */

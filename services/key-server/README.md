@@ -258,10 +258,9 @@ logged at $0, pass-through for virtual keys is Enterprise-only), so the key serv
 | `LITELLM_ADMIN_URL` | unset | LiteLLM base URL for the admin API, without `/v1` (internal, e.g. `http://litellm:4000`). Unset = mock keys |
 | `LITELLM_MASTER_KEY` | unset | LiteLLM master key. **Required** with `LITELLM_ADMIN_URL`. Sent only to the admin API, never logged |
 | `LITELLM_PUBLIC_URL` | `LITELLM_ADMIN_URL` | Base URL handed to clients, without `/v1` (they get `${LITELLM_PUBLIC_URL}/v1`) |
-| `LITELLM_KEY_MODELS` | empty (all models) | Comma-separated LiteLLM model names voucher keys may call. Include the app's voucher model (`DEFAULT_MODELS.voucher` in `@sa/agent`) and `anthropic/claude-haiku-5.5` (document scanning). Keep it empty in production |
+| `LITELLM_KEY_MODELS` | empty (all models) | Comma-separated LiteLLM model names voucher keys may call. Include every voucher model of the models file (`models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`), the document scanner's included. Keep it empty in production |
 | `LITELLM_SEARCH_TOOLS` | empty (all tools) | Comma-separated LiteLLM search tool names keys may call; also told to clients as `searchTools` |
 | `KEY_TTL_DAYS` | `180` | Lifetime of a key from a voucher with no `expiresAt` (`0` = no expiry); a voucher's own `expiresAt` always wins |
-| `DECIDER_MODEL` | `~perplexity/pplx-decider-flash-latest` | OpenRouter id of the scan decider; added to voucher keys' models, the only model of ChatGPT keys. When it changes, the server gives the ChatGPT keys and their team the new model at startup (once per model list) |
 | `CHATGPT_KEYS` | `1` | `0` disables `POST /v1/chatgpt-keys` |
 | `KEY_ENCRYPTION_KEY` | dev key (PGlite only) | 32 random bytes as 64 hex characters or base64 (`openssl rand -hex 32`). Encrypts stored ChatGPT keys; changing it makes them unreadable. Without it on Postgres, ChatGPT keys are disabled (warning at startup) |
 | `CHATGPT_DAILY_BUDGET_USD` | `0.10` | Per-account cap per UTC day |
@@ -285,6 +284,15 @@ The LiteLLM proxy itself must not keep prompts or answers:
 Expose only the routes clients need (`/v1/chat/completions`, `/v1/models`, `/v1/search/*`,
 exactly `/openrouter/alpha/decisions`, `/key/info`) at the public reverse proxy; the admin API
 stays internal.
+
+The scan deciders are not settings: the server reads them from the repository's models file
+(`models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`), the file every app reads too, so keys always allow the decider the app calls.
+`voucher.decider` is added to voucher keys' models, `chatgpt.decider` is the only model of ChatGPT
+keys. When it changes, the server gives the ChatGPT keys and their team the new model at startup
+(once per model list); existing voucher keys keep theirs, which only matters when
+`LITELLM_KEY_MODELS` is set (production leaves it empty: every model). A push that changes the
+file redeploys the server (`watch_paths` in `infra/terraform/coolify.tf`). A new decider also needs
+a price in the gateway (below) before the file names it.
 
 Keys' budgets only fill if LiteLLM knows each model's price. LiteLLM v1.104's price map has no
 `openrouter/~perplexity/pplx-decider-flash-latest`, and a `model_list` entry does not help

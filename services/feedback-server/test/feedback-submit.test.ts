@@ -87,7 +87,7 @@ describe('POST /v1/feedback', () => {
     ['missing author', submission({ author: undefined })],
     ['"human" author (only admin edits write it)', submission({ author: 'human' })],
     ['author without a reasoning level', submission({ author: 'gpt-6.1-sol' })],
-    ['author with an unknown level', submission({ author: 'gpt-6.1-sol · max' })],
+    ['author with an unknown level', submission({ author: 'gpt-6.1-sol · ultra' })],
     ['author with markup', submission({ author: '<b>x</b> · high' })],
     ['long author', submission({ author: `${'m'.repeat(101)} · high` })],
   ])('rejects %s with 400', async (_name, body) => {

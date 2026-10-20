@@ -1,4 +1,4 @@
-import { ASSISTANT_MODELS, DEFAULT_MODELS, type PiCredential } from '@sa/agent';
+import { BUNDLED_MODEL_LISTS, type PiCredential } from '@sa/agent';
 import type { HeadlessApp } from '@sa/desktop/headless';
 import { describe, expect, it } from 'vitest';
 import type { EvalAppDeps } from '../../../src/contracts';
@@ -95,11 +95,9 @@ describe('the stubbed provider flows', () => {
 });
 
 describe('the models', () => {
-  it("are the product's by default, the orchestrator's at high effort", () => {
+  it("are the product's models file by default", () => {
     const lib = createProviderLib('voucher', models, deps({ type: 'api_key', key: KEY }));
-    expect(lib.defaultModels).toEqual(DEFAULT_MODELS);
-    expect(lib.assistantModels).toEqual(ASSISTANT_MODELS);
-    expect(lib.assistantModels.voucher.thinkingLevel).toBe('high');
+    expect(lib.modelLists).toEqual(BUNDLED_MODEL_LISTS);
   });
 
   it('take the ids the run asks for, keeping the effort of the role', () => {
@@ -112,15 +110,19 @@ describe('the models', () => {
       },
       deps({ type: 'api_key', key: KEY }),
     );
-    expect(lib.defaultModels).toEqual({
-      chatgpt: 'openai/gpt-6-luna',
-      voucher: 'openai/gpt-6-luna',
+    const { chatgpt, voucher } = BUNDLED_MODEL_LISTS;
+    expect(lib.modelLists.voucher).toEqual({
+      procedures: [{ ...voucher.procedures[0], id: 'openai/gpt-6-luna' }],
+      assistant: [{ ...voucher.assistant[0], id: 'anthropic/claude-sonnet-5.5' }],
+      // The scanner and the decider keep the product's models.
+      scanner: voucher.scanner,
+      decider: voucher.decider,
     });
-    expect(lib.assistantModels.voucher).toEqual({
-      ...ASSISTANT_MODELS.voucher,
-      id: 'anthropic/claude-sonnet-5.5',
-    });
-    expect(lib.assistantModels.voucher.thinkingLevel).toBe('high');
+    expect(lib.modelLists.chatgpt.procedures).toEqual([
+      { ...chatgpt.procedures[0], id: 'openai/gpt-6-luna' },
+    ]);
+    // Research keeps the product's lists.
+    expect(lib.modelLists.chatgpt.research).toEqual(chatgpt.research);
   });
 });
 

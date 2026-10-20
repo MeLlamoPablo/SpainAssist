@@ -6,7 +6,6 @@ import { MockProvisioner } from '../src/providers/key-provisioner';
 import { ensureDemoVoucher } from '../src/vouchers';
 import {
   ADMIN_TOKEN,
-  DECIDER_MODEL,
   errorCode,
   fakeLiteLLM,
   freshDb,
@@ -79,6 +78,7 @@ describe('POST /v1/vouchers/redeem', () => {
       provisioner: litellmProvisioner(upstream.fetch, {
         models: ['openai/gpt-6-luna', 'moonshotai/kimi-k2.6'],
         searchTools: ['exa', 'parallel'],
+        voucherDeciderModel: 'perplexity/voucher-decider',
       }),
       config: { searchTools: ['exa', 'parallel'] },
     });
@@ -108,8 +108,13 @@ describe('POST /v1/vouchers/redeem', () => {
       key_alias: `sa-voucher-${voucherId}`,
       max_budget: 7.5,
       duration: expect.stringMatching(/^1555\d{4}s$/), // KEY_TTL_DAYS (180) in seconds
-      // The scan decider is always allowed: voucher scans are screened on the voucher's budget.
-      models: ['openai/gpt-6-luna', 'moonshotai/kimi-k2.6', DECIDER_MODEL, TRANSCRIPTION_MODEL],
+      // The voucher scan decider is always allowed: scans are screened on the voucher's budget.
+      models: [
+        'openai/gpt-6-luna',
+        'moonshotai/kimi-k2.6',
+        'perplexity/voucher-decider',
+        TRANSCRIPTION_MODEL,
+      ],
       allowed_routes: [
         '/v1/chat/completions',
         '/v1/models',

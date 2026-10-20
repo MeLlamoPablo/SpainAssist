@@ -3,6 +3,7 @@
  * provider flow. The credential is the synthetic login of replay mode and the backend is the mock's.
  */
 
+import { BUNDLED_MODEL_LISTS } from '@sa/agent';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PendingPrompt } from '../../../src/contracts';
 import { vidaScenario } from './scripts';
@@ -83,10 +84,17 @@ browserSuite('a Codex run', () => {
       );
       expect(assistant.length).toBeGreaterThan(0);
       expect(procedure.length).toBeGreaterThan(0);
-      expect(new Set(assistant.map((b) => b.model))).toEqual(new Set(['gpt-6-luna']));
-      expect(new Set(procedure.map((b) => b.model))).toEqual(new Set(['gpt-6.1-sol']));
-      expect(new Set(assistant.map((b) => b.reasoning?.effort))).toEqual(new Set(['high']));
-      expect(new Set(procedure.map((b) => b.reasoning?.effort))).toEqual(new Set(['medium']));
+      // Codex runs each list's first model of the models file.
+      const [orchestrator] = BUNDLED_MODEL_LISTS.chatgpt.assistant;
+      const [agent] = BUNDLED_MODEL_LISTS.chatgpt.procedures;
+      expect(new Set(assistant.map((b) => b.model))).toEqual(new Set([orchestrator?.id]));
+      expect(new Set(procedure.map((b) => b.model))).toEqual(new Set([agent?.id]));
+      expect(new Set(assistant.map((b) => b.reasoning?.effort))).toEqual(
+        new Set([orchestrator?.thinkingLevel]),
+      );
+      expect(new Set(procedure.map((b) => b.reasoning?.effort))).toEqual(
+        new Set([agent?.thinkingLevel]),
+      );
       // Both agents are metered under their own keys, as for vouchers.
       expect(stack.run.agentKeys().sort()).toEqual(['assistant', `procedure-${procedureId}`]);
     });

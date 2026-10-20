@@ -24,6 +24,8 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 
 # 2. Sources (see Dockerfile.dockerignore: no host node_modules or local data).
 COPY tsconfig.base.json ./
+# The models file: keys allow the scan deciders it names (src/config.ts).
+COPY models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json ./
 COPY packages/shared/ packages/shared/
 COPY services/key-server/ services/key-server/
 

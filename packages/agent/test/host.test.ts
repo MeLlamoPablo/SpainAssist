@@ -94,6 +94,21 @@ describe('buildAgentLaunch', () => {
     expect(parseHostConfig(JSON.stringify(config)).research).toEqual({});
   });
 
+  it("takes every research mode's model of a ChatGPT plan, or none", () => {
+    const chatgptModels = {
+      fast: { id: 'gpt-6-luna', thinkingLevel: 'high' },
+      balanced: { id: 'gpt-5.6-terra', thinkingLevel: 'high' },
+      deep: { id: 'gpt-5.6-terra', thinkingLevel: 'max' },
+    } as const;
+    expect(parseHostConfig({ ...config, research: { chatgptModels } }).research).toEqual({
+      chatgptModels,
+    });
+    const { deep: _, ...partial } = chatgptModels;
+    expect(() => parseHostConfig({ ...config, research: { chatgptModels: partial } })).toThrow(
+      /Invalid agent host config/,
+    );
+  });
+
   it('keeps the DNIe through the phone off unless the app turns it on', () => {
     expect(parseHostConfig(config).dniePhone).toBe(false);
     expect(parseHostConfig({ ...config, dniePhone: true }).dniePhone).toBe(true);

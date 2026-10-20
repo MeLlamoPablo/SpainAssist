@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { Api, Credential, Model } from '@earendil-works/pi-ai';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { configureModel } from '@sa/agent';
-import { postalCodeProvince } from '@sa/shared';
+import { postalCodeProvince, type ThinkingLevel } from '@sa/shared';
 import { z } from 'zod';
 import type { DocumentFields, ScanGuidance, ScannerEvent, ScannerStatus } from '../../scanner';
 import type { Logger } from '../core/logger';
@@ -24,16 +24,20 @@ import { ScanTranscript } from './transcript';
 /** How long a present but illegible document must last before the lighting hint shows. */
 const LEGIBILITY_HELP_DELAY_MS = 5_000;
 
-/** Scan model of OpenAI API keys and Codex connections, with low reasoning. */
+/**
+ * Scan model of OpenAI API keys, with low reasoning. ChatGPT, Codex and vouchers scan with the
+ * models file's scanner model, at its reasoning level.
+ */
 const OPENAI_SCANNER_MODEL = 'gpt-6.1-sol';
-/** Scan model of vouchers (our LiteLLM gateway), with low reasoning. */
-const VOUCHER_SCANNER_MODEL = 'anthropic/claude-haiku-5.5';
-/** Models that cannot turn reasoning off and scan with their lowest effort instead. */
+/**
+ * Models of API keys and custom endpoints that cannot turn reasoning off, and scan with their
+ * lowest effort instead.
+ */
 const LOWEST_SCAN_REASONING: Record<string, 'minimal' | 'low'> = {
   'google/gemini-3.5-flash-lite': 'minimal',
   // Sol's and Haiku 5.5's reasoning is mandatory; low is their lowest effort.
   [OPENAI_SCANNER_MODEL]: 'low',
-  [VOUCHER_SCANNER_MODEL]: 'low',
+  'anthropic/claude-haiku-5.5': 'low',
 };
 
 export const scanImageSchema = z
@@ -54,16 +58,21 @@ interface LiveScan {
   screening?: ScanScreening;
 }
 
-const lowestScanReasoning = (model: Model<Api>) => LOWEST_SCAN_REASONING[model.id];
+/**
+ * The reasoning effort a scan runs at: the scanner model's level (models file), else the lowest
+ * effort of a model that cannot turn reasoning off, else off.
+ */
+function scanEffort(model: Model<Api>, level?: ThinkingLevel): ThinkingLevel {
+  return level ?? LOWEST_SCAN_REASONING[model.id] ?? 'off';
+}
 
 /**
- * Reasoning options of scan requests. Other than the lowest-effort models, no reasoning option is
- * pi's explicit off mode; OpenAI-compatible endpoints that pi cannot describe (custom endpoints, our LiteLLM
+ * Reasoning options of scan requests at `effort`. Off, no reasoning option is pi's explicit off
+ * mode; OpenAI-compatible endpoints that pi cannot describe (custom endpoints, our LiteLLM
  * gateway) also get an explicit `none` effort.
  */
-export function scanReasoning(model: Model<Api>) {
-  const lowest = lowestScanReasoning(model);
-  if (lowest) return { reasoning: lowest };
+export function scanReasoning(model: Model<Api>, effort: ThinkingLevel = scanEffort(model)) {
+  if (effort !== 'off') return { reasoning: effort };
   if (model.provider !== 'custom' && model.provider !== 'litellm') return {};
   return {
     onPayload: (payload: unknown) => {
@@ -111,15 +120,12 @@ export class DocumentScanner {
   }
 
   private async prepare() {
-    const selected = await this.providers.agentModel();
-    // ChatGPT accounts scan with the model their plan offers, which agentModel() picked.
+    // ChatGPT (the model its plan offers), Codex and vouchers: the models file's scanner model.
+    const selected = await this.providers.agentModel('scanner');
     const cfg =
-      selected.provider === 'openai-codex' ||
-      (selected.provider === 'openai' && this.providers.status().kind !== 'chatgpt')
+      selected.provider === 'openai' && this.providers.status().kind !== 'chatgpt'
         ? { ...selected, id: OPENAI_SCANNER_MODEL }
-        : selected.provider === 'litellm'
-          ? { ...selected, id: VOUCHER_SCANNER_MODEL }
-          : selected;
+        : selected;
     const credential = (await this.providers.refreshCredential(cfg.provider)) as
       | Credential
       | undefined;
@@ -137,22 +143,23 @@ export class DocumentScanner {
     });
     // Custom endpoints read images only when the user's settings say the model accepts them.
     const model = configureModel(runtime, cfg);
-    return { runtime, model };
+    return { runtime, model, effort: scanEffort(model, cfg.thinkingLevel) };
   }
 
-  private supportsScanMode(model: Model<Api>): boolean {
-    return !!lowestScanReasoning(model) || canScanWithoutReasoning(model);
+  /** Scans run at a set effort, or with reasoning off: a model must be able to. */
+  private supportsScanMode(model: Model<Api>, effort: ThinkingLevel): boolean {
+    return effort !== 'off' || canScanWithoutReasoning(model);
   }
 
   async status(): Promise<ScannerStatus> {
     if (!this.providers.status().configured) return { available: false, reason: 'no_provider' };
     try {
-      const { model } = await this.prepare();
+      const { model, effort } = await this.prepare();
       return {
-        available: model.input.includes('image') && this.supportsScanMode(model),
+        available: model.input.includes('image') && this.supportsScanMode(model, effort),
         reason: !model.input.includes('image')
           ? 'no_vision'
-          : !this.supportsScanMode(model)
+          : !this.supportsScanMode(model, effort)
             ? 'no_fast_mode'
             : undefined,
         provider: this.providers.status().label,
@@ -270,11 +277,10 @@ export class DocumentScanner {
     );
     const screening = live.screening;
     try {
-      const { runtime, model } = await this.prepare();
+      const { runtime, model, effort } = await this.prepare();
       if (!model.input.includes('image')) throw new Error('no_vision');
-      // Other than the lowest-effort models, require reasoning off.
-      if (!this.supportsScanMode(model)) throw new Error('no_fast_mode');
-      await transcript.initialize(model.id, model.provider, lowestScanReasoning(model) ?? 'off');
+      if (!this.supportsScanMode(model, effort)) throw new Error('no_fast_mode');
+      await transcript.initialize(model.id, model.provider, effort);
       initialized = true;
       const captureFrame = (captureSignal = signal) =>
         new Promise<string[]>((resolve, reject) => {
@@ -333,7 +339,7 @@ export class DocumentScanner {
             try {
               const response = await runtime.completeSimple(model, context, {
                 maxTokens: 1800,
-                ...scanReasoning(model),
+                ...scanReasoning(model, effort),
                 signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
               });
               if (response.stopReason === 'error' || response.stopReason === 'aborted')
@@ -418,7 +424,7 @@ export class DocumentScanner {
       throw new Error(en ? 'A document is already being read.' : 'Ya estoy leyendo un documento.');
     this.busy = true;
     try {
-      const { runtime, model } = await this.prepare();
+      const { runtime, model, effort } = await this.prepare();
       if (!model.input.includes('image')) throw new Error('no_vision');
       const response = await runtime.completeSimple(
         model,
@@ -440,7 +446,7 @@ export class DocumentScanner {
         {
           maxTokens: 1500,
           signal: AbortSignal.timeout(60_000),
-          ...scanReasoning(model),
+          ...scanReasoning(model, effort),
         },
       );
       if (response.stopReason === 'error' || response.stopReason === 'aborted')

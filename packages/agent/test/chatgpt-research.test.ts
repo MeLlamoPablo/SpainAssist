@@ -1,6 +1,8 @@
 import type { Api, AssistantMessage, Model } from '@earendil-works/pi-ai';
 import type { ExtensionToolContext, ModelRuntime } from '@earendil-works/pi-coding-agent';
+import { ResearchMode } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
+import { BUNDLED_MODEL_LISTS, type FixedModel } from '../src/providers/defaults';
 import {
   CHATGPT_RESEARCH_MODELS,
   createChatGPTResearchTool,
@@ -55,11 +57,15 @@ function fakeRuntime(reply: Partial<AssistantMessage>, events: unknown[] = []) {
   return { runtime, sent };
 }
 
-function tool(runtime: Pick<ModelRuntime, 'streamSimple'>) {
+function tool(
+  runtime: Pick<ModelRuntime, 'streamSimple'>,
+  models?: Record<ResearchMode, FixedModel>,
+) {
   return createChatGPTResearchTool({
     runtime,
     model: (id) => ({ id, provider: 'openai' }) as Model<Api>,
     language: 'es',
+    ...(models ? { models } : {}),
   });
 }
 
@@ -79,13 +85,10 @@ describe('web research on a ChatGPT plan', () => {
     expect(description).not.toMatch(/\b(fast|balanced|deep|mode)\b/i);
   });
 
-  it.each([
-    ['fast', 'gpt-6-luna', 'high'],
-    ['balanced', 'gpt-6.1-sol', 'high'],
-    ['deep', 'gpt-6-astra', 'high'],
-  ] as const)(
-    'runs %s research on %s with %s effort and OpenAI web search',
-    async (mode, id, effort) => {
+  it.each(ResearchMode.options)(
+    'runs %s research on the first model of its bundled list, with OpenAI web search',
+    async (mode) => {
+      const { id, thinkingLevel: effort } = BUNDLED_MODEL_LISTS.chatgpt.research[mode][0]!;
       expect(CHATGPT_RESEARCH_MODELS[mode]).toEqual({ id, thinkingLevel: effort });
       const fake = fakeRuntime(answer('Información oficial'));
       await tool(fake.runtime).execute(
@@ -106,6 +109,27 @@ describe('web research on a ChatGPT plan', () => {
       });
     },
   );
+
+  it("runs on the models the app picked from the account's plan", async () => {
+    const models: Record<ResearchMode, FixedModel> = {
+      fast: { id: 'gpt-plan-fast', thinkingLevel: 'low' },
+      balanced: { id: 'gpt-plan-balanced', thinkingLevel: 'max' },
+      deep: { id: 'gpt-plan-deep', thinkingLevel: 'off' },
+    };
+    for (const mode of ['balanced', 'deep'] as const) {
+      const fake = fakeRuntime(answer('Información oficial'));
+      await tool(fake.runtime, models).execute(
+        'call',
+        { query: 'renovar el permiso', mode },
+        undefined,
+        undefined,
+        ctx,
+      );
+      expect(fake.sent[0]!.model.id).toBe(models[mode].id);
+      // "off" sends no reasoning effort: pi has no such option.
+      expect(fake.sent[0]!.options.reasoning).toBe(mode === 'deep' ? undefined : 'max');
+    }
+  });
 
   it('returns the answer with its cited sources and reports searches as progress', async () => {
     const fake = fakeRuntime(answer('Cita previa en la DGT.'), [

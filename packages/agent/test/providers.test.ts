@@ -15,7 +15,11 @@ import {
   refreshOAuthCredential,
   revokeChatGPTCredential,
 } from '../src/providers/chatgpt';
-import { DEFAULT_MODELS, listByokProviders, listProviderModels } from '../src/providers/models';
+import {
+  BUNDLED_MODEL_LISTS,
+  listByokProviders,
+  listProviderModels,
+} from '../src/providers/models';
 import {
   getChatGPTKey,
   getVoucherCredit,
@@ -664,7 +668,7 @@ describe('vouchers, credit and models', () => {
 describe('provider catalogue', () => {
   it('lists the models of one provider, including the legacy Codex one', () => {
     const codex = listProviderModels('openai-codex');
-    expect(codex.map((m) => m.id)).toContain(DEFAULT_MODELS.chatgpt);
+    expect(codex.map((m) => m.id)).toContain(BUNDLED_MODEL_LISTS.chatgpt.procedures[0]?.id);
     expect(new Set(codex.map((m) => m.provider))).toEqual(new Set(['openai-codex']));
     expect(listProviderModels('no-such-provider')).toEqual([]);
   });

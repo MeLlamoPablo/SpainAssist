@@ -129,7 +129,11 @@ locals {
       name        = "key-server"
       port        = "8787"
       hosts       = local.all_hosts.keys
-      watch_paths = concat(["services/key-server/**"], local.workspace_paths)
+      # The models file names the scan deciders keys allow (services/key-server/src/config.ts).
+      watch_paths = concat(
+        ["services/key-server/**", "models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json"],
+        local.workspace_paths,
+      )
     }
     feedback_server = {
       name        = "feedback-server"

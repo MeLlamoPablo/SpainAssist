@@ -93,7 +93,7 @@ Every learning records who wrote it, in `author` (returned by search, MCP and th
 - **an agent**: `<model id> · <reasoning level>`, e.g. `gpt-6-luna · high` or
   `anthropic/claude-haiku-5.5 · medium`. The model id is the one the app runs the procedure agent
   with (BYOK and custom endpoints: the user's model), the level one of `off`, `minimal`, `low`,
-  `medium`, `high`, `xhigh` (pi may clamp it to what the model supports; custom endpoints without
+  `medium`, `high`, `xhigh`, `max` (pi may clamp it to what the model supports; custom endpoints without
   reasoning run at `off`). The app sets it (`agentAuthor()` in `@sa/shared`); the agent's tool
   arguments cannot change it. Submissions must carry one (`AgentAuthor`: model id up to 100
   characters of letters, digits and `_ . : / @ + -`); anything else, `human` included, is

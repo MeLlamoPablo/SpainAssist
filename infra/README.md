@@ -242,7 +242,8 @@ only changes its DSN.
 
 - **Deploy new code**: push to `git_branch` (`master`). A GitHub webhook
   (`github_repository_webhook.coolify`, signed with `github_webhook_secret`) tells Coolify,
-  which redeploys each app whose `watch_paths` the push touched: its `services/<name>/**`, the
+  which redeploys each app whose `watch_paths` the push touched (the key server also watches
+  `models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`, for its scan deciders): its `services/<name>/**`, the
   workspace packages it uses, the root manifests and the lockfile. A commit message with
   `[skip ci]` skips the deploy. To redeploy without a push, change `deploy_revision` and apply,
   or press *Redeploy* in Coolify. Webhook deploys cause no Terraform drift (apps track the

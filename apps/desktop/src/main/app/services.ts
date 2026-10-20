@@ -46,6 +46,7 @@ import type {
 import { ProcedureService } from '../procedures/service';
 import { ProcedureStore } from '../procedures/store';
 import { ProviderManager } from '../providers/manager';
+import { ModelListsSource } from '../providers/model-lists';
 import { FeedbackService } from '../remote/feedback';
 import type { FetchFn } from '../remote/http';
 import { AppStateStore, SettingsStore } from '../settings/store';
@@ -245,6 +246,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
           keyServerUrl: env.keyServerUrl,
           // BYOK and custom endpoints research with Exa, keyless or with the user's key.
           ...(providers.researchesWithExa() ? { exa: true } : {}),
+          // ChatGPT plans research on the models their plan offers.
+          ...(isAssistant ? {} : { chatgptModels: await providers.researchModels() }),
         },
         // Community learnings respect the sharing setting at call time. Sharing and rating also
         // need a user key (one vote per user and learning), which the server checks.
@@ -276,6 +279,13 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     state,
     vault: vaultFn,
     lib: deps.providerLib,
+    models: new ModelListsSource({
+      url: env.modelListsUrl,
+      fetch: deps.fetch,
+      lib: deps.providerLib,
+      logger: logger.child('models'),
+      clock,
+    }),
     fetch: deps.fetch,
     events,
     openExternal: deps.openExternal,

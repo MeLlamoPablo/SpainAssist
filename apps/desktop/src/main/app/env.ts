@@ -63,6 +63,11 @@ export interface SaEnv {
   featureFlags?: string[];
   /** Unleash frontend token: the production environment's in packaged builds, else development's. */
   flagsToken: string;
+  /**
+   * Where the latest models file is read: packaged builds only. Development builds and e2e runs
+   * use the bundled one, so they run the working copy's file.
+   */
+  modelListsUrl?: string;
   extraTrustedHosts: string[];
   browserHeadless?: boolean;
   browserExecutable?: string;
@@ -175,6 +180,7 @@ export function parseEnv(input: NodeJS.ProcessEnv, opts: { packaged?: boolean } 
       .map((s) => s.trim())
       .filter(Boolean),
     flagsToken: PRODUCTION_SERVICES.flagsTokens[opts.packaged ? 'production' : 'development'],
+    modelListsUrl: opts.packaged ? PRODUCTION_SERVICES.modelListsUrl : undefined,
     extraTrustedHosts: (env.SA_EXTRA_TRUSTED_HOSTS ?? '')
       .split(',')
       .map((s) => s.trim().toLowerCase())

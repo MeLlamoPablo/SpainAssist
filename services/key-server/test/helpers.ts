@@ -55,6 +55,7 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     keyTtlDays: 180,
     searchTools: [],
     deciderModel: DECIDER_MODEL,
+    voucherDeciderModel: DECIDER_MODEL,
     chatgptKeys: {
       enabled: true,
       dailyBudgetUsd: 0.1,
@@ -373,6 +374,7 @@ export function litellmProvisioner(
     masterKey: MASTER_KEY,
     publicUrl: 'https://llm.example.org',
     deciderModel: DECIDER_MODEL,
+    voucherDeciderModel: DECIDER_MODEL,
     fetch,
     ...options,
   });

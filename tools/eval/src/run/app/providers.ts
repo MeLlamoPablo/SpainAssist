@@ -15,7 +15,7 @@
  * Every other provider function (ChatGPT sign-in, key server calls) fails: nothing in the app's
  * process may reach a service outside the network layer.
  */
-import { ASSISTANT_MODELS, DEFAULT_MODELS, type PiCredential } from '@sa/agent';
+import { BUNDLED_MODEL_LISTS, type FixedModel, type PiCredential } from '@sa/agent';
 import type { HeadlessApp, HeadlessOptions } from '@sa/desktop/headless';
 import type { EvalAppDeps, EvalModelChoice, EvalProvider } from '../../contracts';
 
@@ -31,8 +31,7 @@ type RunProviderLib = Required<
     | 'getChatGPTKey'
     | 'redeemVoucher'
     | 'getVoucherCredit'
-    | 'defaultModels'
-    | 'assistantModels'
+    | 'modelLists'
   >
 > &
   Pick<ProviderLibOverrides, 'codex'>;
@@ -56,8 +55,13 @@ function apiKeyOf(credential: PiCredential | null): string {
   return credential.key;
 }
 
+/** A role's product list, or only the model `id` a run asks for at the effort of its first. */
+function listFor(list: FixedModel[], id: string | undefined): FixedModel[] {
+  return id ? [{ ...(list[0] as FixedModel), id }] : list;
+}
+
 /**
- * The `providerLib` overrides of a run: the stubbed flows above, and the product's model tables
+ * The `providerLib` overrides of a run: the stubbed flows above, and the product's models file
  * with the models of `choice` (undefined: the product defaults of the role).
  */
 export function createProviderLib(
@@ -92,18 +96,16 @@ export function createProviderLib(
         expiresAt: null,
       };
     },
-    defaultModels: {
-      chatgpt: choice.procedureModel ?? DEFAULT_MODELS.chatgpt,
-      voucher: choice.procedureModel ?? DEFAULT_MODELS.voucher,
-    },
-    assistantModels: {
+    modelLists: {
       chatgpt: {
-        ...ASSISTANT_MODELS.chatgpt,
-        id: choice.assistantModel ?? ASSISTANT_MODELS.chatgpt.id,
+        ...BUNDLED_MODEL_LISTS.chatgpt,
+        procedures: listFor(BUNDLED_MODEL_LISTS.chatgpt.procedures, choice.procedureModel),
+        assistant: listFor(BUNDLED_MODEL_LISTS.chatgpt.assistant, choice.assistantModel),
       },
       voucher: {
-        ...ASSISTANT_MODELS.voucher,
-        id: choice.assistantModel ?? ASSISTANT_MODELS.voucher.id,
+        ...BUNDLED_MODEL_LISTS.voucher,
+        procedures: listFor(BUNDLED_MODEL_LISTS.voucher.procedures, choice.procedureModel),
+        assistant: listFor(BUNDLED_MODEL_LISTS.voucher.assistant, choice.assistantModel),
       },
     },
   };

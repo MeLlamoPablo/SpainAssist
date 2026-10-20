@@ -50,6 +50,10 @@ function provider(baseUrl = 'http://127.0.0.1:1', configured = true) {
     creditSpent: vi.fn(),
   };
 }
+/** An agentModel() stub: `chat` for agent roles, `scanner` for the scanner. */
+function roles(chat: AgentHostConfig['model'], scanner: AgentHostConfig['model']) {
+  return vi.fn(async (role?: string) => (role === 'scanner' ? scanner : chat));
+}
 const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -87,26 +91,34 @@ describe('document vision scanner', () => {
     p.agentModel = vi.fn(async () => ({ ...textOnly, supportsImages: true }));
     expect(await scanner.status()).toMatchObject({ available: true, model: 'mock-vision' });
   });
-  it('uses a dedicated vision model for Codex without changing the chat model', async () => {
+  it("scans with the provider manager's scanner model, not the chat model", async () => {
     const p = provider();
-    p.agentModel = vi.fn(async () => ({ provider: 'openai-codex', id: 'gpt-6-astra' }));
+    p.agentModel = roles(
+      { provider: 'openai-codex', id: 'gpt-6-astra', thinkingLevel: 'high' },
+      { provider: 'openai-codex', id: 'gpt-6.1-sol', thinkingLevel: 'low' },
+    );
     const scanner = new DocumentScanner(p as unknown as ProviderManager, () => 'en');
-    // Sol cannot turn reasoning off, yet scans: with its lowest effort.
     expect(await scanner.status()).toMatchObject({ available: true, model: 'gpt-6.1-sol' });
-    expect((await p.agentModel()).id).toBe('gpt-6-astra');
+    expect(p.agentModel).toHaveBeenCalledWith('scanner');
   });
-  // ChatGPT plans offer different models: scan with the one the provider manager picked.
+  // ChatGPT, Codex and vouchers: the models file's scanner model, at its level (the provider
+  // manager picks it from a ChatGPT plan's models). OpenAI API keys: Sol at its lowest effort.
   it.each([
-    ['chatgpt', 'openai', 'gpt-6-luna', 'gpt-6-luna', {}],
-    ['chatgpt', 'openai', 'gpt-6.1-sol', 'gpt-6.1-sol', { reasoning: 'low' }],
-    ['codex', 'openai-codex', 'gpt-6-luna', 'gpt-6.1-sol', { reasoning: 'low' }],
-    ['byok', 'openai', 'gpt-6-astra', 'gpt-6.1-sol', { reasoning: 'low' }],
-  ])(
-    'scans a %s %s %s account with %s and %o',
-    async (kind, providerId, id, scanModel, reasoning) => {
+    ['chatgpt', 'openai', 'gpt-6-luna', 'off', 'gpt-6-luna', {}],
+    ['chatgpt', 'openai', 'gpt-6.1-sol', 'low', 'gpt-6.1-sol', { reasoning: 'low' }],
+    ['chatgpt', 'openai', 'gpt-5.6-terra', 'minimal', 'gpt-5.6-terra', { reasoning: 'minimal' }],
+    ['codex', 'openai-codex', 'gpt-6.1-sol', 'low', 'gpt-6.1-sol', { reasoning: 'low' }],
+    ['byok', 'openai', 'gpt-6-astra', undefined, 'gpt-6.1-sol', { reasoning: 'low' }],
+  ] as const)(
+    'scans a %s %s %s (%s) account with %s and %o',
+    async (kind, providerId, id, thinkingLevel, scanModel, reasoning) => {
       const p = provider();
       p.status = () => ({ configured: true, kind, label: 'OpenAI' });
-      p.agentModel = vi.fn(async () => ({ provider: providerId, id }));
+      p.agentModel = vi.fn(async () => ({
+        provider: providerId,
+        id,
+        ...(thinkingLevel ? { thinkingLevel } : {}),
+      }));
       const complete = vi.spyOn(ModelRuntime.prototype, 'completeSimple').mockResolvedValue({
         stopReason: 'stop',
         content: [{ type: 'text', text: JSON.stringify(fields) }],
@@ -132,22 +144,26 @@ describe('document vision scanner', () => {
     const model = { id, provider: 'openai', api: 'openai-responses' } as Model<Api>;
     expect(scanReasoning(model)).toEqual(options);
   });
-  // Vouchers scan with Haiku 5.5 on our gateway; OpenRouter BYOK scans with the selected model.
+  it('scans with the explicit effort it is given, off included', () => {
+    const model = { id: 'gpt-6.1-sol', provider: 'openai', api: 'openai-responses' } as Model<Api>;
+    expect(scanReasoning(model, 'medium')).toEqual({ reasoning: 'medium' });
+    expect(scanReasoning(model, 'off')).toEqual({});
+  });
+  // Vouchers scan with the scanner model on our gateway; OpenRouter BYOK with the selected model.
   it.each([
     ['litellm', 'anthropic/claude-haiku-5.5'],
     ['openrouter', 'moonshotai/kimi-k2.6'],
-  ])('scans %s with %s without changing the chat model', async (providerId, scanModel) => {
+  ])('scans %s with %s', async (providerId, scanModel) => {
     const p = provider();
     p.agentModel = vi.fn(async () => ({
       provider: providerId,
-      id: 'moonshotai/kimi-k2.6',
+      id: scanModel,
       baseUrl: 'http://127.0.0.1:1/v1',
       api: 'openai-completions',
       maxTokens: 8192,
     }));
     const scanner = new DocumentScanner(p as unknown as ProviderManager, () => 'en');
     expect(await scanner.status()).toMatchObject({ available: true, model: scanModel });
-    expect(await p.agentModel()).toMatchObject({ id: 'moonshotai/kimi-k2.6', maxTokens: 8192 });
     expect(p.refreshCredential).toHaveBeenCalledWith(providerId);
   });
   it('validates image payloads and model output', () => {
@@ -304,7 +320,10 @@ describe('live scanner IPC lifecycle', () => {
       if (providerId !== 'custom') {
         p.agentModel = vi.fn(async () => ({
           provider: providerId,
-          id: 'moonshotai/kimi-k2.6',
+          // Vouchers: the models file's scanner model (the provider manager's).
+          ...(providerId === 'litellm'
+            ? { id: 'anthropic/claude-haiku-5.5', thinkingLevel: 'low' as const }
+            : { id: 'moonshotai/kimi-k2.6' }),
           baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
           api: 'openai-completions',
           maxTokens: 8192,

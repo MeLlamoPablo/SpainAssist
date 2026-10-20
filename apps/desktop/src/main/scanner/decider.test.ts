@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FRAME_DECIDER_ENDPOINT, FRAME_DECIDER_MODEL, OpenRouterFrameGate } from './decider';
+import { FRAME_DECIDER_ENDPOINT, OpenRouterFrameGate } from './decider';
+
+const FRAME_DECIDER_MODEL = 'test/decider-model';
+/** The models file's decider, as the provider manager gives it. */
+const model = async () => FRAME_DECIDER_MODEL;
 
 const image = 'data:image/jpeg;base64,/9j/2Q==';
 const reply = (present = 0.99, legible = 0.99) => ({
@@ -16,7 +20,7 @@ describe('OpenRouter document frame gate', () => {
   it('uses the global key only in the auth header and sends images as multimodal state', async () => {
     const request = vi.fn(async () => Response.json(reply()));
     vi.stubGlobal('fetch', request);
-    const gate = new OpenRouterFrameGate({ apiKey: 'global-test-only' });
+    const gate = new OpenRouterFrameGate({ model, apiKey: 'global-test-only' });
     const result = await gate.check(image, new AbortController().signal);
     expect(result).toMatchObject({ accepted: true, usage: reply().usage });
     const [endpoint, init] = request.mock.calls[0]! as unknown as [string, RequestInit];
@@ -43,7 +47,7 @@ describe('OpenRouter document frame gate', () => {
       'fetch',
       vi.fn(async () => Response.json(reply(p, l))),
     );
-    const result = await new OpenRouterFrameGate({ apiKey: 'test-only' }).check(
+    const result = await new OpenRouterFrameGate({ model, apiKey: 'test-only' }).check(
       image,
       new AbortController().signal,
     );
@@ -63,7 +67,7 @@ describe('OpenRouter document frame gate', () => {
       vi.fn(async () => Response.json(reply(p, l))),
     );
     expect(
-      await new OpenRouterFrameGate({ apiKey: 'test-only' }).check(
+      await new OpenRouterFrameGate({ model, apiKey: 'test-only' }).check(
         image,
         new AbortController().signal,
       ),
@@ -78,7 +82,10 @@ describe('OpenRouter document frame gate', () => {
         vi.fn(async () => Response.json(body)),
       );
       await expect(
-        new OpenRouterFrameGate({ apiKey: 'test-only' }).check(image, new AbortController().signal),
+        new OpenRouterFrameGate({ model, apiKey: 'test-only' }).check(
+          image,
+          new AbortController().signal,
+        ),
       ).rejects.toThrow('frame_check_failed');
     },
   );
@@ -95,7 +102,10 @@ describe('OpenRouter document frame gate', () => {
       vi.fn(async () => new Response('raw secret and image', { status })),
     );
     await expect(
-      new OpenRouterFrameGate({ apiKey: 'test-only' }).check(image, new AbortController().signal),
+      new OpenRouterFrameGate({ model, apiKey: 'test-only' }).check(
+        image,
+        new AbortController().signal,
+      ),
     ).rejects.toMatchObject({ category, status, message: 'frame_check_failed' });
   });
 
@@ -103,6 +113,7 @@ describe('OpenRouter document frame gate', () => {
     const request = vi.fn(async () => Response.json(reply()));
     vi.stubGlobal('fetch', request);
     const gate = new OpenRouterFrameGate({
+      model,
       access: async () => ({
         endpoint: 'https://llm.example.test/openrouter/alpha/decisions',
         apiKey: 'sk-gateway-user-key',
@@ -141,7 +152,7 @@ describe('OpenRouter document frame gate', () => {
     const request = vi.fn(async () => Response.json(reply()));
     vi.stubGlobal('fetch', request);
     const access = vi.fn(async () => ({ endpoint: 'https://gateway', apiKey: 'user' }));
-    await new OpenRouterFrameGate({ apiKey: 'dev-key', access }).check(
+    await new OpenRouterFrameGate({ model, apiKey: 'dev-key', access }).check(
       image,
       new AbortController().signal,
     );
@@ -152,7 +163,7 @@ describe('OpenRouter document frame gate', () => {
   it('reports a missing key when the user has no gateway key', async () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
-    const error = await new OpenRouterFrameGate({ access: async () => undefined })
+    const error = await new OpenRouterFrameGate({ model, access: async () => undefined })
       .check(image, new AbortController().signal)
       .catch((e) => e);
     expect(error).toMatchObject({ category: 'missing_key', permanent: true });
@@ -165,7 +176,7 @@ describe('OpenRouter document frame gate', () => {
     });
     vi.stubGlobal('fetch', request);
     await expect(
-      new OpenRouterFrameGate({}).check(image, new AbortController().signal),
+      new OpenRouterFrameGate({ model }).check(image, new AbortController().signal),
     ).rejects.toThrow('frame_check_failed');
     expect(request).not.toHaveBeenCalled();
     const controller = new AbortController();
@@ -180,7 +191,7 @@ describe('OpenRouter document frame gate', () => {
           }),
       ),
     );
-    const checking = new OpenRouterFrameGate({ apiKey: 'test-only' }).check(
+    const checking = new OpenRouterFrameGate({ model, apiKey: 'test-only' }).check(
       image,
       controller.signal,
     );

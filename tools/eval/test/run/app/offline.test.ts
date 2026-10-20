@@ -3,6 +3,7 @@
  * getting to a service (a provider sign-in, a probe of an endpoint, a voucher) is stubbed or fails,
  * and the one provider that is on went through the stubbed voucher flow.
  */
+import { BUNDLED_MODEL_LISTS } from '@sa/agent';
 import type { HeadlessApp } from '@sa/desktop/headless';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEvalAppWith } from '../../../src/run/app';
@@ -58,8 +59,7 @@ describe('the app process', () => {
       const model = await services.providers.agentModel('assistant');
       expect(model).toMatchObject({
         provider: 'litellm',
-        id: 'anthropic/claude-haiku-5.5',
-        thinkingLevel: 'high',
+        ...BUNDLED_MODEL_LISTS.voucher.assistant[0],
         maxTokens: 8192,
       });
       expect(model.baseUrl).toBe(world.run.agentBaseUrl('app'));

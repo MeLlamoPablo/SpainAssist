@@ -1,3 +1,4 @@
+import type { FixedModel } from '@sa/agent';
 import { z } from 'zod';
 import type { FetchFn } from '../remote/http';
 
@@ -80,15 +81,19 @@ export async function fetchChatGPTModels(
 const rankOf = (priority: number | undefined) => priority ?? Number.MAX_SAFE_INTEGER;
 
 /**
- * The model to run from `available` (best first): `preferred` when the account lists it, else the
- * best one pi's catalog `known`s, else the best one (procedures run on a guessed template rather
- * than on a model the plan refuses). Undefined from an empty list.
+ * The model to run from `available` (best first): the first of `list` (best first) the account
+ * lists, else the best one pi's catalog `known`s, else the best one (procedures run on a guessed
+ * template rather than on a model the plan refuses), both at the effort of `list`'s first.
+ * Undefined from an empty `available`.
  */
 export function pickChatGPTModel(
   available: readonly string[],
-  preferred: string,
+  list: readonly FixedModel[],
   known: (id: string) => boolean,
-): string | undefined {
-  if (available.includes(preferred)) return preferred;
-  return available.find(known) ?? available[0];
+): FixedModel | undefined {
+  const listed = list.find((m) => available.includes(m.id));
+  if (listed) return listed;
+  const id = available.find(known) ?? available[0];
+  const thinkingLevel = list[0]?.thinkingLevel;
+  return id && thinkingLevel ? { id, thinkingLevel } : undefined;
 }

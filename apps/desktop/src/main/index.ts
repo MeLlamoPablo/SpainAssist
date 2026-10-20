@@ -522,6 +522,7 @@ async function main(): Promise<void> {
     await prepareScanStorage(paths.scanTranscriptsDir, isDev),
     // The user key (voucher, ChatGPT or Codex development key); the dev .env key overrides.
     new OpenRouterFrameGate({
+      model: () => s.providers.deciderModel(),
       apiKey: env.deciderApiKey,
       endpoint: env.deciderUrl,
       access: () => s.providers.scanGateAccess(),

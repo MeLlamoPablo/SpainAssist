@@ -37,8 +37,8 @@ export function providerLib(codex?: CodexLib): ProviderLib {
     redeemVoucher: agent.redeemVoucher,
     getChatGPTKey: (keyServerUrl, idToken) => agent.getChatGPTKey(keyServerUrl, idToken),
     getVoucherCredit: (keyServerUrl, apiKey) => agent.getVoucherCredit(keyServerUrl, apiKey),
-    defaultModels: agent.DEFAULT_MODELS,
-    assistantModels: agent.ASSISTANT_MODELS,
+    modelLists: agent.BUNDLED_MODEL_LISTS,
+    parseModelLists: agent.parseModelLists,
     ...(codex ? { codex } : {}),
   };
 }

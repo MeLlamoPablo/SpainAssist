@@ -1,6 +1,7 @@
 import { appendFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Message } from '@earendil-works/pi-ai';
+import type { ThinkingLevel } from '@sa/shared';
 import { ensurePrivateDir } from '../core/fs';
 import type { FrameDecision } from './decider';
 
@@ -15,7 +16,7 @@ export class ScanTranscript {
   private imageCount = 0;
   constructor(private readonly directory?: string) {}
 
-  async initialize(model: string, provider: string, reasoning: 'off' | 'minimal' | 'low' = 'off') {
+  async initialize(model: string, provider: string, reasoning: ThinkingLevel = 'off') {
     if (!this.directory) return;
     await ensurePrivateDir(this.directory);
     await this.append({

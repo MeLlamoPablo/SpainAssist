@@ -315,6 +315,7 @@ describe('PUT /admin/feedback/:id', () => {
     };
     expect(await author('human')).toBe('human');
     expect(await author('gpt-6.1-sol · xhigh')).toBe('gpt-6.1-sol · xhigh');
+    expect(await author('gpt-5.6-terra · max')).toBe('gpt-5.6-terra · max');
     expect(await author()).toBeUndefined();
     expect(await author('Pablo')).toBe(400);
     expect(await author('gpt-6.1-sol · turbo')).toBe(400);

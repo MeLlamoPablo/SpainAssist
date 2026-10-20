@@ -21,7 +21,8 @@ describe('feedback authors', () => {
   it('accepts only agent authors', () => {
     expect(AgentAuthor.safeParse(HUMAN_AUTHOR).success).toBe(false);
     expect(AgentAuthor.safeParse('gpt-6-luna').success).toBe(false);
-    expect(AgentAuthor.safeParse('gpt-6-luna · max').success).toBe(false);
+    expect(AgentAuthor.safeParse('gpt-6-luna · ultra').success).toBe(false);
+    expect(AgentAuthor.safeParse('gpt-5.6-terra · max').success).toBe(true);
     expect(AgentAuthor.safeParse('gpt 6 · high').success).toBe(false);
   });
 });

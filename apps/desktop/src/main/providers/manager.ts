@@ -1,4 +1,4 @@
-import type { AgentHostConfig, ChatGPTLoginPages, PiCredential } from '@sa/agent';
+import type { AgentHostConfig, ChatGPTLoginPages, FixedModel, PiCredential } from '@sa/agent';
 import type {
   ByokInput,
   CustomModelCapabilities,
@@ -13,9 +13,15 @@ import type {
   ProviderOption,
   ProviderStatus,
   RedeemVoucherResult,
+  ResearchMode,
   VoucherCreditResponse,
 } from '@sa/shared';
-import { agentAuthor, DEFAULT_THINKING_LEVEL, litellmDeciderUrl } from '@sa/shared';
+import {
+  agentAuthor,
+  DEFAULT_THINKING_LEVEL,
+  litellmDeciderUrl,
+  ResearchMode as ResearchModes,
+} from '@sa/shared';
 import { classifyAgentError, NoProviderError, UserError } from '../core/errors';
 import type { EventBus } from '../core/events';
 import { t } from '../core/i18n';
@@ -26,6 +32,7 @@ import type { ProviderLib, VaultPort } from '../ports';
 import type { FetchFn } from '../remote/http';
 import type { AppStateStore, SettingsStore } from '../settings/store';
 import { fetchChatGPTModels, pickChatGPTModel } from './chatgpt-models';
+import type { ModelListsSource } from './model-lists';
 import { probeCustomEndpoint } from './probe';
 
 /** pi provider of voucher keys: our LiteLLM gateway at the voucher's base URL. */
@@ -95,9 +102,9 @@ interface OAuthSecret {
 
 /** Don't ask the key server again for this long after a failed attempt. */
 const SCAN_KEY_RETRY_MS = 60_000;
-/** A ChatGPT account's plan rarely changes: its model pick is kept this long. */
+/** A ChatGPT account's plan rarely changes: its model list is kept this long. */
 const CHATGPT_MODELS_TTL_MS = 60 * 60_000;
-/** After a failed model list, agents and scans use the default model this long without asking. */
+/** After a failed model list, agents and scans use the last models this long without asking. */
 const CHATGPT_MODELS_RETRY_MS = 60_000;
 
 /** `exp` of a JWT in ms (the ID token was verified at sign-in), or 0 when unreadable. */
@@ -109,6 +116,9 @@ function jwtExpiry(token: string): number {
     return 0;
   }
 }
+
+/** A list's first (preferred) model: models files never have an empty list. */
+const firstOf = (list: readonly FixedModel[]) => list[0] as FixedModel;
 
 type OAuthKind = 'chatgpt' | 'codex';
 
@@ -142,6 +152,8 @@ export interface ProviderManagerDeps {
   state: AppStateStore;
   vault: () => VaultPort;
   lib: ProviderLib;
+  /** The models file the app runs (ChatGPT, Codex and vouchers). */
+  models: ModelListsSource;
   /** For probing custom endpoints. */
   fetch: FetchFn;
   events: EventBus;
@@ -179,12 +191,12 @@ export class ProviderManager {
   private chatgptIdToken?: { token: string; expiresAt: number };
   private scanKeyFetch?: Promise<UserKey | undefined>;
   private scanKeyFailedAt = 0;
-  /** The procedure model picked from the ChatGPT account's model list, and when. */
-  private chatgptPick?: { id: string; at: number };
-  private chatgptPickFetch?: Promise<string>;
-  private chatgptPickFailedAt = 0;
+  /** The models the ChatGPT account's plan offers (best first), and when OpenAI said so. */
+  private chatgptModels?: { ids: string[]; at: number };
+  private chatgptModelsFetch?: Promise<string[] | undefined>;
+  private chatgptModelsFailedAt = 0;
   /** Bumped on every provider change, so a lookup for the previous account is not kept. */
-  private chatgptPickGeneration = 0;
+  private chatgptModelsGeneration = 0;
 
   constructor(private readonly deps: ProviderManagerDeps) {}
 
@@ -215,7 +227,11 @@ export class ProviderManager {
       configured: true,
       kind: p.kind,
       label: this.label(p),
-      model: (p.kind === 'chatgpt' && this.chatgptPick?.id) || this.modelOf(p),
+      model:
+        p.kind === 'chatgpt'
+          ? this.pickChatGPT(this.deps.models.current().chatgpt.procedures, this.chatgptModels?.ids)
+              .id
+          : this.modelOf(p),
     };
     if (isOAuth(p) && this.oauthAccount) status.account = this.oauthAccount;
     if (p.kind === 'voucher' && this.credit) status.credit = creditOf(this.credit.value);
@@ -391,10 +407,10 @@ export class ProviderManager {
     this.voucherExpiresAt = undefined;
     if (!isOAuth(config)) this.oauthAccount = undefined;
     if (config?.kind !== 'chatgpt') this.chatgptIdToken = undefined;
-    this.chatgptPick = undefined;
-    this.chatgptPickFetch = undefined;
-    this.chatgptPickFailedAt = 0;
-    this.chatgptPickGeneration++;
+    this.chatgptModels = undefined;
+    this.chatgptModelsFetch = undefined;
+    this.chatgptModelsFailedAt = 0;
+    this.chatgptModelsGeneration++;
     await this.deps.onChanged();
     this.emitStatus();
     if (config?.kind === 'voucher') void this.refreshCredit();
@@ -470,6 +486,15 @@ export class ProviderManager {
   async scanGateAccess(): Promise<ScanGateAccess | undefined> {
     const key = await this.userKey();
     return key && { endpoint: litellmDeciderUrl(key.baseUrl), apiKey: key.apiKey };
+  }
+
+  /**
+   * The frame decider's model: the models file's of vouchers, else of ChatGPT (Codex development
+   * keys too). The key server gives keys the same models.
+   */
+  async deciderModel(): Promise<string> {
+    const lists = await this.deps.models.get();
+    return this.config()?.kind === 'voucher' ? lists.voucher.decider : lists.chatgpt.decider;
   }
 
   /** Whether the provider comes with a user key: see userKey(). */
@@ -831,27 +856,31 @@ export class ProviderManager {
   }
 
   /**
-   * Model section of the agent host config of a role (default: a procedure agent's, also used by
-   * the scanner). Throws NoProviderError when not configured. BYOK and custom endpoints run every
-   * role on the user's model.
+   * Model section of the agent host config of a role (default: a procedure agent's), or the
+   * document scanner's model. Throws NoProviderError when not configured. BYOK and custom
+   * endpoints run every role on the user's model.
    */
-  async agentModel(role: AgentHostConfig['role'] = 'procedure'): Promise<AgentHostConfig['model']> {
+  async agentModel(
+    role: AgentHostConfig['role'] | 'scanner' = 'procedure',
+  ): Promise<AgentHostConfig['model']> {
     const p = this.config();
     if (!p) throw new NoProviderError();
-    const assistant = this.deps.lib.assistantModels;
     switch (p.kind) {
       case 'chatgpt':
       case 'codex': {
         const provider = p.kind === 'chatgpt' ? 'openai' : 'openai-codex';
-        if (role === 'assistant') return { provider, ...assistant.chatgpt };
-        return { provider, id: p.kind === 'chatgpt' ? await this.chatgptModel() : this.modelOf(p) };
+        const lists = (await this.deps.models.get()).chatgpt;
+        const list = role === 'procedure' ? lists.procedures : lists[role];
+        const available = p.kind === 'chatgpt' ? await this.chatgptAvailable() : undefined;
+        return { provider, ...this.pickChatGPT(list, available) };
       }
       case 'voucher': {
         const baseUrl = await this.deps.state.voucherBaseUrl();
         if (!baseUrl) throw new NoProviderError();
+        const lists = (await this.deps.models.get()).voucher;
         return {
           provider: VOUCHER_PROVIDER,
-          ...(role === 'assistant' ? assistant.voucher : { id: this.modelOf(p) }),
+          ...firstOf(role === 'procedure' ? lists.procedures : lists[role]),
           baseUrl,
           maxTokens: VOUCHER_MAX_TOKENS,
         };
@@ -883,23 +912,50 @@ export class ProviderManager {
   }
 
   /**
-   * The ChatGPT procedure model: the app's default when the account's plan offers it (Plus has no
-   * gpt-6.1-sol), else the plan's best model pi's catalog knows with images, else its best model.
-   * Kept for an hour and shared by callers at the same time. When OpenAI can't say, the account's
-   * last pick or the app's default model, without asking again for a minute.
+   * `research.chatgptModels` of the agent host config: on a ChatGPT plan (and Codex), the model
+   * of each research mode, picked from its list like the procedures' one. Undefined otherwise.
    */
-  private async chatgptModel(): Promise<string> {
+  async researchModels(): Promise<Record<ResearchMode, FixedModel> | undefined> {
+    const p = this.config();
+    if (!isOAuth(p)) return undefined;
+    const research = (await this.deps.models.get()).chatgpt.research;
+    const available = p.kind === 'chatgpt' ? await this.chatgptAvailable() : undefined;
+    return Object.fromEntries(
+      ResearchModes.options.map((mode) => [mode, this.pickChatGPT(research[mode], available)]),
+    ) as Record<ResearchMode, FixedModel>;
+  }
+
+  /**
+   * The model a ChatGPT account runs from a list (best first): see pickChatGPTModel, with pi's
+   * catalog models that read images as the known ones. The list's first while the account's
+   * models are unknown (Codex, or OpenAI never answered).
+   */
+  private pickChatGPT(list: readonly FixedModel[], available?: readonly string[]): FixedModel {
+    if (!available) return firstOf(list);
+    const withImages = new Set(
+      this.catalog('openai')
+        .filter((m) => m.supportsImages)
+        .map((m) => m.id),
+    );
+    return pickChatGPTModel(available, list, (id) => withImages.has(id)) ?? firstOf(list);
+  }
+
+  /**
+   * The models the ChatGPT account's plan offers, best first (Plus has no gpt-6.1-sol). Kept for
+   * an hour and shared by callers at the same time. When OpenAI can't say, the account's last
+   * list (undefined before one: the lists' first models), without asking again for a minute.
+   */
+  private async chatgptAvailable(): Promise<string[] | undefined> {
     const now = this.deps.clock().getTime();
-    if (this.chatgptPick && now - this.chatgptPick.at < CHATGPT_MODELS_TTL_MS) {
-      return this.chatgptPick.id;
+    if (this.chatgptModels && now - this.chatgptModels.at < CHATGPT_MODELS_TTL_MS) {
+      return this.chatgptModels.ids;
     }
-    if (this.chatgptPickFetch) return this.chatgptPickFetch;
-    const fallback = this.deps.lib.defaultModels.chatgpt;
-    // Cleared on every provider change, so a pick here is always this account's.
-    const known = () => this.chatgptPick?.id ?? fallback;
-    if (now - this.chatgptPickFailedAt < CHATGPT_MODELS_RETRY_MS) return known();
-    const generation = this.chatgptPickGeneration;
-    const current = () => generation === this.chatgptPickGeneration;
+    if (this.chatgptModelsFetch) return this.chatgptModelsFetch;
+    // Cleared on every provider change, so a list here is always this account's.
+    const known = () => this.chatgptModels?.ids;
+    if (now - this.chatgptModelsFailedAt < CHATGPT_MODELS_RETRY_MS) return known();
+    const generation = this.chatgptModelsGeneration;
+    const current = () => generation === this.chatgptModelsGeneration;
     const lookup = (async () => {
       let category: string;
       try {
@@ -907,20 +963,13 @@ export class ProviderManager {
         const access = credential?.access;
         if (typeof access === 'string' && access) {
           const ids = await fetchChatGPTModels(this.deps.fetch, access);
-          const withImages = new Set(
-            this.catalog('openai')
-              .filter((m) => m.supportsImages)
-              .map((m) => m.id),
-          );
-          const picked = pickChatGPTModel(ids, fallback, (id) => withImages.has(id));
-          if (!picked) this.deps.logger.warn('chatgpt model list has no eligible model');
-          const id = picked ?? fallback;
+          if (!ids.length) this.deps.logger.warn('chatgpt model list has no eligible model');
           // Signed in again meanwhile: the list was the old account's, so ask for the new one.
-          if (!current()) return this.chatgptModel();
+          if (!current()) return this.chatgptAvailable();
           const shown = this.status().model;
-          this.chatgptPick = { id, at: this.deps.clock().getTime() };
-          if (shown !== id) this.emitStatus();
-          return id;
+          this.chatgptModels = { ids, at: this.deps.clock().getTime() };
+          if (this.status().model !== shown) this.emitStatus();
+          return ids;
         }
         category = 'no_credential';
       } catch (err) {
@@ -929,24 +978,24 @@ export class ProviderManager {
         category = typeof listError === 'string' ? listError : 'credential';
       }
       this.deps.logger.warn('chatgpt model list unavailable', { category });
-      if (!current()) return this.chatgptModel();
-      this.chatgptPickFailedAt = this.deps.clock().getTime();
+      if (!current()) return this.chatgptAvailable();
+      this.chatgptModelsFailedAt = this.deps.clock().getTime();
       return known();
     })().finally(() => {
-      if (this.chatgptPickFetch === lookup) this.chatgptPickFetch = undefined;
+      if (this.chatgptModelsFetch === lookup) this.chatgptModelsFetch = undefined;
     });
-    this.chatgptPickFetch = lookup;
+    this.chatgptModelsFetch = lookup;
     return lookup;
   }
 
-  /** BYOK and custom endpoints keep the user's model; the others use this app version's. */
+  /** BYOK and custom endpoints keep the user's model; the others the models file's first. */
   private modelOf(p: ProviderConfig): string {
     switch (p.kind) {
       case 'chatgpt':
       case 'codex':
-        return this.deps.lib.defaultModels.chatgpt;
+        return firstOf(this.deps.models.current().chatgpt.procedures).id;
       case 'voucher':
-        return this.deps.lib.defaultModels.voucher;
+        return firstOf(this.deps.models.current().voucher.procedures).id;
       case 'byok':
       case 'custom':
         return p.model;

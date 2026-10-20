@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { parseEncryptionKey } from './crypto';
 import { DEFAULT_DATABASE_URL, isPgliteUrl } from './db/open';
@@ -23,8 +24,13 @@ export interface AppConfig {
   keyTtlDays: number;
   /** Search tools issued keys may call (told to clients; empty = every tool on the proxy). */
   searchTools: string[];
-  /** OpenRouter id of the document-scan frame decider (the only model of ChatGPT keys). */
+  /**
+   * OpenRouter id of the document-scan frame decider of ChatGPT users (the only model of ChatGPT
+   * keys): the models file's `chatgpt.decider`, which the app calls.
+   */
   deciderModel: string;
+  /** The decider of voucher users (`voucher.decider`), added to voucher keys' models. */
+  voucherDeciderModel: string;
   /** Scan-decider keys for "Sign in with ChatGPT" users (POST /v1/chatgpt-keys). */
   chatgptKeys: {
     /** False when disabled or when no KEY_ENCRYPTION_KEY is available. */
@@ -69,7 +75,25 @@ export interface ServerConfig extends AppConfig {
   warnings: string[];
 }
 
-const DEFAULT_DECIDER_MODEL = '~perplexity/pplx-decider-flash-latest';
+/**
+ * The deciders of the repository's models file, the one every app reads (bundled, and from master
+ * on GitHub): keys must allow the decider the app calls. The Docker image copies the file, and a
+ * push that changes it redeploys the server (watch_paths in infra/terraform/coolify.tf).
+ */
+const MODELS_FILE = new URL(
+  '../../../models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json',
+  import.meta.url,
+);
+const ModelsFileDeciders = z.object({
+  chatgpt: z.object({ decider: z.string().min(1) }),
+  voucher: z.object({ decider: z.string().min(1) }),
+});
+
+/** The deciders of ChatGPT and voucher users, from the models file. */
+export function modelsFileDeciders(file: URL = MODELS_FILE): { chatgpt: string; voucher: string } {
+  const json = ModelsFileDeciders.parse(JSON.parse(readFileSync(file, 'utf8')));
+  return { chatgpt: json.chatgpt.decider, voucher: json.voucher.decider };
+}
 /** Used only with PGlite when VOUCHER_PEPPER is unset; never acceptable with Postgres. */
 export const DEV_PEPPER = 'sa-dev-pepper-NOT-SECRET-do-not-use-in-production';
 /** Used only with PGlite when KEY_ENCRYPTION_KEY is unset (32 public bytes). */
@@ -107,7 +131,6 @@ const EnvSchema = z.object({
   CHATGPT_MONTHLY_BUDGET_USD: z.coerce.number().min(0.01).max(1000).default(0.5),
   CHATGPT_GLOBAL_MONTHLY_BUDGET_USD: z.coerce.number().min(0.01).max(1_000_000).optional(),
   KEY_ENCRYPTION_KEY: z.string().optional(),
-  DECIDER_MODEL: z.string().min(1).default(DEFAULT_DECIDER_MODEL),
   OPENAI_ISSUER: z.url().default('https://auth.openai.com'),
   OPENAI_JWKS_URL: z.url().default('https://auth.openai.com/.well-known/jwks.json'),
   CHATGPT_AUDIENCE_PREFIX: z.string().min(1).default('oaiapp_'),
@@ -181,6 +204,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     warnings.push('LITELLM_ADMIN_URL is not set: issuing mock keys, other LITELLM_* ignored');
   }
 
+  const deciders = modelsFileDeciders();
+
   let encryptionKey: Buffer | undefined;
   if (e.KEY_ENCRYPTION_KEY) {
     encryptionKey = parseEncryptionKey(e.KEY_ENCRYPTION_KEY);
@@ -218,7 +243,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     devSeed: e.DEV_SEED,
     keyTtlDays: e.KEY_TTL_DAYS,
     searchTools: e.LITELLM_SEARCH_TOOLS,
-    deciderModel: e.DECIDER_MODEL,
+    deciderModel: deciders.chatgpt,
+    voucherDeciderModel: deciders.voucher,
     chatgptKeys: {
       enabled: e.CHATGPT_KEYS && encryptionKey !== undefined,
       dailyBudgetUsd: daily,

@@ -7,7 +7,7 @@ import type {
   AgentLaunch,
   AgentLaunchOptions,
   ChatGPTLoginCallbacks,
-  FixedModel,
+  ModelLists,
   PiCredential,
   PromptDisposition,
   PromptImage,
@@ -107,10 +107,10 @@ export interface ProviderLib {
   getChatGPTKey(keyServerUrl: string, idToken: string): Promise<ChatGPTKeyResponse>;
   /** A voucher key's balance and expiry (GET /v1/vouchers/credit on the key server). */
   getVoucherCredit(keyServerUrl: string, apiKey: string): Promise<VoucherCreditResponse>;
-  /** The procedure agents' model of ChatGPT (and Codex) and of vouchers: fixed per app version. */
-  defaultModels: { chatgpt: string; voucher: string };
-  /** The assistant's (orchestrator's) model and effort of ChatGPT/Codex and vouchers: same rules. */
-  assistantModels: { chatgpt: FixedModel; voucher: FixedModel };
+  /** The models file this app version was built with (see ModelLists). */
+  modelLists: ModelLists;
+  /** Reads a downloaded models file; lists it lacks are `fallback`'s (see parseModelLists). */
+  parseModelLists(json: unknown, fallback: ModelLists): ModelLists;
   /** Legacy Codex device-code login. Development builds only: undefined when packaged. */
   codex?: CodexLib;
 }

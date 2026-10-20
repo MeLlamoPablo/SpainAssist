@@ -17,7 +17,7 @@ export const CustomApi = z.enum(['openai-completions', 'openai-responses', 'anth
 export type CustomApi = z.infer<typeof CustomApi>;
 
 /** Thinking (reasoning effort) levels understood by pi; clamped to what the model supports. */
-export const ThinkingLevel = z.enum(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+export const ThinkingLevel = z.enum(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 export type ThinkingLevel = z.infer<typeof ThinkingLevel>;
 
 /** The level an agent runs at when its config sets none. */
@@ -210,6 +210,12 @@ export const PRODUCTION_SERVICES = {
   relayServerUrl: 'https://relay.spainassist.es',
   /** Unleash, for feature flags (infra/terraform/unleash.tf). */
   flagsUrl: 'https://flags.spainassist.es',
+  /**
+   * The latest models file (the repository's `models_warning…json` on master): packaged builds
+   * read it here, so a push that changes it changes the models of every installed app.
+   */
+  modelListsUrl:
+    'https://raw.githubusercontent.com/MeLlamoPablo/SpainAssist/master/models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json',
   /**
    * Where packaged builds send error reports: the `desktop` project of our GlitchTip, which
    * speaks Sentry's protocol (infra/terraform/glitchtip.tf). Public by design: a DSN can

@@ -1,3 +1,4 @@
+import type { ThinkingLevel } from '@sa/shared';
 import { HOST_LOG_PREFIX } from '../host/log';
 import type { AgentLaunch } from '../launch';
 import { type AgentEvent, EventNormalizer } from './events';
@@ -221,9 +222,7 @@ export class PiRpcClient {
     return data?.text ?? null;
   }
 
-  async setThinkingLevel(
-    level: 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh',
-  ): Promise<void> {
+  async setThinkingLevel(level: ThinkingLevel): Promise<void> {
     await this.request('set_thinking_level', { level });
   }
 

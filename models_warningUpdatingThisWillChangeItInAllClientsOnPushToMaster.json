@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "chatgpt": {
+    "procedures": ["gpt-6.1-sol:high", "gpt-5.6-terra:max"],
+    "assistant": ["gpt-6-luna:high"],
+    "scanner": ["gpt-6.1-sol:low", "gpt-5.6-terra:off"],
+    "decider": "~perplexity/pplx-decider-flash-latest",
+    "research": {
+      "fast": ["gpt-6-luna:high"],
+      "balanced": ["gpt-6.1-sol:high", "gpt-5.6-terra:high"],
+      "deep": ["gpt-6-astra:high", "gpt-6.1-sol:high", "gpt-5.6-terra:max"]
+    }
+  },
+  "voucher": {
+    "procedures": ["anthropic/claude-haiku-5.5:high"],
+    "assistant": ["anthropic/claude-haiku-5.5:medium"],
+    "scanner": ["anthropic/claude-haiku-5.5:low"],
+    "decider": "~perplexity/pplx-decider-flash-latest"
+  }
+}

@@ -124,9 +124,12 @@ Protocol: `packages/companion/README.md`.
 
 ### Document scanning
 The user scans an ID document (DNI, TIE, passport, driving licence) with the camera or a photo.
-1. A cheap decision model screens each camera frame (is there a document, is it legible).
+1. A cheap decision model screens each camera frame (is there a document, is it legible): the
+   models file's `decider` of the user type, which the key server's keys allow (see Models).
 2. A small, isolated scanning agent reads the fields from the accepted frames. It asks for
-   another side or a closer frame until it has what it needs.
+   another side or a closer frame until it has what it needs. On ChatGPT, Codex and vouchers it
+   runs the models file's `scanner` model at its level (see Models); API keys and custom
+   endpoints use the user's model, with reasoning off or at its lowest.
 3. Field and document rules (`apps/desktop/src/main/scanner/rules.ts`) reject misreads.
 4. Valid fields go straight to the vault.
 
@@ -155,12 +158,17 @@ Our services know a user by their key on our LiteLLM gateway, turned into a pseu
 Without a user key these are off: scan screening, phone-call transcription, map pins, and sharing
 or rating learnings (searching still works).
 
-## 5. Feature flags and error reports
+## 5. Feature flags, models and error reports
 
 - **Feature flags.** Main reads flags from Unleash once per launch; a change applies at the next
   launch. Flags can target an app version, OS, CPU or install channel. When Unleash can't be
   reached, every flag is off. Main enforces the flags itself; the UI only hides what main already
   refuses. Flags are listed in `FeatureFlags` (`@sa/shared`).
+- **Models.** The models of ChatGPT, Codex and vouchers (procedures, the assistant, the scanner, ChatGPT
+  research modes) are lists in the repository's `models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`, best first. Each build bundles
+  it, and packaged builds download it from master on GitHub at most once an hour (the bundled or
+  last read one when GitHub fails), so **a push that changes it changes every installed app**. A
+  ChatGPT account runs each list's first model its plan offers (`packages/agent/README.md`).
 - **Error reports.** Packaged builds send crashes and uncaught errors to our GlitchTip (Sentry
   protocol), when both the `error-reports` flag and the user's anonymous learnings sharing setting are
   on. Only errors are sent: no breadcrumbs, no tracing, no memory dumps. Every event is scrubbed with `@sa/pii`.

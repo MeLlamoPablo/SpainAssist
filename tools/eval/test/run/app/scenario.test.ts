@@ -7,6 +7,7 @@
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { BUNDLED_MODEL_LISTS } from '@sa/agent';
 import type { ChatRequest } from '@sa/mock-llm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { HostEvalConfig, PendingPrompt } from '../../../src/contracts';
@@ -313,17 +314,22 @@ browserSuite('the app of a run, end to end', () => {
         .map((r) => r.body as ChatRequest & { reasoning_effort?: string; max_tokens?: number });
     const toolNames = (body: ChatRequest) => (body.tools ?? []).map((t) => t.function?.name);
 
-    it('gives the orchestrator the product model at high effort, and the procedure agent its own', () => {
+    it("gives the orchestrator and the procedure agent the models file's voucher models", () => {
       const assistant = completions().filter((b) => toolNames(b).includes('procedure_start'));
       const procedure = completions().filter((b) => toolNames(b).includes('procedure_update'));
       expect(assistant.length).toBeGreaterThan(0);
       expect(procedure.length).toBeGreaterThan(0);
-      for (const body of [...assistant, ...procedure]) {
-        expect(body.model).toBe('anthropic/claude-haiku-5.5');
-        expect(body.max_tokens).toBe(8192);
-      }
-      expect(new Set(assistant.map((b) => b.reasoning_effort))).toEqual(new Set(['high']));
-      expect(new Set(procedure.map((b) => b.reasoning_effort))).toEqual(new Set(['medium']));
+      const [orchestrator] = BUNDLED_MODEL_LISTS.voucher.assistant;
+      const [agent] = BUNDLED_MODEL_LISTS.voucher.procedures;
+      for (const body of [...assistant, ...procedure]) expect(body.max_tokens).toBe(8192);
+      expect(new Set(assistant.map((b) => b.model))).toEqual(new Set([orchestrator?.id]));
+      expect(new Set(procedure.map((b) => b.model))).toEqual(new Set([agent?.id]));
+      expect(new Set(assistant.map((b) => b.reasoning_effort))).toEqual(
+        new Set([orchestrator?.thinkingLevel]),
+      );
+      expect(new Set(procedure.map((b) => b.reasoning_effort))).toEqual(
+        new Set([agent?.thinkingLevel]),
+      );
       // The product's research tool is there (the voucher backend), answered by the stub.
       expect(procedure.every((b) => toolNames(b).includes('web_research'))).toBe(true);
     });

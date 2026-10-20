@@ -153,32 +153,37 @@ describe('fetchChatGPTModels', () => {
 
 describe('pickChatGPTModel', () => {
   const all = () => true;
+  const sol = { id: 'gpt-6.1-sol', thinkingLevel: 'high' } as const;
+  const terra = { id: 'gpt-5.6-terra', thinkingLevel: 'max' } as const;
+  const list = [sol, terra];
 
-  it("keeps the app's model when the account lists it, even ranked lower", () => {
-    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-6.1-sol'], 'gpt-6.1-sol', all)).toBe('gpt-6.1-sol');
+  it('runs the first model of the list the account lists, even ranked lower', () => {
+    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-6.1-sol'], list, all)).toBe(sol);
     // Even when pi's catalog does not know it.
-    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-6.1-sol'], 'gpt-6.1-sol', () => false)).toBe(
-      'gpt-6.1-sol',
+    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-6.1-sol'], list, () => false)).toBe(sol);
+    // A plan without the first (Go): the next one, at its own effort.
+    expect(pickChatGPTModel(['gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna'], list, all)).toBe(
+      terra,
     );
   });
 
-  it('otherwise picks the model OpenAI ranks first', async () => {
+  it("otherwise picks the model OpenAI ranks first, at the list's first effort", async () => {
     const plus = await fetchChatGPTModels(
       fakeFetch(() => Response.json(PLUS)),
       TOKEN,
     );
-    expect(pickChatGPTModel(plus, 'gpt-6.1-sol', all)).toBe('gpt-6-luna');
+    expect(pickChatGPTModel(plus, [sol], all)).toEqual({ id: 'gpt-6-luna', thinkingLevel: 'high' });
   });
 
   it('prefers a model pi knows, then any listed model, over the default', () => {
-    const listed = ['gpt-7-luna', 'gpt-6-luna', 'gpt-5.6-terra'];
+    const listed = ['gpt-7-luna', 'gpt-6-luna', 'gpt-5.6-luna'];
     const known = (id: string) => id !== 'gpt-7-luna';
-    expect(pickChatGPTModel(listed, 'gpt-6.1-sol', known)).toBe('gpt-6-luna');
+    expect(pickChatGPTModel(listed, list, known)?.id).toBe('gpt-6-luna');
     // None known: the best-ranked one still beats a default the plan refuses.
-    expect(pickChatGPTModel(listed, 'gpt-6.1-sol', () => false)).toBe('gpt-7-luna');
+    expect(pickChatGPTModel(listed, list, () => false)?.id).toBe('gpt-7-luna');
   });
 
   it('picks nothing from an empty list', () => {
-    expect(pickChatGPTModel([], 'gpt-6.1-sol', all)).toBeUndefined();
+    expect(pickChatGPTModel([], list, all)).toBeUndefined();
   });
 });

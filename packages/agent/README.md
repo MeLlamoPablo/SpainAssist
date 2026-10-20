@@ -74,7 +74,7 @@ plus `ask_user`, `vault_read` and `vault_save`. Procedure agents have the rest:
 | `browser_login_clave` | `browser.loginClave` | Cl@ve Permanente login: types the saved DNI/NIE and password and submits; asks the user in the app's own form when none is saved, or to correct it with `rejected` |
 | `browser_fill_from_user` | `browser.fillFromUser` | One-time codes and passwords of sites other than Cl@ve, typed by the app and never saved; refused on Cl@ve password fields. The model never sees them |
 | `browser_tabs`, `browser_screenshot`, `browser_use_certificate`, `browser_close` | `browser.*` | Screenshot returns an image block (refused when the model has no vision) |
-| `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher; `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan; `mode` picks model and effort: `fast` → `gpt-6-luna`, `balanced` → `gpt-6.1-sol`, `deep` → `gpt-6-astra`, all at high effort | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
+| `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher; `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan; `mode` picks model and effort from the models file's `chatgpt.research` lists (`research.chatgptModels`, picked by the app from the plan's models; default each list's first) | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
 | `exa_search`, `exa_fetch` | local (Exa's hosted MCP server, `mcp.exa.ai`): keyless free tier, or the user's optional key from `agent.exaKey` for higher limits | BYOK and custom endpoints only, instead of `web_research`. `exa_search`: `userLocation: "ES"`, `sources` `official` (default, `includeDomains` of Spanish administrations) or `any`, ≤ 10 results. `exa_fetch`: ≤ 5 URLs, 12,000 (≤ 30,000) characters each. A rejected key gives a research-blocker result that tells the user to fix or remove it |
 | `feedback_search`, `feedback_submit`, `feedback_vote` | `feedback.*` | Submit text must be PII-free (the app scrubs again); votes rate a search result by id |
 | `fetch_url` | local | 20 s timeout, 6 MB (HTML) / 25 MB (PDF) cap, ≤ 5 redirects (each re-checked), private hosts blocked, `offset`/`maxChars` paging, `mode: full`, 10-minute cache |
@@ -87,7 +87,7 @@ may run in parallel.
 ## Using it from the desktop main process
 
 ```ts
-import { buildAgentLaunch, DEFAULT_MODELS, PiRpcClient, type AgentEvent } from '@sa/agent';
+import { buildAgentLaunch, BUNDLED_MODEL_LISTS, PiRpcClient, type AgentEvent } from '@sa/agent';
 
 const client = new PiRpcClient(
   buildAgentLaunch({
@@ -99,7 +99,7 @@ const client = new PiRpcClient(
       procedureId: p.id,
       sessionFile: join(appData, 'sessions', `${p.id}.jsonl`),
       language: settings.language,
-      model: { provider: 'litellm', id: DEFAULT_MODELS.voucher, baseUrl: voucherBaseUrl, maxTokens: 8192 },
+      model: { provider: 'litellm', ...BUNDLED_MODEL_LISTS.voucher.procedures[0], baseUrl: voucherBaseUrl, maxTokens: 8192 },
     },
     bridge: { url: bridgeUrl, token: perProcedureToken },
   }),
@@ -151,6 +151,7 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 | `model.maxTokens` | Output cap (capped voucher keys) |
 | `model.thinkingLevel` | Default `medium`, clamped to the model |
 | `research.keyServerUrl` | Our key server: vouchers' `web_research` |
+| `research.chatgptModels` | ChatGPT plans: model and effort of each `web_research` mode (`fast`, `balanced`, `deep`); default each mode's first bundled model |
 | `research.exa` | BYOK and custom endpoints: `exa_search`/`exa_fetch` instead of `web_research` (the optional key comes from the app at call time) |
 | `research.boeBaseUrl`, `research.exaBaseUrl`, `research.allowPrivateHosts` | Tests / e2e (mock sede on localhost) |
 | `feedback` | `{submit, vote}` when the app has a feedback server: `feedback_search`, plus submit and vote when on |
@@ -203,16 +204,27 @@ spend headers.
   `timeout`, `denied`, `missing_scope`, `invalid_id_token`, …). Port 1455 busy → pass
   `manualRedirectUrl` (the URL the user pastes).
 - `refreshOAuthCredential('openai', credential)`, `credentialNeedsRefresh(credential)`.
-- `DEFAULT_MODELS = { chatgpt: 'gpt-6.1-sol', voucher: 'anthropic/claude-haiku-5.5' }` (procedure
-  agents) and `ASSISTANT_MODELS` (the assistant/orchestrator: `gpt-6-luna` for ChatGPT/Codex and
-  `anthropic/claude-haiku-5.5` for vouchers, both with thinking level `high`). The desktop app
-  always runs ChatGPT, Codex and voucher agents on these (not stored in settings, so an app update
-  changes the model); only BYOK and custom endpoints keep a user-chosen model, for every role.
-- ChatGPT plans offer different models (Plus has no `gpt-6.1-sol`). The desktop app asks OpenAI
-  which models the account has (`GET /v1/models`) and runs procedure agents on
-  `DEFAULT_MODELS.chatgpt` when the account lists it, else on the model OpenAI ranks first
-  (`priority`), preferring one pi's catalog knows with images; when that lookup fails it uses
-  `DEFAULT_MODELS.chatgpt`.
+- The models of ChatGPT, Codex and vouchers live in the repository's `models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`:
+  per role (`procedures`, `assistant`, the document `scanner`, and on ChatGPT each `research`
+  mode), a list of `"<model id>:<reasoning level>"` entries, best first; and per user type the
+  scan frame `decider`, one OpenRouter id that the key server also reads so keys allow it.
+  `BUNDLED_MODEL_LISTS` is that file as this
+  build bundles it; `parseModelLists(json, fallback)` reads a downloaded one (see the desktop app
+  below). Only BYOK and custom endpoints keep a user-chosen model, for every role.
+- **Every installed app reads the file from master on GitHub**, so pushing a change to it changes
+  the models of every app version at once. Released apps read it too, so the format can only grow:
+  they ignore fields they don't know and skip entries they can't read (an unknown reasoning level),
+  a list left empty falls back to the bundled one, and another `version` is ignored whole. An
+  incompatible format needs a new file name.
+- The desktop app (packaged builds) downloads the file at most once an hour, keeping the last one
+  read, else the bundled one, when GitHub can't be reached; development builds and e2e runs use
+  the bundled one (the working copy's). Vouchers and Codex run each list's first model.
+- ChatGPT plans offer different models (Plus has no `gpt-6.1-sol`, Go neither `gpt-6-astra`). The
+  desktop app asks OpenAI which models the account has (`GET /v1/models`) and runs each role on the
+  first model of its list the account lists, else on the model OpenAI ranks first (`priority`),
+  preferring one pi's catalog knows with images, at the effort of the list's first; when that
+  lookup fails it uses each list's first. The research modes' picks reach the host as
+  `research.chatgptModels`.
 - `listByokProviders()` — pi-ai's built-in providers with API-key auth and their chat models.
 - `redeemVoucher(keyServerUrl, code)` → `KeyServerError {code, status}` on failure.
 - Vouchers run on our LiteLLM gateway: the `litellm` provider is OpenAI-compatible at the

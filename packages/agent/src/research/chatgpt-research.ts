@@ -2,6 +2,7 @@ import type { Api, JsonValue, Model } from '@earendil-works/pi-ai';
 import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { ResearchMode } from '@sa/shared';
 import { Type } from 'typebox';
+import { BUNDLED_MODEL_LISTS, type FixedModel } from '../providers/defaults';
 import { defineSaTool, errorResult, StringEnum, textResult } from '../tools/common';
 import { WEB_RESEARCH_TOOL_NAME } from '../tools/names';
 
@@ -10,21 +11,18 @@ const MAX_WAIT_MS = 30 * 60_000;
 /** pi providers that spend a ChatGPT plan when signed in with OAuth (an API key pays per call). */
 export const CHATGPT_PLAN_PROVIDERS: readonly string[] = ['openai', 'openai-codex'];
 
-/** A model of the ChatGPT plan and its reasoning effort. */
-export interface ResearchModel {
-  id: string;
-  thinkingLevel: 'low' | 'medium' | 'high';
-}
-
 /**
- * Model and reasoning effort of each research mode on a ChatGPT plan. Every mode searches with
- * OpenAI's hosted `web_search` tool at high effort; deeper modes use larger models.
+ * Model and reasoning effort of each research mode on a ChatGPT plan, by default the first of
+ * each mode's bundled list (the app passes the ones the account's plan offers). Every mode
+ * searches with OpenAI's hosted `web_search` tool at high effort; deeper modes use larger models.
  */
-export const CHATGPT_RESEARCH_MODELS: Readonly<Record<ResearchMode, ResearchModel>> = {
-  fast: { id: 'gpt-6-luna', thinkingLevel: 'high' },
-  balanced: { id: 'gpt-6.1-sol', thinkingLevel: 'high' },
-  deep: { id: 'gpt-6-astra', thinkingLevel: 'high' },
-};
+export const CHATGPT_RESEARCH_MODELS: Readonly<Record<ResearchMode, FixedModel>> =
+  Object.fromEntries(
+    ResearchMode.options.map((mode) => [
+      mode,
+      BUNDLED_MODEL_LISTS.chatgpt.research[mode][0] as FixedModel,
+    ]),
+  ) as Record<ResearchMode, FixedModel>;
 
 const INSTRUCTIONS = `You research Spanish administrative procedures on the web for an assistant that will carry them out for a user. Search the web as much as the question needs. Prefer official sources (gob.es, boe.es, regional and municipal sites, sede electrónica pages) and say when a fact comes only from an unofficial source. Answer in the language of the question. Report eligibility, national, regional and local variations, requirements, documents, fees, deadlines, official entry points, authentication, signatures, online and in-person steps, exceptions and common blockers, as far as the question asks for them. Cite the official URL of every fact. List gaps and conflicting information instead of guessing.`;
 
@@ -33,7 +31,7 @@ export interface ChatGPTResearchOptions {
   /** The research model of a mode, configured on the agent's provider. */
   model: (id: string) => Model<Api>;
   language: 'es' | 'en';
-  models?: Readonly<Record<ResearchMode, ResearchModel>>;
+  models?: Readonly<Record<ResearchMode, FixedModel>>;
 }
 
 type Citation = { url: string; title?: string };
@@ -112,7 +110,8 @@ export function createChatGPTResearchTool(options: ChatGPTResearchOptions) {
               ],
             },
             {
-              reasoning: choice.thinkingLevel,
+              // pi has no "off" option: leaving it out sends no reasoning effort.
+              ...(choice.thinkingLevel === 'off' ? {} : { reasoning: choice.thinkingLevel }),
               signal: requestSignal,
               onPayload: (payload: unknown) => {
                 const body = payload as Record<string, unknown>;

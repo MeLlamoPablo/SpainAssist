@@ -1,9 +1,9 @@
-import type { ChatGPTLoginCallbacks } from '@sa/agent';
-import { agentAuthor } from '@sa/shared';
+import type { ChatGPTLoginCallbacks, ModelLists } from '@sa/agent';
+import { agentAuthor, type ThinkingLevel } from '@sa/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../core/i18n';
 import { SECRET_IDS } from '../core/secrets';
-import { createFakeProviderLib, FAKE_ID_TOKEN } from '../testing/fakes';
+import { createFakeProviderLib, FAKE_ID_TOKEN, FAKE_MODEL_LISTS } from '../testing/fakes';
 import { createFakeFetch, createTestApp, TEST_LOGIN_PAGES, type TestApp } from '../testing/harness';
 
 let app: TestApp;
@@ -42,6 +42,7 @@ describe('ProviderManager', () => {
     expect(await app.services.providers.agentModel()).toEqual({
       provider: 'litellm',
       id: 'test/voucher-model',
+      thinkingLevel: 'medium',
       baseUrl: 'https://llm.example.test/v1',
       maxTokens: 8192,
     });
@@ -116,6 +117,7 @@ describe('ProviderManager', () => {
     expect(await app.services.providers.agentModel()).toEqual({
       provider: 'litellm',
       id: 'test/voucher-model',
+      thinkingLevel: 'medium',
       baseUrl: 'http://127.0.0.1:8789/v1',
       maxTokens: 8192,
     });
@@ -656,6 +658,7 @@ describe('ProviderManager', () => {
     expect(await app.services.providers.agentModel()).toEqual({
       provider: 'openai',
       id: 'gpt-test',
+      thinkingLevel: 'medium',
     });
     expect(await app.services.providers.agentModel('assistant')).toEqual({
       provider: 'openai',
@@ -671,6 +674,7 @@ describe('ProviderManager', () => {
     expect(await app.services.providers.agentModel()).toEqual({
       provider: 'openai-codex',
       id: 'gpt-test',
+      thinkingLevel: 'medium',
     });
     expect(await app.services.providers.agentModel('assistant')).toEqual({
       provider: 'openai-codex',
@@ -992,13 +996,17 @@ describe('ChatGPT plan models', () => {
     const providers = app.services.providers;
 
     // No gpt-test (a Plus account without sol): the best model pi knows with images.
-    expect(await providers.agentModel()).toEqual({ provider: 'openai', id: 'gpt-test-luna' });
+    expect(await providers.agentModel()).toEqual({
+      provider: 'openai',
+      id: 'gpt-test-luna',
+      thinkingLevel: 'medium',
+    });
     expect(fetch.requests[0]?.headers.get('authorization')).toBe('Bearer acc-token-1');
     expect(await providers.agentAuthor()).toBe(agentAuthor('gpt-test-luna', 'medium'));
-    // The assistant keeps its fixed model.
+    // The assistant's list has no model of this plan either: the same pick, at its own effort.
     expect(await providers.agentModel('assistant')).toEqual({
       provider: 'openai',
-      id: 'gpt-test-assistant',
+      id: 'gpt-test-luna',
       thinkingLevel: 'high',
     });
     // The status shows the model in use, and says so when it changes.
@@ -1011,7 +1019,11 @@ describe('ChatGPT plan models', () => {
     slugs = ['gpt-test-luna', 'gpt-test'];
     await app.invoke('providers.logout');
     await app.invoke('providers.loginChatGPT');
-    expect(await providers.agentModel()).toEqual({ provider: 'openai', id: 'gpt-test' });
+    expect(await providers.agentModel()).toEqual({
+      provider: 'openai',
+      id: 'gpt-test',
+      thinkingLevel: 'medium',
+    });
     expect(listRequests(fetch)).toBe(2);
     expect(app.logLines.join('\n')).not.toContain('acc-token-1');
   });
@@ -1053,7 +1065,11 @@ describe('ChatGPT plan models', () => {
     await app.invoke('providers.loginChatGPT');
     const providers = app.services.providers;
 
-    expect(await providers.agentModel()).toEqual({ provider: 'openai', id: 'gpt-test' });
+    expect(await providers.agentModel()).toEqual({
+      provider: 'openai',
+      id: 'gpt-test',
+      thinkingLevel: 'medium',
+    });
     expect(providers.status().model).toBe('gpt-test');
     const log = app.logLines.join('\n');
     expect(log).toContain('chatgpt model list unavailable');
@@ -1189,8 +1205,143 @@ describe('ChatGPT plan models', () => {
     });
     expect((await providers.agentModel()).id).toBe('qwen3:14b');
     await app.invoke('providers.loginCodexDevice');
-    expect(await providers.agentModel()).toEqual({ provider: 'openai-codex', id: 'gpt-test' });
+    expect(await providers.agentModel()).toEqual({
+      provider: 'openai-codex',
+      id: 'gpt-test',
+      thinkingLevel: 'medium',
+    });
     expect(providers.status().model).toBe('gpt-test');
     expect(listRequests(fetch)).toBe(0);
+  });
+
+  it('runs each role on the first model of its list the plan offers, scanner and research included', async () => {
+    const at = (id: string, thinkingLevel: ThinkingLevel) => ({ id, thinkingLevel });
+    const modelLists: ModelLists = {
+      ...FAKE_MODEL_LISTS,
+      chatgpt: {
+        procedures: [at('gpt-test-sol', 'high'), at('gpt-test-terra', 'max')],
+        assistant: [at('gpt-test-luna', 'high')],
+        scanner: [at('gpt-test-sol', 'low'), at('gpt-test-terra', 'off')],
+        decider: 'test/chatgpt-decider-next',
+        research: {
+          fast: [at('gpt-test-luna', 'high')],
+          balanced: [at('gpt-test-sol', 'high'), at('gpt-test-terra', 'high')],
+          deep: [at('gpt-test-astra', 'high'), at('gpt-test-terra', 'max')],
+        },
+      },
+    };
+    // A Go plan: no sol, no astra.
+    const fetch = openai(() => modelList(['gpt-test-luna', 'gpt-test-terra']));
+    app = await createTestApp({
+      fetch,
+      providerLib: createFakeProviderLib({ ...chatgptLib(), modelLists }),
+    });
+    await app.invoke('providers.loginChatGPT');
+    const providers = app.services.providers;
+
+    expect(await providers.agentModel()).toEqual({
+      provider: 'openai',
+      ...at('gpt-test-terra', 'max'),
+    });
+    expect(await providers.agentAuthor()).toBe('gpt-test-terra · max');
+    expect(await providers.agentModel('assistant')).toEqual({
+      provider: 'openai',
+      ...at('gpt-test-luna', 'high'),
+    });
+    expect(await providers.agentModel('scanner')).toEqual({
+      provider: 'openai',
+      ...at('gpt-test-terra', 'off'),
+    });
+    // The frame decider is the file's, whatever the plan offers.
+    expect(await providers.deciderModel()).toBe('test/chatgpt-decider-next');
+    expect(await providers.researchModels()).toEqual({
+      fast: at('gpt-test-luna', 'high'),
+      balanced: at('gpt-test-terra', 'high'),
+      deep: at('gpt-test-terra', 'max'),
+    });
+    expect(listRequests(fetch)).toBe(1);
+
+    // Vouchers scan with their list's first; they research through the key server.
+    await app.invoke('providers.redeemVoucher', 'VALID-CODE');
+    expect(await providers.agentModel('scanner')).toMatchObject(
+      FAKE_MODEL_LISTS.voucher.scanner[0]!,
+    );
+    expect(await providers.deciderModel()).toBe(FAKE_MODEL_LISTS.voucher.decider);
+    expect(await providers.researchModels()).toBeUndefined();
+  });
+
+  it('runs the latest models file, read once an hour, else the last one read, else the bundled one', async () => {
+    const MODELS_FILE_URL = 'https://models.example.test/models.json';
+    let now = Date.parse('2026-10-20T09:00:00.000Z');
+    let file = (): Response =>
+      Response.json({
+        version: 1,
+        chatgpt: {
+          ...FAKE_MODEL_LISTS.chatgpt,
+          procedures: [{ id: 'gpt-test-new', thinkingLevel: 'xhigh' }],
+        },
+      });
+    const fetch = createFakeFetch(({ url }) => {
+      if (url.href === MODELS_FILE_URL) return file();
+      if (url.href === MODELS_URL) {
+        return modelList(['gpt-test-new', 'gpt-test', 'gpt-test-assistant']);
+      }
+      throw new TypeError('fetch failed');
+    });
+    const fileRequests = () => fetch.requests.filter((r) => r.url.href === MODELS_FILE_URL).length;
+    app = await createTestApp({
+      fetch,
+      providerLib: chatgptLib(),
+      clock: () => new Date(now),
+      env: { modelListsUrl: MODELS_FILE_URL },
+    });
+    await app.invoke('providers.loginChatGPT');
+    const providers = app.services.providers;
+
+    expect(await providers.agentModel()).toEqual({
+      provider: 'openai',
+      id: 'gpt-test-new',
+      thinkingLevel: 'xhigh',
+    });
+    // Lists the file does not have are the bundled ones.
+    expect((await providers.agentModel('assistant')).id).toBe('gpt-test-assistant');
+    expect(providers.status().model).toBe('gpt-test-new');
+    expect(fileRequests()).toBe(1);
+
+    // An hour later the file is gone: the last one read stays, and is not asked again for a minute.
+    file = () => new Response('Not Found', { status: 404 });
+    now += 59 * 60_000;
+    expect((await providers.agentModel()).id).toBe('gpt-test-new');
+    expect(fileRequests()).toBe(1);
+    now += 2 * 60_000;
+    expect((await providers.agentModel()).id).toBe('gpt-test-new');
+    expect(app.logLines.join('\n')).toContain('models file unavailable');
+    now += 30_000;
+    expect((await providers.agentModel()).id).toBe('gpt-test-new');
+    expect(fileRequests()).toBe(2);
+
+    // A file of another version is not read either.
+    file = () => Response.json({ version: 2 });
+    now += 61_000;
+    expect((await providers.agentModel()).id).toBe('gpt-test-new');
+    expect(fileRequests()).toBe(3);
+  });
+
+  it('runs the bundled models file when the latest one was never read', async () => {
+    const fetch = createFakeFetch(({ url }) => {
+      if (url.href === MODELS_URL) return modelList(['gpt-test-new', 'gpt-test']);
+      throw new TypeError('fetch failed');
+    });
+    app = await createTestApp({
+      fetch,
+      providerLib: chatgptLib(),
+      env: { modelListsUrl: 'https://models.example.test/models.json' },
+    });
+    await app.invoke('providers.loginChatGPT');
+    expect(await app.services.providers.agentModel()).toEqual({
+      provider: 'openai',
+      id: 'gpt-test',
+      thinkingLevel: 'medium',
+    });
   });
 });

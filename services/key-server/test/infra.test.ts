@@ -1,8 +1,21 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { ConfigError, DEV_ENCRYPTION_KEY, DEV_PEPPER, loadConfig } from '../src/config';
+import {
+  ConfigError,
+  DEV_ENCRYPTION_KEY,
+  DEV_PEPPER,
+  loadConfig,
+  modelsFileDeciders,
+} from '../src/config';
 import { MIGRATIONS_DIR, migrate } from '../src/db/migrate';
 import { openDatabase } from '../src/db/open';
 import { createProvisioner } from '../src/providers';
@@ -115,6 +128,20 @@ describe('openDatabase', () => {
   });
 });
 
+describe('modelsFileDeciders', () => {
+  it("reads the repository models file's deciders", () => {
+    const file = new URL(
+      '../../../models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json',
+      import.meta.url,
+    );
+    const json = JSON.parse(readFileSync(file, 'utf8'));
+    expect(modelsFileDeciders()).toEqual({
+      chatgpt: json.chatgpt.decider,
+      voucher: json.voucher.decider,
+    });
+  });
+});
+
 describe('loadConfig', () => {
   it('has development defaults', () => {
     const config = loadConfig({});
@@ -127,7 +154,9 @@ describe('loadConfig', () => {
       devSeed: false,
       keyTtlDays: 180,
       searchTools: [],
-      deciderModel: '~perplexity/pplx-decider-flash-latest',
+      // The models file's deciders: the ones the app calls.
+      deciderModel: modelsFileDeciders().chatgpt,
+      voucherDeciderModel: modelsFileDeciders().voucher,
       chatgptKeys: {
         enabled: true,
         dailyBudgetUsd: 0.1,

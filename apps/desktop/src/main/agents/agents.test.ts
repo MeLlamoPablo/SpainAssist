@@ -746,6 +746,24 @@ describe('procedure agents', () => {
     expect(voucher.agent!.launch.config.research?.exa).toBeUndefined();
   });
 
+  it('research on a ChatGPT plan with the models the app picked for it', async () => {
+    app = await createTestApp();
+    await app.invoke('providers.loginChatGPT');
+    const chatgpt = await app.startProcedure('Trámite A');
+    // OpenAI's model list is offline here: each mode's first model.
+    expect(chatgpt.agent!.launch.config.research?.chatgptModels).toEqual({
+      fast: { id: 'gpt-test-fast', thinkingLevel: 'high' },
+      balanced: { id: 'gpt-test-balanced', thinkingLevel: 'high' },
+      deep: { id: 'gpt-test-deep', thinkingLevel: 'high' },
+    });
+    await app.close();
+
+    app = await createTestApp();
+    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
+    const voucher = await app.startProcedure('Trámite B');
+    expect(voucher.agent!.launch.config.research?.chatgptModels).toBeUndefined();
+  });
+
   it('all stop when the provider or the language changes', async () => {
     await withProvider();
     const a = await app.startProcedure('Trámite A');

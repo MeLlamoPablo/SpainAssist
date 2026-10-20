@@ -7,6 +7,7 @@ import type {
   AgentEvent,
   AgentLaunch,
   AgentLaunchOptions,
+  ModelLists,
   PromptDisposition,
   PromptImage,
 } from '@sa/agent';
@@ -610,6 +611,27 @@ export const FAKE_ID_TOKEN = [
   'fake-signature',
 ].join('.');
 
+/** The bundled models file of tests: one model per list, so the first is always the one run. */
+export const FAKE_MODEL_LISTS: ModelLists = {
+  chatgpt: {
+    procedures: [{ id: 'gpt-test', thinkingLevel: 'medium' }],
+    assistant: [{ id: 'gpt-test-assistant', thinkingLevel: 'high' }],
+    scanner: [{ id: 'gpt-test-scanner', thinkingLevel: 'low' }],
+    decider: 'test/chatgpt-decider',
+    research: {
+      fast: [{ id: 'gpt-test-fast', thinkingLevel: 'high' }],
+      balanced: [{ id: 'gpt-test-balanced', thinkingLevel: 'high' }],
+      deep: [{ id: 'gpt-test-deep', thinkingLevel: 'high' }],
+    },
+  },
+  voucher: {
+    procedures: [{ id: 'test/voucher-model', thinkingLevel: 'medium' }],
+    assistant: [{ id: 'test/voucher-assistant', thinkingLevel: 'high' }],
+    scanner: [{ id: 'test/voucher-scanner', thinkingLevel: 'low' }],
+    decider: 'test/voucher-decider',
+  },
+};
+
 export function createFakeProviderLib(overrides: Partial<ProviderLib> = {}): ProviderLib & {
   readonly refreshCalls: number;
   /** Refresh tokens of the ChatGPT sessions ended at OpenAI, in order. */
@@ -618,10 +640,12 @@ export function createFakeProviderLib(overrides: Partial<ProviderLib> = {}): Pro
   const counters = { refresh: 0 };
   const revoked: string[] = [];
   const lib: ProviderLib = {
-    defaultModels: { chatgpt: 'gpt-test', voucher: 'test/voucher-model' },
-    assistantModels: {
-      chatgpt: { id: 'gpt-test-assistant', thinkingLevel: 'high' },
-      voucher: { id: 'test/voucher-assistant', thinkingLevel: 'high' },
+    modelLists: FAKE_MODEL_LISTS,
+    // A downloaded file's lists replace the bundled ones; only version 1 is read.
+    parseModelLists(json, fallback) {
+      if ((json as { version?: unknown } | null)?.version !== 1) throw new Error('bad version');
+      const { chatgpt, voucher } = json as Partial<ModelLists>;
+      return { chatgpt: chatgpt ?? fallback.chatgpt, voucher: voucher ?? fallback.voucher };
     },
     async loginChatGPT() {
       return {

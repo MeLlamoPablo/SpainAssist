@@ -122,6 +122,7 @@ export async function runHost(
           baseUrl: model.baseUrl,
         }),
         language: config.language,
+        ...(config.research.chatgptModels ? { models: config.research.chatgptModels } : {}),
       }),
     );
   } else if (research === 'exa') {
