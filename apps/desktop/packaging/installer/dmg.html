@@ -6,8 +6,10 @@
   <style>
     @font-face { font-family: Instrument; src: url('./serif.ttf'); }
     @font-face { font-family: Inter; src: url('./inter.woff2'); }
-    html, body { margin: 0; width: 720px; height: 442px; overflow: hidden; background: #3a1a14; }
+    html, body { margin: 0; width: 720px; height: 502px; overflow: hidden; background: #3a1a14; }
     body { background-image: url('./shader.png'); background-size: 720px 480px; background-position: 0 -38px; }
+    /* Finder's title and status bars hide the bottom 60 pt: continue the shader there, mirrored. */
+    body::after { content: ''; position: absolute; left: 0; top: 442px; width: 720px; height: 60px; background: url('./shader.png') 0 -420px / 720px 480px; transform: scaleY(-1); }
     main { position: absolute; left: 48px; top: 38px; width: 624px; }
     h1 { margin: 0 0 12px; font: 400 44px/1.1 Instrument, serif; color: white; }
     p { margin: 0; font: 400 15px/1.45 Inter, sans-serif; color: rgb(255 255 255 / 85%); }

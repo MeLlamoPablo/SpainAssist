@@ -22,7 +22,7 @@ const browser = await chromium.launch();
 try {
   for (const scale of [1, 2]) {
     const page = await browser.newPage({
-      viewport: { width: 720, height: 442 },
+      viewport: { width: 720, height: 502 },
       deviceScaleFactor: scale,
     });
     await page.goto(new URL('installer/dmg.html', import.meta.url).href);

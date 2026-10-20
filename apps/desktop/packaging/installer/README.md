@@ -9,8 +9,11 @@ The supplied `shader.png` is the user's exported “Background Shader@3x.png”.
   sits behind the icon and Finder's black filename, matching the Framer design.
 - `progress.html` reproduces screen 04 beneath the native title bar. It has an
   indeterminate CSS animation and respects reduced motion.
-- `background.tiff` contains 1× and 2× representations at 720 × 442 pt. `background.png`
-  is its 1× preview. Only the TIFF goes into the DMG.
+- `background.tiff` contains 1× and 2× representations at 720 × 502 pt. `background.png`
+  is its 1× preview. Only the TIFF goes into the DMG. dmg-builder sizes the outer Finder
+  window from the image (it ignores `dmg.window` when there is a background), and Finder's
+  title and status bars cover about 60 pt, so only the top 442 pt shows. The bottom 60 pt
+  continue the shader, mirrored, in case less chrome is drawn.
 - `serif.ttf`, `inter.woff2` and `icon.png` are generated copies of existing app assets,
   also shipped with the preparation window so no network or vault is needed.
 

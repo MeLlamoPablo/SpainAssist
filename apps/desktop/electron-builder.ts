@@ -187,9 +187,9 @@ const config: Configuration = {
   dmg: {
     title: 'Spain Assist',
     background: 'packaging/installer/background.tiff',
-    // Finder's title and status bars use roughly 60 pt of this outer window height.
-    // Leave the full 442 pt artwork visible, including the space below the card.
-    window: { width: 720, height: 502 },
+    // dmg-builder ignores `window` when there is a background: the outer window takes the
+    // image's size. The artwork is 502 pt tall so that the 442 pt Finder shows below its
+    // title and status bars keeps the space under the card (packaging/installer/README.md).
     iconSize: 112,
     iconTextSize: 14,
     // A single real Finder item. Opening it installs and relaunches the app automatically.
