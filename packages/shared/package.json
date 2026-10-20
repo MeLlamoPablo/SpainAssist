@@ -1,6 +1,6 @@
 {
   "name": "@sa/shared",
-  "version": "0.3.0-beta",
+  "version": "0.3.0",
   "private": true,
   "license": "MIT",
   "type": "module",
