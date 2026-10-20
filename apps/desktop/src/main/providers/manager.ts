@@ -25,6 +25,7 @@ import { type Clock, errorMessage, hostOf, Mutex } from '../core/util';
 import type { ProviderLib, VaultPort } from '../ports';
 import type { FetchFn } from '../remote/http';
 import type { AppStateStore, SettingsStore } from '../settings/store';
+import { fetchChatGPTModels, pickChatGPTModel } from './chatgpt-models';
 import { probeCustomEndpoint } from './probe';
 
 /** pi provider of voucher keys: our LiteLLM gateway at the voucher's base URL. */
@@ -94,6 +95,10 @@ interface OAuthSecret {
 
 /** Don't ask the key server again for this long after a failed attempt. */
 const SCAN_KEY_RETRY_MS = 60_000;
+/** A ChatGPT account's plan rarely changes: its model pick is kept this long. */
+const CHATGPT_MODELS_TTL_MS = 60 * 60_000;
+/** After a failed model list, agents and scans use the default model this long without asking. */
+const CHATGPT_MODELS_RETRY_MS = 60_000;
 
 /** `exp` of a JWT in ms (the ID token was verified at sign-in), or 0 when unreadable. */
 function jwtExpiry(token: string): number {
@@ -174,6 +179,12 @@ export class ProviderManager {
   private chatgptIdToken?: { token: string; expiresAt: number };
   private scanKeyFetch?: Promise<UserKey | undefined>;
   private scanKeyFailedAt = 0;
+  /** The procedure model picked from the ChatGPT account's model list, and when. */
+  private chatgptPick?: { id: string; at: number };
+  private chatgptPickFetch?: Promise<string>;
+  private chatgptPickFailedAt = 0;
+  /** Bumped on every provider change, so a lookup for the previous account is not kept. */
+  private chatgptPickGeneration = 0;
 
   constructor(private readonly deps: ProviderManagerDeps) {}
 
@@ -204,7 +215,7 @@ export class ProviderManager {
       configured: true,
       kind: p.kind,
       label: this.label(p),
-      model: this.modelOf(p),
+      model: (p.kind === 'chatgpt' && this.chatgptPick?.id) || this.modelOf(p),
     };
     if (isOAuth(p) && this.oauthAccount) status.account = this.oauthAccount;
     if (p.kind === 'voucher' && this.credit) status.credit = creditOf(this.credit.value);
@@ -380,6 +391,10 @@ export class ProviderManager {
     this.voucherExpiresAt = undefined;
     if (!isOAuth(config)) this.oauthAccount = undefined;
     if (config?.kind !== 'chatgpt') this.chatgptIdToken = undefined;
+    this.chatgptPick = undefined;
+    this.chatgptPickFetch = undefined;
+    this.chatgptPickFailedAt = 0;
+    this.chatgptPickGeneration++;
     await this.deps.onChanged();
     this.emitStatus();
     if (config?.kind === 'voucher') void this.refreshCredit();
@@ -829,7 +844,7 @@ export class ProviderManager {
       case 'codex': {
         const provider = p.kind === 'chatgpt' ? 'openai' : 'openai-codex';
         if (role === 'assistant') return { provider, ...assistant.chatgpt };
-        return { provider, id: this.modelOf(p) };
+        return { provider, id: p.kind === 'chatgpt' ? await this.chatgptModel() : this.modelOf(p) };
       }
       case 'voucher': {
         const baseUrl = await this.deps.state.voucherBaseUrl();
@@ -865,6 +880,63 @@ export class ProviderManager {
         ? 'off'
         : (model.thinkingLevel ?? DEFAULT_THINKING_LEVEL);
     return agentAuthor(model.id, level);
+  }
+
+  /**
+   * The ChatGPT procedure model: the app's default when the account's plan offers it (Plus has no
+   * gpt-6.1-sol), else the plan's best model pi's catalog knows with images, else its best model.
+   * Kept for an hour and shared by callers at the same time. When OpenAI can't say, the account's
+   * last pick or the app's default model, without asking again for a minute.
+   */
+  private async chatgptModel(): Promise<string> {
+    const now = this.deps.clock().getTime();
+    if (this.chatgptPick && now - this.chatgptPick.at < CHATGPT_MODELS_TTL_MS) {
+      return this.chatgptPick.id;
+    }
+    if (this.chatgptPickFetch) return this.chatgptPickFetch;
+    const fallback = this.deps.lib.defaultModels.chatgpt;
+    // Cleared on every provider change, so a pick here is always this account's.
+    const known = () => this.chatgptPick?.id ?? fallback;
+    if (now - this.chatgptPickFailedAt < CHATGPT_MODELS_RETRY_MS) return known();
+    const generation = this.chatgptPickGeneration;
+    const current = () => generation === this.chatgptPickGeneration;
+    const lookup = (async () => {
+      let category: string;
+      try {
+        const credential = await this.refreshCredential('openai');
+        const access = credential?.access;
+        if (typeof access === 'string' && access) {
+          const ids = await fetchChatGPTModels(this.deps.fetch, access);
+          const withImages = new Set(
+            this.catalog('openai')
+              .filter((m) => m.supportsImages)
+              .map((m) => m.id),
+          );
+          const picked = pickChatGPTModel(ids, fallback, (id) => withImages.has(id));
+          if (!picked) this.deps.logger.warn('chatgpt model list has no eligible model');
+          const id = picked ?? fallback;
+          // Signed in again meanwhile: the list was the old account's, so ask for the new one.
+          if (!current()) return this.chatgptModel();
+          const shown = this.status().model;
+          this.chatgptPick = { id, at: this.deps.clock().getTime() };
+          if (shown !== id) this.emitStatus();
+          return id;
+        }
+        category = 'no_credential';
+      } catch (err) {
+        // Model list errors carry a category; anything else came from the credential refresh.
+        const listError = (err as { category?: unknown } | null)?.category;
+        category = typeof listError === 'string' ? listError : 'credential';
+      }
+      this.deps.logger.warn('chatgpt model list unavailable', { category });
+      if (!current()) return this.chatgptModel();
+      this.chatgptPickFailedAt = this.deps.clock().getTime();
+      return known();
+    })().finally(() => {
+      if (this.chatgptPickFetch === lookup) this.chatgptPickFetch = undefined;
+    });
+    this.chatgptPickFetch = lookup;
+    return lookup;
   }
 
   /** BYOK and custom endpoints keep the user's model; the others use this app version's. */

@@ -24,7 +24,7 @@ import { ScanTranscript } from './transcript';
 /** How long a present but illegible document must last before the lighting hint shows. */
 const LEGIBILITY_HELP_DELAY_MS = 5_000;
 
-/** Scan model of OpenAI / ChatGPT connections, with low reasoning. */
+/** Scan model of OpenAI API keys and Codex connections, with low reasoning. */
 const OPENAI_SCANNER_MODEL = 'gpt-6.1-sol';
 /** Scan model of vouchers (our LiteLLM gateway), with low reasoning. */
 const VOUCHER_SCANNER_MODEL = 'anthropic/claude-haiku-5.5';
@@ -112,11 +112,14 @@ export class DocumentScanner {
 
   private async prepare() {
     const selected = await this.providers.agentModel();
-    const cfg = ['openai', 'openai-codex'].includes(selected.provider)
-      ? { ...selected, id: OPENAI_SCANNER_MODEL }
-      : selected.provider === 'litellm'
-        ? { ...selected, id: VOUCHER_SCANNER_MODEL }
-        : selected;
+    // ChatGPT accounts scan with the model their plan offers, which agentModel() picked.
+    const cfg =
+      selected.provider === 'openai-codex' ||
+      (selected.provider === 'openai' && this.providers.status().kind !== 'chatgpt')
+        ? { ...selected, id: OPENAI_SCANNER_MODEL }
+        : selected.provider === 'litellm'
+          ? { ...selected, id: VOUCHER_SCANNER_MODEL }
+          : selected;
     const credential = (await this.providers.refreshCredential(cfg.provider)) as
       | Credential
       | undefined;

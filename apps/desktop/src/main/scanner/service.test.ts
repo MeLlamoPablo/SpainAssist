@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { AgentHostConfig } from '@sa/agent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ScannerEvent } from '../../scanner';
@@ -86,19 +87,42 @@ describe('document vision scanner', () => {
     p.agentModel = vi.fn(async () => ({ ...textOnly, supportsImages: true }));
     expect(await scanner.status()).toMatchObject({ available: true, model: 'mock-vision' });
   });
-  it('uses a dedicated vision model for OpenAI without changing the chat model', async () => {
+  it('uses a dedicated vision model for Codex without changing the chat model', async () => {
     const p = provider();
-    p.agentModel = vi.fn(async () => ({
-      provider: 'openai',
-      id: 'gpt-6-astra',
-      baseUrl: 'http://127.0.0.1:1',
-      api: 'openai-completions',
-    }));
+    p.agentModel = vi.fn(async () => ({ provider: 'openai-codex', id: 'gpt-6-astra' }));
     const scanner = new DocumentScanner(p as unknown as ProviderManager, () => 'en');
     // Sol cannot turn reasoning off, yet scans: with its lowest effort.
     expect(await scanner.status()).toMatchObject({ available: true, model: 'gpt-6.1-sol' });
     expect((await p.agentModel()).id).toBe('gpt-6-astra');
   });
+  // ChatGPT plans offer different models: scan with the one the provider manager picked.
+  it.each([
+    ['chatgpt', 'openai', 'gpt-6-luna', 'gpt-6-luna', {}],
+    ['chatgpt', 'openai', 'gpt-6.1-sol', 'gpt-6.1-sol', { reasoning: 'low' }],
+    ['codex', 'openai-codex', 'gpt-6-luna', 'gpt-6.1-sol', { reasoning: 'low' }],
+    ['byok', 'openai', 'gpt-6-astra', 'gpt-6.1-sol', { reasoning: 'low' }],
+  ])(
+    'scans a %s %s %s account with %s and %o',
+    async (kind, providerId, id, scanModel, reasoning) => {
+      const p = provider();
+      p.status = () => ({ configured: true, kind, label: 'OpenAI' });
+      p.agentModel = vi.fn(async () => ({ provider: providerId, id }));
+      const complete = vi.spyOn(ModelRuntime.prototype, 'completeSimple').mockResolvedValue({
+        stopReason: 'stop',
+        content: [{ type: 'text', text: JSON.stringify(fields) }],
+      } as Awaited<ReturnType<ModelRuntime['completeSimple']>>);
+      const scanner = new DocumentScanner(p as unknown as ProviderManager, () => 'en');
+      expect(await scanner.status()).toMatchObject({ available: true, model: scanModel });
+      expect(await scanner.read(image)).toEqual(fields);
+      expect(complete).toHaveBeenCalledOnce();
+      const [model, , options] = complete.mock.calls[0]!;
+      expect(model).toMatchObject({ provider: providerId, id: scanModel });
+      expect(options).not.toHaveProperty('onPayload');
+      if ('reasoning' in reasoning) expect(options).toMatchObject(reasoning);
+      else expect(options).not.toHaveProperty('reasoning');
+      expect(p.refreshCredential).toHaveBeenCalledWith(providerId);
+    },
+  );
   it.each([
     ['gpt-6.1-sol', { reasoning: 'low' }],
     ['google/gemini-3.5-flash-lite', { reasoning: 'minimal' }],

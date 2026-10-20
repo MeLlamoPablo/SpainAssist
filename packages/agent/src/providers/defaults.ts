@@ -3,7 +3,8 @@ import type { ThinkingLevel } from '@sa/shared';
 /**
  * The procedure agents' models of ChatGPT (also Codex in development builds) and vouchers. The app
  * uses them as is and never stores them, so a new app version changes the model for every
- * install. ChatGPT: the best model of the current Plus/Pro generation. Voucher: OpenRouter id.
+ * install. ChatGPT: the best model of the current Plus/Pro generation; a ChatGPT account whose
+ * plan does not offer it gets the model OpenAI ranks first for it. Voucher: OpenRouter id.
  */
 export const DEFAULT_MODELS: { chatgpt: string; voucher: string } = {
   chatgpt: 'gpt-6.1-sol',

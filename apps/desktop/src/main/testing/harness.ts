@@ -20,6 +20,7 @@ import type { SaEnv } from '../app/env';
 import { createAppPaths } from '../app/paths';
 import { createMainServices, type MainDeps, type MainServices } from '../app/services';
 import { createLogger } from '../core/logger';
+import type { Clock } from '../core/util';
 import { type Biometric, noBiometric, type ProviderLib } from '../ports';
 import type { FetchFn } from '../remote/http';
 import {
@@ -53,6 +54,8 @@ export interface TestAppOptions {
   features?: Partial<FeatureFlags>;
   /** The relay socket for DNIe signatures (with `env.relayServerUrl`). */
   relaySocket?: typeof WebSocket;
+  /** The app's clock. Default: the system clock. */
+  clock?: Clock;
 }
 
 export type TestApp = Awaited<ReturnType<typeof createTestApp>>;
@@ -179,6 +182,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     isTrustedSender: (ctx) => ctx.isMainFrame && ctx.senderUrl === APP_PAGE,
     ...(opts.idleMs !== undefined ? { idleMs: opts.idleMs } : {}),
     ...(opts.relaySocket ? { relaySocket: opts.relaySocket } : {}),
+    ...(opts.clock ? { clock: opts.clock } : {}),
   };
 
   let services: MainServices = await createMainServices(mainDeps);

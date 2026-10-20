@@ -208,6 +208,11 @@ spend headers.
   `anthropic/claude-haiku-5.5` for vouchers, both with thinking level `high`). The desktop app
   always runs ChatGPT, Codex and voucher agents on these (not stored in settings, so an app update
   changes the model); only BYOK and custom endpoints keep a user-chosen model, for every role.
+- ChatGPT plans offer different models (Plus has no `gpt-6.1-sol`). The desktop app asks OpenAI
+  which models the account has (`GET /v1/models`) and runs procedure agents on
+  `DEFAULT_MODELS.chatgpt` when the account lists it, else on the model OpenAI ranks first
+  (`priority`), preferring one pi's catalog knows with images; when that lookup fails it uses
+  `DEFAULT_MODELS.chatgpt`.
 - `listByokProviders()` — pi-ai's built-in providers with API-key auth and their chat models.
 - `redeemVoucher(keyServerUrl, code)` → `KeyServerError {code, status}` on failure.
 - Vouchers run on our LiteLLM gateway: the `litellm` provider is OpenAI-compatible at the
