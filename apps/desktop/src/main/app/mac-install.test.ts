@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+type Handler = (...args: unknown[]) => void;
 const mocks = vi.hoisted(() => ({
+  handlers: new Map<string, Handler>(),
   app: {
     isPackaged: true,
     isInApplicationsFolder: vi.fn(() => false),
@@ -16,15 +18,21 @@ const mocks = vi.hoisted(() => ({
   win: {
     loadFile: vi.fn(async () => {}),
     show: vi.fn(),
-    on: vi.fn(),
+    on: vi.fn((event: string, handler: Handler) => mocks.handlers.set(`win:${event}`, handler)),
+    close: vi.fn(),
     isDestroyed: vi.fn(() => false),
-    webContents: { setWindowOpenHandler: vi.fn(), capturePage: vi.fn(async () => {}) },
+    webContents: {
+      setWindowOpenHandler: vi.fn(),
+      capturePage: vi.fn(async () => {}),
+      on: vi.fn((event: string, handler: Handler) => mocks.handlers.set(event, handler)),
+    },
   },
   errorBox: vi.fn(),
   bundleManifest: vi.fn(async () => 'manifest'),
   cleanupInstaller: vi.fn(async () => {}),
   detachInstaller: vi.fn(),
   forgetInstaller: vi.fn(async () => {}),
+  hasPendingInstaller: vi.fn(async () => true),
   identifyInstaller: vi.fn(async () => ({
     image: '/Downloads/app.dmg',
     mount: '/Volumes/Spain Assist',
@@ -48,6 +56,7 @@ import { installMacApp } from './mac-install';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.handlers.clear();
   vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: '/app/resources' });
   mocks.app.isPackaged = true;
   mocks.app.isInApplicationsFolder.mockReturnValue(false);
@@ -69,7 +78,9 @@ describe('automatic macOS installation', () => {
 
   it('shows the preparation window and records the source before moving without confirmation', async () => {
     expect(await installMacApp(false)).toBe(true);
-    expect(mocks.win.loadFile).toHaveBeenCalledWith('/app/resources/installer/progress.html');
+    expect(mocks.win.loadFile).toHaveBeenCalledWith('/app/resources/installer/progress.html', {
+      hash: undefined,
+    });
     expect(mocks.win.show).toHaveBeenCalled();
     expect(mocks.identifyInstaller).toHaveBeenCalledWith(
       [],
@@ -90,12 +101,51 @@ describe('automatic macOS installation', () => {
     expect(mocks.errorBox).not.toHaveBeenCalled();
   });
 
-  it('starts cleanup without a window or completion dialog in the installed app', async () => {
+  it('starts the installed app directly when no copy is pending', async () => {
     mocks.app.isInApplicationsFolder.mockReturnValue(true);
+    mocks.hasPendingInstaller.mockResolvedValueOnce(false);
     expect(await installMacApp(false)).toBe(false);
-    expect(mocks.cleanupInstaller).toHaveBeenCalledOnce();
     expect(mocks.win.loadFile).not.toHaveBeenCalled();
+    expect(mocks.cleanupInstaller).not.toHaveBeenCalled();
+  });
+
+  /** Resolves once the installed app shows its finished screen and waits for the user. */
+  async function installedScreen(): Promise<{ started: Promise<boolean> }> {
+    mocks.app.isInApplicationsFolder.mockReturnValue(true);
+    const started = installMacApp(false);
+    await vi.waitFor(() => expect(mocks.handlers.has('did-navigate-in-page')).toBe(true));
+    expect(mocks.win.loadFile).toHaveBeenCalledWith('/app/resources/installer/progress.html', {
+      hash: 'installed',
+    });
+    expect(mocks.cleanupInstaller).not.toHaveBeenCalled();
+    return { started };
+  }
+
+  it('moves the installer to Trash only after the button, then starts the app', async () => {
+    const { started } = await installedScreen();
+    mocks.handlers.get('did-navigate-in-page')?.({}, 'file:///app/progress.html#opening');
+    expect(await started).toBe(false);
+    expect(mocks.cleanupInstaller).toHaveBeenCalledOnce();
+    expect(mocks.win.close).toHaveBeenCalled();
     expect(mocks.app.moveToApplicationsFolder).not.toHaveBeenCalled();
+  });
+
+  it('starts the app when Trash access is denied', async () => {
+    mocks.cleanupInstaller.mockRejectedValueOnce(new Error('Operation not permitted'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { started } = await installedScreen();
+    mocks.handlers.get('did-navigate-in-page')?.({}, 'file:///app/progress.html#opening');
+    expect(await started).toBe(false);
+    expect(mocks.win.close).toHaveBeenCalled();
+  });
+
+  it('keeps the installer and starts the app when the window is closed instead', async () => {
+    const { started } = await installedScreen();
+    mocks.handlers.get('win:closed')?.();
+    expect(await started).toBe(false);
+    expect(mocks.cleanupInstaller).not.toHaveBeenCalled();
+    expect(mocks.forgetInstaller).toHaveBeenCalled();
+    expect(mocks.app.quit).not.toHaveBeenCalled();
   });
 
   it('quits without starting from the image when authorization is cancelled', async () => {

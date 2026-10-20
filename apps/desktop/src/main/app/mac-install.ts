@@ -5,6 +5,7 @@ import {
   cleanupInstaller,
   detachInstaller,
   forgetInstaller,
+  hasPendingInstaller,
   identifyInstaller,
   mountedDiskImages,
   rememberInstaller,
@@ -17,33 +18,12 @@ export async function installMacApp(e2e: boolean): Promise<boolean> {
   if (process.platform !== 'darwin' || !app.isPackaged || e2e) return false;
   const userData = app.getPath('userData');
   if (app.isInApplicationsFolder()) {
-    // The installed instance is alive. Cleanup never blocks onboarding or shows a success screen.
-    void cleanupInstaller({
-      userData,
-      manifest: () => bundleManifest(bundlePath()),
-      images: mountedDiskImages,
-      detach: detachInstaller,
-      trash: (image) => shell.trashItem(image),
-    }).catch((error: unknown) => console.warn('Installer cleanup skipped:', error));
+    if (await hasPendingInstaller(userData)) await offerInstallerCleanup(userData);
     return false;
   }
 
-  const win = new BrowserWindow({
-    width: 720,
-    height: 480,
-    useContentSize: false,
-    resizable: false,
-    maximizable: false,
-    minimizable: false,
-    show: false,
-    title: 'Spain Assist',
-    backgroundColor: '#fbf7f2',
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
-  });
+  const win = await showInstallerWindow();
   win.on('closed', () => app.quit());
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  await win.loadFile(join(process.resourcesPath, 'installer/progress.html'));
-  win.show();
   // Wait for a composited frame before the synchronous native copy. The renderer keeps the
   // indeterminate CSS animation running while the main process is occupied by the bundle mover.
   await win.webContents.capturePage();
@@ -74,4 +54,50 @@ export async function installMacApp(e2e: boolean): Promise<boolean> {
   }
   // The native mover quits this process and opens the installed app. Never start the app on DMG.
   return true;
+}
+
+async function showInstallerWindow(hash?: string): Promise<BrowserWindow> {
+  const win = new BrowserWindow({
+    width: 720,
+    height: 480,
+    useContentSize: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    show: false,
+    title: 'Spain Assist',
+    backgroundColor: '#fbf7f2',
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  await win.loadFile(join(process.resourcesPath, 'installer/progress.html'), { hash });
+  win.show();
+  return win;
+}
+
+/**
+ * The installed app's first launch finishes the copy screen with a button, so the Downloads
+ * access prompt that moving the DMG may raise answers the user's own click, never startup.
+ * Clicking or closing the window both start the app, whether or not the DMG reached Trash.
+ */
+async function offerInstallerCleanup(userData: string): Promise<void> {
+  const win = await showInstallerWindow('installed');
+  const trash = await new Promise<boolean>((resolve) => {
+    win.webContents.on('did-navigate-in-page', (_event, url) => {
+      if (new URL(url).hash === '#opening') resolve(true);
+    });
+    win.on('closed', () => resolve(false));
+  });
+  if (trash) {
+    await cleanupInstaller({
+      userData,
+      manifest: () => bundleManifest(bundlePath()),
+      images: mountedDiskImages,
+      detach: detachInstaller,
+      trash: (image) => shell.trashItem(image),
+    }).catch((error: unknown) => console.warn('Installer cleanup skipped:', error));
+  } else {
+    await forgetInstaller(userData).catch(() => {});
+  }
+  if (!win.isDestroyed()) win.close();
 }

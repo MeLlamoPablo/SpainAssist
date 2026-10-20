@@ -8,24 +8,43 @@
     @font-face { font-family: Instrument; src: url('./serif.ttf'); }
     @font-face { font-family: Inter; src: url('./inter.woff2'); }
     * { box-sizing: border-box; }
-    html, body { margin: 0; width: 100%; height: 100%; background: #fbf7f2; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #fbf7f2; }
     body { color: #3a1a14; font-family: Inter, sans-serif; -webkit-app-region: drag; }
     img { position: absolute; width: 80px; height: 80px; top: 57px; left: calc(50% - 40px); }
-    main { position: absolute; top: 182px; left: calc(50% - 250px); width: 500px; text-align: center; }
+    section { position: absolute; top: 182px; left: calc(50% - 250px); width: 500px; text-align: center; }
+    /* The main process moves between states by URL fragment; the page itself runs no script. */
+    #installed, #opening, main:has(:target) #copying { display: none; }
+    #installed:target, #opening:target { display: block; }
     h1 { margin: 0 0 20px; font: 400 40px/1.45 Instrument, serif; }
     p { margin: 0 0 20px; color: #725d55; font-size: 15px; line-height: 1.45; }
     .progress { position: relative; height: 4px; border-radius: 4px; background: #e8ddd1; overflow: hidden; }
     .progress::after { content: ''; position: absolute; width: 26%; height: 100%; border-radius: inherit; background: #c8402a; animation: preparing 1.5s ease-in-out infinite alternate; }
     @keyframes preparing { from { left: 0; } to { left: 74%; } }
+    a { display: inline-flex; align-items: center; height: 44px; padding: 0 20px; border-radius: 12px; background: #c8402a; color: #fff; font-size: 15px; font-weight: 500; text-decoration: none; box-shadow: 0 1px 2px rgb(58 26 20 / 0.12); -webkit-app-region: no-drag; transition: background-color 150ms; }
+    a:hover { background: #b33722; }
+    a:active { transform: translateY(1px); }
+    a:focus-visible { outline: 2px solid #c8402a; outline-offset: 3px; }
     @media (prefers-reduced-motion: reduce) { .progress::after { animation: none; left: 37%; } }
   </style>
 </head>
 <body>
   <img src="./icon.png" alt="">
   <main>
-    <h1>Preparando tu asistente</h1>
-    <p>Spain Assist se abrirá en un momento.</p>
-    <div class="progress" role="progressbar" aria-label="Instalando Spain Assist"></div>
+    <section id="copying">
+      <h1>Preparando tu asistente</h1>
+      <p>Spain Assist se abrirá en un momento.</p>
+      <div class="progress" role="progressbar" aria-label="Instalando Spain Assist"></div>
+    </section>
+    <section id="installed">
+      <h1>Ya está en Aplicaciones</h1>
+      <p>El instalador ya no hace falta.</p>
+      <a href="#opening">Mover el instalador a la papelera</a>
+    </section>
+    <section id="opening">
+      <h1>Abriendo Spain Assist</h1>
+      <p>Un momento.</p>
+      <div class="progress" role="progressbar" aria-label="Abriendo Spain Assist"></div>
+    </section>
   </main>
 </body>
 </html>

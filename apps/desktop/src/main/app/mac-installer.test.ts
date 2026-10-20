@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   cleanupInstaller,
+  forgetInstaller,
+  hasPendingInstaller,
   identifyInstaller,
   isSameInstaller,
   rememberInstaller,
@@ -107,6 +109,13 @@ describe('macOS installer identity and cleanup', () => {
     );
     await cleanupInstaller(options);
     expect(options.trash).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers cleanup only while a recorded copy is pending', async () => {
+    const { options } = await fixture();
+    expect(await hasPendingInstaller(options.userData)).toBe(true);
+    await forgetInstaller(options.userData);
+    expect(await hasPendingInstaller(options.userData)).toBe(false);
   });
 
   it('handles an image already ejected by Electron', async () => {

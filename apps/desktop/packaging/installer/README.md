@@ -8,7 +8,9 @@ The supplied `shader.png` is the user's exported “Background Shader@3x.png”.
   A 200 pt cream card (`#f2eae0`, 24 pt corners, black `0 10px 30px` shadow)
   sits behind the icon and Finder's black filename, matching the Framer design.
 - `progress.html` reproduces screen 04 beneath the native title bar. It has an
-  indeterminate CSS animation and respects reduced motion.
+  indeterminate CSS animation and respects reduced motion. Its `#installed` fragment is
+  the finished state with the “Mover el instalador a la papelera” button, and `#opening`
+  the state after the click. The page runs no script; the main process reads the fragment.
 - `background.tiff` contains 1× and 2× representations at 720 × 502 pt. `background.png`
   is its 1× preview. Only the TIFF goes into the DMG. dmg-builder sizes the outer Finder
   window from the image (it ignores `dmg.window` when there is a background), and Finder's
@@ -27,11 +29,14 @@ Opening a packaged app outside Applications starts the preparation window and ca
 Electron's native bundle mover without an extra install confirmation. Successful copying
 quits the source and relaunches the installed app. A private one-shot record identifies
 the original DMG by mount, exact signed-build resource manifest, file identity and size.
-The installed instance ejects the source and moves that exact DMG to Trash automatically.
+On its first launch the installed instance shows the finished screen. Only the button
+ejects the source and moves that exact DMG to Trash, so any Downloads access prompt
+follows the user's click instead of appearing at startup. Clicking or closing the window
+both start the app, whether Trash access is granted, denied or fails.
 When multiple mounted DMGs contain the same build, the running bundle's volume identifies
 the source. A translocated app still requires a unique manifest match.
 Cleanup failure is nonblocking and never deletes a guessed filename. There is no
-cleanup preference or completion screen. Development, tests and other platforms skip it.
+cleanup preference, and the screen is offered once. Development, tests and other platforms skip it.
 
 The native mover handles authorization and existing installations. Gatekeeper and Files
 & Folders prompts remain under macOS control; they are not app artwork. If an installed

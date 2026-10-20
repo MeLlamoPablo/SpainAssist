@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
@@ -106,6 +106,14 @@ export function isSameInstaller(
     pending.ino === current.ino &&
     pending.size === current.size &&
     pending.mtimeMs === current.mtimeMs
+  );
+}
+
+/** Only the first launch after a recorded copy offers to move the installer to Trash. */
+export async function hasPendingInstaller(userData: string): Promise<boolean> {
+  return access(markerPath(userData)).then(
+    () => true,
+    () => false,
   );
 }
 
