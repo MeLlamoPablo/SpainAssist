@@ -43,6 +43,7 @@ import {
   signerLib,
   testKeyProvider,
 } from './app/libs';
+import { installMacApp } from './app/mac-install';
 import { createAppPaths } from './app/paths';
 import {
   APP_ENTRY_URL,
@@ -326,6 +327,7 @@ function restrictPermissions(
 // ---------------------------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  if (await installMacApp(env.e2e)) return;
   const paths = createAppPaths(app.getPath('userData'));
   await ensurePrivateDir(paths.userData);
   logger = createLogger({

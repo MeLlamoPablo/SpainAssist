@@ -21,6 +21,22 @@ const packageJson = (dir: string) =>
 describe('electron-builder config', () => {
   afterEach(() => vi.unstubAllEnvs());
 
+  it('opens a single app from the branded DMG and ships its preparation window', async () => {
+    const config = await loadConfig();
+    expect(config.dmg?.contents).toEqual([{ x: 360, y: 260, type: 'file' }]);
+    expect(config.dmg?.background).toBe('packaging/installer/background.tiff');
+    const resources = config.extraResources as FileSet[];
+    expect(resources).toContainEqual({
+      from: 'packaging/installer',
+      to: 'installer',
+      filter: ['progress.html', 'serif.ttf', 'inter.woff2', 'icon.png'],
+    });
+    for (const name of ['background.tiff', 'progress.html', 'serif.ttf', 'inter.woff2', 'icon.png'])
+      expect(
+        readFileSync(path.join(import.meta.dirname, 'packaging/installer', name)).length,
+      ).toBeGreaterThan(0);
+  });
+
   it('copies sa-sidecar to where the packaged app looks for it', async () => {
     const [resource] = (await loadConfig()).extraResources as FileSet[];
     // beforePack builds into the development folder of the target: vendor/<platform>-<arch>.

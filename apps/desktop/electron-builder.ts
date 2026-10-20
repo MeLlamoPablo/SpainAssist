@@ -130,6 +130,11 @@ const config: Configuration = {
     // LICENSE.electron.txt and Chromium's LICENSES.chromium.html (in Resources on macOS).
     { from: '../../LICENSE', to: 'LICENSE.txt' },
     { from: NOTICES, to: NOTICES },
+    {
+      from: 'packaging/installer',
+      to: 'installer',
+      filter: ['progress.html', 'serif.ttf', 'inter.woff2', 'icon.png'],
+    },
   ],
   asar: true,
   // With a macOS certificate, fail rather than skip signing when its identity isn't found
@@ -176,6 +181,15 @@ const config: Configuration = {
       NSMicrophoneUsageDescription:
         'Spain Assist usa el micrófono para grabar las llamadas que tú le pidas.',
     },
+  },
+  dmg: {
+    title: 'Spain Assist',
+    background: 'packaging/installer/background.tiff',
+    window: { width: 720, height: 442 },
+    iconSize: 112,
+    iconTextSize: 14,
+    // A single real Finder item. Opening it installs and relaunches the app automatically.
+    contents: [{ x: 360, y: 260, type: 'file' }],
   },
   win: {
     // NSIS for GitHub Releases, appx for the Store. `package:msix` builds only the appx.

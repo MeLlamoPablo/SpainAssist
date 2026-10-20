@@ -25,6 +25,7 @@
     "test": "vitest run --passWithNoTests",
     "test:main": "vitest run --config vitest.main.config.ts",
     "notices": "node scripts/notices.ts",
+    "design:installer": "node packaging/render-installer.mjs",
     "captures": "node scripts/captures.ts",
     "package": "corepack pnpm build && node scripts/package.mjs --publish never",
     "package:dir": "corepack pnpm build && node scripts/package.mjs --dir --publish never",

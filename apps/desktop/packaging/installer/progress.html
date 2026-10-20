@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self'">
+  <title>Spain Assist</title>
+  <style>
+    @font-face { font-family: Instrument; src: url('./serif.ttf'); }
+    @font-face { font-family: Inter; src: url('./inter.woff2'); }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; background: #fbf7f2; }
+    body { color: #3a1a14; font-family: Inter, sans-serif; -webkit-app-region: drag; }
+    img { position: absolute; width: 80px; height: 80px; top: 57px; left: calc(50% - 40px); }
+    main { position: absolute; top: 182px; left: calc(50% - 250px); width: 500px; text-align: center; }
+    h1 { margin: 0 0 20px; font: 400 40px/1.45 Instrument, serif; }
+    p { margin: 0 0 20px; color: #725d55; font-size: 15px; line-height: 1.45; }
+    .progress { position: relative; height: 4px; border-radius: 4px; background: #e8ddd1; overflow: hidden; }
+    .progress::after { content: ''; position: absolute; width: 26%; height: 100%; border-radius: inherit; background: #c8402a; animation: preparing 1.5s ease-in-out infinite alternate; }
+    @keyframes preparing { from { left: 0; } to { left: 74%; } }
+    @media (prefers-reduced-motion: reduce) { .progress::after { animation: none; left: 37%; } }
+  </style>
+</head>
+<body>
+  <img src="./icon.png" alt="">
+  <main>
+    <h1>Preparando tu espacio.</h1>
+    <p>Estamos copiando Spain Assist a Aplicaciones. Se abrirá en unos instantes.</p>
+    <div class="progress" role="progressbar" aria-label="Instalando Spain Assist"></div>
+  </main>
+</body>
+</html>
