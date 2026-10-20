@@ -23,7 +23,7 @@ import type { UserKey } from '../providers/manager';
  *   SA_ERROR_REPORTS_DSN     development only: send error reports to this Sentry-compatible DSN
  *                            (packaged builds use PRODUCTION_SERVICES.errorReportsDsn). Without
  *                            it, development builds send none. The `error-reports` flag and the
- *                            setting still apply (SA_FEATURE_FLAGS=error-reports turns it on)
+ *                            anonymous data sharing setting still apply (SA_FEATURE_FLAGS=error-reports turns it on)
  *   SA_FEATURE_FLAGS         development only: comma-separated Unleash flag names to turn on,
  *                            instead of asking Unleash (e.g. "dnie-phone");
  *                            "" = all off. E2e runs never ask Unleash: without it, every

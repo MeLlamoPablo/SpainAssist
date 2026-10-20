@@ -7,7 +7,7 @@ import { scrubReport } from './scrub';
 export interface ErrorReports {
   /**
    * Decides, per event, whether reports may be sent: the `error-reports` flag and the user's
-   * setting. Until it is set (flags load after `ready`) nothing is sent.
+   * anonymous data sharing setting. Until it is set (flags load after `ready`) nothing is sent.
    */
   setGate(allowed: () => boolean): void;
 }

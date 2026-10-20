@@ -34,7 +34,6 @@ describe('custom endpoint capabilities', () => {
       language: 'es',
       onboardingCompleted: true,
       shareLearnings: false,
-      errorReports: true,
       provider: { ...custom, reasoning: true },
     });
     expect(settings.provider).toEqual({ ...custom, reasoning: true });

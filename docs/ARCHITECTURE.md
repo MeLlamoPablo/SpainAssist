@@ -162,8 +162,8 @@ or rating learnings (searching still works).
   reached, every flag is off. Main enforces the flags itself; the UI only hides what main already
   refuses. Flags are listed in `FeatureFlags` (`@sa/shared`).
 - **Error reports.** Packaged builds send crashes and uncaught errors to our GlitchTip (Sentry
-  protocol), when both the `error-reports` flag and the user's setting are on. Only errors are
-  sent: no breadcrumbs, no tracing, no memory dumps. Every event is scrubbed with `@sa/pii`.
+  protocol), when both the `error-reports` flag and the user's anonymous data sharing setting are
+  on. Only errors are sent: no breadcrumbs, no tracing, no memory dumps. Every event is scrubbed with `@sa/pii`.
 
 ## 6. Development tooling
 

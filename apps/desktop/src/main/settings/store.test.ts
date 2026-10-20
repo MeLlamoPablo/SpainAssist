@@ -53,13 +53,15 @@ describe('SettingsStore', () => {
     expect(s.provider).toBeUndefined();
   });
 
-  it('turns error reports on for files from versions without the setting', async () => {
-    await writeFile(file, JSON.stringify({ language: 'en', shareLearnings: false }));
+  it.each([true, false])('drops the removed error-reporting setting (%s)', async (errorReports) => {
+    await writeFile(file, JSON.stringify({ language: 'en', shareLearnings: false, errorReports }));
     const store = await SettingsStore.open(file, { logger: silentLogger });
-    expect(store.get().errorReports).toBe(true);
-    expect((await store.update({ errorReports: false })).errorReports).toBe(false);
+    expect(store.get()).not.toHaveProperty('errorReports');
+    expect(store.get().shareLearnings).toBe(false);
+    await store.update({ shareLearnings: true });
     const reopened = await SettingsStore.open(file, { logger: silentLogger });
-    expect(reopened.get().errorReports).toBe(false);
+    expect(reopened.get()).not.toHaveProperty('errorReports');
+    expect(reopened.get().shareLearnings).toBe(true);
   });
 
   it('drops the model an older version stored for a voucher', async () => {

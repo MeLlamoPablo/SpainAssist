@@ -182,13 +182,8 @@ export type Language = z.infer<typeof Language>;
 export const Settings = z.object({
   language: Language,
   onboardingCompleted: z.boolean(),
-  /** Share anonymous, PII-scrubbed learnings with the community feedback server. */
+  /** Share anonymous, PII-scrubbed community learnings and error reports (when enabled by flag). */
   shareLearnings: z.boolean(),
-  /**
-   * Send PII-scrubbed error reports (crashes, uncaught errors) to our GlitchTip server, when the
-   * `error-reports` flag is on.
-   */
-  errorReports: z.boolean(),
   provider: ProviderConfig.optional(),
 });
 export type Settings = z.infer<typeof Settings>;
@@ -197,7 +192,6 @@ export const SettingsPatch = z.object({
   language: Language.optional(),
   onboardingCompleted: z.boolean().optional(),
   shareLearnings: z.boolean().optional(),
-  errorReports: z.boolean().optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;
 
@@ -248,8 +242,8 @@ export interface FeatureFlags {
    */
   mustUpdate: boolean;
   /**
-   * Error reports to GlitchTip, a kill switch: off, nothing is sent whatever the setting
-   * says, and Settings hides the toggle.
+   * Error reports to GlitchTip, a kill switch: off, nothing is sent even when anonymous
+   * data sharing is on.
    */
   errorReports: boolean;
 }
@@ -271,5 +265,4 @@ export const DEFAULT_SETTINGS: Settings = {
   language: 'es',
   onboardingCompleted: false,
   shareLearnings: true,
-  errorReports: true,
 };

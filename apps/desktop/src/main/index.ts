@@ -56,6 +56,7 @@ import { bundledChromiumPath } from './browser/bundled';
 import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
+import { errorReportsAllowed } from './errors/gate';
 import { startErrorReports } from './errors/reports';
 import { applyStagedLocalState, defaultUserData, openDataImport } from './migrate/nsis-import';
 import { findNsisUninstaller, launchNsisUninstaller } from './migrate/nsis-install';
@@ -496,7 +497,7 @@ async function main(): Promise<void> {
   });
   const s = services;
   // Read per event: turning the setting off stops reports at once; the flag applies per launch.
-  errorReports?.setGate(() => appInfo.features.errorReports && s.settings.get().errorReports);
+  errorReports?.setGate(() => errorReportsAllowed(appInfo.features, s.settings.get()));
 
   if (!devUrl) {
     protocol.handle(

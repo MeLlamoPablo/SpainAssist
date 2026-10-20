@@ -124,12 +124,9 @@ export const settingsDict = defineDict({
       title: 'Compartir datos anónimos',
       body: [
         'El asistente comparte información sobre trámites para hacerlos cada vez mejor. Nunca se incluyen tus datos.',
+        'Si algo falla en la app, también se envía un informe técnico sin datos personales al equipo de Spain Assist para que lo arregle.',
         'Al compartir, también te beneficias de los aprendizajes de otros usuarios.',
       ],
-    },
-    errorReports: {
-      title: 'Enviar informes de errores',
-      body: 'Si algo falla en la app, envío un informe técnico al equipo de Spain Assist para que lo arregle. No incluye tus datos personales: los quito antes de enviar nada.',
     },
     history: {
       title: 'Exportar historial',
@@ -267,12 +264,9 @@ export const settingsDict = defineDict({
       title: 'Share anonymous data',
       body: [
         'The assistant shares information about procedures to make them better every time. Your data is never included.',
+        'If something fails in the app, a technical report without personal data is also sent to the Spain Assist team so they can fix it.',
         'By sharing, you also benefit from what other users have learned.',
       ],
-    },
-    errorReports: {
-      title: 'Send error reports',
-      body: 'If something fails in the app, I send a technical report to the Spain Assist team so they can fix it. It doesn’t include your personal data: I remove it before sending anything.',
     },
     history: {
       title: 'Export history',

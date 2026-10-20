@@ -1,14 +1,5 @@
 import type { Language, SettingsPatch } from '@sa/shared';
-import {
-  Bug,
-  ChevronDown,
-  Download,
-  FileArchive,
-  Globe,
-  Share2,
-  Sparkles,
-  Ticket,
-} from 'lucide-react';
+import { ChevronDown, Download, FileArchive, Globe, Share2, Sparkles, Ticket } from 'lucide-react';
 import { Collapsible } from 'radix-ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { BrandMark, BrandName } from '../../components/brand';
@@ -175,17 +166,6 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
               description={t.learnings.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
             />
           </SectionCard>
-
-          {info?.features.errorReports ? (
-            <SectionCard icon={Bug} title={t.errorReports.title}>
-              <Switch
-                checked={settings.errorReports}
-                onCheckedChange={(errorReports) => void set({ errorReports })}
-                label={t.errorReports.title}
-                description={t.errorReports.body}
-              />
-            </SectionCard>
-          ) : null}
 
           <ExportHistory />
 
