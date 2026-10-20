@@ -40,11 +40,6 @@ export interface FeedbackInput {
 export interface FeedbackDeps {
   feedbackServerUrl?: string;
   /**
-   * Sharing learnings is on (feature flag). Searching is always on; voting needs only the user's
-   * sharing setting.
-   */
-  submitEnabled: boolean;
-  /**
    * The user key (see UserKey), which the server checks before it accepts a learning or a vote,
    * and which identifies the user; undefined when the provider has none (BYOK, custom endpoints).
    */
@@ -147,8 +142,6 @@ export class FeedbackService {
   async submit(
     input: FeedbackInput,
   ): Promise<{ result: BridgeResults['feedback.submit']; shared?: FeedbackSubmission }> {
-    if (!this.deps.submitEnabled)
-      throw new BridgeError('unavailable', 'Sharing learnings is not available yet.');
     if (!this.deps.settings().shareLearnings) {
       return {
         result: {

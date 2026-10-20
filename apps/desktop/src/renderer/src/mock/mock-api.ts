@@ -894,7 +894,6 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       isDev: true,
       isE2E: false,
       features: {
-        feedbackServer: params.get('feedback') === '1',
         dniePhone,
         mustUpdate,
         errorReports: params.get('errors') === '1',

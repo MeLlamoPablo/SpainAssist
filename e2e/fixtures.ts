@@ -138,7 +138,7 @@ export const test = base.extend<{ harness: Harness }>({
         SA_USER_DATA_DIR: userData,
         SA_KEY_SERVER_URL: keyUrl,
         SA_FEEDBACK_SERVER_URL: feedbackUrl,
-        SA_FEATURE_FLAGS: 'feedback-server,dnie-phone',
+        SA_FEATURE_FLAGS: 'dnie-phone',
         SA_EXTRA_TRUSTED_HOSTS: 'localhost,127.0.0.1',
         SA_BROWSER_HEADLESS: '1',
         SA_HIDE_WINDOW: headless ? '1' : '0',

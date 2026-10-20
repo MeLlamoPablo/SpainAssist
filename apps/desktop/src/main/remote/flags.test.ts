@@ -25,11 +25,10 @@ function load(handler: Parameters<typeof createFakeFetch>[0]) {
 describe('loadFeatureFlags', () => {
   it("reads the flags that are on from Unleash's frontend API", async () => {
     const { fetch, flags } = load(() =>
-      jsonResponse(200, { toggles: [{ name: 'feedback-server', enabled: true }] }),
+      jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
     );
     expect(await flags).toEqual({
-      feedbackServer: true,
-      dniePhone: false,
+      dniePhone: true,
       mustUpdate: false,
       errorReports: false,
     });
@@ -65,7 +64,6 @@ describe('loadFeatureFlags', () => {
         start: expect.any(String),
         stop: expect.any(String),
         toggles: {
-          'feedback-server': { yes: 0, no: 1, variants: {} },
           'dnie-phone': { yes: 1, no: 0, variants: {} },
           'must-update': { yes: 0, no: 1, variants: {} },
         },
@@ -76,12 +74,11 @@ describe('loadFeatureFlags', () => {
   it('keeps the flags when the metrics report fails', async () => {
     const { fetch, flags } = load((req) =>
       req.url.pathname === '/api/frontend'
-        ? jsonResponse(200, { toggles: [{ name: 'feedback-server', enabled: true }] })
+        ? jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] })
         : jsonResponse(500, {}),
     );
     expect(await flags).toEqual({
-      feedbackServer: true,
-      dniePhone: false,
+      dniePhone: true,
       mustUpdate: false,
       errorReports: false,
     });
@@ -93,7 +90,6 @@ describe('loadFeatureFlags', () => {
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
     ).flags;
     expect(await on).toEqual({
-      feedbackServer: false,
       dniePhone: true,
       mustUpdate: false,
       errorReports: false,
@@ -109,7 +105,6 @@ describe('loadFeatureFlags', () => {
       jsonResponse(200, { toggles: [{ name: 'must-update', enabled: true }] }),
     ).flags;
     expect(await on).toEqual({
-      feedbackServer: false,
       dniePhone: false,
       mustUpdate: true,
       errorReports: false,

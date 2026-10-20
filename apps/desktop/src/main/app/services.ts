@@ -247,11 +247,11 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
           ...(providers.researchesWithExa() ? { exa: true } : {}),
         },
         // Everyone reads community learnings. Sharing and rating them needs a user key (one vote
-        // per user and learning), which the server checks; sharing is also behind the flag.
+        // per user and learning), which the server checks.
         ...(env.feedbackServerUrl
           ? {
               feedback: {
-                submit: deps.appInfo.features.feedbackServer && providers.hasUserKey(),
+                submit: providers.hasUserKey(),
                 vote: providers.hasUserKey(),
               },
             }
@@ -382,9 +382,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     .catch((err) => logger.warn('download cleanup failed', { error: errorMessage(err) }));
 
   const feedback = new FeedbackService({
-    // Without a URL, feedback.* bridge calls fail as 'unavailable'; without the flag, submit does.
+    // Without a URL, feedback.* bridge calls fail as 'unavailable'.
     feedbackServerUrl: env.feedbackServerUrl,
-    submitEnabled: deps.appInfo.features.feedbackServer,
     access: () => providers.userKey(),
     author: () => providers.agentAuthor('procedure'),
     fetch: deps.fetch,

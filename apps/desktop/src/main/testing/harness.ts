@@ -144,7 +144,6 @@ export async function createTestApp(opts: TestAppOptions = {}) {
       isDev: true,
       isE2E: true,
       features: {
-        feedbackServer: true,
         dniePhone: true,
         mustUpdate: false,
         errorReports: false,

@@ -90,7 +90,7 @@ describe('defaults', () => {
       installChannel: 'dev',
       isDev: false,
       isE2E: true,
-      features: { feedbackServer: false, dniePhone: false, mustUpdate: false, errorReports: false },
+      features: { dniePhone: false, mustUpdate: false, errorReports: false },
       errorReports: false,
     });
     expect((await app.invoke('settings.get')).language).toBe('es');
@@ -112,7 +112,7 @@ describe('defaults', () => {
     expect(await app.invoke('app.info')).toMatchObject({
       version: '9.9.9',
       isDev: true,
-      features: { feedbackServer: false, dniePhone: true, mustUpdate: false },
+      features: { dniePhone: true, mustUpdate: false },
     });
     expect((await app.invoke('settings.get')).language).toBe('en');
     expect(app.services.companion).toBeDefined();
@@ -134,12 +134,11 @@ describe('defaults', () => {
   it('reads nothing from process.env', async () => {
     vi.stubEnv('SA_KEY_SERVER_URL', 'https://keys.attacker.test');
     vi.stubEnv('SA_FEEDBACK_SERVER_URL', 'https://feedback.attacker.test');
-    vi.stubEnv('SA_FEATURE_FLAGS', 'dnie-phone,feedback-server');
+    vi.stubEnv('SA_FEATURE_FLAGS', 'dnie-phone');
     vi.stubEnv('SA_EXTRA_TRUSTED_HOSTS', 'localhost');
     vi.stubEnv('SA_USER_DATA_DIR', join(root, 'elsewhere'));
     const { app, agentLib } = await openWithProvider();
     expect((await app.invoke('app.info')).features).toEqual({
-      feedbackServer: false,
       dniePhone: false,
       mustUpdate: false,
       errorReports: false,

@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "corepack pnpm --filter @sa/desktop dev",
     "playground": "corepack pnpm --filter @sa/desktop preview:web --open '/?playground=1'",
-    "dev:local": "SA_FEATURE_FLAGS=feedback-server,dnie-phone SA_KEY_SERVER_URL=http://127.0.0.1:8787 SA_FEEDBACK_SERVER_URL=http://127.0.0.1:8788 SA_MAPS_SERVER_URL=http://127.0.0.1:8793 SA_RELAY_SERVER_URL=http://127.0.0.1:8794 corepack pnpm --filter @sa/desktop dev",
+    "dev:local": "SA_FEATURE_FLAGS=dnie-phone SA_KEY_SERVER_URL=http://127.0.0.1:8787 SA_FEEDBACK_SERVER_URL=http://127.0.0.1:8788 SA_MAPS_SERVER_URL=http://127.0.0.1:8793 SA_RELAY_SERVER_URL=http://127.0.0.1:8794 corepack pnpm --filter @sa/desktop dev",
     "build": "corepack pnpm -r --if-present build",
     "eval": "corepack pnpm --filter @sa/eval eval",
     "typecheck": "corepack pnpm -r --if-present typecheck",

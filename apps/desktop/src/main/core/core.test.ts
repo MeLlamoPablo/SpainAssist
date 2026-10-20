@@ -193,13 +193,13 @@ describe('env', () => {
 
   it('turns feature flags on only in development builds', () => {
     expect(parseEnv({}).featureFlags).toBeUndefined();
-    expect(parseEnv({ SA_FEATURE_FLAGS: 'feedback-server, other ' }).featureFlags).toEqual([
-      'feedback-server',
+    expect(parseEnv({ SA_FEATURE_FLAGS: 'dnie-phone, other ' }).featureFlags).toEqual([
+      'dnie-phone',
       'other',
     ]);
     expect(parseEnv({ SA_FEATURE_FLAGS: '' }).featureFlags).toEqual([]);
     expect(
-      parseEnv({ SA_FEATURE_FLAGS: 'feedback-server' }, { packaged: true }).featureFlags,
+      parseEnv({ SA_FEATURE_FLAGS: 'dnie-phone' }, { packaged: true }).featureFlags,
     ).toBeUndefined();
   });
 

@@ -236,11 +236,6 @@ export const PRODUCTION_SERVICES = {
 /** Feature flags, read from Unleash when the app starts. Off when Unleash can't be reached. */
 export interface FeatureFlags {
   /**
-   * Sharing community learnings: feedback_submit and the sharing setting. Reading and rating
-   * them (feedback_search, feedback_vote) is always on.
-   */
-  feedbackServer: boolean;
-  /**
    * The DNIe through the phone app: signatures and logins, the "DNIe con el móvil"
    * card and pairing in Mis datos, the relay connection. Off, the app behaves as if it didn't
    * exist; a saved `dnie` credential stays in the vault, hidden.
@@ -261,14 +256,12 @@ export interface FeatureFlags {
 
 /** Unleash flag name of each feature flag. */
 export const FEATURE_FLAG_NAMES: Record<keyof FeatureFlags, string> = {
-  feedbackServer: 'feedback-server',
   dniePhone: 'dnie-phone',
   mustUpdate: 'must-update',
   errorReports: 'error-reports',
 };
 
 export const FEATURES_OFF: FeatureFlags = {
-  feedbackServer: false,
   dniePhone: false,
   mustUpdate: false,
   errorReports: false,

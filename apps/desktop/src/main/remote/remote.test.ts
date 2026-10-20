@@ -46,16 +46,19 @@ describe('feedback.submit', () => {
     expect(fetch.requests).toEqual([]);
   });
 
-  it('searches but never shares learnings when the feature flag is off', async () => {
+  it('searches and shares learnings with all feature flags off', async () => {
     const fetch = createFakeFetch((req) => {
       if (req.url.pathname === '/v1/feedback/search') return jsonResponse(200, { results: [] });
+      if (req.url.pathname === '/v1/feedback')
+        return jsonResponse(200, { id: 'fb_1', redactions: 0 });
       throw new Error('Unexpected request');
     });
     app = await createTestApp({
       fetch,
-      env: { feedbackServerUrl: 'http://feedback.test' },
-      features: { feedbackServer: false },
+      env: { keyServerUrl: 'http://keys.test', feedbackServerUrl: 'http://feedback.test' },
+      features: { dniePhone: false, mustUpdate: false, errorReports: false },
     });
+    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
     const { token } = await app.procedureWithToken();
     const search = await app.rpc('feedback.search', { query: 'cita dni' }, token);
     expect(search).toMatchObject({ status: 200, body: { ok: true, result: { results: [] } } });
@@ -69,8 +72,14 @@ describe('feedback.submit', () => {
       },
       token,
     );
-    expect(submit).toMatchObject({ status: 503, body: { error: { code: 'unavailable' } } });
-    expect(fetch.requests.map((r) => r.url.pathname)).toEqual(['/v1/feedback/search']);
+    expect(submit).toMatchObject({
+      status: 200,
+      body: { ok: true, result: { submitted: true, id: 'fb_1' } },
+    });
+    expect(fetch.requests.map((r) => r.url.pathname)).toEqual([
+      '/v1/feedback/search',
+      '/v1/feedback',
+    ]);
   });
 
   it('scrubs every field (vault values + regex), strips URL params and shows what was shared', async () => {
@@ -279,23 +288,6 @@ describe('feedback.vote', () => {
     const res = await app.rpc('feedback.vote', { id, vote: 'up' }, token);
     expect(res.body.result).toMatchObject({ counted: false });
     expect(fetch.requests).toEqual([]);
-  });
-
-  it('works with the feature flag off', async () => {
-    const fetch = createFakeFetch((req) =>
-      req.url.pathname === `/v1/feedback/${id}/vote`
-        ? jsonResponse(200, { id, counted: true })
-        : jsonResponse(404, {}),
-    );
-    app = await createTestApp({
-      fetch,
-      env: { keyServerUrl: 'http://keys.test', feedbackServerUrl: 'http://feedback.test' },
-      features: { feedbackServer: false },
-    });
-    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
-    const { token } = await app.procedureWithToken();
-    const res = await app.rpc('feedback.vote', { id, vote: 'up' }, token);
-    expect(res.body.result).toEqual({ counted: true });
   });
 });
 

@@ -719,7 +719,7 @@ describe('procedure agents', () => {
     expect((await app.rpc('procedure.get', {}, agent!.token)).status).toBe(401);
   });
 
-  it('shares and rates learnings only with a gateway key (voucher or ChatGPT), shares only with the flag', async () => {
+  it('shares and rates learnings only with a gateway key (voucher or ChatGPT)', async () => {
     await withProvider();
     const custom = await app.startProcedure('Trámite A');
     expect(custom.agent!.launch.config.feedback).toEqual({ submit: false, vote: false });
@@ -729,13 +729,6 @@ describe('procedure agents', () => {
     expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
     const voucher = await app.startProcedure('Trámite B');
     expect(voucher.agent!.launch.config.feedback).toEqual({ submit: true, vote: true });
-    await app.close();
-
-    // Without the feature flag they still rate learnings, but don't share them.
-    app = await createTestApp({ features: { feedbackServer: false } });
-    expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
-    const flagOff = await app.startProcedure('Trámite C');
-    expect(flagOff.agent!.launch.config.feedback).toEqual({ submit: false, vote: true });
   });
 
   it('research with the user’s Exa key only on BYOK and custom endpoints', async () => {
