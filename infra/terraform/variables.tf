@@ -159,6 +159,24 @@ variable "deploy_revision" {
   default     = "1"
 }
 
+# --- Desktop release signing (github_release.tf) -------------------------------------------
+
+variable "apple_signing_p12_password" {
+  description = "Password of secrets/developer-id.p12, the Developer ID Application certificate exported from Keychain Access."
+  type        = string
+  sensitive   = true
+}
+
+variable "apple_api_key_id" {
+  description = "Key ID of the App Store Connect API key notarization uses (Developer role); its key is secrets/AuthKey_<id>.p8."
+  type        = string
+}
+
+variable "apple_api_issuer_id" {
+  description = "Issuer ID of the App Store Connect API keys (Users and Access > Integrations)."
+  type        = string
+}
+
 # --- Postgres (one container, one database and one role per service) ----------------------
 
 variable "postgres_password" {

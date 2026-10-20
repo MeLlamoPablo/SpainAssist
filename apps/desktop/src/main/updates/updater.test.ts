@@ -60,8 +60,10 @@ describe('updatesSupported', () => {
     expect(supported({ windowsStore: true })).toBe(false);
   });
 
-  it('is off on macOS, which needs signed builds first', () => {
-    expect(supported({ platform: 'darwin' })).toBe(false);
+  it('is on for the packaged macOS app outside e2e', () => {
+    expect(supported({ platform: 'darwin' })).toBe(true);
+    expect(supported({ platform: 'darwin', packaged: false })).toBe(false);
+    expect(supported({ platform: 'darwin', e2e: true })).toBe(false);
   });
 
   it('is on for Linux only when installed from the .deb', () => {

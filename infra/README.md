@@ -128,6 +128,7 @@ the IP. The relay and the dashboard are on `<domain>` only.
 | `glitchtip.tf` | GlitchTip's compose file, env vars, restart on change, its admin user |
 | `dns.tf` | Route 53: the registered domain (name servers, auto-renew), its hosted zone, the service records and the website's (Framer) |
 | `aws_iam.tf` | The IAM user Terraform manages AWS with: only `dns.tf`'s resources, never deleting or transferring a domain |
+| `github_release.tf` + `secrets/` | GitHub Actions secrets the desktop release signs and notarizes macOS builds with (`.github/workflows/release.yml`) |
 | `tf.sh` | Runs Terraform with an SSH tunnel to Coolify's API |
 
 ### Why it looks like this
@@ -189,7 +190,7 @@ the IP. The relay and the dashboard are on `<domain>` only.
 - Terraform ≥ 1.6 (the Coolify provider's floor): `brew install hashicorp/tap/terraform`, or
   run `tf.sh` with `TERRAFORM=/path/to/terraform`.
 - `gh auth login` (or `GITHUB_TOKEN`) with admin rights on the repository: the GitHub provider
-  manages the deploy key and the webhook with it.
+  manages the deploy key, the webhook and the release's Actions secrets with it.
 - `ssh` and `nc`.
 - An AWS key: `aws_access_key_id`/`aws_secret_access_key` in `terraform.tfvars` (the IAM user
   from `aws_iam.tf`). The apply that creates that user, and any later change to its policy,
@@ -274,8 +275,11 @@ only changes its DSN.
 ### Secrets and git-crypt
 
 `terraform.tfvars` and `terraform.tfstate` hold every secret (the state also has the GitHub
-deploy key and Coolify's view of the env vars). They are committed encrypted with git-crypt
-(`.gitattributes` at the repository root); a locked clone sees ciphertext.
+deploy key and Coolify's view of the env vars). Secrets that are files live in `secrets/`: the
+Developer ID Application certificate (`developer-id.p12`, its password in `terraform.tfvars`)
+and the App Store Connect API key for notarization (`AuthKey_<key id>.p8`). All of them are
+committed encrypted with git-crypt (`.gitattributes` at the repository root); a locked clone
+sees ciphertext.
 
 - **Unlock**: `git-crypt unlock` decrypts with Pablo's on-device GPG key (`652182…24E6AA2E`),
   the only key file in `.git-crypt/keys/default/0/`.

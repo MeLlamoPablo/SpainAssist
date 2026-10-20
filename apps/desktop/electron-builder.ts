@@ -132,6 +132,9 @@ const config: Configuration = {
     { from: NOTICES, to: NOTICES },
   ],
   asar: true,
+  // With a macOS certificate, fail rather than skip signing when its identity isn't found
+  // (electron-builder only warns). Windows CI never sets the macOS variables.
+  forceCodeSigning: macSigning,
   // Fail when a production dependency can't be collected, instead of shipping without it.
   allowMissingDependencies: false,
   // The UI is in Spanish and English: drop Chromium's other locales.
@@ -154,8 +157,8 @@ const config: Configuration = {
   },
   // Where updates come from: written into the app as `app-update.yml` and used for the
   // `latest*.yml` update files next to the installers. CI uploads them to the release itself
-  // (`--publish never`, .github/workflows/release.yml). Windows and the Linux .deb update
-  // themselves; macOS waits for signing.
+  // (`--publish never`, .github/workflows/release.yml). Windows, macOS (from the zip, signed
+  // releases only) and the Linux .deb update themselves.
   publish: { provider: 'github', owner: 'MeLlamoPablo', repo: 'SpainAssist' },
   mac: {
     target: ['dmg', 'zip'],

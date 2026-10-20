@@ -22,13 +22,16 @@ export interface Updates {
 
 /**
  * Where the app updates itself from GitHub Releases, by how it was installed
- * (`installChannel`): the NSIS installer's builds, and the Linux .deb, which electron-updater
- * reinstalls with `dpkg -i`, asking for the password through pkexec. Not the Microsoft Store's
- * MSIX: the Store updates it. Not macOS until builds are signed (Squirrel.Mac only installs updates
- * signed by the same Developer ID), and not development, e2e or unpacked builds.
+ * (`installChannel`): the NSIS installer's builds, the macOS app (from its zip, through
+ * Squirrel.Mac), and the Linux .deb, which electron-updater reinstalls with `dpkg -i`, asking for
+ * the password through pkexec. Not the Microsoft Store's MSIX: the Store updates it. Not
+ * development, e2e or unpacked builds.
+ *
+ * Squirrel.Mac only installs an update signed by the running app's Developer ID: releases are
+ * signed (release.yml), and a local ad-hoc build's updates fail with an `error` status.
  */
 export function updatesSupported(opts: { channel: InstallChannel; e2e: boolean }): boolean {
-  return !opts.e2e && (opts.channel === 'nsis' || opts.channel === 'deb');
+  return !opts.e2e && (opts.channel === 'nsis' || opts.channel === 'dmg' || opts.channel === 'deb');
 }
 
 /** The Store's page of the app: the Microsoft Store build updates there (`updates.openStore`). */

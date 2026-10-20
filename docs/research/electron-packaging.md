@@ -114,7 +114,7 @@ The packaged app ships `sa-sidecar` in `<resources>/vendor/` and the browser in
 - **macOS signing of CfT.**
   - The CfT zip contains **no `_CodeSignature` directories** (verified), so it isn't a sealed Developer-ID bundle. We would have to sign every Mach-O ourselves: a 235 MB framework, 8 helper apps, crashpad and dylibs. osx-sign would do this, and electron-builder's copier preserves the framework's 5 symlinks.
   - Bundled browsers have failed to sign before: [#2010](https://github.com/electron-userland/electron-builder/issues/2010) (Puppeteer: "code object is not signed") and [#5383](https://github.com/electron-userland/electron-builder/issues/5383) (Playwright). That's why the ignore list exists.
-  - Ad-hoc re-signed with the rest of the app, CfT 153 launches headed and headless (6.11). Whether it passes **Developer ID signing with the hardened runtime and notarization is UNVERIFIED**: test it as soon as the Apple account exists.
+  - Ad-hoc re-signed with the rest of the app, CfT 153 launches headed and headless (6.11). It passes Developer ID signing with the hardened runtime and notarization (verified 2026-10-20, §6.11). Whether the agent can still launch it under the hardened runtime is UNVERIFIED.
   - `mac.binaries` only matters for files outside the bundle walk. `signIgnore` leaves files unsigned, so notarization rejects the app.
 
 **Options for the agent's browser**
@@ -143,6 +143,7 @@ The packaged app ships `sa-sidecar` in `<resources>/vendor/` and the browser in
 - **Platform floor.** Electron 44 requires macOS 13+ and ships 64-bit builds only.
 - **Entitlements** are in `apps/desktop/packaging/`. Add `disable-library-validation` to the main app's only if the main process loads dylibs signed by another team. Whether nested helpers need the camera key is UNVERIFIED (the inherit file has it).
 - **CI with an API key:** decode the `.p8` from a secret into `$RUNNER_TEMP/AuthKey.p8` and set `APPLE_API_KEY` to that path.
+- **`CSC_IDENTITY_AUTO_DISCOVERY=false` disables `CSC_LINK` too** (26.17.0, verified): `findIdentity` returns null without `CSC_NAME` or `mac.identity`, and signing is skipped with only a warning. With `CSC_LINK`, auto-discovery searches only the temporary keychain the .p12 is imported into, so release.yml turns it on for macOS; `forceCodeSigning` makes a skipped signature fail the build.
 
 **Windows**
 - **Configuration.** `win.azureSignOptions` (Azure **Artifact Signing**, formerly Trusted Signing) is built in.
@@ -235,14 +236,19 @@ doesn't record: measurements, checks in the packaged app, and open points.
 - **Ad-hoc signing.** Without certificates every Mach-O gets `identity: "-"`, with no hardened
   runtime (library validation would reject Electron's frameworks). The `.app` and the sidecar in
   it pass `codesign --verify --deep --strict`.
-- **macOS notarization is deferred** until the Apple Developer account ($99/year) is bought.
-  Until then a downloaded dmg is ad-hoc signed and not notarized: `spctl -a -t exec` says
-  `rejected`. Users see a Gatekeeper warning ("Apple could not verify…"). On macOS 13–14 they
-  right-click the app and choose Open. On macOS 15 and later, where that shortcut no longer
-  works, they open System Settings → Privacy & Security → Open Anyway. They do this once per
-  installed version. With an ad-hoc signature the Keychain may also ask again after each update
-  before it releases the vault key (UNVERIFIED). Auto-update stays off on macOS until then:
-  Squirrel.Mac only installs updates signed by the same Developer ID (`src/main/updates/`).
+- **macOS releases are signed and notarized** (Developer ID Application, team B3KD4D44DR) from
+  release.yml, and update themselves (`src/main/updates/`). Releases before that were ad-hoc
+  signed: Gatekeeper warned ("Apple could not verify…", Open Anyway in Privacy & Security), and
+  they never update, so their users install a signed release by hand once.
+- **Verified 2026-10-20 (local signed build, arm64, 0.3.0-beta).** Notarization succeeds with the
+  bundled Chrome for Testing: `spctl -a -t exec` says `accepted, source=Notarized Developer ID`,
+  the ticket is stapled to the app, and CfT carries our Developer ID with the hardened runtime.
+  `package:mac` took 13 min, mostly notarization. The dmg itself stays unsigned and unstapled
+  (`dmg.sign` is off by default); Gatekeeper checks the stapled app inside it.
+- **Keychain on the switch to signing.** The safeStorage keychain item was created by an ad-hoc
+  build, so the first signed launch asks for the login password to release it (verified: the
+  app waits on SecurityAgent). "Always Allow" adds the Developer ID app, and later signed
+  updates keep the same designated requirement, so it asks once (later updates UNVERIFIED).
 - **Measured on macOS arm64 (2026-10-11, before Chromium was bundled).** `Spain Assist.app` is
   428 MB: Electron Framework, plus app.asar 116 MB and 51 MB unpacked. The dmg is 166 MB and the
   zip 161 MB. `package:mac` takes about 75 s. Bundled Chrome for Testing adds about 358 MiB

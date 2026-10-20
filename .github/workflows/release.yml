@@ -1,8 +1,9 @@
 # Desktop release: pushing a tag `vX.Y.Z` (or `vX.Y.Z-suffix`, a prerelease) on a
 # commit of `master` builds the installers on one native runner per target and publishes
 # them as a GitHub Release, with SHA256SUMS.txt. Windows also uploads `latest.yml` and the
-# installer's blockmap, and Linux `latest-linux.yml`: installed Windows apps and .deb installs
-# update from them (electron-updater). Linux ships only the .deb: no AppImage, snap or apt
+# installer's blockmap, macOS `latest-mac.yml` and the zips' blockmaps, and Linux
+# `latest-linux.yml`: installed Windows and macOS apps and .deb installs update from them
+# (electron-updater). Linux ships only the .deb: no AppImage, snap or apt
 # repository. Installer names carry no version (`SpainAssist-mac-arm64.dmg`), so
 # `releases/latest/download/<name>` links always reach the newest stable release.
 # Publishing a tag that already has a release deletes that release first, so moving the tag
@@ -15,9 +16,15 @@
 # A prerelease's MSIX is for sideload testing (signed locally with a certificate for the
 # `appx.publisher` subject). The Store signs the package it ships.
 #
-# Unsigned for now: macOS builds are ad-hoc signed and not notarized, Windows builds are unsigned.
-# Linux has no code signing: SHA256SUMS.txt covers the .deb. Signing turns on when its secrets are passed as the environment
-# variables `apps/desktop/electron-builder.ts` reads.
+# macOS builds are signed with the Developer ID Application certificate and notarized, from the
+# Actions secrets `infra/terraform/github_release.tf` sets (CSC_LINK, CSC_KEY_PASSWORD,
+# APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER): without them the macOS builds fail rather
+# than ship unsigned, because signed apps update themselves and Squirrel.Mac only installs updates
+# signed by the same Developer ID. Each macOS runner writes a `latest-mac.yml` for its own CPU; the
+# release merges them into one that lists both zips (electron-updater picks the one for the Mac).
+# Windows builds are unsigned for now: signing turns on when its secrets are passed as the
+# environment variables `apps/desktop/electron-builder.ts` reads. Linux has no code signing:
+# SHA256SUMS.txt covers the .deb.
 name: Release
 
 on:
@@ -84,9 +91,6 @@ jobs:
             runner: ubuntu-24.04
             script: package:linux
     runs-on: ${{ matrix.runner }}
-    env:
-      # No signing yet: never pick up an identity from the runner's keychain.
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -126,14 +130,45 @@ jobs:
       - name: Set the app version from the tag
         working-directory: apps/desktop
         run: npm pkg set version=${{ needs.check.outputs.version }}
+      # notarytool takes the API key as a file (docs/research/electron-packaging.md §6.6).
+      - if: runner.os == 'macOS'
+        name: Write the notarization key
+        env:
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+        run: |
+          if [[ -z "$CSC_LINK" || -z "$APPLE_API_KEY_P8" ]]; then
+            echo "::error::The macOS signing secrets are missing: apply infra/terraform (github_release.tf)"
+            exit 1
+          fi
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$key"
+          echo "APPLE_API_KEY=$key" >> "$GITHUB_ENV"
       - name: Package
+        env:
+          # electron-builder 26 only finds the identity in CSC_LINK with auto-discovery on (or
+          # CSC_NAME); it then searches only the temporary keychain it imports CSC_LINK into,
+          # never the runner's. Off elsewhere: no identity from a runner's keychain.
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ runner.os == 'macOS' }}
+          # macOS only: Windows would take CSC_LINK as its own certificate.
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY_ID: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
         run: corepack pnpm --filter @sa/desktop run ${{ matrix.script }}
+      # Both macOS runners write `latest-mac.yml`: keep them apart until the release merges them.
+      - if: runner.os == 'macOS'
+        name: Name the update file after the CPU
+        working-directory: apps/desktop/dist
+        run: mv latest-mac.yml "latest-mac-$(uname -m).yml"
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ runner.os }}-${{ runner.arch }}
           path: |
             apps/desktop/dist/*.dmg
             apps/desktop/dist/*.zip
+            apps/desktop/dist/*.zip.blockmap
+            apps/desktop/dist/latest-mac-*.yml
             apps/desktop/dist/*.exe
             apps/desktop/dist/*.exe.blockmap
             apps/desktop/dist/latest.yml
@@ -162,6 +197,13 @@ jobs:
           pattern: installers-*
           path: installers
           merge-multiple: true
+      # electron-updater on a Mac reads one `latest-mac.yml`, and picks the arm64 or x64 zip in it.
+      - name: Merge the macOS update files
+        working-directory: installers
+        run: |
+          yq '.files += load("latest-mac-arm64.yml").files' latest-mac-x86_64.yml > latest-mac.yml
+          rm latest-mac-arm64.yml latest-mac-x86_64.yml
+          cat latest-mac.yml
       - name: Write checksums
         working-directory: installers
         run: sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt
