@@ -161,8 +161,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # arm64 on macOS 26: on macos-15, Xcode 26's actool crashed compiling the Icon
+          # Composer icon ("The tool closed the connection (AssetCatalogAgent-AssetRuntime)"),
+          # every time on v0.3.0. There is no Intel macOS 26 image; macos-15-intel compiles it.
           - arch: arm64
-            runner: macos-15
+            runner: macos-26
           - arch: x64
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
@@ -175,7 +178,9 @@ jobs:
       # The app icon is an Icon Composer bundle (packaging/icon.icon): only Xcode 26's actool
       # compiles it, and the macOS 15 images select an older Xcode by default.
       - name: Select Xcode 26
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
       - name: Check the signing secrets
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -250,8 +255,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The same runners as build-mac (see there why arm64 is on macOS 26).
           - arch: arm64
-            runner: macos-15
+            runner: macos-26
           - arch: x64
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
@@ -263,7 +269,9 @@ jobs:
         run: npm pkg set version=${{ needs.check.outputs.version }}
       # The dmg's volume icon is compiled from packaging/icon.icon too (see build-mac).
       - name: Select Xcode 26
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
       - uses: actions/download-artifact@v5
         with:
           name: mac-app-notarized-${{ matrix.arch }}
