@@ -3,6 +3,26 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.3.1 (2026-10-21)
+
+Installed apps update to it. What changed since 0.3.0.
+
+### App
+
+- **Microsoft Store version:** the package now declares Windows 10 1809 as its minimum, which
+  the Store requires (it rejected 0.3.0's package). (dd53265)
+- **ChatGPT Go** accounts work: the app names Go as the minimum plan instead of Plus or Pro.
+  (5640e87)
+- **DNIe with the phone, early access:** when the DNIe is in early access, Mis datos shows an
+  "Acceso anticipado" card that asks for an invitation; enabling it saves the DNIe, and the
+  assistant offers it while one is saved. (33a2efe, 6f41a52, 528e8bf, 67faa45)
+
+### Releases
+
+- macOS arm64 builds and packages on macos-26, the GitHub release no longer adds
+  auto-generated notes, and the flag icon asset passes Biome. (78484d9, 666eb2b, 46035e2,
+  fab3f39)
+
 ## 0.3.0 (2026-10-21)
 
 Installed apps update to it, except on macOS (below). What changed since 0.3.0-beta; with
