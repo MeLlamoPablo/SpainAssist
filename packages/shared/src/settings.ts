@@ -184,11 +184,6 @@ export const Settings = z.object({
   onboardingCompleted: z.boolean(),
   /** Give and receive anonymous community learnings; allow scrubbed error reports when flagged on. */
   shareLearnings: z.boolean(),
-  /**
-   * The user said they have the phone app during the DNIe's prerelease (the `prerelease` variant
-   * of the `dnie-phone` flag): the app then offers the DNIe as if it were released.
-   */
-  dnieEarlyAccess: z.boolean().optional(),
   provider: ProviderConfig.optional(),
 });
 export type Settings = z.infer<typeof Settings>;
@@ -197,7 +192,6 @@ export const SettingsPatch = z.object({
   language: Language.optional(),
   onboardingCompleted: z.boolean().optional(),
   shareLearnings: z.boolean().optional(),
-  dnieEarlyAccess: z.boolean().optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;
 
@@ -243,19 +237,17 @@ export const PRODUCTION_SERVICES = {
  * How far the DNIe through the phone app is released, from the `dnie-phone` flag's variant:
  * - `off`: the app behaves as if it didn't exist; a saved `dnie` credential stays in the vault,
  *   hidden.
- * - `prerelease`: Mis datos shows an "Acceso anticipado" card. The phone app is in a closed test,
- *   so it's offered once the user says they have it (`Settings.dnieEarlyAccess`).
+ * - `prerelease`: the phone app is in a closed test. Until the user saves their DNIe, which they
+ *   do once they have the app, Mis datos shows an "Acceso anticipado" card instead of "Lo tengo",
+ *   and agents don't offer the DNIe.
  * - `release`: offered to everyone. A flag that is on without a variant means this, as it did
  *   before the flag had variants.
  */
 export type DniePhoneStage = 'off' | 'prerelease' | 'release';
 
 /** Whether the app offers the DNIe through the phone (cards, pairing, the agents' tools). */
-export function dniePhoneOffered(
-  stage: DniePhoneStage,
-  settings: Pick<Settings, 'dnieEarlyAccess'>,
-): boolean {
-  return stage === 'release' || (stage === 'prerelease' && settings.dnieEarlyAccess === true);
+export function dniePhoneOffered(stage: DniePhoneStage, dnieSaved: boolean): boolean {
+  return stage === 'release' || (stage === 'prerelease' && dnieSaved);
 }
 
 /** Feature flags, read from Unleash when the app starts. Off when Unleash can't be reached. */

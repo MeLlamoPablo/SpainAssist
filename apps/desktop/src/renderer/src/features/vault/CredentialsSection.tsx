@@ -3,7 +3,6 @@ import {
   type CredentialSummary,
   companionOutdatedSide,
   DniePin,
-  dniePhoneOffered,
   type VaultOverview,
 } from '@sa/shared';
 import {
@@ -52,10 +51,8 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
   const movil = overview.credentials.find((c) => c.kind === 'clave_movil');
   const certs = overview.credentials.filter((c) => c.kind === 'certificate');
   // DNIe with the phone is behind a feature flag (main hides a saved one without it, too). In
-  // prerelease it's offered once the user says they have the phone app.
+  // prerelease, an early-access card stands in for "Lo tengo" until the DNIe is saved.
   const dnieStage = useAppStore((s) => s.info?.features.dniePhone ?? 'off');
-  const dnieEarlyAccess = useAppStore((s) => s.settings?.dnieEarlyAccess);
-  const dniePhone = dniePhoneOffered(dnieStage, { dnieEarlyAccess });
   const [earlyOpen, setEarlyOpen] = useState(false);
   const dnie = overview.credentials.find((c) => c.kind === 'dnie');
   const biometric = overview.storage.biometricAvailable;
@@ -144,7 +141,7 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
         {/* DNIe, read by the phone */}
         {dnie && dnieStage !== 'off' ? (
           <DnieCard credential={dnie} biometric={biometric} />
-        ) : dnieStage === 'prerelease' && !dniePhone ? (
+        ) : dnieStage === 'prerelease' ? (
           <AddCard
             icon={IdCard}
             title={t.credentials.dnie.title}
@@ -161,7 +158,7 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
               </Button>
             }
           />
-        ) : !dniePhone ? null : (
+        ) : dnieStage !== 'release' ? null : (
           <AddCard
             icon={IdCard}
             title={t.credentials.dnie.title}
@@ -998,11 +995,8 @@ function DnieEarlyAccessDialog({
   const enable = async () => {
     setBusy(true);
     try {
-      // Saves the DNIe too, like "Lo tengo": the card goes straight to its PIN and pairing.
+      // Like "Lo tengo": the card goes straight to its PIN and pairing.
       await api.invoke('vault.addDnie');
-      useAppStore.setState({
-        settings: await api.invoke('settings.update', { dnieEarlyAccess: true }),
-      });
       await reloadVault();
       onOpenChange(false);
       toast.success(t.credentials.dnie.saved);

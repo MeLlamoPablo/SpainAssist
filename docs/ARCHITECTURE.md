@@ -114,8 +114,8 @@ too.
 
 ### DNIe with the phone
 Behind the `dnie-phone` flag, whose variant sets the stage (`DniePhoneStage`): `prerelease`
-shows an "Acceso anticipado" card in Mis datos and offers the DNIe once the user says they have the
-phone app (a closed test); `release`, or the flag on without a variant, offers it to everyone. The
+shows an "Acceso anticipado" card in Mis datos instead of "Lo tengo", and offers the DNIe once the
+user saves it, which they do once they have the phone app (a closed test); `release`, or the flag on without a variant, offers it to everyone. The
 user pairs the phone with a one-time QR. Signatures and
 certificate logins then go to the phone over the relay, end-to-end encrypted, and the phone reads
 the card over NFC after the user approves.

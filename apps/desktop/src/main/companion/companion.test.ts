@@ -1046,7 +1046,7 @@ describe('without the dnie-phone feature flag', () => {
 });
 
 describe('in the prerelease of the dnie-phone feature flag', () => {
-  it('starts the companion, and offers the DNIe to agents once the user has the phone app', async () => {
+  it('starts the companion, and offers the DNIe to agents while it is saved', async () => {
     const a = await createTestApp({
       env: { relayServerUrl: 'wss://relay.example.test' },
       relaySocket: new MemoryRelay().WebSocket,
@@ -1063,12 +1063,16 @@ describe('in the prerelease of the dnie-phone feature flag', () => {
     const { procedureId } = await a.startProcedure();
     expect(a.agentFor(procedureId)?.launch.config).toMatchObject({ dniePhone: false });
 
-    // "Ya tengo la app, habilitar DNIe" saves the DNIe, then the setting.
+    // "Ya tengo la app, habilitar DNIe" saves the DNIe.
     const dnie = await a.invoke('vault.addDnie');
     expect((await a.invoke('vault.overview')).credentials).toMatchObject([{ id: dnie.id }]);
-    await a.invoke('settings.update', { dnieEarlyAccess: true });
     await a.say('Otro trámite');
     const { procedureId: next } = await a.startProcedure('Otro trámite');
     expect(a.agentFor(next)?.launch.config).toMatchObject({ dniePhone: true });
+
+    await a.invoke('vault.deleteCredential', dnie.id);
+    await a.say('Un trámite más');
+    const { procedureId: last } = await a.startProcedure('Un trámite más');
+    expect(a.agentFor(last)?.launch.config).toMatchObject({ dniePhone: false });
   });
 });

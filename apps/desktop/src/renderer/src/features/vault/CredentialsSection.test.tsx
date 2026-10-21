@@ -49,11 +49,10 @@ function render(
   stage: Stage,
   credentials: VaultOverview['credentials'] = [],
   companion: CompanionStatus = { state: 'off' },
-  settings = DEFAULT_SETTINGS,
 ): string {
   store.state = {
     info: info(stage),
-    settings,
+    settings: DEFAULT_SETTINGS,
     companion,
   };
   const overview: VaultOverview = {
@@ -88,26 +87,16 @@ describe('Mis datos: DNIe with the phone', () => {
     expect(saved).toContain('Vincular el móvil');
   });
 
-  it('shows the early-access card in prerelease until the user says they have the phone app', () => {
+  it('shows the early-access card in prerelease, never "Lo tengo", until the DNIe is saved', () => {
     const early = render('prerelease');
     expect(early).toContain('DNIe con el móvil');
     expect(early).toContain('Acceso anticipado');
     expect(early).toContain('Probar');
     expect(early).not.toContain('Lo tengo');
-    const enabled = render(
-      'prerelease',
-      [],
-      { state: 'off' },
-      {
-        ...DEFAULT_SETTINGS,
-        dnieEarlyAccess: true,
-      },
-    );
-    expect(enabled).not.toContain('Acceso anticipado');
-    expect(enabled).toContain('Lo tengo');
-    // The release ignores the setting, and a saved DNIe is shown as is.
+    const saved = render('prerelease', [DNIE]);
+    expect(saved).toContain('data-testid="credential-dnie"');
+    expect(saved).not.toContain('Acceso anticipado');
     expect(render('release')).not.toContain('Acceso anticipado');
-    expect(render('prerelease', [DNIE])).toContain('data-testid="credential-dnie"');
   });
 
   it('offers to save the DNIe PIN, and to change or delete a saved one (never shown)', () => {

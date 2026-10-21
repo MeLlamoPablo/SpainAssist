@@ -953,7 +953,6 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
           ? { onboardingCompleted: patch.onboardingCompleted }
           : {}),
         ...(patch.shareLearnings !== undefined ? { shareLearnings: patch.shareLearnings } : {}),
-        ...(patch.dnieEarlyAccess !== undefined ? { dnieEarlyAccess: patch.dnieEarlyAccess } : {}),
       };
       emit({ type: 'settings.changed', settings: state.settings });
       return state.settings;

@@ -153,9 +153,14 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const clock = deps.clock ?? systemClock;
   const ids = deps.ids ?? newId;
   // In prerelease the DNIe's plumbing (pairing, relay, a saved DNIe) is there from launch, so the
-  // user can turn it on without a restart; agents only offer it once it is offered (buildConfig).
+  // user can save their DNIe without a restart; agents only offer it once it is saved.
   const dnieStage = deps.appInfo.features.dniePhone;
   const dniePhone = dnieStage !== 'off';
+  const dnieOffered = () =>
+    dniePhoneOffered(
+      dnieStage,
+      vaultPort.listCredentials().some((c) => c.kind === 'dnie'),
+    );
 
   const assistant = assistantPaths(paths.assistantDir);
   for (const dir of [
@@ -263,7 +268,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
               },
             }
           : {}),
-        dniePhone: dniePhoneOffered(dnieStage, s),
+        dniePhone: dnieOffered(),
       };
     },
     hostScript: deps.hostScript,
@@ -487,12 +492,20 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   });
 
   settings.onChange((next, prev) => {
-    // Agents read both when they start (buildConfig): restart them.
-    const dnieChanged = dniePhoneOffered(dnieStage, next) !== dniePhoneOffered(dnieStage, prev);
-    if (next.language === prev.language && !dnieChanged) return;
-    if (next.language !== prev.language) certificates?.setLanguage(next.language);
+    if (next.language === prev.language) return;
+    certificates?.setLanguage(next.language);
     void agents.stopAll();
   });
+  // Agents read whether the DNIe is offered when they start (buildConfig): in prerelease, saving
+  // or deleting the DNIe changes it, so restart them.
+  if (dnieStage === 'prerelease') {
+    let offered = dnieOffered();
+    events.on((e) => {
+      if (e.type !== 'vault.changed' || dnieOffered() === offered) return;
+      offered = !offered;
+      void agents.stopAll();
+    });
+  }
 
   async function deleteProcedure(id: string): Promise<void> {
     procedures.require(id);
