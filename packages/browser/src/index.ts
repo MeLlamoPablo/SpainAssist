@@ -36,6 +36,7 @@ export type {
   BrowserServiceOptions,
   CertificateProxy,
   ClientCertificateUse,
+  CrlSetComponent,
   DownloadedFile,
   Logger,
   RefInfo,

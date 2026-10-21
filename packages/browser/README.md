@@ -50,6 +50,29 @@ sedes only.
 `afirma` injects the `@sa/signer` shim into every frame and binds calls to a trusted handler;
 origin and URL come from the invoking frame rather than page arguments.
 
+## Revoked certificates
+
+Chrome blocks revoked certificates and compromised CA keys with a CRLSet, which its component
+updater downloads in the background. Playwright turns the updater off, so its Chromium has no
+CRLSet and trusts whatever its root store does: in October 2026 it accepted sites signed with
+eMudhra's leaked intermediate keys, which Chrome had blocked within hours.
+
+With `crlSet`, each launch copies the app's CRLSet (`dir`, unpacked from the component) into a
+new temporary profile and launches Chromium persistently on it, because `launch` can't take a
+profile. Chromium loads a seeded CRLSet only while its component updater runs, so the updater
+is on, pointed at port 9, which Chromium never connects to: nothing is downloaded and nothing
+is sent. Chromium enforces the CRLSet in its after-startup tasks, about 2 s after launch on a
+Mac (it's listed in `chrome://components` sooner), so the launch waits 5 s before the first
+page. Those tasks need a window: the profile's own blank window is closed only after the wait
+(closed at once, the CRLSet is never enforced). Sessions use contexts of that browser as
+usual, and the profile is deleted when the browser goes away. An expired CRLSet still blocks
+the keys it lists.
+
+A local server can't show the CRLSet being enforced (an untrusted test certificate fails
+first, and a trusted one skips revocation), so the desktop app has a live test against a site
+signed with eMudhra's leaked key (`apps/desktop/src/main/crlset/live.test.ts`,
+`SA_TEST_LIVE_CRLSET=1`).
+
 ## Tests
 
 `corepack pnpm --filter @sa/browser typecheck` and `corepack pnpm --filter @sa/browser test`,

@@ -65,6 +65,12 @@ export interface BrowserServiceOptions {
   /** Extra Chromium command-line switches. */
   launchArgs?: string[];
   /**
+   * The CRLSet to enforce, asked for at each launch: Chromium's list of revoked certificates and
+   * blocked CA keys, which Playwright's Chromium never downloads by itself (README.md, "Revoked
+   * certificates"). Without one, the browser trusts every certificate its root store does.
+   */
+  crlSet?: () => Promise<CrlSetComponent | undefined>;
+  /**
    * Scripts (source text) injected into every frame of every context before the page's own
    * scripts run (`addInitScript`). For embedders that must change what a page can see or do, such
    * as the eval suite, which removes WebRTC.
@@ -102,6 +108,12 @@ export interface BrowserServiceOptions {
    * for offline mock sites, with typed secrets scrubbed (capture.ts). Never in production.
    */
   capture?: CaptureOptions;
+}
+
+/** Chromium's CRLSet component, unpacked: `dir` holds `crl-set` and `manifest.json`. */
+export interface CrlSetComponent {
+  version: string;
+  dir: string;
 }
 
 /** What the browser needs from the TLS sidecar (`@sa/sidecar`'s `Sidecar`). */

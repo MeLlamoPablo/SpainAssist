@@ -4,6 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {
   AFIRMA_BINDING,
@@ -61,6 +62,7 @@ import type {
   BrowserService,
   BrowserServiceOptions,
   ClientCertificateUse,
+  CrlSetComponent,
   Logger,
   RefInfo,
   ScreencastFrame,
@@ -93,6 +95,19 @@ const POPUP_WAIT_MS = 5_000;
 /** Closing the pages of a context before the context itself, and the wait for either. */
 const PAGE_CLOSE_MS = 3_000;
 const CONTEXT_CLOSE_MS = 15_000;
+/**
+ * How long after launch a seeded CRLSet takes to reach the network stack: Chromium hands it over
+ * in its after-startup tasks, about 2 s after launch on a Mac (README.md, "Revoked certificates").
+ */
+const CRLSET_SETTLE_MS = 5_000;
+/**
+ * The component updater's server while a CRLSet is seeded: it must run to load the seeded
+ * CRLSet, but never download anything. Port 9 is on Chromium's list of unsafe ports, so nothing
+ * is ever sent there.
+ */
+const NO_COMPONENT_UPDATES = '--component-updater=url-source=http://127.0.0.1:9/';
+/** Temporary profiles of CRLSet launches, in the OS temp directory. */
+export const PROFILE_PREFIX = 'sa-agent-profile-';
 
 const silentLogger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
 
@@ -813,7 +828,13 @@ export class PlaywrightBrowserService implements BrowserService {
         ? { handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false }
         : {}),
     };
-    const browser = await chromium.launch(options);
+    const crlSet = await this.opts.crlSet?.().catch((err) => {
+      this.log.warn('no CRLSet for the browser', { error: errorMessage(err) });
+      return undefined;
+    });
+    const browser = crlSet
+      ? await this.launchWithCrlSet(options, crlSet)
+      : await chromium.launch(options);
     if (this.opts.certificates) {
       try {
         await answerProxyLogins(browser, this.opts.certificates.credentials);
@@ -827,6 +848,46 @@ export class PlaywrightBrowserService implements BrowserService {
     this.browser = browser;
     this.log.info('browser launched', { headless, version: browser.version() });
     return browser;
+  }
+
+  /**
+   * Launches Chromium on a new profile seeded with the CRLSet. Playwright's `launch` always starts
+   * from an empty profile of its own, so this is a persistent launch on a temporary profile
+   * (deleted when the browser goes away) whose browser gives sessions their contexts as usual.
+   * Chromium loads a seeded CRLSet only while its component updater runs (NO_COMPONENT_UPDATES),
+   * and enforces it a moment later, so this waits CRLSET_SETTLE_MS before the first page.
+   */
+  private async launchWithCrlSet(
+    options: LaunchOptions,
+    crlSet: CrlSetComponent,
+  ): Promise<Browser> {
+    const profile = await fs.mkdtemp(path.join(os.tmpdir(), PROFILE_PREFIX));
+    const removeProfile = () =>
+      fs.rm(profile, { recursive: true, force: true, maxRetries: 5 }).catch(noop);
+    let context: BrowserContext | undefined;
+    try {
+      await fs.cp(crlSet.dir, path.join(profile, 'CertificateRevocation', crlSet.version), {
+        recursive: true,
+      });
+      context = await chromium.launchPersistentContext(profile, {
+        ...options,
+        ignoreDefaultArgs: ['--disable-component-update'],
+        args: [...(options.args ?? []), NO_COMPONENT_UPDATES],
+      });
+      const browser = context.browser();
+      if (!browser) throw new Error('The persistent launch returned no browser');
+      browser.on('disconnected', () => void removeProfile());
+      await sleep(CRLSET_SETTLE_MS);
+      // Its blank first window, only now: Chromium enforces the CRLSet in its after-startup
+      // tasks, which never run if the browser's only window closes first. Sessions open their own.
+      await Promise.all(context.pages().map((page) => page.close().catch(noop)));
+      this.log.info('browser enforces a CRLSet', { version: crlSet.version });
+      return browser;
+    } catch (err) {
+      await context?.close().catch(noop);
+      await removeProfile();
+      throw err;
+    }
   }
 
   private onBrowserDisconnected(browser: Browser): void {
