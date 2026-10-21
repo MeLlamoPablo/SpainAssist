@@ -90,6 +90,7 @@ const IMPORTED: Record<Exclude<keyof AppPaths, 'userData' | 'tmpDir'>, boolean> 
   logsDir: false,
   downloadsDir: false,
   scanTranscriptsDir: false,
+  crlSetDir: false,
 };
 
 function importedEntries(userData: string): string[] {

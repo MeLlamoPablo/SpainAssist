@@ -19,6 +19,8 @@ export interface AppPaths {
   tmpDir: string;
   /** Browser downloads: staging, then temporary downloads until the agent saves them to the vault. */
   downloadsDir: string;
+  /** Chrome's CRLSet, unpacked (`crlset/store.ts`). */
+  crlSetDir: string;
 }
 
 export function createAppPaths(userData: string, tempRoot = tmpdir()): AppPaths {
@@ -34,6 +36,7 @@ export function createAppPaths(userData: string, tempRoot = tmpdir()): AppPaths 
     scanTranscriptsDir: join(userData, 'scanner', 'conversations'),
     tmpDir: join(tempRoot, `SpainAssistant-${profile}`),
     downloadsDir: join(userData, 'downloads'),
+    crlSetDir: join(userData, 'crlset'),
   };
 }
 

@@ -27,6 +27,7 @@ import { ensurePrivateDir } from '../core/fs';
 import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import { type Clock, errorMessage, type IdFactory, newId, systemClock } from '../core/util';
+import type { CrlSetStore } from '../crlset/store';
 import { exportTranscripts } from '../export/transcripts';
 import { registerIpcHandlers } from '../ipc/handlers';
 import { type IpcCallContext, IpcRouter } from '../ipc/router';
@@ -74,6 +75,8 @@ export interface MainDeps {
    * cache (development, tests); SA_BROWSER_EXECUTABLE overrides both.
    */
   browserExecutable?: string;
+  /** Chrome's CRLSet for the agent's browser (`crlset/store.ts`); none in tests. */
+  crlSets?: Pick<CrlSetStore, 'component'>;
   certificateOrigins: readonly string[];
   signer?: SignerLib;
   pii: PiiLib;
@@ -370,11 +373,13 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
           scratchDir: join(paths.tmpDir, 'browser-capture'),
         }
       : undefined;
+  const crlSets = deps.crlSets;
   const browser = new BrowserHolder({
     certificates,
     certificateLoginsAvailable: !deps.startSidecar || !!certificates,
     factory: deps.browserFactory,
     executablePath: env.browserExecutable ?? deps.browserExecutable,
+    ...(crlSets ? { crlSet: () => crlSets.component() } : {}),
     ignoreHTTPSErrors: env.e2e,
     headless: env.e2e || deps.appInfo.isDev ? env.browserHeadless : undefined,
     ...(capture ? { capture } : {}),

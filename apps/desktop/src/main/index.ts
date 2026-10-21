@@ -57,6 +57,8 @@ import { bundledChromiumPath } from './browser/bundled';
 import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
+import { CrlSetStore } from './crlset/store';
+import { blockedInChain, blockKeysInNodeTls, electronChain } from './crlset/tls';
 import { errorReportsAllowed } from './errors/gate';
 import { startErrorReports } from './errors/reports';
 import { applyStagedLocalState, defaultUserData, openDataImport } from './migrate/nsis-import';
@@ -343,6 +345,17 @@ async function main(): Promise<void> {
       status: systemPreferences.getMediaAccessStatus('camera'),
     });
 
+  // Chrome's CRLSet: for the agent's browser, and its blocked keys for our own connections from
+  // the first request on (Node's here, Electron's below). Never in e2e runs, which stay offline.
+  const crlSets = env.e2e
+    ? undefined
+    : new CrlSetStore({ dir: paths.crlSetDir, fetch, logger: log.child('crlset') });
+  if (crlSets) {
+    await crlSets.load();
+    blockKeysInNodeTls(() => crlSets.blockedKeys());
+    crlSets.start();
+  }
+
   // Asked once per launch, in parallel with the rest of startup: flag changes apply on restart.
   const features = env.featureFlags
     ? Promise.resolve(featuresFromNames(env.featureFlags))
@@ -377,6 +390,13 @@ async function main(): Promise<void> {
     'microphone',
   );
   restrictPermissions(session.defaultSession, requestCamera, requestMicrophone);
+  if (crlSets)
+    session.defaultSession.setCertificateVerifyProc((request, callback) => {
+      const subject = blockedInChain(electronChain(request.certificate), crlSets.blockedKeys());
+      if (subject) log.warn('blocked certificate authority', { host: request.hostname, subject });
+      // -2: refuse; -3: Chromium's own verdict.
+      callback(subject ? -2 : -3);
+    });
   // Identify the desktop client to OSM, as its tile policy asks; HTTP caching stays enabled.
   session.defaultSession.webRequest.onBeforeSendHeaders(
     { urls: ['https://tile.openstreetmap.org/*'] },
@@ -467,6 +487,7 @@ async function main(): Promise<void> {
         ...(env.e2e ? { insecureUpstream: true } : {}),
       }),
     browserExecutable: bundledBrowser(log),
+    ...(crlSets ? { crlSets } : {}),
     certificateOrigins,
     signer: signerLib(log),
     pii: piiLib,
@@ -597,6 +618,7 @@ async function main(): Promise<void> {
   });
   updates.start();
   app.on('before-quit', () => updates.stop());
+  app.on('before-quit', () => crlSets?.stop());
   log.info('ready', { bridge: 'listening', methods: s.router.methods().length });
 }
 

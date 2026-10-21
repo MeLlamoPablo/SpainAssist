@@ -3,6 +3,7 @@ import type {
   CaptureOptions,
   CertificateProxy,
   ClientCertificateUse,
+  CrlSetComponent,
   DownloadedFile,
 } from '@sa/browser';
 import type {
@@ -30,6 +31,8 @@ export interface BrowserHolderDeps {
   certificateLoginsAvailable?: boolean;
   /** The Chromium to launch; Playwright's cache without it (development, e2e). */
   executablePath?: string;
+  /** Chrome's CRLSet for each launch (`crlset/store.ts`); none in tests. */
+  crlSet?: () => Promise<CrlSetComponent | undefined>;
   /** Headless override for development/test runs only. */
   headless?: boolean;
   /** Staging directory for browser downloads; temporary downloads live in its `kept` folder. */
@@ -172,6 +175,7 @@ export class BrowserHolder {
       headless: deps.headless ?? false,
       startHidden: true,
       executablePath: deps.executablePath,
+      ...(deps.crlSet ? { crlSet: deps.crlSet } : {}),
       ignoreHTTPSErrors: deps.ignoreHTTPSErrors ?? false,
       ...(deps.capture ? { capture: deps.capture } : {}),
       downloadsDir: deps.downloadsDir,
