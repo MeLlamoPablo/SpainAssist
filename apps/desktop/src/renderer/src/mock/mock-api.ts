@@ -979,8 +979,8 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
           ok: false,
           error:
             lang() === 'es'
-              ? 'Spain Assist solo puede conectar la IA de ChatGPT en los planes Plus o superiores.'
-              : 'Spain Assist can only connect ChatGPT on Plus plans or higher.',
+              ? 'Spain Assist solo puede conectar la IA de ChatGPT en los planes Go o superiores.'
+              : 'Spain Assist can only connect ChatGPT on Go plans or higher.',
         };
       }
       const status: ProviderStatus = {

@@ -288,8 +288,8 @@ const STRINGS = {
     en: "Couldn't sign in: {message}",
   },
   loginChatgptNotEligible: {
-    es: 'Spain Assist solo puede conectar la IA de ChatGPT en los planes Plus o superiores.',
-    en: 'Spain Assist can only connect ChatGPT on Plus plans or higher.',
+    es: 'Spain Assist solo puede conectar la IA de ChatGPT en los planes Go o superiores.',
+    en: 'Spain Assist can only connect ChatGPT on Go plans or higher.',
   },
   voucherInvalid: {
     es: 'Ese código no es válido. Revisa que esté bien escrito.',

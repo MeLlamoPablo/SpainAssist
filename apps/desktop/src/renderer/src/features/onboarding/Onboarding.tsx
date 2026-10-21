@@ -38,7 +38,7 @@ const dict = defineDict({
     splash: {
       voucher: 'Continuar con código de invitación',
       chatgpt: 'Continuar con ChatGPT',
-      plans: 'Plus o Pro',
+      plans: 'Go o superior',
       skip: 'Saltar',
     },
     voucher: {
@@ -64,7 +64,7 @@ const dict = defineDict({
     splash: {
       voucher: 'Continue with invitation code',
       chatgpt: 'Continue with ChatGPT',
-      plans: 'Plus or Pro',
+      plans: 'Go or higher',
       skip: 'Skip',
     },
     voucher: {

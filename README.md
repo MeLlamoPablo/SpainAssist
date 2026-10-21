@@ -20,7 +20,7 @@ What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 Pick one in the app:
 
 * **A Spain Assist code**, with credit included.
-* **ChatGPT** Plus or Pro.
+* **ChatGPT** Go or higher.
 * **Your own API key** (Anthropic, OpenAI, OpenRouter…) or **any OpenAI-compatible endpoint**.
   Web research uses Exa's free tier, no key needed; an Exa key of your own raises the limits.
 

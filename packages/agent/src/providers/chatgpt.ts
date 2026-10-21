@@ -360,7 +360,7 @@ async function verifyChatGPTIdToken(
 }
 
 /**
- * Consent works for any ChatGPT account, but only paid plans (Plus/Pro) may spend plan usage in
+ * Consent works for any ChatGPT account, but only paid plans (Go or higher) may spend plan usage in
  * other apps: for the rest the code exchange fails, observed as a bare `invalid_grant`. Only
  * applies to a fresh authorization code; on refresh `invalid_grant` means an expired session.
  */

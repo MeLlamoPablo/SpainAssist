@@ -21,7 +21,7 @@ export const settingsDict = defineDict({
       error: 'Hay un problema con la conexión',
       chatgpt: {
         title: 'Usar IA de ChatGPT',
-        body: 'Planes Plus o Pro',
+        body: 'Planes Go o superior',
         button: 'Continuar con ChatGPT',
         waiting: 'Esperando a que inicies sesión…',
         cancel: 'Cancelar',
@@ -174,7 +174,7 @@ export const settingsDict = defineDict({
       error: 'There’s a problem with the connection',
       chatgpt: {
         title: 'Use ChatGPT’s AI',
-        body: 'Plus or Pro plans',
+        body: 'Go plans or higher',
         button: 'Continue with ChatGPT',
         waiting: 'Waiting for you to sign in…',
         cancel: 'Cancel',

@@ -5,7 +5,7 @@ import { z } from 'zod';
 // ---------------------------------------------------------------------------------------------
 
 export const ProviderKind = z.enum([
-  'chatgpt', // "Sign in with ChatGPT" (Plus/Pro subscription, via pi's openai-codex OAuth)
+  'chatgpt', // "Sign in with ChatGPT" (Go or higher subscription, via pi's openai-codex OAuth)
   'voucher', // capped LiteLLM key (our gateway) issued by our key server for a voucher code
   'byok', // bring your own key, any provider supported by pi (advanced)
   'custom', // any OpenAI-compatible endpoint, e.g. a local model (advanced; also used by e2e tests)
