@@ -3,6 +3,21 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.3.2 (2026-10-21)
+
+Installed apps update to it. What changed since 0.3.1.
+
+### App
+
+- **Revoked certificates are refused, including eMudhra's leaked keys.** The assistant's
+  browser accepted sites signed with the eight eMudhra intermediate keys leaked in October 2026,
+  which Chrome had blocked within hours. The app now downloads Chrome's list of revoked
+  certificates and blocked keys (its CRLSet) from Google at startup and every 6 hours, and the
+  assistant's browser enforces it; opening that browser takes about 5 s longer. The app's own
+  connections (our servers, AI providers, the window) refuse the same keys. The download sends
+  no personal data. (04092b5, b48c09b)
+- **The assistant's browser is Chromium 156** (was 153), with Playwright 1.64.1. (1128ddb)
+
 ## 0.3.1 (2026-10-21)
 
 Installed apps update to it. What changed since 0.3.0.
