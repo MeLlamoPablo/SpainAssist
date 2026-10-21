@@ -122,13 +122,13 @@ resource "coolify_private_key" "github" {
 
 locals {
   # Shared build inputs: a change in any of them redeploys every app (see watch_paths).
-  workspace_paths = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", "packages/shared/**"]
+  workspace_paths = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", "patches/**", "packages/shared/**"]
 
   apps = {
     key_server = {
-      name        = "key-server"
-      port        = "8787"
-      hosts       = local.all_hosts.keys
+      name  = "key-server"
+      port  = "8787"
+      hosts = local.all_hosts.keys
       # The models file names the scan deciders keys allow (services/key-server/src/config.ts).
       watch_paths = concat(
         ["services/key-server/**", "models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json"],

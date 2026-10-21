@@ -13,8 +13,10 @@ WORKDIR /app
 
 # 1. Dependencies: only the workspace manifests, so this layer is cached until one of them or
 #    the lockfile changes. corepack fetches the pnpm version pinned in package.json
-#    (pnpm 12 needs corepack >= 0.36, newer than the one bundled with Node 24).
+#    (pnpm 12 needs corepack >= 0.36, newer than the one bundled with Node 24). The install
+#    reads every patch pnpm-workspace.yaml names, even of packages it skips.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches/ patches/
 COPY packages/shared/package.json packages/shared/
 COPY services/key-server/package.json services/key-server/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
