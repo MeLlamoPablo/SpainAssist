@@ -1063,6 +1063,9 @@ describe('in the prerelease of the dnie-phone feature flag', () => {
     const { procedureId } = await a.startProcedure();
     expect(a.agentFor(procedureId)?.launch.config).toMatchObject({ dniePhone: false });
 
+    // "Ya tengo la app, habilitar DNIe" saves the DNIe, then the setting.
+    const dnie = await a.invoke('vault.addDnie');
+    expect((await a.invoke('vault.overview')).credentials).toMatchObject([{ id: dnie.id }]);
     await a.invoke('settings.update', { dnieEarlyAccess: true });
     await a.say('Otro trámite');
     const { procedureId: next } = await a.startProcedure('Otro trámite');

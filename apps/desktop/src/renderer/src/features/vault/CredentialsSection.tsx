@@ -998,10 +998,14 @@ function DnieEarlyAccessDialog({
   const enable = async () => {
     setBusy(true);
     try {
+      // Saves the DNIe too, like "Lo tengo": the card goes straight to its PIN and pairing.
+      await api.invoke('vault.addDnie');
       useAppStore.setState({
         settings: await api.invoke('settings.update', { dnieEarlyAccess: true }),
       });
+      await reloadVault();
       onOpenChange(false);
+      toast.success(t.credentials.dnie.saved);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
