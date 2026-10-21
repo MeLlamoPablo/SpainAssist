@@ -91,7 +91,7 @@ variable "aws_secret_access_key" {
 variable "coolify_version" {
   description = "Coolify version installed by the bootstrap (auto-update is off). Bumping it and applying upgrades Coolify."
   type        = string
-  default     = "4.3.23"
+  default     = "4.3.24"
 }
 
 variable "coolify_root_email" {

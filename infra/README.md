@@ -91,7 +91,7 @@ it and declares everything Coolify runs, with the
 ```text
 Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443 (+ ICMP)
 └─ cx23 (2 vCPU, 4 GB), Ubuntu 26.04, 2 GB swap, daily Hetzner backups
-   └─ Coolify 4.3.23: dashboard https://coolify.<domain>, Traefik + Let's Encrypt
+   └─ Coolify 4.3.24: dashboard https://coolify.<domain>, Traefik + Let's Encrypt
       └─ project "SpainAssistant" / production
          ├─ postgres          Postgres 17: databases keyserver, feedback, litellm, unleash,
          │                    glitchtip (one role each); daily pg_dump, 7 kept on the server
