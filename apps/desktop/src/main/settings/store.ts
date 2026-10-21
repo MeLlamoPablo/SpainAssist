@@ -74,6 +74,7 @@ export class SettingsStore {
         ? { onboardingCompleted: patch.onboardingCompleted }
         : {}),
       ...(patch.shareLearnings !== undefined ? { shareLearnings: patch.shareLearnings } : {}),
+      ...(patch.dnieEarlyAccess !== undefined ? { dnieEarlyAccess: patch.dnieEarlyAccess } : {}),
     }));
   }
 
@@ -140,7 +141,7 @@ export function normalizeSettings(
   if (!raw || typeof raw !== 'object') return out;
   const r = raw as Record<string, unknown>;
   const shape = Settings.shape;
-  const keys = ['language', 'onboardingCompleted', 'shareLearnings'] as const;
+  const keys = ['language', 'onboardingCompleted', 'shareLearnings', 'dnieEarlyAccess'] as const;
   for (const key of keys) {
     if (r[key] === undefined) continue;
     const parsed = shape[key].safeParse(r[key]);

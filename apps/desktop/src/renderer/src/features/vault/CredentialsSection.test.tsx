@@ -2,6 +2,7 @@ import {
   type AppInfo,
   type CompanionStatus,
   DEFAULT_SETTINGS,
+  type DniePhoneStage,
   FEATURES_OFF,
   type VaultOverview,
 } from '@sa/shared';
@@ -19,14 +20,20 @@ vi.mock('../../store/app', () => ({
   ),
 }));
 
-const info = (dniePhone: boolean): AppInfo => ({
+/** `true` and `false` stand for `release` and `off`. */
+type Stage = DniePhoneStage | boolean;
+
+const info = (stage: Stage): AppInfo => ({
   name: 'Spain Assist',
   version: '0.0.0-test',
   platform: 'darwin',
   installChannel: 'dev',
   isDev: true,
   isE2E: false,
-  features: { ...FEATURES_OFF, dniePhone },
+  features: {
+    ...FEATURES_OFF,
+    dniePhone: stage === true ? 'release' : stage === false ? 'off' : stage,
+  },
   errorReports: false,
 });
 
@@ -39,13 +46,14 @@ const DNIE = {
 } as const;
 
 function render(
-  dniePhone: boolean,
+  stage: Stage,
   credentials: VaultOverview['credentials'] = [],
   companion: CompanionStatus = { state: 'off' },
+  settings = DEFAULT_SETTINGS,
 ): string {
   store.state = {
-    info: info(dniePhone),
-    settings: DEFAULT_SETTINGS,
+    info: info(stage),
+    settings,
     companion,
   };
   const overview: VaultOverview = {
@@ -78,6 +86,28 @@ describe('Mis datos: DNIe with the phone', () => {
     const saved = render(true, [DNIE]);
     expect(saved).toContain('data-testid="credential-dnie"');
     expect(saved).toContain('Vincular el móvil');
+  });
+
+  it('shows the early-access card in prerelease until the user says they have the phone app', () => {
+    const early = render('prerelease');
+    expect(early).toContain('DNIe con el móvil');
+    expect(early).toContain('Acceso anticipado');
+    expect(early).toContain('Probar');
+    expect(early).not.toContain('Lo tengo');
+    const enabled = render(
+      'prerelease',
+      [],
+      { state: 'off' },
+      {
+        ...DEFAULT_SETTINGS,
+        dnieEarlyAccess: true,
+      },
+    );
+    expect(enabled).not.toContain('Acceso anticipado');
+    expect(enabled).toContain('Lo tengo');
+    // The release ignores the setting, and a saved DNIe is shown as is.
+    expect(render('release')).not.toContain('Acceso anticipado');
+    expect(render('prerelease', [DNIE])).toContain('data-testid="credential-dnie"');
   });
 
   it('offers to save the DNIe PIN, and to change or delete a saved one (never shown)', () => {

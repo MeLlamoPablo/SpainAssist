@@ -25,7 +25,8 @@ import type { UserKey } from '../providers/manager';
  *                            it, development builds send none. The `error-reports` flag and the
  *                            anonymous data sharing setting still apply (SA_FEATURE_FLAGS=error-reports turns it on)
  *   SA_FEATURE_FLAGS         development only: comma-separated Unleash flag names to turn on,
- *                            instead of asking Unleash (e.g. "dnie-phone");
+ *                            instead of asking Unleash (e.g. "dnie-phone"), each with an optional
+ *                            variant after a colon ("dnie-phone:prerelease");
  *                            "" = all off. E2e runs never ask Unleash: without it, every
  *                            feature is off. `dev:local` turns every flag on
  *   SA_EXTRA_TRUSTED_HOSTS   comma-separated host suffixes allowed for credentials (mock sede)

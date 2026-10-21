@@ -10,14 +10,37 @@ import type { Logger } from '../core/logger';
 import { type FetchFn, joinUrl, requestJson } from './http';
 
 const FrontendResponse = z.object({
-  toggles: z.array(z.object({ name: z.string(), enabled: z.boolean() })),
+  toggles: z.array(
+    z.object({
+      name: z.string(),
+      enabled: z.boolean(),
+      variant: z.object({ name: z.string(), enabled: z.boolean() }).optional(),
+    }),
+  ),
 });
 
-/** Feature flags from a list of enabled Unleash flag names. */
+/**
+ * Feature flags from the Unleash flags that are on, each a name with an optional variant
+ * (`dnie-phone:prerelease`), as SA_FEATURE_FLAGS lists them.
+ */
 export function featuresFromNames(enabled: Iterable<string>): FeatureFlags {
-  const names = new Set(enabled);
-  const entries = Object.entries(FEATURE_FLAG_NAMES).map(([key, name]) => [key, names.has(name)]);
-  return Object.fromEntries(entries) as FeatureFlags;
+  const variants = new Map<string, string | undefined>();
+  for (const entry of enabled) {
+    const [name = '', variant] = entry.split(':');
+    variants.set(name, variant);
+  }
+  const has = (key: keyof FeatureFlags) => variants.has(FEATURE_FLAG_NAMES[key]);
+  const dnieVariant = variants.get(FEATURE_FLAG_NAMES.dniePhone);
+  return {
+    dniePhone: !has('dniePhone') ? 'off' : dnieVariant === 'prerelease' ? 'prerelease' : 'release',
+    mustUpdate: has('mustUpdate'),
+    errorReports: has('errorReports'),
+  };
+}
+
+/** Whether a flag is on, for the metrics Unleash shows. */
+function flagOn(value: FeatureFlags[keyof FeatureFlags]): boolean {
+  return value !== false && value !== 'off';
 }
 
 /**
@@ -26,7 +49,8 @@ export function featuresFromNames(enabled: Iterable<string>): FeatureFlags {
  * and `installChannel` context properties, so a flag can target versions (`must-update` with
  * SEMVER_LT, for example), one OS (`process.platform`: darwin, win32, linux), one CPU
  * (`process.arch`: arm64, x64) or one way of installing (`InstallChannel`: msix for the Microsoft
- * Store, nsis, dmg, deb…). Fails closed: when Unleash can't be reached or answers nonsense, every
+ * Store, nsis, dmg, deb…). `dnie-phone` also has a variant (`prerelease` or `release`, see
+ * DniePhoneStage). Fails closed: when Unleash can't be reached or answers nonsense, every
  * feature is off.
  * Once read, it reports their use in the background (see reportFlagMetrics).
  */
@@ -56,7 +80,11 @@ export async function loadFeatureFlags(deps: {
       timeoutMs: deps.timeoutMs ?? 3_000,
     });
     const parsed = FrontendResponse.parse(json);
-    const features = featuresFromNames(parsed.toggles.filter((t) => t.enabled).map((t) => t.name));
+    const features = featuresFromNames(
+      parsed.toggles
+        .filter((t) => t.enabled)
+        .map((t) => (t.variant?.enabled ? `${t.name}:${t.variant.name}` : t.name)),
+    );
     void reportFlagMetrics(deps, start, features);
     return features;
   } catch (err) {
@@ -79,7 +107,7 @@ async function reportFlagMetrics(
 ): Promise<void> {
   const toggles = Object.fromEntries(
     Object.entries(FEATURE_FLAG_NAMES).map(([key, name]) => {
-      const on = features[key as keyof FeatureFlags];
+      const on = flagOn(features[key as keyof FeatureFlags]);
       return [name, { yes: on ? 1 : 0, no: on ? 0 : 1, variants: {} }];
     }),
   );

@@ -184,6 +184,11 @@ export const Settings = z.object({
   onboardingCompleted: z.boolean(),
   /** Give and receive anonymous community learnings; allow scrubbed error reports when flagged on. */
   shareLearnings: z.boolean(),
+  /**
+   * The user said they have the phone app during the DNIe's prerelease (the `prerelease` variant
+   * of the `dnie-phone` flag): the app then offers the DNIe as if it were released.
+   */
+  dnieEarlyAccess: z.boolean().optional(),
   provider: ProviderConfig.optional(),
 });
 export type Settings = z.infer<typeof Settings>;
@@ -192,6 +197,7 @@ export const SettingsPatch = z.object({
   language: Language.optional(),
   onboardingCompleted: z.boolean().optional(),
   shareLearnings: z.boolean().optional(),
+  dnieEarlyAccess: z.boolean().optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;
 
@@ -233,14 +239,32 @@ export const PRODUCTION_SERVICES = {
   },
 } as const;
 
+/**
+ * How far the DNIe through the phone app is released, from the `dnie-phone` flag's variant:
+ * - `off`: the app behaves as if it didn't exist; a saved `dnie` credential stays in the vault,
+ *   hidden.
+ * - `prerelease`: Mis datos shows an "Acceso anticipado" card. The phone app is in a closed test,
+ *   so it's offered once the user says they have it (`Settings.dnieEarlyAccess`).
+ * - `release`: offered to everyone. A flag that is on without a variant means this, as it did
+ *   before the flag had variants.
+ */
+export type DniePhoneStage = 'off' | 'prerelease' | 'release';
+
+/** Whether the app offers the DNIe through the phone (cards, pairing, the agents' tools). */
+export function dniePhoneOffered(
+  stage: DniePhoneStage,
+  settings: Pick<Settings, 'dnieEarlyAccess'>,
+): boolean {
+  return stage === 'release' || (stage === 'prerelease' && settings.dnieEarlyAccess === true);
+}
+
 /** Feature flags, read from Unleash when the app starts. Off when Unleash can't be reached. */
 export interface FeatureFlags {
   /**
    * The DNIe through the phone app: signatures and logins, the "DNIe con el móvil"
-   * card and pairing in Mis datos, the relay connection. Off, the app behaves as if it didn't
-   * exist; a saved `dnie` credential stays in the vault, hidden.
+   * card and pairing in Mis datos, the relay connection.
    */
-  dniePhone: boolean;
+  dniePhone: DniePhoneStage;
   /**
    * This version may no longer be used: the app shows only the must-update screen. Unleash
    * targets it with a constraint on the `appVersion` context field (e.g. SEMVER_LT 0.3.0), which
@@ -262,7 +286,7 @@ export const FEATURE_FLAG_NAMES: Record<keyof FeatureFlags, string> = {
 };
 
 export const FEATURES_OFF: FeatureFlags = {
-  dniePhone: false,
+  dniePhone: 'off',
   mustUpdate: false,
   errorReports: false,
 };

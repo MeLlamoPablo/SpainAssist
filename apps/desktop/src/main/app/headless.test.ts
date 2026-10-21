@@ -90,7 +90,7 @@ describe('defaults', () => {
       installChannel: 'dev',
       isDev: false,
       isE2E: true,
-      features: { dniePhone: false, mustUpdate: false, errorReports: false },
+      features: { dniePhone: 'off', mustUpdate: false, errorReports: false },
       errorReports: false,
     });
     expect((await app.invoke('settings.get')).language).toBe('es');
@@ -105,14 +105,14 @@ describe('defaults', () => {
   it('takes language, features, version and capture from the options', async () => {
     const { app } = await open({
       language: 'en',
-      features: { dniePhone: true },
+      features: { dniePhone: 'release' },
       version: '9.9.9',
       capture: true,
     });
     expect(await app.invoke('app.info')).toMatchObject({
       version: '9.9.9',
       isDev: true,
-      features: { dniePhone: true, mustUpdate: false },
+      features: { dniePhone: 'release', mustUpdate: false },
     });
     expect((await app.invoke('settings.get')).language).toBe('en');
     expect(app.services.companion).toBeDefined();
@@ -139,7 +139,7 @@ describe('defaults', () => {
     vi.stubEnv('SA_USER_DATA_DIR', join(root, 'elsewhere'));
     const { app, agentLib } = await openWithProvider();
     expect((await app.invoke('app.info')).features).toEqual({
-      dniePhone: false,
+      dniePhone: 'off',
       mustUpdate: false,
       errorReports: false,
     });

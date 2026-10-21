@@ -5,6 +5,7 @@ import type { CaptureOptions } from '@sa/browser';
 import {
   type AppInfo,
   ASSISTANT_AGENT_ID,
+  dniePhoneOffered,
   type Language,
   type WindowControlsStyle,
 } from '@sa/shared';
@@ -151,7 +152,10 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const logger = deps.logger;
   const clock = deps.clock ?? systemClock;
   const ids = deps.ids ?? newId;
-  const dniePhone = deps.appInfo.features.dniePhone;
+  // In prerelease the DNIe's plumbing (pairing, relay, a saved DNIe) is there from launch, so the
+  // user can turn it on without a restart; agents only offer it once it is offered (buildConfig).
+  const dnieStage = deps.appInfo.features.dniePhone;
+  const dniePhone = dnieStage !== 'off';
 
   const assistant = assistantPaths(paths.assistantDir);
   for (const dir of [
@@ -259,7 +263,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
               },
             }
           : {}),
-        dniePhone,
+        dniePhone: dniePhoneOffered(dnieStage, s),
       };
     },
     hostScript: deps.hostScript,
@@ -483,8 +487,10 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   });
 
   settings.onChange((next, prev) => {
-    if (next.language === prev.language) return;
-    certificates?.setLanguage(next.language);
+    // Agents read both when they start (buildConfig): restart them.
+    const dnieChanged = dniePhoneOffered(dnieStage, next) !== dniePhoneOffered(dnieStage, prev);
+    if (next.language === prev.language && !dnieChanged) return;
+    if (next.language !== prev.language) certificates?.setLanguage(next.language);
     void agents.stopAll();
   });
 

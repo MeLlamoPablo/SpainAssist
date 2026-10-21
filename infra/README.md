@@ -216,7 +216,9 @@ seeds on its first start. The app has two frontend tokens built in
 (`PRODUCTION_SERVICES.flagsTokens`): `desktop` for the `production` environment (packaged
 builds) and `api-key-default-development` for `development` (development builds; created in
 Unleash's UI and added to the state by hand). The flags themselves are created by hand in
-Unleash's UI (project `default`): `dnie-phone` (type experiment), `must-update` (constrained on the `appVersion` context field,
+Unleash's UI (project `default`): `dnie-phone` (type experiment; its strategy's variant
+`prerelease` or `release` sets the DNIe's stage, and on without a variant means `release`, which is
+also all that versions up to 0.3.0 understand), `must-update` (constrained on the `appVersion` context field,
 e.g. `SEMVER_LT 0.3.0`: without a constraint it blocks every version) and `error-reports` (type
 kill switch, on in production). The desktop reads them at start-up, and every flag is off when
 Unleash can't be reached (`FEATURE_FLAG_NAMES` in `@sa/shared`).

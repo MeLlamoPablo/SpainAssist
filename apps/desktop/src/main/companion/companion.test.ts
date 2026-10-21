@@ -968,7 +968,7 @@ describe('without the dnie-phone feature flag', () => {
     app = await createTestApp({
       env: { relayServerUrl: 'wss://relay.example.test' },
       relaySocket: relay.WebSocket,
-      features: { dniePhone: false },
+      features: { dniePhone: 'off' },
     });
     // Saved while the flag was on.
     const dnie = await app.vault.addDnie();
@@ -1003,7 +1003,7 @@ describe('without the dnie-phone feature flag', () => {
     expect(a.vault.getCredential(dnie.id)).toMatchObject({ kind: 'dnie', policy: 'ask' });
 
     // Flags are read at start-up: the next launch with the flag on shows it again.
-    await a.restart({ dniePhone: true });
+    await a.restart({ dniePhone: 'release' });
     expect((await a.invoke('vault.overview')).credentials).toMatchObject([{ id: dnie.id }]);
     expect(a.services.companion).toBeDefined();
   });
@@ -1038,7 +1038,32 @@ describe('without the dnie-phone feature flag', () => {
     expect((await a.invoke('providers.setCustom', provider)).ok).toBe(true);
     const { procedureId } = await a.startProcedure();
     expect(a.agentFor(procedureId)?.launch.config).toMatchObject({ dniePhone: false });
-    await a.restart({ dniePhone: true });
+    await a.restart({ dniePhone: 'release' });
+    await a.say('Otro trámite');
+    const { procedureId: next } = await a.startProcedure('Otro trámite');
+    expect(a.agentFor(next)?.launch.config).toMatchObject({ dniePhone: true });
+  });
+});
+
+describe('in the prerelease of the dnie-phone feature flag', () => {
+  it('starts the companion, and offers the DNIe to agents once the user has the phone app', async () => {
+    const a = await createTestApp({
+      env: { relayServerUrl: 'wss://relay.example.test' },
+      relaySocket: new MemoryRelay().WebSocket,
+      features: { dniePhone: 'prerelease' },
+    });
+    app = a;
+    expect(a.services.companion).toBeDefined();
+    const provider = {
+      baseUrl: 'http://127.0.0.1:8789/v1',
+      api: 'openai-completions',
+      model: 'mock-model',
+    } as const;
+    expect((await a.invoke('providers.setCustom', provider)).ok).toBe(true);
+    const { procedureId } = await a.startProcedure();
+    expect(a.agentFor(procedureId)?.launch.config).toMatchObject({ dniePhone: false });
+
+    await a.invoke('settings.update', { dnieEarlyAccess: true });
     await a.say('Otro trámite');
     const { procedureId: next } = await a.startProcedure('Otro trámite');
     expect(a.agentFor(next)?.launch.config).toMatchObject({ dniePhone: true });

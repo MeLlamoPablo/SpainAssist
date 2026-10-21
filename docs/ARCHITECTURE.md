@@ -113,7 +113,10 @@ or PAdES), and the site gets the result as if AutoFirma had produced it. Some se
 too.
 
 ### DNIe with the phone
-Behind the `dnie-phone` flag. The user pairs the phone with a one-time QR. Signatures and
+Behind the `dnie-phone` flag, whose variant sets the stage (`DniePhoneStage`): `prerelease`
+shows an "Acceso anticipado" card in Mis datos and offers the DNIe once the user says they have the
+phone app (a closed test); `release`, or the flag on without a variant, offers it to everyone. The
+user pairs the phone with a one-time QR. Signatures and
 certificate logins then go to the phone over the relay, end-to-end encrypted, and the phone reads
 the card over NFC after the user approves.
 - The CAN and the PIN are typed on the desktop and kept there (the PIN in the vault). They reach

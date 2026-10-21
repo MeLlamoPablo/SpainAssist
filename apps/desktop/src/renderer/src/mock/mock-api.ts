@@ -8,6 +8,7 @@ import {
   type CredentialSummary,
   type DataImportStatus,
   DEFAULT_SETTINGS,
+  type DniePhoneStage,
   type DocumentMeta,
   maskValue,
   normalizeVoucherCode,
@@ -109,8 +110,17 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     (params.has('onboarding') && params.get('onboarding') !== '0') || dataImport.state !== 'none';
   const chatgptIneligible = params.get('chatgpt') === 'ineligible';
   const dnieSaved = params.has('dnieSaved');
-  const dniePhone =
-    params.get('dnie') === '1' || params.has('companion') || params.has('playground') || dnieSaved;
+  const dnieStage: DniePhoneStage =
+    params.get('dnie') === 'prerelease'
+      ? 'prerelease'
+      : params.get('dnie') === '1' ||
+          params.has('companion') ||
+          params.has('playground') ||
+          dnieSaved
+        ? 'release'
+        : 'off';
+  // Like main: the DNIe's plumbing is there in prerelease too.
+  const dniePhone = dnieStage !== 'off';
 
   let state: MockState = createDemoState(Date.now(), {
     provider: params.get('provider'),
@@ -894,7 +904,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       isDev: true,
       isE2E: false,
       features: {
-        dniePhone,
+        dniePhone: dnieStage,
         mustUpdate,
         errorReports: params.get('errors') === '1',
       },
@@ -943,6 +953,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
           ? { onboardingCompleted: patch.onboardingCompleted }
           : {}),
         ...(patch.shareLearnings !== undefined ? { shareLearnings: patch.shareLearnings } : {}),
+        ...(patch.dnieEarlyAccess !== undefined ? { dnieEarlyAccess: patch.dnieEarlyAccess } : {}),
       };
       emit({ type: 'settings.changed', settings: state.settings });
       return state.settings;

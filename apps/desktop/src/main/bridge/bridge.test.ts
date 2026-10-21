@@ -213,7 +213,7 @@ describe('bridge: prompts', () => {
     });
 
     it('refuses to ask for the DNIe without the phone app', async () => {
-      const off = await createTestApp({ features: { dniePhone: false } });
+      const off = await createTestApp({ features: { dniePhone: 'off' } });
       try {
         const { token: offToken } = await off.procedureWithToken();
         const res = await off.rpc(

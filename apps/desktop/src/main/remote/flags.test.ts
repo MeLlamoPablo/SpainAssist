@@ -2,7 +2,7 @@ import { FEATURES_OFF } from '@sa/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../core/logger';
 import { createFakeFetch, jsonResponse } from '../testing/harness';
-import { loadFeatureFlags } from './flags';
+import { featuresFromNames, loadFeatureFlags } from './flags';
 
 const logger = createLogger({ level: 'error', sinks: [] });
 
@@ -28,7 +28,7 @@ describe('loadFeatureFlags', () => {
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
     );
     expect(await flags).toEqual({
-      dniePhone: true,
+      dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
     });
@@ -78,7 +78,7 @@ describe('loadFeatureFlags', () => {
         : jsonResponse(500, {}),
     );
     expect(await flags).toEqual({
-      dniePhone: true,
+      dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
     });
@@ -90,14 +90,34 @@ describe('loadFeatureFlags', () => {
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
     ).flags;
     expect(await on).toEqual({
-      dniePhone: true,
+      dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
     });
     const off = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: false }] }),
     ).flags;
-    expect((await off).dniePhone).toBe(false);
+    expect((await off).dniePhone).toBe('off');
+  });
+
+  it("reads the DNIe's stage from the dnie-phone variant", async () => {
+    const stage = async (variant: { name: string; enabled: boolean }) =>
+      (
+        await load(() =>
+          jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true, variant }] }),
+        ).flags
+      ).dniePhone;
+    expect(await stage({ name: 'prerelease', enabled: true })).toBe('prerelease');
+    expect(await stage({ name: 'release', enabled: true })).toBe('release');
+    // On without variants, as before the flag had them.
+    expect(await stage({ name: 'disabled', enabled: false })).toBe('release');
+  });
+
+  it('takes the variant from SA_FEATURE_FLAGS after a colon', () => {
+    expect(featuresFromNames(['dnie-phone:prerelease']).dniePhone).toBe('prerelease');
+    expect(featuresFromNames(['dnie-phone:release']).dniePhone).toBe('release');
+    expect(featuresFromNames(['dnie-phone']).dniePhone).toBe('release');
+    expect(featuresFromNames(['error-reports'])).toEqual({ ...FEATURES_OFF, errorReports: true });
   });
 
   it('blocks this version only when must-update is on', async () => {
@@ -105,7 +125,7 @@ describe('loadFeatureFlags', () => {
       jsonResponse(200, { toggles: [{ name: 'must-update', enabled: true }] }),
     ).flags;
     expect(await on).toEqual({
-      dniePhone: false,
+      dniePhone: 'off',
       mustUpdate: true,
       errorReports: false,
     });

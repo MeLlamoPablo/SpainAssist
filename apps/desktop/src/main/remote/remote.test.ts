@@ -56,7 +56,7 @@ describe('feedback.submit', () => {
     app = await createTestApp({
       fetch,
       env: { keyServerUrl: 'http://keys.test', feedbackServerUrl: 'http://feedback.test' },
-      features: { dniePhone: false, mustUpdate: false, errorReports: false },
+      features: { dniePhone: 'off', mustUpdate: false, errorReports: false },
     });
     expect((await app.invoke('providers.redeemVoucher', 'VALID-CODE')).ok).toBe(true);
     const { token } = await app.procedureWithToken();

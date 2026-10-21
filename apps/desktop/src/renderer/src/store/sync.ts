@@ -95,7 +95,7 @@ async function loadInitialState(): Promise<void> {
       api.invoke('chat.state'),
       // Without the DNIe feature flag, main refuses the pairing calls.
       appInfo.then((i): Promise<CompanionStatus> | CompanionStatus =>
-        i.features.dniePhone ? api.invoke('companion.status') : { state: 'unavailable' },
+        i.features.dniePhone !== 'off' ? api.invoke('companion.status') : { state: 'unavailable' },
       ),
       api.invoke('updates.status'),
       api.invoke('dataImport.status'),
