@@ -386,4 +386,4 @@ jobs:
           flags=()
           [[ "$PRERELEASE" == true ]] && flags+=(--prerelease)
           gh release create "$TAG" installers/* \
-            --verify-tag --generate-notes --title "Spain Assist $VERSION" "${flags[@]}"
+            --verify-tag --notes "" --title "Spain Assist $VERSION" "${flags[@]}"
