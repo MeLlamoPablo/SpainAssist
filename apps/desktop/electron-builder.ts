@@ -217,6 +217,10 @@ const config: Configuration = {
     // runFullTrust is always added. The scanner uses the camera; call recordings the microphone.
     capabilities: ['webcam', 'microphone'],
     languages: ['es-ES', 'en'],
+    // The Store rejects MinVersion <= 10.0.17134.0, and electron-builder defaults to 10.0.14316.0.
+    // Minimum: Windows 10 1809 (LTSC 2019). MaxVersionTested: Windows 11 24H2.
+    minVersion: '10.0.17763.0',
+    maxVersionTested: '10.0.26100.0',
     backgroundColor: 'transparent',
     // Version X.Y.Z.0: the Store reserves the fourth part, so never take CI's build number.
     setBuildNumber: false,
