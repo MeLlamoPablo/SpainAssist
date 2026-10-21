@@ -13,6 +13,7 @@ import {
   KeyRound,
   type LucideIcon,
   Plus,
+  Rocket,
   ShieldCheck,
   Smartphone,
   Trash,
@@ -149,7 +150,7 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
             title={t.credentials.dnie.title}
             badge={
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-st-progress-bg px-2 text-[13px] text-st-progress-fg">
-                <IdCard size={14} aria-hidden />
+                <Rocket size={14} aria-hidden />
                 {t.credentials.dnie.earlyAccess}
               </span>
             }
