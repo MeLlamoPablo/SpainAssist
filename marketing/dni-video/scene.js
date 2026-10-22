@@ -5,7 +5,7 @@ import { ICONS } from '../icons.js';
  * render.mjs can capture any frame deterministically. Times live in `T`; tweak them there.
  */
 
-export const DURATION = 19.25;
+export const DURATION = 18.95;
 
 const T = {
   winIn: -0.2,
@@ -22,14 +22,14 @@ const T = {
   pair: 7.25,
   tapLink: 8.2,
   paired: 8.35,
-  request: 9.35,
-  review: 9.6,
-  tapSign: 11.25,
-  hold: 11.4,
-  cardIn: 11.65,
-  read: 12.4,
-  signed: 13.75,
-  outro: 15.35,
+  request: 9.05,
+  review: 9.3,
+  tapSign: 10.95,
+  hold: 11.1,
+  cardIn: 11.35,
+  read: 12.1,
+  signed: 13.45,
+  outro: 15.05,
 };
 
 // ------------------------------------------------------------------------------------------
@@ -191,8 +191,8 @@ function title(t) {
 function windowAndCamera(t) {
   const p = P(t, T.winIn, 1.0, E.out5);
   const out = P(t, T.outro, 0.7, E.in);
-  // Behind the phone while it signs.
-  const back = P(t, T.request, 0.8, E.inOut) * (1 - out);
+  // Behind the phone from the moment the dialog closes until the end: it never brightens between.
+  const back = P(t, T.paired + 0.1, 0.4, E.inOut) * (1 - out);
   const { cx, cy, z } = camera(t);
   const blur = out * 14 + back * 5;
   set($('world'), {
