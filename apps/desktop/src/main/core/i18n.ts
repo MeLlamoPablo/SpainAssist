@@ -150,10 +150,6 @@ const STRINGS = {
     en: "{holder}'s DNI (with your phone)",
   },
   dnieLoginTitle: { es: 'Entrar con el DNI', en: 'Log in with your DNI' },
-  dnieLoginMessage: {
-    es: 'Aprueba entrar en {host} en tu móvil. Deja el DNI en el móvil hasta que termine: puede firmar varias veces seguidas.',
-    en: 'Approve login to {host} on your phone. Keep your DNI on the phone until it finishes: it may sign several times in a row.',
-  },
   dnieSignatureTitle: { es: 'Firma con tu DNI', en: 'Sign with your DNI' },
   dnieSignatureMessage: {
     es: '{host} te pide firmar con tu DNI. Revisa la firma en el móvil y acerca el DNI al móvil.',

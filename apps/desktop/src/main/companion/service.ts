@@ -314,7 +314,9 @@ export class CompanionService {
         ? 'certificate'
         : 'document';
     const details: { label: string; value: string }[] = [
-      { label: t(lang, 'detailWhat'), value: summary.description.slice(0, 500) },
+      ...(!login
+        ? [{ label: t(lang, 'detailWhat'), value: summary.description.slice(0, 500) }]
+        : []),
       { label: t(lang, 'detailFor'), value: login?.site ?? host },
     ];
     if (summary.format)
@@ -335,15 +337,11 @@ export class CompanionService {
       kind: 'dnie_signature',
       purpose,
       title: t(lang, login ? 'dnieLoginTitle' : 'dnieSignatureTitle'),
-      message: t(
-        lang,
-        login
-          ? 'dnieLoginMessage'
-          : purpose === 'certificate'
-            ? 'dnieCertificateMessage'
-            : 'dnieSignatureMessage',
-        { host: login?.site ?? host },
-      ),
+      message: login
+        ? t(lang, 'dnieLoginTitle')
+        : t(lang, purpose === 'certificate' ? 'dnieCertificateMessage' : 'dnieSignatureMessage', {
+            host,
+          }),
       details,
       stage: 'phone',
     };
@@ -548,7 +546,7 @@ export class CompanionService {
         {
           method: 'selectCertificate',
           origin: site,
-          description: t(this.deps.lang(), 'dnieLoginMessage', { host: label }),
+          description: t(this.deps.lang(), 'dnieLoginTitle'),
           format: '',
           algorithm: 'SHA256withRSA',
           documents: [],

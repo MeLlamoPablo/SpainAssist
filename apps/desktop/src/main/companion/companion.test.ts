@@ -751,9 +751,12 @@ it('keeps one phone approval across the hosts of one organisation, and tells the
   const approval = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
   const prompt = await typeUnlock(a, procedureId);
   expect(prompt).toMatchObject({ purpose: 'login' });
-  expect(prompt.kind === 'dnie_signature' && prompt.message).toContain(
-    'Seguridad Social (idp.seg-social.es, ipce.seg-social.es, w2.seg-social.es)',
-  );
+  expect(prompt.kind === 'dnie_signature' && prompt.details).toEqual([
+    {
+      label: 'Para',
+      value: 'Seguridad Social (idp.seg-social.es, ipce.seg-social.es, w2.seg-social.es)',
+    },
+  ]);
   await a.waitFor(() => companion.status().state === 'waiting');
   const status = await a.invoke('companion.status');
   let held: string | undefined;

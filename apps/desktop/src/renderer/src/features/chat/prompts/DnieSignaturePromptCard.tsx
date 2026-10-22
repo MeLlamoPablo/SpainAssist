@@ -117,9 +117,9 @@ export function DnieSignaturePromptCard({
         ) : null
       }
     >
-      <Markdown text={prompt.message} className="text-[14px] text-fg" />
+      {!login && <Markdown text={prompt.message} className="text-[14px] text-fg" />}
 
-      <div className="mt-4 rounded-xl border border-line bg-surface-2/60 p-4">
+      <div className={cn('rounded-xl border border-line bg-surface-2/60 p-4', !login && 'mt-4')}>
         {unlock ? (
           <>
             {/* The request would fail once sent: say why before the user types anything. */}
