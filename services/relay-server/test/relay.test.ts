@@ -343,7 +343,16 @@ describe('relay HTTP', () => {
     expect(page.headers.get('cache-control')).toBe('no-store');
     expect(page.headers.get('content-security-policy')).toContain("default-src 'none'");
     const html = await page.text();
-    expect(html).toContain('scheme=sa-firma;package=es.spainassist.firma');
+    expect(html).toContain('https://play.google.com/store/apps/details?id=es.spainassist.firma');
+    const fontPaths = [...html.matchAll(/url\("([^"]+)"\)/g)].map((match) => match[1]!);
+    expect(fontPaths).toHaveLength(3);
+    for (const path of fontPaths) {
+      const font = await app.request(path);
+      expect(font.status).toBe(200);
+      expect(font.headers.get('content-type')).toMatch(/^font\/(woff2|ttf)$/);
+      expect((await font.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+    }
+    expect((await app.request('/assets/unknown.ttf')).status).toBe(404);
     const links = (await (await app.request('/.well-known/assetlinks.json')).json()) as {
       target: { package_name: string };
     }[];

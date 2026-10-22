@@ -2,11 +2,12 @@
  * HTTP side of the relay:
  * - `GET /health`;
  * - `GET /p`: the page a pairing link opens when the phone app isn't installed (or App Links
- *   aren't verified). It reads the payload from the fragment (never sent to us) and offers to
- *   open it in the app or to install it;
+ *   aren't verified). It offers the Android download; the pairing payload stays in the
+ *   fragment (never sent to us);
  * - `GET /.well-known/assetlinks.json`: verifies the app for App Links on this host, when the
  *   signing certificate fingerprints are configured.
  */
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 
 export interface AppOptions {
@@ -20,14 +21,22 @@ export interface AppOptions {
 
 export const DEFAULT_ANDROID_PACKAGE = 'es.spainassist.firma';
 
+const fonts = new Map(
+  [
+    ['inter-latin-wght-normal.woff2', 'font/woff2'],
+    ['instrument-serif-regular.ttf', 'font/ttf'],
+    ['instrument-serif-italic.ttf', 'font/ttf'],
+  ].map(([name, contentType]) => [
+    name,
+    { contentType, data: readFileSync(new URL(`../assets/${name}`, import.meta.url)) },
+  ]),
+);
+
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-function landingPage(pkg: string, installUrl: string): string {
-  // The script builds an intent:// link with the payload as a query parameter of the app's own
-  // scheme (an intent URL can't carry a fragment). Chrome opens the store when the app is
-  // missing. Nothing here talks to the server.
+function landingPage(installUrl: string): string {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -36,33 +45,69 @@ function landingPage(pkg: string, installUrl: string): string {
 <meta name="referrer" content="no-referrer">
 <title>Spain Assist</title>
 <style>
-  :root { color-scheme: light dark; --bg: #f7f6f2; --fg: #1d1d1b; --muted: #5f5e58; --accent: #b4441c; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #161614; --fg: #f1efe8; --muted: #aaa79d; --accent: #ef8a5e; } }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.5 system-ui, sans-serif; }
-  main { max-width: 28rem; margin: 0 auto; padding: 3rem 1rem; }
-  h1 { font-size: 1.5rem; margin: 0 0 .75rem; }
-  p { color: var(--muted); margin: 0 0 1rem; }
-  a.button { display: block; text-align: center; padding: .9rem 1rem; border-radius: .75rem; margin: 0 0 .75rem;
-    background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
-  a.secondary { background: transparent; color: var(--accent); border: 1px solid currentColor; }
+  @font-face {
+    font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap;
+    src: url("/assets/inter-latin-wght-normal.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Instrument Serif"; font-style: normal; font-weight: 400; font-display: swap;
+    src: url("/assets/instrument-serif-regular.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Instrument Serif"; font-style: italic; font-weight: 400; font-display: swap;
+    src: url("/assets/instrument-serif-italic.ttf") format("truetype");
+  }
+  :root {
+    color-scheme: light dark;
+    --bg: #fff; --fg: #28211d; --subtle: #79736e;
+    --accent: #28211d; --accent-hover: #463d37; --accent-fg: #fff; --flag-outline: #d4d0cb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1b19; --fg: #edebe7; --subtle: #96918c;
+      --accent: #edebe7; --accent-hover: #fff; --accent-fg: #1e1b19; --flag-outline: #fff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/22px Inter, system-ui, sans-serif; }
+  main {
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    min-height: 100vh; min-height: 100svh; max-width: 496px; margin: 0 auto;
+    padding: 152px 24px 64px; gap: 64px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 11px; height: 44px; flex-shrink: 0;
+    font: 400 44px/44px "Instrument Serif", serif; letter-spacing: -.02em; white-space: nowrap;
+  }
+  .brand-flag {
+    width: 39px; height: 26px; border-radius: 5px;
+    background: linear-gradient(#c60b1e 25%, #ffc400 25% 75%, #c60b1e 75%);
+    box-shadow: inset 0 0 0 1.3px var(--flag-outline);
+  }
+  .content { width: 100%; }
+  h1 { font-size: 24px; line-height: 30px; font-weight: 600; margin: 0; text-wrap: balance; }
+  p { color: var(--subtle); margin: 10px 0 64px; text-wrap: pretty; }
+  .download {
+    display: flex; align-items: center; justify-content: center; min-height: 52px;
+    padding: 14px 24px; border-radius: 12px; background: var(--accent); color: var(--accent-fg);
+    text-align: center; text-decoration: none; font-weight: 600; line-height: 24px;
+  }
+  .download:hover { background: var(--accent-hover); }
+  .download:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Firma con tu DNI desde el móvil</h1>
-  <p>Este enlace conecta tu móvil con Spain Assist en tu ordenador. Ábrelo con la app Spain Assist del móvil.</p>
-  <a class="button" id="open" href="#">Abrir en la app</a>
-  <a class="button secondary" href="${escapeHtml(installUrl)}">Instalar la app</a>
-  <p lang="en">Open this link with the Spain Assist app to pair your phone with your computer.</p>
+  <header class="brand" aria-label="Spain Assist">
+    <span class="brand-flag" aria-hidden="true"></span>
+    <span>Spain</span> <i>Assist</i>
+  </header>
+  <section class="content" aria-labelledby="title">
+    <h1 id="title">Firma con tu DNI</h1>
+    <p>Conecta la app de escritorio de Spain Assist con tu móvil para firmar.</p>
+    <a class="download" href="${escapeHtml(installUrl)}">Descargar Spain Assist para Android</a>
+  </section>
 </main>
-<script>
-  (function () {
-    var payload = location.hash.slice(1);
-    var open = document.getElementById('open');
-    if (!/^[A-Za-z0-9_-]+$/.test(payload)) { open.style.display = 'none'; return; }
-    open.href = 'intent://pair?d=' + payload + '#Intent;scheme=sa-firma;package=${escapeHtml(pkg)};end';
-  })();
-</script>
 </body>
 </html>`;
 }
@@ -77,14 +122,23 @@ export function createApp(options: AppOptions = {}): Hono {
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
+  app.get('/assets/:name', (c) => {
+    const font = fonts.get(c.req.param('name'));
+    if (!font) return c.notFound();
+    return c.body(font.data, 200, {
+      'Content-Type': font.contentType,
+      'Cache-Control': 'public, max-age=86400',
+    });
+  });
+
   app.get('/p', (c) => {
     c.header('Cache-Control', 'no-store');
     c.header('Referrer-Policy', 'no-referrer');
     c.header(
       'Content-Security-Policy',
-      "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+      "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; form-action 'none'",
     );
-    return c.html(landingPage(pkg, installUrl));
+    return c.html(landingPage(installUrl));
   });
 
   app.get('/.well-known/assetlinks.json', (c) => {

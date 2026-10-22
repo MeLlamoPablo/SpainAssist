@@ -63,9 +63,9 @@ and no addresses.
 
 **Pairing links.** The desktop shows `https://<relay host>/p#<payload>` as a QR code. With App
 Links verified (`ANDROID_CERT_SHA256`), Android opens it straight in the app. Otherwise the page
-offers "Abrir en la app" (an `intent://` link to the app's `sa-firma://pair?d=<payload>`; Chrome
-goes to the Play Store when the app is missing) and "Instalar la app". The app's own scanner reads
-the QR too.
+offers "Descargar Spain Assist para Android", linking to the Play Store. After installing, the
+app's own scanner can read the QR. The page follows the system's light or dark theme and serves
+its fonts locally, without third-party requests.
 
 ## Configuration
 
@@ -75,7 +75,7 @@ the QR too.
 | `TRUST_PROXY` | off | Client address from `X-Forwarded-For` (behind our reverse proxy only) |
 | `ANDROID_PACKAGE` | `es.spainassist.firma` | App id for App Links and the landing page |
 | `ANDROID_CERT_SHA256` | empty | Comma-separated SHA-256 fingerprints of the app's signing certificates |
-| `INSTALL_URL` | Play Store page | Where "Instalar la app" points |
+| `INSTALL_URL` | Play Store page | Where "Descargar Spain Assist para Android" points |
 | `ROOMS_PER_ADDRESS` / `CONNECTIONS_PER_ADDRESS` | 20 / 40 | Per client address |
 | `MAX_CONNECTIONS` | 300 | In total, all addresses |
 | `ROOM_MEGABYTES` | 512 | Bytes forwarded per room (binary and text frames) |
