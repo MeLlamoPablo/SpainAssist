@@ -169,11 +169,17 @@ git tag mobile-v0.3.3 && git push origin mobile-v0.3.3
 `.github/workflows/mobile-release.yml` checks the tag and the secrets (it fails, naming the
 missing ones), builds `:androidApp:bundleRelease` with that version, checks the bundle is
 signed, and keeps `SpainAssist-X.Y.Z.aab` and R8's `mapping.txt` as the workflow artifact
-`android-bundle`. A separate job uploads both files to Google Play, using the track and status
-above. Submissions are serialized across tags to avoid conflicting Play edits. Branch dispatches
-with the `version` input only build; they never upload. Re-run only a failed submission job to
-reuse the same artifact. Play refuses a versionCode it has already accepted, so never release the
-same X.Y.Z through both tag formats, or rebuild and re-upload an accepted version.
+`android-bundle`, alongside `version.json` with AGP's actual built versionCode. A separate job
+checks Google Play before uploading: it skips a version already saved on the requested track,
+or reuses its existing bundle to finish a submission or promote a draft to completed. It keeps
+the existing bundle's mapping when reusing it. Another draft/rollout or a newer version on the
+track fails clearly instead of being overwritten. Submissions are serialized across tags to
+avoid conflicting Play edits. Branch dispatches with the `version` input only build; they never
+upload. Re-run a failed submission job to reuse its artifact, or re-run the release: each store
+checks its own state independently. Already submitted Windows versions also skip, including
+those still in certification. See [the retry rules](../../docs/research/store-submissions.md).
+Play still refuses a versionCode it has already accepted; changes to the app need a new X.Y.Z,
+even when a previous build with that code was only a draft. Keep released tags fixed.
 
 - **Licence.** Every build must come with its complete source (see "Licence" below). The tag
   is that source: `Licenses.SOURCE_URL` points at the public repo, so push the tag before

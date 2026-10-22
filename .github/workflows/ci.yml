@@ -63,6 +63,9 @@ jobs:
         run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
       - name: Test
         run: corepack pnpm test
+      - name: Store submission retries (mock APIs)
+        if: ${{ !cancelled() }}
+        run: node --test scripts/store-submissions.test.mjs
 
   e2e:
     name: Electron e2e

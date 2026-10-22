@@ -144,6 +144,8 @@ jobs:
           keytool -printcert -jarfile "$aab" | grep -E 'Owner|SHA256:'
           mv "$aab" "SpainAssist-$VERSION.aab"
           cp androidApp/build/outputs/mapping/release/mapping.txt mapping.txt
+          # AGP's packaged-manifest metadata has the actual versionCode, including overrides.
+          cp androidApp/build/intermediates/packaged_manifests/release/processReleaseManifestForPackage/output-metadata.json version.json
       - name: Remove the keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks"
@@ -153,6 +155,7 @@ jobs:
           path: |
             apps/mobile/SpainAssist-*.aab
             apps/mobile/mapping.txt
+            apps/mobile/version.json
           if-no-files-found: error
           # Keep the bundle and mapping for diagnosis or manual recovery.
           retention-days: 30
@@ -176,6 +179,10 @@ jobs:
       PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
       - name: Check Play configuration
         env:
           WORKLOAD_IDENTITY_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
@@ -200,23 +207,12 @@ jobs:
           workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
           export_environment_variables: false
-      # The temporary credential file uses identity federation; no service-account key is stored.
-      - name: Upload the bundle and mapping
-        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1
-        with:
-          serviceAccountJson: ${{ steps.auth.outputs.credentials_file_path }}
-          packageName: es.spainassist.firma
-          releaseFiles: ${{ runner.temp }}/android-bundle/SpainAssist-*.aab
-          mappingFile: ${{ runner.temp }}/android-bundle/mapping.txt
-          track: ${{ env.PLAY_TRACK }}
-          status: ${{ env.PLAY_RELEASE_STATUS }}
-          changesNotSentForReview: ${{ env.PLAY_RELEASE_STATUS == 'draft' }}
-      - name: Record the Play submission
-        run: |
-          {
-            echo "### Google Play"
-            echo "Uploaded es.spainassist.firma to **$PLAY_TRACK** with status **$PLAY_RELEASE_STATUS**."
-            if [[ "$PLAY_RELEASE_STATUS" == draft ]]; then
-              echo "The bundle is saved in Play Console. Complete the app setup and send it for review there."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+      # Read the track before uploading: skip a saved version, or resume using its existing bundle.
+      # The short-lived token uses identity federation; no service-account key is stored.
+      - name: Submit the Android version unless already saved in Play
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          ANDROID_BUNDLE_DIR: ${{ runner.temp }}/android-bundle
+        run: node scripts/store-submissions.mjs android

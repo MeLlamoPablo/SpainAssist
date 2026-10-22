@@ -18,11 +18,16 @@ on:
 
 permissions:
   actions: read
+  contents: read
 
 jobs:
   submit:
     name: Submit to the Microsoft Store
     runs-on: windows-latest
+    # A draft belongs to the app, so different release tags must not replace it concurrently.
+    concurrency:
+      group: microsoft-store
+      cancel-in-progress: false
     env:
       PRODUCT_ID: 9ND5MF94VKGC
     steps:
@@ -38,6 +43,13 @@ jobs:
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/checkout@v5
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
       # Called from release.yml, github.run_id is the release run's.
       - if: steps.secrets.outputs.configured == 'true'
         uses: actions/download-artifact@v5
@@ -47,8 +59,25 @@ jobs:
           run-id: ${{ inputs.run-id || github.run_id }}
           github-token: ${{ github.token }}
       - if: steps.secrets.outputs.configured == 'true'
+        id: submission
+        name: Check whether this MSIX version is already submitted
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: |
+          $zip = [IO.Compression.ZipFile]::OpenRead("$env:RUNNER_TEMP/msix/SpainAssist-win-x64.msix")
+          try {
+            $reader = [IO.StreamReader]::new($zip.GetEntry('AppxManifest.xml').Open())
+            try { [xml]$manifest = $reader.ReadToEnd() } finally { $reader.Dispose() }
+            $env:MSIX_VERSION = $manifest.Package.Identity.Version
+          } finally { $zip.Dispose() }
+          node scripts/store-submissions.mjs windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - if: steps.secrets.outputs.configured == 'true' && steps.submission.outputs.action != 'skip'
         uses: microsoft/microsoft-store-apppublisher@v1.1
-      - if: steps.secrets.outputs.configured == 'true'
+      - if: steps.secrets.outputs.configured == 'true' && steps.submission.outputs.action != 'skip'
         name: Sign in to Partner Center
         shell: pwsh
         env:
@@ -57,12 +86,10 @@ jobs:
           CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
         run: msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
-      # `publish` starts a new draft from the last published submission (listings, notes for
-      # certification, options) with this package in place of the old one. It replaces a pending
-      # draft, so submitting again is safe; a submission still in certification makes it fail
-      # until that one is through. A loose .msix is passed as the path; the upload of ~400 MB
-      # needs more than the default 100 s.
-      - if: steps.secrets.outputs.configured == 'true'
+      # Reuse an uploaded PendingCommit draft; never replace a version in certification.
+      # New versions start a draft from the last published submission's listings and options.
+      # The upload of ~400 MB needs more than the default 100 s.
+      - if: steps.secrets.outputs.configured == 'true' && steps.submission.outputs.action == 'upload'
         name: Upload the MSIX
         shell: pwsh
         run: msstore publish "$env:RUNNER_TEMP/msix/SpainAssist-win-x64.msix" --appId $env:PRODUCT_ID --noCommit --uploadTimeout 3600
@@ -70,7 +97,7 @@ jobs:
       # like the GitHub release electron-updater already serves. The CLI leaves out null fields.
       # `update` prints the submission, whose FileUploadUrl is a writable link to the package
       # until the next day: keep it out of the (public) log.
-      - if: steps.secrets.outputs.configured == 'true'
+      - if: steps.secrets.outputs.configured == 'true' && steps.submission.outputs.action != 'skip'
         name: Publish once certified
         shell: pwsh
         run: |
@@ -79,10 +106,12 @@ jobs:
           msstore submission update $env:PRODUCT_ID ($submission | ConvertTo-Json -Depth 100 -Compress) | Out-Null
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "Publish mode: $($submission.targetPublishMode)"
-      - if: steps.secrets.outputs.configured == 'true'
+      - if: steps.secrets.outputs.configured == 'true' && steps.submission.outputs.action != 'skip'
         name: Submit for certification
         shell: pwsh
         run: |
           msstore submission publish $env:PRODUCT_ID
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           msstore submission status $env:PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "Windows submission sent for certification." >> $env:GITHUB_STEP_SUMMARY

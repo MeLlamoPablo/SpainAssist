@@ -400,6 +400,7 @@ jobs:
     uses: ./.github/workflows/store.yml
     permissions:
       actions: read
+      contents: read
     secrets: inherit
 
   android:
