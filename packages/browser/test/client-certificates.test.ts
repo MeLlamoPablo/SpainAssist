@@ -100,7 +100,7 @@ const DIGEST_INFO: Record<SidecarHash, string> = {
   'SHA-512': '3051300d060960864801650304020305000440',
 };
 
-/** The DNIe in the phone: signs digests with PKCS#1 v1.5, maybe after the user declines. */
+/** The DNI in the phone: signs digests with PKCS#1 v1.5, maybe after the user declines. */
 function phoneIdentity(id: string, opts: { decline?: boolean } = {}): SidecarIdentity {
   const opened = openP12(pki.client.p12Aes, pki.client.passphrase);
   return {
@@ -172,7 +172,7 @@ describe('client certificates through the sidecar', () => {
     expect(obs.snapshot).toContain('003002');
   });
 
-  it('logs in with a remote key (the DNIe in the phone), one signature per connection', async () => {
+  it('logs in with a remote key (the DNI in the phone), one signature per connection', async () => {
     signatures.length = 0;
     await t.service.useClientCertificate('dnie', {
       origins: [server.origin],

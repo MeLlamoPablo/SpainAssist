@@ -343,7 +343,7 @@ function demoMedia(): Map<string, string> {
         kind: 'list',
         color: '#4a5d73',
         lines: [
-          'DNIe / Certificado electrónico',
+          'DNI / Certificado electrónico',
           'Cl@ve Móvil',
           'Cl@ve permanente',
           'Ciudadanos UE',
@@ -865,10 +865,7 @@ function demoProcedures(now: number, t: Tr): ProcedureListItem[] {
         },
       ],
       sources: [
-        source(
-          t('Renovación del DNI — Portal del DNIe', 'DNI renewal — DNIe portal'),
-          URLS.dniRenew,
-        ),
+        source(t('Renovación del DNI — Portal del DNI', 'DNI renewal — DNI portal'), URLS.dniRenew),
         source(t('Cita previa DNI y pasaporte', 'DNI and passport appointments'), URLS.dniCita),
       ],
       createdAt: dayAt(now, 3, 18, 5),

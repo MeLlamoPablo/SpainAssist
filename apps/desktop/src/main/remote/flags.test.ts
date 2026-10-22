@@ -85,7 +85,7 @@ describe('loadFeatureFlags', () => {
     await vi.waitFor(() => expect(fetch.requests).toHaveLength(2));
   });
 
-  it('turns on DNIe with the phone only when dnie-phone is on', async () => {
+  it('turns on DNI with the phone only when dnie-phone is on', async () => {
     const on = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
     ).flags;
@@ -100,7 +100,7 @@ describe('loadFeatureFlags', () => {
     expect((await off).dniePhone).toBe('off');
   });
 
-  it("reads the DNIe's stage from the dnie-phone variant", async () => {
+  it("reads the DNI's stage from the dnie-phone variant", async () => {
     const stage = async (variant: { name: string; enabled: boolean }) =>
       (
         await load(() =>

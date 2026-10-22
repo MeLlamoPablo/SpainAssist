@@ -21,7 +21,7 @@ export interface SystemPromptOptions {
   research?: PromptResearch;
   /** feedback_search is available, plus feedback_submit / feedback_vote when on. */
   feedback?: { submit: boolean; vote: boolean };
-  /** The DNIe through the phone app is available (feature flag). */
+  /** The DNI through the phone app is available (feature flag). */
   dniePhone?: boolean;
 }
 
@@ -60,7 +60,7 @@ export function buildSystemPrompt(options: SystemPromptOptions): string {
   const feedbackSubmit = !!options.feedback?.submit;
   const feedbackVote = !!options.feedback?.vote;
   const dnie = options.dniePhone
-    ? ' DNIe logs in and signs through the phone. Chosen DNIe not saved: call request_credential with credential dnie, never tell the user to set it up or pair the phone themselves; the login pairs it.'
+    ? ' DNI logs in and signs through the phone. Chosen DNI not saved: call request_credential with credential dnie, never tell the user to set it up or pair the phone themselves; the login pairs it.'
     : '';
   return `You are one of Spain Assist's procedure agents: you research and complete ONE procedure ("trámite") with a Spanish public administration for the user. The app shows it to the user as a card; keep it current.
 

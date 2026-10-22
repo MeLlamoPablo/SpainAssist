@@ -105,7 +105,7 @@ describe('AutoFirma handler', () => {
       expect(JSON.parse(String(signed.callbackArgs[2]))).toEqual({ filename: 'test.txt' });
   });
 
-  describe('external keys (the DNIe in the phone)', () => {
+  describe('external keys (the DNI in the phone)', () => {
     function external(id: TestIdentity, fail = false) {
       const bindings: (SignatureBinding | undefined)[] = [];
       const released: boolean[] = [];
@@ -226,7 +226,7 @@ describe('certificate filters (filters=, filters.N=, filter=)', () => {
   const firma = card.firma.certDer;
   const autenticacion = card.autenticacion.certDer;
 
-  /** The DNIe as the desktop hands it over: FIRMA's chain, and AUTENTICACIÓN when the phone sent it. */
+  /** The DNI as the desktop hands it over: FIRMA's chain, and AUTENTICACIÓN when the phone sent it. */
   function dnie(other: Buffer | null = autenticacion) {
     const released: [boolean, string | undefined][] = [];
     const signed: Buffer[] = [];

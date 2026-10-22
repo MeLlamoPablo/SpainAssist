@@ -65,7 +65,7 @@ export class MemoryVault implements VaultPort {
     { summary: CredentialSummary; secret: CredentialSecret }
   >();
   readonly secrets = new Map<string, { label: string; value: string; createdAt: string }>();
-  /** DNIe PINs by credential id; `wrong` once the card refused them. */
+  /** DNI PINs by credential id; `wrong` once the card refused them. */
 
   constructor(private readonly storage = { backend: 'memory (temporary)', secure: false }) {}
 
@@ -204,7 +204,7 @@ export class MemoryVault implements VaultPort {
     const summary: CredentialSummary = {
       id: `c_${hex()}`,
       kind: 'dnie',
-      label: input?.label ?? 'DNIe con el móvil',
+      label: input?.label ?? 'DNI con el móvil',
       policy: DEFAULT_CREDENTIAL_POLICY.dnie,
       createdAt: now(),
       hasPin: false,
@@ -215,14 +215,14 @@ export class MemoryVault implements VaultPort {
 
   async setDnieCertificate(id: string, certificate: CertificateInfo): Promise<CredentialSummary> {
     const entry = this.credentials.get(id);
-    if (entry?.summary.kind !== 'dnie') throw new Error('Not a DNIe credential');
+    if (entry?.summary.kind !== 'dnie') throw new Error('Not a DNI credential');
     entry.summary = { ...entry.summary, certificate };
     return entry.summary;
   }
 
   async setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
     const entry = this.credentials.get(id);
-    if (entry?.summary.kind !== 'dnie') throw new Error('Not a DNIe credential');
+    if (entry?.summary.kind !== 'dnie') throw new Error('Not a DNI credential');
     entry.summary = { ...entry.summary, hasPin: !!pin };
     entry.secret = pin ? { kind: 'dnie', pin } : { kind: 'dnie' };
     return entry.summary;

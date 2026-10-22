@@ -415,10 +415,10 @@ describe('credentials', () => {
     await expectVaultError(vault.setCredentialPolicy(movil.id, 'never' as never), 'invalid_input');
   });
 
-  it('keeps one DNIe credential, with its certificate details once read, across reopen', async () => {
+  it('keeps one DNI credential, with its certificate details once read, across reopen', async () => {
     const { dir, vault } = await openVault();
     const dnie = await vault.addDnie();
-    expect(dnie).toMatchObject({ kind: 'dnie', label: 'DNIe con el móvil', policy: 'ask' });
+    expect(dnie).toMatchObject({ kind: 'dnie', label: 'DNI con el móvil', policy: 'ask' });
     expect((await vault.addDnie()).id).toBe(dnie.id);
     expect(await vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
     const info = {
@@ -441,7 +441,21 @@ describe('credentials', () => {
     expect(reopened.getCredential(dnie.id)?.certificate?.holderName).toBe('JUAN ESPAÑOL ESPAÑOL');
   });
 
-  it('saves, changes and forgets the DNIe PIN, never in a summary', async () => {
+  it('shows the current DNI label for an existing default and keeps custom labels', async () => {
+    for (const [stored, displayed] of [
+      ['DNIe con el móvil', 'DNI con el móvil'],
+      ['Mi tarjeta', 'Mi tarjeta'],
+    ]) {
+      const { dir, vault } = await openVault();
+      const credential = await vault.addDnie({ label: stored });
+      const reopened = await Vault.open(dir, keys());
+      expect(reopened.getCredential(credential.id)?.label).toBe(displayed);
+      expect(reopened.listCredentials()[0]?.label).toBe(displayed);
+      expect((await reopened.addDnie()).label).toBe(displayed);
+    }
+  });
+
+  it('saves, changes and forgets the DNI PIN, never in a summary', async () => {
     const { dir, vault } = await openVault();
     const dnie = await vault.addDnie();
     expect(dnie.hasPin).toBe(false);

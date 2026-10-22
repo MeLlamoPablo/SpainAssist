@@ -127,8 +127,8 @@ const STRINGS = {
   },
   continueLabel: { es: 'Continuar', en: 'Continue' },
   noCertificate: {
-    es: '{host} te pide firmar, pero no tienes ningún certificado digital guardado. Añade un certificado o tu DNIe en Mis datos.',
-    en: '{host} asks you to sign, but you have no digital certificate saved. Add a certificate or your DNIe in My data.',
+    es: '{host} te pide firmar, pero no tienes ningún certificado digital guardado. Añade un certificado o tu DNI en Mis datos.',
+    en: '{host} asks you to sign, but you have no digital certificate saved. Add a certificate or your DNI in My data.',
   },
   /** Without the `dnie-phone` feature flag. */
   noCertificateOnly: {
@@ -143,59 +143,59 @@ const STRINGS = {
   touchIdCertificate: { es: 'usar tu certificado digital', en: 'use your digital certificate' },
   touchIdSignature: { es: 'firmar un documento', en: 'sign a document' },
 
-  // --- DNIe in the phone ---------------------------------------------------------------------
-  dnieOption: { es: 'DNIe con el móvil', en: 'DNIe with your phone' },
+  // --- DNI in the phone ---------------------------------------------------------------------
+  dnieOption: { es: 'DNI con el móvil', en: 'DNI with your phone' },
   dnieOptionHolder: {
-    es: 'DNIe de {holder} (con el móvil)',
-    en: "{holder}'s DNIe (with your phone)",
+    es: 'DNI de {holder} (con el móvil)',
+    en: "{holder}'s DNI (with your phone)",
   },
-  dnieLoginTitle: { es: 'Entrar con el DNIe', en: 'Log in with your DNIe' },
+  dnieLoginTitle: { es: 'Entrar con el DNI', en: 'Log in with your DNI' },
   dnieLoginMessage: {
-    es: 'Aprueba entrar en {host} en tu móvil. Deja el DNIe en el móvil hasta que termine: puede firmar varias veces seguidas. Puedes cancelar aquí.',
-    en: 'Approve login to {host} on your phone. Keep your DNIe on the phone until it finishes: it may sign several times in a row. You can cancel here.',
+    es: 'Aprueba entrar en {host} en tu móvil. Deja el DNI en el móvil hasta que termine: puede firmar varias veces seguidas. Puedes cancelar aquí.',
+    en: 'Approve login to {host} on your phone. Keep your DNI on the phone until it finishes: it may sign several times in a row. You can cancel here.',
   },
-  dnieSignatureTitle: { es: 'Firma con tu DNIe', en: 'Sign with your DNIe' },
+  dnieSignatureTitle: { es: 'Firma con tu DNI', en: 'Sign with your DNI' },
   dnieSignatureMessage: {
-    es: '{host} te pide firmar con tu DNIe. Revisa la firma en el móvil y acerca el DNIe al móvil.',
-    en: '{host} asks you to sign with your DNIe. Check the signature on your phone and hold the DNIe to it.',
+    es: '{host} te pide firmar con tu DNI. Revisa la firma en el móvil y acerca el DNI al móvil.',
+    en: '{host} asks you to sign with your DNI. Check the signature on your phone and hold the DNI to it.',
   },
   dnieCertificateMessage: {
     es: '{host} quiere saber con qué certificado firmarás. Sigue en el móvil: no se firma nada todavía.',
     en: '{host} wants to know which certificate you will sign with. Carry on on your phone: nothing is signed yet.',
   },
-  /** IPC calls for the DNIe without the `dnie-phone` feature flag. */
+  /** IPC calls for the DNI without the `dnie-phone` feature flag. */
   dniePhoneOff: {
-    es: 'El DNIe con el móvil no está disponible en esta versión de la app.',
-    en: "DNIe with your phone isn't available in this version of the app.",
+    es: 'El DNI con el móvil no está disponible en esta versión de la app.',
+    en: "DNI with your phone isn't available in this version of the app.",
   },
   /** `companion.unlock` without what the prompt asks for. */
   dnieUnlockMissing: {
-    es: 'Escribe el número CAN (6 números) y el PIN del DNIe (de 8 a 16 caracteres).',
-    en: 'Type the CAN (6 digits) and the DNIe PIN (8 to 16 characters).',
+    es: 'Escribe el número CAN (6 números) y el PIN del DNI (de 8 a 16 caracteres).',
+    en: 'Type the CAN (6 digits) and the DNI PIN (8 to 16 characters).',
   },
   dnieUnavailable: {
-    es: 'No se puede usar el DNIe con el móvil ahora mismo. Inténtalo más tarde o usa un certificado digital.',
-    en: "Using your DNIe with your phone isn't available right now. Try again later or use a digital certificate.",
+    es: 'No se puede usar el DNI con el móvil ahora mismo. Inténtalo más tarde o usa un certificado digital.',
+    en: "Using your DNI with your phone isn't available right now. Try again later or use a digital certificate.",
   },
   dnieError_pin_blocked: {
-    es: 'El PIN de tu DNIe está bloqueado. Para desbloquearlo, ve a un punto de actualización del DNI en una comisaría.',
-    en: 'Your DNIe PIN is blocked. To unblock it, use a DNI update point at a police station.',
+    es: 'El PIN de tu DNI está bloqueado. Para desbloquearlo, ve a un punto de actualización del DNI en una comisaría.',
+    en: 'Your DNI PIN is blocked. To unblock it, use a DNI update point at a police station.',
   },
   dnieError_card_unsupported: {
-    es: 'El móvil no ha reconocido la tarjeta como un DNIe 3.0 o 4.0.',
-    en: "The phone didn't recognise the card as a DNIe 3.0 or 4.0.",
+    es: 'El móvil no ha reconocido la tarjeta como un DNI 3.0 o 4.0.',
+    en: "The phone didn't recognise the card as a DNI 3.0 or 4.0.",
   },
   dnieError_no_certificate: {
-    es: 'Tu DNIe no tiene el certificado que necesita esta petición. Puedes activarlo en un punto de actualización del DNI en una comisaría.',
-    en: 'Your DNIe does not have the certificate this request needs. You can activate it at a DNI update point at a police station.',
+    es: 'Tu DNI no tiene el certificado que necesita esta petición. Puedes activarlo en un punto de actualización del DNI en una comisaría.',
+    en: 'Your DNI does not have the certificate this request needs. You can activate it at a DNI update point at a police station.',
   },
   dnieError_certificate_expired: {
-    es: 'El certificado de tu DNIe ha caducado. Puedes renovarlo en un punto de actualización del DNI en una comisaría.',
-    en: 'Your DNIe certificate has expired. You can renew it at a DNI update point at a police station.',
+    es: 'El certificado de tu DNI ha caducado. Puedes renovarlo en un punto de actualización del DNI en una comisaría.',
+    en: 'Your DNI certificate has expired. You can renew it at a DNI update point at a police station.',
   },
   dnieError_wrong_card: {
-    es: 'Has acercado otro DNIe distinto al del principio. Vuelve a intentarlo con el mismo.',
-    en: 'You held a different DNIe than at the start. Try again with the same one.',
+    es: 'Has acercado otro DNI distinto al del principio. Vuelve a intentarlo con el mismo.',
+    en: 'You held a different DNI than at the start. Try again with the same one.',
   },
   dnieError_binding_mismatch: {
     es: 'El móvil no ha firmado porque lo que le llegó no coincide con el documento. No se ha firmado nada.',
@@ -206,8 +206,8 @@ const STRINGS = {
     en: 'The phone has no NFC or it is off. Turn it on in the phone settings and try again.',
   },
   dnieError_timeout: {
-    es: 'La firma con el DNIe ha tardado demasiado. Vuelve a intentarlo.',
-    en: 'Signing with your DNIe took too long. Try again.',
+    es: 'La firma con el DNI ha tardado demasiado. Vuelve a intentarlo.',
+    en: 'Signing with your DNI took too long. Try again.',
   },
   dnieError_phone_away: {
     es: 'No has abierto Spain Assist en el móvil a tiempo y la petición no le ha llegado. Abre la app en el móvil y vuelve a intentarlo.',
@@ -218,12 +218,12 @@ const STRINGS = {
     en: 'The phone is already signing something else. Finish that and try again.',
   },
   dnieError_unpaired: {
-    es: 'Se ha desvinculado el móvil. Vuelve a escanear el código para firmar con el DNIe.',
-    en: 'The phone was unpaired. Scan the code again to sign with your DNIe.',
+    es: 'Se ha desvinculado el móvil. Vuelve a escanear el código para firmar con el DNI.',
+    en: 'The phone was unpaired. Scan the code again to sign with your DNI.',
   },
   dnieError_expired: {
-    es: 'La vinculación con el móvil ha caducado. Vuelve a escanear el código para firmar con el DNIe.',
-    en: 'The phone pairing expired. Scan the code again to sign with your DNIe.',
+    es: 'La vinculación con el móvil ha caducado. Vuelve a escanear el código para firmar con el DNI.',
+    en: 'The phone pairing expired. Scan the code again to sign with your DNI.',
   },
   dnieError_relay_refused: {
     es: 'El servidor de enlace con el móvil ha rechazado la conexión. Inténtalo de nuevo más tarde.',
@@ -238,16 +238,16 @@ const STRINGS = {
     en: 'The phone app is newer than Spain Assist on this computer. Update Spain Assist on the computer and try again.',
   },
   dnieError_filter_no_match: {
-    es: '{host} no admite ninguno de los certificados de tu DNIe para esta operación. No se ha firmado nada.',
-    en: "{host} doesn't accept any of your DNIe's certificates for this. Nothing was signed.",
+    es: '{host} no admite ninguno de los certificados de tu DNI para esta operación. No se ha firmado nada.',
+    en: "{host} doesn't accept any of your DNI's certificates for this. Nothing was signed.",
   },
   dnieError_authentication_only: {
-    es: '{host} pide firmar con el certificado de autenticación del DNIe, y Spain Assist solo firma documentos con el de firma. No se ha firmado nada.',
-    en: '{host} asks to sign with the DNIe authentication certificate, and Spain Assist signs documents only with the signing one. Nothing was signed.',
+    es: '{host} pide firmar con el certificado de autenticación del DNI, y Spain Assist solo firma documentos con el de firma. No se ha firmado nada.',
+    en: '{host} asks to sign with the DNI authentication certificate, and Spain Assist signs documents only with the signing one. Nothing was signed.',
   },
   dnieError_failed: {
-    es: 'No se ha podido usar el DNIe. Vuelve a intentarlo.',
-    en: "Couldn't use your DNIe. Try again.",
+    es: 'No se ha podido usar el DNI. Vuelve a intentarlo.',
+    en: "Couldn't use your DNI. Try again.",
   },
 
   // --- providers ----------------------------------------------------------------------------

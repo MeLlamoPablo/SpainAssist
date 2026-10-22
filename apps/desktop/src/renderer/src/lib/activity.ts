@@ -73,7 +73,7 @@ const q = (lang: Lang, text: string) =>
 const CREDENTIAL_NAME: Record<CredentialKind, { es: string; en: string }> = {
   clave_permanente: { es: 'Cl@ve', en: 'Cl@ve' },
   clave_movil: { es: 'Cl@ve Móvil', en: 'Cl@ve Móvil' },
-  dnie: { es: 'DNIe', en: 'DNIe' },
+  dnie: { es: 'DNI', en: 'DNI' },
   certificate: { es: 'certificado', en: 'certificate' },
 };
 
@@ -240,7 +240,7 @@ export function activityLabel(
       };
     case 'request_credential':
       return args.credential === 'dnie'
-        ? { text: es ? 'Pidiéndote tu DNIe' : 'Asking for your DNIe', icon: IdCard }
+        ? { text: es ? 'Pidiéndote tu DNI' : 'Asking for your DNI', icon: IdCard }
         : {
             text: es ? 'Pidiéndote tu Cl@ve Permanente' : 'Asking for your Cl@ve Permanente',
             icon: KeyRound,

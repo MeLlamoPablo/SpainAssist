@@ -62,13 +62,13 @@ import {
  * Query params: ?onboarding=1|voucher|data · ?lang=en · ?provider=none|chatgpt|voucher|byok · ?empty=1 ·
  * ?freeze=1 (no live simulation at all: static screens) · ?speed=N (time multiplier) ·
  * ?latency=ms (per-call delay) · ?chatgpt=ineligible (ChatGPT login fails: free account) ·
- * ?phone=1 (the DNI card asks for a phone call) · ?dnie=1 (feature flag: DNIe with the phone on;
+ * ?phone=1 (the DNI card asks for a phone call) · ?dnie=1 (feature flag: DNI with the phone on;
  * ?companion, ?dnieSaved and the playground imply it) · ?companion=waiting|away|connected (phone
- * pairing for DNIe signatures; the playground starts connected; =phone_unpaired|expired|
+ * pairing for DNI signatures; the playground starts connected; =phone_unpaired|expired|
  * relay_refused: no pairing, the last one ended for that reason; =outdated|outdated_desktop:
  * the paired phone's app, or this one, needs an update; =stalled: the relay can't be reached,
  * "Reintentar" pairs anew) · ?dnieSaved=1|pin (a saved
- * DNIe in Mis datos; =pin with its PIN saved).
+ * DNI in Mis datos; =pin with its PIN saved).
  */
 
 type Handlers = { [M in SaMethod]: (...args: SaArgs<M>) => SaResult<M> | Promise<SaResult<M>> };
@@ -119,7 +119,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
           dnieSaved
         ? 'release'
         : 'off';
-  // Like main: the DNIe's plumbing is there in prerelease too.
+  // Like main: the DNI's plumbing is there in prerelease too.
   const dniePhone = dnieStage !== 'off';
 
   let state: MockState = createDemoState(Date.now(), {
@@ -224,7 +224,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     state.credentials.push({
       id: 'cred-dnie',
       kind: 'dnie',
-      label: 'DNIe con el móvil',
+      label: 'DNI con el móvil',
       policy: 'ask',
       createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
       hasPin: params.get('dnieSaved') === 'pin',
@@ -260,7 +260,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       if (item) putChat(item);
     };
 
-  // The phone pairing for DNIe signatures: a fake link that pairs a demo phone after a moment.
+  // The phone pairing for DNI signatures: a fake link that pairs a demo phone after a moment.
   const demoLink = 'https://relay.example.invalid/p#demo';
   const pairedUntil = new Date(Date.now() + 72 * 3600_000).toISOString();
   const companionParam = params.get('companion') ?? (params.has('playground') ? 'connected' : '');
@@ -818,7 +818,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const overview = (): VaultOverview => ({
     personal: state.personal,
     documents: state.documents,
-    // Like main: without the feature flag, a saved DNIe stays hidden.
+    // Like main: without the feature flag, a saved DNI stays hidden.
     credentials: dniePhone ? state.credentials : state.credentials.filter((c) => c.kind !== 'dnie'),
     storage: state.storage,
   });
@@ -826,8 +826,8 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     if (!dniePhone)
       throw new Error(
         tr(
-          'El DNIe con el móvil no está disponible en esta versión de la app.',
-          "DNIe with your phone isn't available in this version of the app.",
+          'El DNI con el móvil no está disponible en esta versión de la app.',
+          "DNI with your phone isn't available in this version of the app.",
         ),
       );
   };
@@ -1367,7 +1367,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       const cred: CredentialSummary = {
         id: newId('cred'),
         kind: 'dnie',
-        label: 'DNIe con el móvil',
+        label: 'DNI con el móvil',
         policy: 'ask',
         createdAt: now(),
         hasPin: false,

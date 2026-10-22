@@ -40,7 +40,7 @@ const info = (stage: Stage): AppInfo => ({
 const DNIE = {
   id: 'cred-dnie',
   kind: 'dnie',
-  label: 'DNIe con el móvil',
+  label: 'DNI con el móvil',
   policy: 'ask',
   createdAt: '2026-10-11T10:00:00.000Z',
 } as const;
@@ -68,28 +68,28 @@ function render(
   );
 }
 
-describe('Mis datos: DNIe with the phone', () => {
-  it('has no DNIe card without the feature flag, even with a saved DNIe', () => {
+describe('Mis datos: DNI with the phone', () => {
+  it('has no DNI card without the feature flag, even with a saved DNI', () => {
     for (const html of [render(false), render(false, [DNIE])]) {
-      expect(html).not.toContain('DNIe con el móvil');
+      expect(html).not.toContain('DNI con el móvil');
       expect(html).not.toContain('Vincular el móvil');
       expect(html).toContain('Cl@ve Móvil');
       expect(html).toContain('Certificado digital');
     }
   });
 
-  it('offers to add the DNIe, or shows the saved one with its pairing, with the flag on', () => {
+  it('offers to add the DNI, or shows the saved one with its pairing, with the flag on', () => {
     const add = render(true);
-    expect(add).toContain('DNIe con el móvil');
+    expect(add).toContain('DNI con el móvil');
     expect(add).toContain('Lo tengo');
     const saved = render(true, [DNIE]);
     expect(saved).toContain('data-testid="credential-dnie"');
     expect(saved).toContain('Vincular el móvil');
   });
 
-  it('shows the early-access card in prerelease, never "Lo tengo", until the DNIe is saved', () => {
+  it('shows the early-access card in prerelease, never "Lo tengo", until the DNI is saved', () => {
     const early = render('prerelease');
-    expect(early).toContain('DNIe con el móvil');
+    expect(early).toContain('DNI con el móvil');
     expect(early).toContain('Acceso anticipado');
     expect(early).toContain('Probar');
     expect(early).not.toContain('Lo tengo');
@@ -99,7 +99,7 @@ describe('Mis datos: DNIe with the phone', () => {
     expect(render('release')).not.toContain('Acceso anticipado');
   });
 
-  it('offers to save the DNIe PIN, or delete a saved one (never shown)', () => {
+  it('offers to save the DNI PIN, or delete a saved one (never shown)', () => {
     const none = render(true, [{ ...DNIE, hasPin: false }]);
     expect(none).toContain('dnie-pin-row');
     expect(none).not.toContain('Sin guardar');

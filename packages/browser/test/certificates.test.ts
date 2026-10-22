@@ -36,7 +36,7 @@ describe('certificate origins', () => {
     ).toEqual(['pasarela-ident.clave.gob.es:443', 'localhost:9443']);
   });
 
-  it('groups the hosts of one organisation for DNIe login approvals', () => {
+  it('groups the hosts of one organisation for DNI login approvals', () => {
     const idp = certificateSite('idp.seg-social.es');
     expect(idp.name).toBe('Seguridad Social');
     expect(certificateSite('IPCE.seg-social.es').id).toBe(idp.id);

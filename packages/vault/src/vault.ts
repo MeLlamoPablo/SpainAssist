@@ -110,7 +110,7 @@ const DEFAULT_LABELS = {
   clave_permanente: 'Cl@ve Permanente',
   clave_movil: 'Cl@ve Móvil',
   certificate: 'Certificado digital',
-  dnie: 'DNIe con el móvil',
+  dnie: 'DNI con el móvil',
 } as const;
 
 function invalid(message: string): VaultError {
@@ -139,7 +139,10 @@ function summarize(credential: StoredCredential): CredentialSummary {
   const summary: CredentialSummary = {
     id: credential.id,
     kind: credential.kind,
-    label: credential.label,
+    label:
+      credential.kind === 'dnie' && credential.label === 'DNIe con el móvil'
+        ? DEFAULT_LABELS.dnie
+        : credential.label,
     policy: credential.policy,
     createdAt: credential.createdAt,
   };
@@ -519,7 +522,7 @@ export class Vault {
     });
   }
 
-  /** "I sign with my DNIe and my phone". Only one: adding it again returns the existing one. */
+  /** "I sign with my DNI and my phone". Only one: adding it again returns the existing one. */
   async addDnie(input: { label?: string } = {}): Promise<CredentialSummary> {
     return this.lock.run(async () => {
       const existing = this.state.credentials.find((c) => c.kind === 'dnie');
@@ -538,24 +541,24 @@ export class Vault {
     });
   }
 
-  /** Remembers the details of the DNIe's signing certificate (holder, validity) after a read. */
+  /** Remembers the details of the DNI's signing certificate (holder, validity) after a read. */
   async setDnieCertificate(id: string, certificate: CertificateInfo): Promise<CredentialSummary> {
     return this.lock.run(async () => {
       if (!CertificateInfo.safeParse(certificate).success) throw invalid('Invalid certificate');
       const updated = await this.updateCredential(id, (c) => {
-        if (c.kind !== 'dnie') throw invalid('Not a DNIe credential');
+        if (c.kind !== 'dnie') throw invalid('Not a DNI credential');
         return { ...c, certificate: { ...certificate } };
       });
       return summarize(updated);
     });
   }
 
-  /** Saves the DNIe PIN (8 to 16 characters), or forgets it with null. */
+  /** Saves the DNI PIN (8 to 16 characters), or forgets it with null. */
   async setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
     return this.lock.run(async () => {
-      if (pin !== null && !DniePin.safeParse(pin).success) throw invalid('Invalid DNIe PIN');
+      if (pin !== null && !DniePin.safeParse(pin).success) throw invalid('Invalid DNI PIN');
       const updated = await this.updateCredential(id, (c) => {
-        if (c.kind !== 'dnie') throw invalid('Not a DNIe credential');
+        if (c.kind !== 'dnie') throw invalid('Not a DNI credential');
         const { pin: _old, ...rest } = c;
         return pin === null ? rest : { ...rest, pin };
       });
@@ -707,7 +710,7 @@ export class Vault {
   }
 
   /**
-   * Every personal value (plus common written variants), credential username and DNIe PIN, for
+   * Every personal value (plus common written variants), credential username and DNI PIN, for
    * exact-match PII scrubbing of outgoing feedback and of text shown to the model when needed.
    * Longest first. See `sensitive.ts` for the rules.
    */

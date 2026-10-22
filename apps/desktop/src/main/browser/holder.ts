@@ -49,7 +49,7 @@ export interface BrowserHolderDeps {
   events: EventBus;
   /** AutoFirma replacement; omitted (or empty shim) = no shim injected. */
   signer?: SignerLib;
-  /** DNIe signatures and logins with the paired phone; absent without the feature flag. */
+  /** DNI signatures and logins with the paired phone; absent without the feature flag. */
   companion?: CompanionService;
   /** fetch for triphase signing (Electron's net.fetch uses the OS trust store). */
   fetch?: typeof fetch;
@@ -98,7 +98,7 @@ export class BrowserHolder {
   ): Promise<ClientCertificateUse['identity']> {
     if (credential.kind === 'dnie') {
       const identity = await this.deps.companion?.login(procedureId, credential, origin);
-      if (!identity) throw new Error('DNIe login was cancelled or unavailable.');
+      if (!identity) throw new Error('DNI login was cancelled or unavailable.');
       return identity;
     }
     const secret = await this.deps.vault().getCredentialSecret(credential.id);
@@ -108,7 +108,7 @@ export class BrowserHolder {
     return { id: credential.id, chain: identity.chainDer, key: identity.privateKey };
   }
 
-  /** News of the procedure's DNIe logins for the agent's next observation. */
+  /** News of the procedure's DNI logins for the agent's next observation. */
   loginNotes(procedureId: string): string[] {
     return this.deps.companion?.takeLoginNotes(procedureId) ?? [];
   }
@@ -243,9 +243,9 @@ export class BrowserHolder {
   }
 
   /**
-   * AutoFirma replacement approval: pick a certificate or the DNIe (if several), then confirm
+   * AutoFirma replacement approval: pick a certificate or the DNI (if several), then confirm
    * with the details of what is signed (+ Touch ID when available). Signatures with a `.p12`
-   * always ask, whatever the credential's policy. The DNIe is approved on the phone instead
+   * always ask, whatever the credential's policy. The DNI is approved on the phone instead
    * (`CompanionService.approve`), after the desktop asks for its CAN and PIN when it doesn't
    * have them. Returns null when declined / cancelled / no certificate.
    */
@@ -262,7 +262,7 @@ export class BrowserHolder {
     const certificates = vault.listCredentials().filter(
       (c) =>
         (c.kind === 'certificate' && !(c.certificate && Date.parse(c.certificate.validTo) < now)) ||
-        // The DNIe may have been renewed since its certificate was last read.
+        // The DNI may have been renewed since its certificate was last read.
         (c.kind === 'dnie' && !!deps.companion),
     );
     if (certificates.length === 0) {

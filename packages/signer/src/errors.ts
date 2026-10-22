@@ -77,13 +77,13 @@ export class AfirmaError extends Error {
   }
 
   /**
-   * The page's certificate filters accept only the DNIe's AUTENTICACIÓN certificate, and
+   * The page's certificate filters accept only the DNI's AUTENTICACIÓN certificate, and
    * documents are signed only with FIRMA (AutoFirma would find no certificate either way).
    */
   static authenticationOnly(): AfirmaError {
     return AfirmaError.generic(
       'AF501001',
-      'No se encontraron certificados con los que firmar: el sitio solo admite el certificado de autenticacion del DNIe, que no se usa para firmar documentos',
+      'No se encontraron certificados con los que firmar: el sitio solo admite el certificado de autenticacion del DNI, que no se usa para firmar documentos',
     );
   }
 

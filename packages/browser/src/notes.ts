@@ -9,7 +9,7 @@ export function certificateRequestedNote(host: string): string {
   const call = host
     ? `call browser_use_certificate with origins ["https://${host}"]`
     : 'call browser_use_certificate with the origin of the site in origins';
-  return `${host || 'The site'} asked for a client certificate and none was presented. If the user has a digital certificate or a DNIe, ${call}, then open the page again.`;
+  return `${host || 'The site'} asked for a client certificate and none was presented. If the user has a digital certificate or a DNI, ${call}, then open the page again.`;
 }
 
 /**
@@ -26,7 +26,7 @@ export function certificateFailedNote(host: string, code: string, detail: string
     case 'unavailable':
       return `The certificate is not available for ${site} right now${why}. Call browser_use_certificate again if the user still wants to use it.`;
     case 'timeout':
-      return `The certificate login to ${site} timed out${why}. With a DNIe, the user must keep the card on the phone until the page loads. Then try again.`;
+      return `The certificate login to ${site} timed out${why}. With a DNI, the user must keep the card on the phone until the page loads. Then try again.`;
     case 'rejected':
       return `${site} did not accept the certificate${why}. It may be expired, revoked or not accepted by this site.`;
     case 'no_certificate':
@@ -42,7 +42,7 @@ export function certificateFailedNote(host: string, code: string, detail: string
 
 /** A page that loaded AutoFirma's JavaScript client (the app's shim answers it). */
 export function afirmaPageNote(host: string): string {
-  return `${host || 'This page'} uses AutoFirma. The app replaces it: when a button on this page signs or logs in with a certificate through AutoFirma, the app asks the user to approve and pick their certificate or DNIe, and signs. Just click the button and wait; browser_use_certificate is not needed for it (that tool is only for logins where the browser itself asks for a client certificate).`;
+  return `${host || 'This page'} uses AutoFirma. The app replaces it: when a button on this page signs or logs in with a certificate through AutoFirma, the app asks the user to approve and pick their certificate or DNI, and signs. Just click the button and wait; browser_use_certificate is not needed for it (that tool is only for logins where the browser itself asks for a client certificate).`;
 }
 
 const CLAVE_NO_CERT =

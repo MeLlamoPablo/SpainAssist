@@ -94,7 +94,7 @@ function pageResult(obs: BrowserObservation, redacted: boolean): ToolResult {
 export interface BrowserToolOptions {
   /** Whether the model accepts images (browser_screenshot returns one). */
   imagesSupported: boolean;
-  /** The DNIe through the phone app is available (feature flag). */
+  /** The DNI through the phone app is available (feature flag). */
   dniePhone?: boolean;
   /** Old page results are redacted from the context (see host/redaction.ts). */
   redactPages?: boolean;
@@ -390,7 +390,7 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
     defineSaTool({
       name: 'browser_use_certificate',
       label: 'Use certificate',
-      description: `Enable TLS client-certificate login with the user's digital certificate${options.dniePhone ? ' or DNIe in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser: for sites where the browser itself asks for a certificate when you open the login page (e.g. "Certificado electrónico" in Cl@ve, AEAT). The app may ask the user to approve. Afterwards click the site's certificate login button.${options.dniePhone ? " With the DNIe, the user approves each login on their phone, once for all the hosts of one organisation (e.g. Seguridad Social's idp, ipce and w2), and must keep the card on the phone until the login ends. Browser results say in Notes when a DNIe login waits for the user, was approved or failed: while one waits, use browser_wait instead of clicking again, and tell the user what to do if it fails." : ''} Not for AutoFirma logins and signatures (the page uses AutoFirma or its "Acceder"/"Firmar" button calls AutoScript): there, just click the button; the app signs.`,
+      description: `Enable TLS client-certificate login with the user's digital certificate${options.dniePhone ? ' or DNI in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser: for sites where the browser itself asks for a certificate when you open the login page (e.g. "Certificado electrónico" in Cl@ve, AEAT). The app may ask the user to approve. Afterwards click the site's certificate login button.${options.dniePhone ? " With the DNI, the user approves each login on their phone, once for all the hosts of one organisation (e.g. Seguridad Social's idp, ipce and w2), and must keep the card on the phone until the login ends. Browser results say in Notes when a DNI login waits for the user, was approved or failed: while one waits, use browser_wait instead of clicking again, and tell the user what to do if it fails." : ''} Not for AutoFirma logins and signatures (the page uses AutoFirma or its "Acceder"/"Firmar" button calls AutoScript): there, just click the button; the app signs.`,
       parameters: Type.Object({
         credentialId: Type.String({ minLength: 1, maxLength: 120 }),
         origins: Type.Optional(

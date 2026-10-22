@@ -449,23 +449,23 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     ),
     replaceId: 'cred-clave',
   });
-  addPrompt('credential-dnie', 'actions', 'DNIe', 'credential', {
+  addPrompt('credential-dnie', 'actions', 'DNI', 'credential', {
     kind: 'credential',
     credential: 'dnie',
-    title: t('Añade tu DNIe', 'Add your DNIe'),
+    title: t('Añade tu DNI', 'Add your DNI'),
     message: t(
-      'La sede de ejemplo pide certificado digital. Con tu DNIe y el móvil puedo entrar por ti.',
-      'The example site asks for a digital certificate. With your DNIe and your phone I can log in for you.',
+      'La sede de ejemplo pide certificado digital. Con tu DNI y el móvil puedo entrar por ti.',
+      'The example site asks for a digital certificate. With your DNI and your phone I can log in for you.',
     ),
   });
   addPrompt('phone-call', 'actions', 'Phone call', 'phone_call', phoneCallExample(t));
-  addPrompt('dnie-login', 'confirmations', t('DNIe · Acceso', 'DNIe · Login'), 'dnie_signature', {
+  addPrompt('dnie-login', 'confirmations', t('DNI · Acceso', 'DNI · Login'), 'dnie_signature', {
     kind: 'dnie_signature',
     purpose: 'login',
-    title: t('Entrar con el DNIe', 'Log in with your DNIe'),
+    title: t('Entrar con el DNI', 'Log in with your DNI'),
     message: t(
-      'Aprueba entrar en la sede en tu móvil y mantén el DNIe cerca. Puedes cancelar aquí.',
-      'Approve login to the site on your phone and keep your DNIe nearby. You can cancel here.',
+      'Aprueba entrar en la sede en tu móvil y mantén el DNI cerca. Puedes cancelar aquí.',
+      'Approve login to the site on your phone and keep your DNI nearby. You can cancel here.',
     ),
     details: [{ label: t('Web', 'Website'), value: 'sede.example.gob.es' }],
     stage: 'reviewing',
@@ -473,10 +473,10 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
   const dnieSignature = (stage: DnieSignatureStage, unlock?: DnieUnlock): Prompt => ({
     kind: 'dnie_signature',
     purpose: 'document',
-    title: t('Firma con tu DNIe', 'Sign with your DNIe'),
+    title: t('Firma con tu DNI', 'Sign with your DNI'),
     message: t(
-      'La sede de ejemplo te pide firmar con tu DNIe. Revisa la firma en el móvil y acerca el DNIe al móvil.',
-      'The example site asks you to sign with your DNIe. Check the signature on your phone and hold the DNIe to it.',
+      'La sede de ejemplo te pide firmar con tu DNI. Revisa la firma en el móvil y acerca el DNI al móvil.',
+      'The example site asks you to sign with your DNI. Check the signature on your phone and hold the DNI to it.',
     ),
     details: [
       {
@@ -491,14 +491,14 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
   addPrompt(
     'dnie-unlock',
     'confirmations',
-    t('DNIe · CAN y PIN', 'DNIe · CAN and PIN'),
+    t('DNI · CAN y PIN', 'DNI · CAN and PIN'),
     'dnie_signature',
     dnieSignature('unlock', { can: true, pin: true }),
   );
   addPrompt(
     'dnie-unlock-wrong-pin',
     'confirmations',
-    t('DNIe · PIN incorrecto', 'DNIe · Wrong PIN'),
+    t('DNI · PIN incorrecto', 'DNI · Wrong PIN'),
     'dnie_signature',
     dnieSignature('unlock', { can: false, pin: true, refused: 'pin', triesLeft: 2 }),
   );
@@ -506,7 +506,7 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     addPrompt(
       `dnie-${stage}`,
       'confirmations',
-      `DNIe · ${stage}`,
+      `DNI · ${stage}`,
       'dnie_signature',
       dnieSignature(stage),
     );

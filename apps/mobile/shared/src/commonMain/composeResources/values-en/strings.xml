@@ -15,13 +15,13 @@
     <string name="notice_desktop_unpaired">You unpaired the phone from your computer.</string>
 
     <!-- NFC -->
-    <string name="nfc_missing">This phone has no NFC: it can’t read your DNIe.</string>
-    <string name="nfc_disabled">NFC is off. Turn it on to read your DNIe.</string>
+    <string name="nfc_missing">This phone has no NFC: it can’t read your DNI.</string>
+    <string name="nfc_disabled">NFC is off. Turn it on to read your DNI.</string>
     <string name="nfc_open_settings">Turn on NFC</string>
 
     <!-- Pairing -->
     <string name="pair_title">Pair with your computer?</string>
-    <string name="pair_body">You’ll pair this device with Spain Assist on your computer for 72 hours.\n\nYou’ll sign your DNIe operations here.</string>
+    <string name="pair_body">You’ll pair this device with Spain Assist on your computer for 72 hours.\n\nYou’ll sign your DNI operations here.</string>
     <string name="pair_replacing">You’re already paired with a computer. If you go on, it will be unpaired.</string>
     <string name="pair_confirm">Pair</string>
     <string name="pair_cancel">Cancel</string>
@@ -48,29 +48,29 @@
     <string name="doc_xml">XML document</string>
     <string name="doc_text">Text</string>
     <string name="doc_other">Document</string>
-    <string name="review_sign">Sign with my DNIe</string>
-    <string name="review_share">Continue with my DNIe</string>
+    <string name="review_sign">Sign with my DNI</string>
+    <string name="review_share">Continue with my DNI</string>
     <string name="review_decline">Don’t sign</string>
     <string name="review_decline_login">Don’t log in</string>
     <string name="review_disconnected">Waiting for your computer…</string>
 
     <!-- CAN and PIN: typed on the computer -->
     <string name="wait_can_title">Type the CAN number on your computer</string>
-    <string name="wait_can_wrong">Your DNIe didn’t accept the CAN number. Check it on the card and type it in Spain Assist, on your computer.</string>
+    <string name="wait_can_wrong">Your DNI didn’t accept the CAN number. Check it on the card and type it in Spain Assist, on your computer.</string>
     <string name="wait_pin_title">Type your PIN on your computer</string>
     <string name="wait_pin_wrong">Wrong PIN. You have %1$d tries left. Type it again in Spain Assist, on your computer.</string>
-    <string name="wait_pin_missing">Type your DNIe PIN in Spain Assist, on your computer.</string>
-    <string name="pin_last_try">Careful: one try left. If it fails, the DNIe is blocked and you’ll have to go to a police station.</string>
-    <string name="wait_body">Then hold your DNIe to the phone again.</string>
+    <string name="wait_pin_missing">Type your DNI PIN in Spain Assist, on your computer.</string>
+    <string name="pin_last_try">Careful: one try left. If it fails, the DNI is blocked and you’ll have to go to a police station.</string>
+    <string name="wait_body">Then hold your DNI to the phone again.</string>
     <string name="cancel_label">Cancel</string>
 
     <!-- Card -->
-    <string name="card_title">Hold your DNIe to the phone</string>
-    <string name="card_body">Put your DNIe on a table and rest the back of your phone on it, without a case.\n\nDon’t move them.</string>
-    <string name="card_moved">The DNIe moved. Rest the phone on it again and don’t move it.</string>
-    <string name="working_reading">Reading your DNIe…</string>
+    <string name="card_title">Hold your DNI to the phone</string>
+    <string name="card_body">Put your DNI on a table and rest the back of your phone on it, without a case.\n\nDon’t move them.</string>
+    <string name="card_moved">The DNI moved. Rest the phone on it again and don’t move it.</string>
+    <string name="working_reading">Reading your DNI…</string>
     <string name="working_signing">Signing…</string>
-    <string name="working_hint">Don’t move the DNIe or the phone.</string>
+    <string name="working_hint">Don’t move the DNI or the phone.</string>
     <string name="working_signed">Signatures done: %1$d</string>
 
     <!-- Results -->
@@ -80,19 +80,19 @@
     <string name="result_cancelled">You cancelled the signature.</string>
     <string name="result_cancelled_desktop">The computer cancelled the signature.</string>
     <string name="result_expired">It took too long. Try again from your computer.</string>
-    <string name="result_pin_blocked">Your DNIe PIN is blocked. To unblock it, use a DNI update point at a police station.</string>
-    <string name="result_unsupported">This card isn’t a DNIe 3.0 or 4.0, or it can’t be read.</string>
-    <string name="result_no_certificate">Your DNIe does not have the certificate this request needs. You can activate it at a DNI update point at a police station.</string>
-    <string name="result_certificate_expired">Your DNIe certificate has expired. You can renew it at a DNI update point at a police station.</string>
-    <string name="result_wrong_card">You held a different DNIe than at the start. Try again from your computer with the same one.</string>
+    <string name="result_pin_blocked">Your DNI PIN is blocked. To unblock it, use a DNI update point at a police station.</string>
+    <string name="result_unsupported">This card isn’t a DNI 3.0 or 4.0, or it can’t be read.</string>
+    <string name="result_no_certificate">Your DNI does not have the certificate this request needs. You can activate it at a DNI update point at a police station.</string>
+    <string name="result_certificate_expired">Your DNI certificate has expired. You can renew it at a DNI update point at a police station.</string>
+    <string name="result_wrong_card">You held a different DNI than at the start. Try again from your computer with the same one.</string>
     <string name="result_mismatch">Nothing was signed: what came from the computer doesn’t match the document.</string>
     <string name="result_timeout">The computer took too long. Try again.</string>
     <string name="result_failed">Couldn’t sign. Try again from your computer.</string>
     <string name="result_ok">OK</string>
     <string name="review_title_login">Log in to</string>
-    <string name="review_login">Log in with my DNIe</string>
-    <string name="working_login">Keep your DNIe nearby</string>
-    <string name="result_login">DNIe use ended</string>
+    <string name="review_login">Log in with my DNI</string>
+    <string name="working_login">Keep your DNI nearby</string>
+    <string name="result_login">DNI use ended</string>
     <string name="result_login_declined">You did not approve login.</string>
     <string name="result_login_cancelled">The computer cancelled login.</string>
     <string name="result_login_failed">Could not log in. Try again from your computer.</string>
@@ -102,7 +102,7 @@
     <string name="licenses_open">Open-source licences</string>
     <string name="licenses_title">Open-source licences</string>
     <string name="licenses_lead">Our code is free software, under the MIT licence. Here are also the licences of the components by others that the app uses.</string>
-    <string name="licenses_lead_eupl">Our code is free software, under the MIT licence. The app includes jmulticard, the Spanish government’s library for reading the DNIe. So the app as a whole is distributed under the EUPL 1.2, and you can download all of its source code.</string>
+    <string name="licenses_lead_eupl">Our code is free software, under the MIT licence. The app includes jmulticard, the Spanish government’s library for reading the DNI. So the app as a whole is distributed under the EUPL 1.2, and you can download all of its source code.</string>
     <string name="licenses_source">App source code</string>
     <string name="licenses_jmulticard_source">jmulticard source code</string>
     <string name="licenses_show_text">Show the licence text</string>

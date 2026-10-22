@@ -130,7 +130,7 @@ const TOPICS: Record<string, TopicDef> = {
     intro: ['Vale, me pongo con la renovación del DNI.', 'OK, I’m on your DNI renewal.'],
     query: ['renovar DNI cita previa', 'renew DNI appointment'],
     url: URLS.dniRenew,
-    sourceTitle: ['Renovación del DNI — Portal del DNIe', 'DNI renewal — DNIe portal'],
+    sourceTitle: ['Renovación del DNI — Portal del DNI', 'DNI renewal — DNI portal'],
     readSummary: [
       'Hace falta el DNI actual, una foto y 12 €',
       'Needs the current DNI, a photo and €12',

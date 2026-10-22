@@ -239,7 +239,7 @@ describe('XML batch (signBatch) in the handler', () => {
     });
   });
 
-  it('signs with an external key (the DNIe in the phone) and releases it once', async () => {
+  it('signs with an external key (the DNI in the phone) and releases it once', async () => {
     const released: boolean[] = [];
     const digests: string[] = [];
     const key: ExternalSigningKey = {

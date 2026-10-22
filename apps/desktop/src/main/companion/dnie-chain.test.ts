@@ -7,7 +7,7 @@ const der = (pem: string) => Buffer.from(new X509Certificate(pem).raw);
 const cn = (cert: X509Certificate) => /CN=([^\n]+)/.exec(cert.subject)?.[1];
 const issuerCn = (cert: X509Certificate) => /CN=([^\n]+)/.exec(cert.issuer)?.[1];
 
-describe('dnieChain (a test CA standing in for the DNIe CAs)', () => {
+describe('dnieChain (a test CA standing in for the DNI CAs)', () => {
   const demo = loadDemoIdentity();
   const leaf = der(demo.certPem);
   const [intermediate, root] = demo.chainPem.map(der) as [Buffer, Buffer];
@@ -24,7 +24,7 @@ describe('dnieChain (a test CA standing in for the DNIe CAs)', () => {
   });
 });
 
-describe('the bundled DNIe CA certificates', () => {
+describe('the bundled DNI CA certificates', () => {
   const certs = DNIE_AUTHORITIES.map((d) => new X509Certificate(d));
   const root = certs.find((c) => cn(c) === 'AC RAIZ DNIE 2')!;
 

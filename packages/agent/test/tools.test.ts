@@ -151,9 +151,9 @@ describe('tools', () => {
       expect(tools).not.toMatch(/\bCAN\b/);
     });
 
-    it('offers no way to read, type, save or ask for the DNIe PIN', async () => {
+    it('offers no way to read, type, save or ask for the DNI PIN', async () => {
       const tools = JSON.stringify(h.tools.map((t) => [t.description, t.parameters]));
-      expect(tools).not.toMatch(/dniePin|DNIe PIN|PIN del DNIe/i);
+      expect(tools).not.toMatch(/dniePin|DNI PIN|PIN del DNI/i);
       // Only the Cl@ve Permanente is typed from a credential: its DNI/NIE and password.
       expect(
         BridgeParams['browser.fillFromVault'].safeParse({ ref: 'e1', credentialId: 'cred_dnie' })
@@ -417,7 +417,7 @@ describe('tools', () => {
       expect(credential).not.toContain('clave_permanente');
     });
 
-    it('asks for the DNIe only with the phone app, and logs in with it', async () => {
+    it('asks for the DNI only with the phone app, and logs in with it', async () => {
       const credentialParam = (deps: Parameters<typeof toolHarness>[1]) =>
         JSON.stringify(
           toolHarness(bridge, deps).tools.find((t) => t.name === 'request_credential')?.parameters,
@@ -428,10 +428,10 @@ describe('tools', () => {
       bridge.setHandler('prompt.credential', () => ({ kind: 'credential', credentialId: 'd1' }));
       const added = await toolHarness(bridge, { dniePhone: true }).run('request_credential', {
         credential: 'dnie',
-        title: 'Añade tu DNIe',
+        title: 'Añade tu DNI',
         message: 'La sede pide certificado.',
       });
-      expect(textOf(added)).toContain('DNIe as credential d1');
+      expect(textOf(added)).toContain('DNI as credential d1');
       expect(textOf(added)).toContain('browser_use_certificate');
     });
 
@@ -789,9 +789,9 @@ describe('tools', () => {
       toolHarness(bridge, deps).tools.find((t) => t.name === 'browser_use_certificate')
         ?.description;
 
-    it('offers the DNIe in the paired phone only with its feature flag', () => {
-      expect(description({ dniePhone: true })).toContain('or DNIe in the paired phone');
-      expect(description({ dniePhone: false })).not.toContain('DNIe');
+    it('offers the DNI in the paired phone only with its feature flag', () => {
+      expect(description({ dniePhone: true })).toContain('or DNI in the paired phone');
+      expect(description({ dniePhone: false })).not.toContain('DNI');
       expect(description({ dniePhone: false })).toContain("the user's digital certificate");
     });
   });

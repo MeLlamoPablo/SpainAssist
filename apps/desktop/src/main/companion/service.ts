@@ -43,7 +43,7 @@ import type { ProcedureService } from '../procedures/service';
 import { dnieChain } from './dnie-chain';
 
 export interface CompanionDeps {
-  /** ws(s):// or http(s):// base URL of the relay; undefined = DNIe signing unavailable. */
+  /** ws(s):// or http(s):// base URL of the relay; undefined = DNI signing unavailable. */
   relayUrl?: string;
   /** Development: put this machine's LAN address in the QR when the relay is on loopback. */
   lanRelay?: boolean;
@@ -84,7 +84,7 @@ const ALGORITHMS: Record<SignatureDigest, CompanionAlgorithm> = {
 };
 
 /**
- * Why a DNIe request ended: the signer's codes, or the phone's app speaking another protocol
+ * Why a DNI request ended: the signer's codes, or the phone's app speaking another protocol
  * version (`phone_outdated`: update the phone app; `desktop_outdated`: update this one).
  */
 type RefusalCode = PhoneSignErrorCode | 'phone_outdated' | 'desktop_outdated';
@@ -108,20 +108,20 @@ const NOTICES: Partial<Record<RefusalCode, StringKey>> = {
   desktop_outdated: 'dnieError_desktop_outdated',
 };
 
-/** What the user reads when the site's certificate filters refuse the DNIe's certificate. */
+/** What the user reads when the site's certificate filters refuse the DNI's certificate. */
 const REFUSAL_NOTICES: Record<CertificateRefusal, StringKey> = {
   no_match: 'dnieError_filter_no_match',
   authentication_only: 'dnieError_authentication_only',
 };
 
-/** Why a DNIe login wasn't approved, for the agent. */
+/** Why a DNI login wasn't approved, for the agent. */
 const LOGIN_REFUSALS: Partial<Record<RefusalCode, string>> = {
   rejected: 'the user declined it on the phone',
   cancelled: 'the user cancelled it',
   timeout: 'nobody approved it in time',
   phone_away: 'the user did not open the phone app in time, so the request never reached the phone',
-  pin_blocked: 'the DNIe PIN is blocked',
-  wrong_card: 'a different DNIe was held to the phone',
+  pin_blocked: 'the DNI PIN is blocked',
+  wrong_card: 'a different DNI was held to the phone',
   unpaired: 'the phone was unpaired',
   expired: 'the phone pairing expired',
   relay_refused: 'the relay server refused the phone connection',
@@ -180,7 +180,7 @@ function toCheck(binding: SignatureBinding | undefined): CompanionCheck | undefi
 }
 
 /**
- * The pairing with the phone app and signatures with the DNIe in it (`@sa/companion`). One
+ * The pairing with the phone app and signatures with the DNI in it (`@sa/companion`). One
  * pairing at a time, created on demand (a signature, or "Vincular móvil"). The QR link stays in
  * memory: the renderer gets it through `companion.status`, never in a saved prompt.
  */
@@ -201,7 +201,7 @@ export class CompanionService {
   /** CANs the card refused: not offered again while the app runs (also Mis datos' one). */
   private readonly refusedCans = new Set<string>();
   private readonly unlocks = new Map<string, UnlockWaiter>();
-  /** DNIe login news for each procedure's agent (`takeLoginNotes`). */
+  /** DNI login news for each procedure's agent (`takeLoginNotes`). */
   private readonly logins = new Map<string, { waiting?: string; notes: string[] }>();
 
   constructor(private readonly deps: CompanionDeps) {
@@ -279,7 +279,7 @@ export class CompanionService {
   }
 
   /**
-   * A signature with the DNIe in the phone: shows the card, which first asks for the CAN and the
+   * A signature with the DNI in the phone: shows the card, which first asks for the CAN and the
    * PIN when the desktop doesn't have them, then the QR code when no phone is connected,
    * sends the request, and resolves with the key once the phone has read the card's
    * certificate. Null when the user cancels, declines or it fails (with a notice).
@@ -573,19 +573,19 @@ export class CompanionService {
         const why =
           (refused && LOGIN_REFUSALS[refused]) ?? `it failed (${refused ?? 'unavailable'})`;
         this.loginNews(procedureId).notes.push(
-          `The DNIe login for ${label} was not approved: ${why}.`,
+          `The DNI login for ${label} was not approved: ${why}.`,
         );
-        throw new SidecarError('declined', 'DNIe login was not approved.');
+        throw new SidecarError('declined', 'DNI login was not approved.');
       }
       if (chain && !Buffer.from(chain[0]!).equals(Buffer.from(key.certificates[0]!))) {
         key.release(false);
         this.loginNews(procedureId).notes.push(
-          `The DNIe login for ${label} failed: the user held a different DNIe than for the previous login.`,
+          `The DNI login for ${label} failed: the user held a different DNI than for the previous login.`,
         );
-        throw new SidecarError('wrong_card', 'Use the same DNIe for this login.');
+        throw new SidecarError('wrong_card', 'Use the same DNI for this login.');
       }
       this.loginNews(procedureId).notes.push(
-        `The user approved the DNIe login for ${label} on their phone.`,
+        `The user approved the DNI login for ${label} on their phone.`,
       );
       chain = dnieChain(key.certificates.slice(0, 1), 'tls');
       active = key;
@@ -636,7 +636,7 @@ export class CompanionService {
         },
         sign: async (digest, hash, host, signal) => {
           if (signal.aborted || !active || !sameSite(host))
-            throw new SidecarError('declined', 'DNIe login approval ended.');
+            throw new SidecarError('declined', 'DNI login approval ended.');
           clearTimeout(timer);
           const key = active;
           // A dropped connection stops waiting only for its own signature: the phone finishes it
@@ -647,7 +647,7 @@ export class CompanionService {
               const code = err instanceof PhoneSignError ? err.code : 'internal';
               logger.warn('dnie login signature failed', { procedureId, host, code });
               this.loginNews(procedureId).notes.push(
-                `The phone could not sign the DNIe login for ${host} (${code}). Ask the user to keep the DNIe on the phone, then start the login again from the site.`,
+                `The phone could not sign the DNI login for ${host} (${code}). Ask the user to keep the DNI on the phone, then start the login again from the site.`,
               );
               if (active === key) end(false);
               throw new SidecarError('failed', 'The phone could not complete the login.');
@@ -665,7 +665,7 @@ export class CompanionService {
   }
 
   /**
-   * What happened to the procedure's DNIe logins since the last call, and whether one waits for
+   * What happened to the procedure's DNI logins since the last call, and whether one waits for
    * the user on the phone: notes for the agent's next browser observation.
    */
   takeLoginNotes(procedureId: string): string[] {
@@ -675,8 +675,8 @@ export class CompanionService {
     if (news.waiting)
       notes.push(
         this.pairing?.connected
-          ? `Waiting for the user to approve the DNIe login for ${news.waiting} on their phone. The page may not change until then: use browser_wait instead of clicking again.`
-          : `Waiting for the user to open the Spain Assist app on their phone, which gets the DNIe login for ${news.waiting} only while it is open. The page may not change until then: use browser_wait instead of clicking again.`,
+          ? `Waiting for the user to approve the DNI login for ${news.waiting} on their phone. The page may not change until then: use browser_wait instead of clicking again.`
+          : `Waiting for the user to open the Spain Assist app on their phone, which gets the DNI login for ${news.waiting} only while it is open. The page may not change until then: use browser_wait instead of clicking again.`,
       );
     else this.logins.delete(procedureId);
     return notes;
@@ -714,7 +714,7 @@ export class CompanionService {
     if (this.can === can) this.can = undefined;
   }
 
-  /** The PIN saved on the DNIe credential. Never logged. */
+  /** The PIN saved on the DNI credential. Never logged. */
   private async savedPin(credential: CredentialSummary): Promise<string | undefined> {
     try {
       const secret = await this.deps.vault().getCredentialSecret(credential.id);

@@ -109,7 +109,7 @@ describe('buildAgentLaunch', () => {
     );
   });
 
-  it('keeps the DNIe through the phone off unless the app turns it on', () => {
+  it('keeps the DNI through the phone off unless the app turns it on', () => {
     expect(parseHostConfig(config).dniePhone).toBe(false);
     expect(parseHostConfig({ ...config, dniePhone: true }).dniePhone).toBe(true);
   });
@@ -201,16 +201,17 @@ describe('community learnings prompt', () => {
   });
 });
 
-describe('DNIe prompt', () => {
-  it('offers the DNIe through the phone only with its feature flag', () => {
+describe('DNI prompt', () => {
+  it('offers the DNI through the phone only with its feature flag', () => {
     const on = buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: true });
-    expect(on).toContain('DNIe logs in and signs through the phone.');
+    expect(on).toContain('DNI logs in and signs through the phone.');
     expect(on).toContain('request_credential with credential dnie');
     for (const off of [
       buildSystemPrompt({ language: 'en', research: 'web_research' }),
       buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: false }),
     ]) {
-      expect(off).not.toContain('DNIe');
+      expect(off).not.toContain('DNI logs in and signs through the phone.');
+      expect(off).not.toContain('request_credential with credential dnie');
       expect(off).toContain('Cl@ve Permanente and Cl@ve Móvil are different capabilities');
       expect(off).toContain('browser_use_certificate is only for logins where the browser asks');
     }

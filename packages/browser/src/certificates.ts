@@ -1,12 +1,12 @@
 /**
- * TLS client certificates for government logins (Cl@ve "DNIe / Certificado electrónico", AEAT,
+ * TLS client certificates for government logins (Cl@ve "DNI / Certificado electrónico", AEAT,
  * Seguridad Social...). See docs/research/browser.md §1 and docs/research/dnie.md §2.
  *
  * Every browser context goes through the TLS sidecar (`@sa/sidecar`) with its own proxy
  * username. Its connections are plain TCP tunnels, so Chromium checks each site's certificate
  * itself, except for the origins where `useClientCertificate` turned a certificate on. The sidecar
  * intercepts only those, presenting the certificate with a key it holds (a .p12) or one that signs
- * elsewhere (the DNIe in the phone). Chromium trusts the sidecar's per-launch key for them through
+ * elsewhere (the DNI in the phone). Chromium trusts the sidecar's per-launch key for them through
  * an SPKI pin, so no certificate error is ignored for any other origin, and nothing needs a new
  * context: cookies, storage and open pages stay as they are. Hosts that ask for a certificate
  * none is enabled for are intercepted too and get none: Chromium would open its own picker.
@@ -19,7 +19,7 @@ import { BrowserError } from './errors';
  * entry. Regional/municipal sedes may need extra origins (pass them explicitly).
  */
 export const CERTIFICATE_ORIGINS: readonly string[] = Object.freeze([
-  'https://pasarela-ident.clave.gob.es', // Cl@ve "DNIe / Certificado electrónico" (any sede on Cl@ve)
+  'https://pasarela-ident.clave.gob.es', // Cl@ve "DNI / Certificado electrónico" (any sede on Cl@ve)
   'https://www1.agenciatributaria.gob.es', // AEAT certificate access (/wlpl/OVCT-CXEW/…)
   'https://www8.agenciatributaria.gob.es', // AEAT (asks during the TLS 1.3 handshake)
   'https://www10.agenciatributaria.gob.es', // AEAT
@@ -30,7 +30,7 @@ export const CERTIFICATE_ORIGINS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * Hosts of one organisation that a single DNIe login approval covers: a login can hop between
+ * Hosts of one organisation that a single DNI login approval covers: a login can hop between
  * them (Importass goes idp → ipce → idp), and each hop would otherwise ask again on the phone.
  * A fixed list, never computed from the domain; any other host is a site of its own.
  */
@@ -58,7 +58,7 @@ export interface CertificateSite {
   hosts: readonly string[];
 }
 
-/** The site a host belongs to for DNIe login approvals. */
+/** The site a host belongs to for DNI login approvals. */
 export function certificateSite(host: string): CertificateSite {
   const hostname = host.toLowerCase();
   const site = CERTIFICATE_SITES.find((s) => s.hosts.includes(hostname));

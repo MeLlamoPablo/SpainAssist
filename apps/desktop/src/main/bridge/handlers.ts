@@ -63,7 +63,7 @@ export interface BridgeHandlerDeps {
   lang: () => Language;
   placeLookup: PlaceLookup;
   /**
-   * DNIe with the phone (`dnie-phone` feature flag). Off: agents never see a saved `dnie`
+   * DNI with the phone (`dnie-phone` feature flag). Off: agents never see a saved `dnie`
    * credential, and using one fails with an explanation.
    */
   dniePhone: boolean;
@@ -80,7 +80,7 @@ const PIN_KEY = /(?:^|[._-])pin(?:$|[._-])/i;
 
 /**
  * Agents never read, save, type or ask for these: the DNI CAN (it goes only to the phone) and
- * PINs (the DNIe's is typed on the desktop and goes only to the phone).
+ * PINs (the DNI's is typed on the desktop and goes only to the phone).
  */
 function hiddenFromAgents(key: string): boolean {
   return AGENT_HIDDEN_PERSONAL_KEYS.has(key) || PIN_KEY.test(key);
@@ -91,7 +91,7 @@ function refuseHiddenKey(key: string | undefined): void {
   throw new BridgeError(
     'policy_denied',
     PIN_KEY.test(key)
-      ? 'PINs are secrets, not personal data: agents never ask for, save or type them. A one-time PIN goes through browser_fill_from_user. The user saves the DNIe PIN in Mis datos (DNIe con el móvil), and only the paired phone gets it.'
+      ? 'PINs are secrets, not personal data: agents never ask for, save or type them. A one-time PIN goes through browser_fill_from_user. The user saves the DNI PIN in Mis datos (DNI con el móvil), and only the paired phone gets it.'
       : `"${key}" is not available to agents.`,
   );
 }
@@ -240,7 +240,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     }
   }
 
-  /** A browser action's observation, with news of the procedure's DNIe logins for the agent. */
+  /** A browser action's observation, with news of the procedure's DNI logins for the agent. */
   async function observe(
     procedureId: string,
     fn: (b: BrowserPort) => Promise<BrowserObservation>,
@@ -265,7 +265,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     );
   }
 
-  /** A saved credential the agent may use (the DNIe only with its feature flag). */
+  /** A saved credential the agent may use (the DNI only with its feature flag). */
   function requireCredential(id: string): CredentialSummary {
     const credential = deps.vault().getCredential(id);
     if (!credential)
@@ -273,7 +273,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     if (credential.kind === 'dnie' && !deps.dniePhone)
       throw new BridgeError(
         'bad_request',
-        'The DNIe through the phone is not available in this version of the app. Log in with Cl@ve or a digital certificate (.p12) instead, or tell the user which methods this site accepts.',
+        'The DNI through the phone is not available in this version of the app. Log in with Cl@ve or a digital certificate (.p12) instead, or tell the user which methods this site accepts.',
       );
     return credential;
   }
@@ -287,7 +287,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
 
   /**
    * In-app confirmation for credentials set to "ask", plus Touch ID when available and a
-   * `touchIdReason` is given. The DNIe passes none: its phone approval and card are the second
+   * `touchIdReason` is given. The DNI passes none: its phone approval and card are the second
    * factor.
    */
   async function approveCredentialUse(
@@ -574,7 +574,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
           'Log in with browser_login_clave: it asks the user for their Cl@ve Permanente when none is saved.',
         );
       if (!deps.dniePhone)
-        throw new BridgeError('bad_request', 'The DNIe with the phone is not available.');
+        throw new BridgeError('bad_request', 'The DNI with the phone is not available.');
       const prompt: CredentialPrompt = { kind: 'credential', ...params };
       const response = await deps.prompts.ask(ctx.procedureId, prompt, { signal: ctx.signal });
       if (response.kind !== 'credential') throw new BridgeError('internal', 'Unexpected response.');

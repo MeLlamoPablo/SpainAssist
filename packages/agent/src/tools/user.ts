@@ -162,7 +162,7 @@ const RequestUserActionParams = Type.Object({
 });
 
 const RequestCredentialParams = Type.Object({
-  credential: StringEnum(['dnie'], { description: 'dnie (the DNIe, read by the phone app)' }),
+  credential: StringEnum(['dnie'], { description: 'dnie (the DNI, read by the phone app)' }),
   title: Type.String({ minLength: 1, maxLength: 160 }),
   message: Type.String({
     minLength: 1,
@@ -374,17 +374,17 @@ export function userTools(bridge: BridgeTransport) {
       name: 'request_credential',
       label: 'Ask the user to add a login',
       description:
-        'Ask the user to add their DNIe in the app when a login needs it and vault_read lists none (read by the phone app; the app pairs the phone later, when you log in). Never tell the user to add it in Mis datos themselves. Cl@ve Permanente is not added here: browser_login_clave asks for it. Returns the new credentialId. Waits for the user.',
+        'Ask the user to add their DNI in the app when a login needs it and vault_read lists none (read by the phone app; the app pairs the phone later, when you log in). Never tell the user to add it in Mis datos themselves. Cl@ve Permanente is not added here: browser_login_clave asks for it. Returns the new credentialId. Waits for the user.',
       parameters: RequestCredentialParams,
       async execute(_id, params, signal) {
         return callBridge(bridge, 'prompt.credential', params, signal, (response) =>
           response.credentialId
             ? textResult(
-                `The user added their DNIe as credential ${response.credentialId}. Log in with browser_use_certificate when the site asks for a client certificate, or click the login button when it signs with AutoFirma; the app pairs the phone if needed, don't ask the user to do it.`,
+                `The user added their DNI as credential ${response.credentialId}. Log in with browser_use_certificate when the site asks for a client certificate, or click the login button when it signs with AutoFirma; the app pairs the phone if needed, don't ask the user to do it.`,
                 { credentialId: response.credentialId },
               )
             : textResult(
-                'The user has no DNIe. Do not log in with it. Ask which other supported method they can use.',
+                'The user has no DNI. Do not log in with it. Ask which other supported method they can use.',
                 { credentialId: null },
               ),
         );

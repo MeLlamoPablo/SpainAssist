@@ -15,13 +15,13 @@
     <string name="notice_desktop_unpaired">Has desvinculado el móvil desde el ordenador.</string>
 
     <!-- NFC -->
-    <string name="nfc_missing">Este móvil no tiene NFC: no puede leer el DNIe.</string>
-    <string name="nfc_disabled">El NFC está desactivado. Actívalo para leer el DNIe.</string>
+    <string name="nfc_missing">Este móvil no tiene NFC: no puede leer el DNI.</string>
+    <string name="nfc_disabled">El NFC está desactivado. Actívalo para leer el DNI.</string>
     <string name="nfc_open_settings">Activar NFC</string>
 
     <!-- Pairing -->
     <string name="pair_title">¿Vincular con tu ordenador?</string>
-    <string name="pair_body">Vincularás este dispositivo con Spain Assist en tu ordenador durante 72 horas.\n\nPodrás firmar aquí tus operaciones con DNIe.</string>
+    <string name="pair_body">Vincularás este dispositivo con Spain Assist en tu ordenador durante 72 horas.\n\nPodrás firmar aquí tus operaciones con DNI.</string>
     <string name="pair_replacing">Ya estás vinculado con un ordenador. Si sigues, se desvincula.</string>
     <string name="pair_confirm">Vincular</string>
     <string name="pair_cancel">Cancelar</string>
@@ -48,29 +48,29 @@
     <string name="doc_xml">Documento XML</string>
     <string name="doc_text">Texto</string>
     <string name="doc_other">Documento</string>
-    <string name="review_sign">Firmar con mi DNIe</string>
-    <string name="review_share">Continuar con mi DNIe</string>
+    <string name="review_sign">Firmar con mi DNI</string>
+    <string name="review_share">Continuar con mi DNI</string>
     <string name="review_decline">No firmar</string>
     <string name="review_decline_login">No iniciar sesión</string>
     <string name="review_disconnected">Esperando a tu ordenador…</string>
 
     <!-- CAN and PIN: typed on the computer -->
     <string name="wait_can_title">Escribe el número CAN en el ordenador</string>
-    <string name="wait_can_wrong">Tu DNIe no ha aceptado el número CAN. Revísalo en la tarjeta y escríbelo en Spain Assist, en el ordenador.</string>
+    <string name="wait_can_wrong">Tu DNI no ha aceptado el número CAN. Revísalo en la tarjeta y escríbelo en Spain Assist, en el ordenador.</string>
     <string name="wait_pin_title">Escribe el PIN en el ordenador</string>
     <string name="wait_pin_wrong">El PIN no es correcto. Te quedan %1$d intentos. Escríbelo otra vez en Spain Assist, en el ordenador.</string>
-    <string name="wait_pin_missing">Escribe el PIN de tu DNIe en Spain Assist, en el ordenador.</string>
-    <string name="pin_last_try">Cuidado: te queda un intento. Si fallas, el DNIe se bloquea y tendrás que ir a una comisaría.</string>
-    <string name="wait_body">Después, vuelve a acercar el DNIe al móvil.</string>
+    <string name="wait_pin_missing">Escribe el PIN de tu DNI en Spain Assist, en el ordenador.</string>
+    <string name="pin_last_try">Cuidado: te queda un intento. Si fallas, el DNI se bloquea y tendrás que ir a una comisaría.</string>
+    <string name="wait_body">Después, vuelve a acercar el DNI al móvil.</string>
     <string name="cancel_label">Cancelar</string>
 
     <!-- Card -->
-    <string name="card_title">Acerca el DNIe</string>
-    <string name="card_body">Pon el DNIe sobre una mesa y apoya la parte de atrás del móvil encima, sin funda.\n\nNo los muevas.</string>
-    <string name="card_moved">Se ha movido el DNIe. Vuelve a apoyar el móvil encima y no lo muevas.</string>
-    <string name="working_reading">Leyendo el DNIe…</string>
+    <string name="card_title">Acerca el DNI</string>
+    <string name="card_body">Pon el DNI sobre una mesa y apoya la parte de atrás del móvil encima, sin funda.\n\nNo los muevas.</string>
+    <string name="card_moved">Se ha movido el DNI. Vuelve a apoyar el móvil encima y no lo muevas.</string>
+    <string name="working_reading">Leyendo el DNI…</string>
     <string name="working_signing">Firmando…</string>
-    <string name="working_hint">No muevas el DNIe ni el móvil.</string>
+    <string name="working_hint">No muevas el DNI ni el móvil.</string>
     <string name="working_signed">Firmas hechas: %1$d</string>
 
     <!-- Results -->
@@ -80,19 +80,19 @@
     <string name="result_cancelled">Has cancelado la firma.</string>
     <string name="result_cancelled_desktop">El ordenador ha cancelado la firma.</string>
     <string name="result_expired">Ha pasado demasiado tiempo. Vuelve a intentarlo desde el ordenador.</string>
-    <string name="result_pin_blocked">El PIN de tu DNIe está bloqueado. Para desbloquearlo, ve a un punto de actualización del DNI en una comisaría.</string>
-    <string name="result_unsupported">Esta tarjeta no es un DNIe 3.0 o 4.0, o no se puede leer.</string>
-    <string name="result_no_certificate">Tu DNIe no tiene el certificado que necesita esta petición. Puedes activarlo en un punto de actualización del DNI en una comisaría.</string>
-    <string name="result_certificate_expired">El certificado de tu DNIe ha caducado. Puedes renovarlo en un punto de actualización del DNI en una comisaría.</string>
-    <string name="result_wrong_card">Has acercado otro DNIe distinto al del principio. Vuelve a intentarlo desde el ordenador con el mismo.</string>
+    <string name="result_pin_blocked">El PIN de tu DNI está bloqueado. Para desbloquearlo, ve a un punto de actualización del DNI en una comisaría.</string>
+    <string name="result_unsupported">Esta tarjeta no es un DNI 3.0 o 4.0, o no se puede leer.</string>
+    <string name="result_no_certificate">Tu DNI no tiene el certificado que necesita esta petición. Puedes activarlo en un punto de actualización del DNI en una comisaría.</string>
+    <string name="result_certificate_expired">El certificado de tu DNI ha caducado. Puedes renovarlo en un punto de actualización del DNI en una comisaría.</string>
+    <string name="result_wrong_card">Has acercado otro DNI distinto al del principio. Vuelve a intentarlo desde el ordenador con el mismo.</string>
     <string name="result_mismatch">No hemos firmado: lo que llegó del ordenador no coincide con el documento.</string>
     <string name="result_timeout">El ordenador ha tardado demasiado. Vuelve a intentarlo.</string>
     <string name="result_failed">No se ha podido firmar. Vuelve a intentarlo desde el ordenador.</string>
     <string name="result_ok">Vale</string>
     <string name="review_title_login">Entrar en</string>
-    <string name="review_login">Entrar con mi DNIe</string>
-    <string name="working_login">Mantén el DNIe cerca</string>
-    <string name="result_login">Uso del DNIe terminado</string>
+    <string name="review_login">Entrar con mi DNI</string>
+    <string name="working_login">Mantén el DNI cerca</string>
+    <string name="result_login">Uso del DNI terminado</string>
     <string name="result_login_declined">No has aprobado el acceso.</string>
     <string name="result_login_cancelled">El ordenador ha cancelado el acceso.</string>
     <string name="result_login_failed">No se ha podido entrar. Vuelve a intentarlo desde el ordenador.</string>
@@ -102,7 +102,7 @@
     <string name="licenses_open">Licencias de código abierto</string>
     <string name="licenses_title">Licencias de código abierto</string>
     <string name="licenses_lead">Nuestro código es software libre, con licencia MIT. Aquí tienes también las licencias de los componentes de otros que usa la app.</string>
-    <string name="licenses_lead_eupl">Nuestro código es software libre, con licencia MIT. La app incluye jmulticard, la biblioteca del Gobierno para leer el DNIe. Por eso la app completa se distribuye con la licencia EUPL 1.2, y puedes descargar todo su código fuente.</string>
+    <string name="licenses_lead_eupl">Nuestro código es software libre, con licencia MIT. La app incluye jmulticard, la biblioteca del Gobierno para leer el DNI. Por eso la app completa se distribuye con la licencia EUPL 1.2, y puedes descargar todo su código fuente.</string>
     <string name="licenses_source">Código fuente de la app</string>
     <string name="licenses_jmulticard_source">Código fuente de jmulticard</string>
     <string name="licenses_show_text">Ver el texto de la licencia</string>

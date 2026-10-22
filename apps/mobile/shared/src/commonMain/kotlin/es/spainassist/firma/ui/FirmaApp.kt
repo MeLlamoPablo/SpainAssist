@@ -342,7 +342,7 @@ private fun CardIllustration(active: Boolean) {
                 .background(colors.accentSoft, RoundedCornerShape(12.dp))
                 .border(2.dp, colors.accent, RoundedCornerShape(12.dp)),
         ) {
-            Text("DNIe", modifier = Modifier.padding(12.dp), color = colors.accentText, fontWeight = FontWeight.SemiBold)
+            Text("DNI", modifier = Modifier.padding(12.dp), color = colors.accentText, fontWeight = FontWeight.SemiBold)
         }
         Box(
             Modifier.padding(start = 70.dp, top = 30.dp).size(width = 86.dp, height = 150.dp)

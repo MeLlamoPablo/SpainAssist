@@ -33,7 +33,7 @@ function render(
   const full: DnieSignaturePrompt = {
     kind: 'dnie_signature',
     purpose: 'document',
-    title: 'Firma con tu DNIe',
+    title: 'Firma con tu DNI',
     message: 'sede.example.gob.es te pide firmar.',
     stage: 'reviewing',
     ...prompt,
@@ -48,9 +48,9 @@ function render(
   return renderToStaticMarkup(<DnieSignaturePromptCard item={item} prompt={full} />);
 }
 
-describe('DNIe progress card', () => {
+describe('DNI progress card', () => {
   it('never asks for the PIN on the phone', () => {
-    const typed = { es: 'escribe el PIN', en: 'type your DNIe PIN' };
+    const typed = { es: 'escribe el PIN', en: 'type your DNI PIN' };
     const certificate = {
       es: 'Comprueba quién lo pide y comparte tu certificado.',
       en: 'Check who asks and share your certificate.',
@@ -65,12 +65,12 @@ describe('DNIe progress card', () => {
     const both = render('es', { stage: 'unlock', unlock: { can: true, pin: true } });
     expect(both).toContain('data-testid="dnie-unlock"');
     expect(both).toContain('Número CAN');
-    expect(both).toContain('PIN del DNIe');
+    expect(both).toContain('PIN del DNI');
     expect(both).toContain('¿Qué es el PIN y dónde lo encuentro?');
     expect(both).not.toContain('data-stage');
     const pinOnly = render('en', { stage: 'unlock', unlock: { can: false, pin: true } });
     expect(pinOnly).not.toContain('CAN number');
-    expect(pinOnly).toContain('DNIe PIN');
+    expect(pinOnly).toContain('DNI PIN');
     expect(
       render('es', {
         stage: 'unlock',
@@ -79,7 +79,7 @@ describe('DNIe progress card', () => {
     ).toContain('te queda un intento');
     expect(
       render('en', { stage: 'unlock', unlock: { can: true, pin: false, refused: 'can' } }),
-    ).toContain('match your DNIe');
+    ).toContain('match your DNI');
   });
 
   it('asks to open the app while the paired phone is away, then follows the phone', () => {

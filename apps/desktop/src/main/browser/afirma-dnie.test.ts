@@ -1,5 +1,5 @@
 /**
- * An AutoFirma XML batch (the gsede-style login signature) with the DNIe in the phone: the
+ * An AutoFirma XML batch (the gsede-style login signature) with the DNI in the phone: the
  * signer's handler asks the app's approval, which goes to the phone; the phone signs the
  * presignature of the mock sede's BatchPresigner and its BatchPostsigner builds a valid CAdES.
  */
@@ -32,7 +32,7 @@ afterAll(async () => {
 const der = (pem: string) =>
   Buffer.from(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64');
 
-it('signs an AutoFirma XML batch with the DNIe in the phone, end to end', async () => {
+it('signs an AutoFirma XML batch with the DNI in the phone, end to end', async () => {
   const relay = new MemoryRelay();
   app = await createTestApp({
     env: { relayServerUrl: 'wss://relay.example.test' },
@@ -126,7 +126,7 @@ it('signs an AutoFirma XML batch with the DNIe in the phone, end to end', async 
   expect(toBeSigned[0]).not.toHaveProperty('check');
   await a.waitFor(() => received.some((m) => m.type === 'sign.done'));
 
-  // The sede's postsigner stored a CAdES of the challenge signed by the DNIe's certificate.
+  // The sede's postsigner stored a CAdES of the challenge signed by the DNI's certificate.
   const stored = await (
     await sede.fetch(`${sede.url}/gsede/clientsigner/RetrieveService?op=get&v=1_0&id=tx-dnie`)
   ).text();

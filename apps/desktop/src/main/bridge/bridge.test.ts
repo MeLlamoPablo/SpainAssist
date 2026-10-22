@@ -199,7 +199,7 @@ describe('bridge: prompts', () => {
       });
       return (await call).body;
     }
-    it('returns the DNIe the user added, and not a credential of another kind', async () => {
+    it('returns the DNI the user added, and not a credential of another kind', async () => {
       const dnie = await app.vault.addDnie();
       expect((await askFor('dnie', dnie.id)).result).toEqual({
         kind: 'credential',
@@ -212,13 +212,13 @@ describe('bridge: prompts', () => {
       expect((await askFor('dnie', undefined)).result).toEqual({ kind: 'credential' });
     });
 
-    it('refuses to ask for the DNIe without the phone app', async () => {
+    it('refuses to ask for the DNI without the phone app', async () => {
       const off = await createTestApp({ features: { dniePhone: 'off' } });
       try {
         const { token: offToken } = await off.procedureWithToken();
         const res = await off.rpc(
           'prompt.credential',
-          { credential: 'dnie', title: 'Añade tu DNIe', message: 'Lo necesito.' },
+          { credential: 'dnie', title: 'Añade tu DNI', message: 'Lo necesito.' },
           offToken,
         );
         expect(res.body).toMatchObject({ ok: false, error: { code: 'bad_request' } });
@@ -454,11 +454,11 @@ describe('bridge: vault', () => {
     expect(app.pendingPrompt(procedureId)).toBeUndefined();
   });
 
-  it('keeps the DNIe PIN from agents: no reading, typing, saving or asking for it', async () => {
+  it('keeps the DNI PIN from agents: no reading, typing, saving or asking for it', async () => {
     const dnie = await app.invoke('vault.addDnie');
     // A PIN the user wrote down as personal data (Mis datos allows custom fields) is hidden too.
     await app.vault.setPersonal(
-      [{ key: 'custom.pin_dnie', label: 'PIN del DNIe', value: 'Abcd1234' }],
+      [{ key: 'custom.pin_dnie', label: 'PIN del DNI', value: 'Abcd1234' }],
       'manual',
     );
     for (const params of [{}, { keys: ['custom.pin_dnie'] }]) {
@@ -490,10 +490,10 @@ describe('bridge: vault', () => {
     expect(await app.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
     // Asking: no form field for it.
     for (const field of [
-      { key: 'pin', label: 'PIN del DNIe', type: 'secret' },
+      { key: 'pin', label: 'PIN del DNI', type: 'secret' },
       { key: 'codigo', label: 'PIN', type: 'text', vaultKey: 'custom.pin_dnie' },
     ])
-      await refused('prompt.form', { title: 'Tu DNIe', fields: [field] });
+      await refused('prompt.form', { title: 'Tu DNI', fields: [field] });
     expect(app.pendingPrompt(procedureId)).toBeUndefined();
     // Words that merely contain "pin" are fine.
     const saved = await app.rpc(
@@ -1198,7 +1198,7 @@ describe('bridge: Touch ID', () => {
     expect(app.browser.certificates).toEqual([]);
   });
 
-  it('does not ask for it to log in with the DNIe: the phone and the card are the second factor', async () => {
+  it('does not ask for it to log in with the DNI: the phone and the card are the second factor', async () => {
     await app.close();
     let prompts = 0;
     app = await createTestApp({

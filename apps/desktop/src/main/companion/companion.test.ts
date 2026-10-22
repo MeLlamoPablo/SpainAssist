@@ -73,7 +73,7 @@ const CERT = crypto.randomBytes(256);
 const CAN = '123456';
 const PIN = 'Abcd1234';
 
-/** Waits for the DNIe card's `unlock` stage and types what it asks for. */
+/** Waits for the DNI card's `unlock` stage and types what it asks for. */
 async function typeUnlock(
   a: TestApp,
   procedureId: string,
@@ -88,7 +88,7 @@ async function typeUnlock(
   return item.prompt;
 }
 
-describe('DNIe signatures with the phone', () => {
+describe('DNI signatures with the phone', () => {
   it('pairs on demand, shows the phone progress and signs through the phone', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
     const approval = a.services.browser.approveSignature(procedureId, summary);
@@ -784,7 +784,7 @@ it('keeps one phone approval across the hosts of one organisation, and tells the
   expect(received.filter((m) => m.type === 'sign.toBeSigned')).toHaveLength(3);
   const observation = await a.rpc('browser.snapshot', {}, token);
   expect(observation.body.result.notes).toContain(
-    'The user approved the DNIe login for Seguridad Social (idp.seg-social.es, ipce.seg-social.es, w2.seg-social.es) on their phone.',
+    'The user approved the DNI login for Seguridad Social (idp.seg-social.es, ipce.seg-social.es, w2.seg-social.es) on their phone.',
   );
   expect(companion.takeLoginNotes(procedureId)).toEqual([]);
 
@@ -793,7 +793,7 @@ it('keeps one phone approval across the hosts of one organisation, and tells the
   await a.waitFor(() => held !== undefined);
   expect(companion.takeLoginNotes(procedureId)).toEqual([
     expect.stringMatching(
-      /^Waiting for the user to approve the DNIe login for Agencia Tributaria \(.*\) on their phone\./,
+      /^Waiting for the user to approve the DNI login for Agencia Tributaria \(.*\) on their phone\./,
     ),
   ]);
   client.send({ type: 'sign.error', requestId: held!, code: 'rejected' });
@@ -920,7 +920,7 @@ it('keeps the login approval when the browser drops a connection', async () => {
   );
 });
 
-it('enables DNIe browser login after origin policy, desktop consent and phone approval', async () => {
+it('enables DNI browser login after origin policy, desktop consent and phone approval', async () => {
   const { relay, app: a, procedureId, token, dnie } = await setup();
   await a.vault.setCredentialPolicy(dnie.id, 'ask');
   const use = a.rpc(
@@ -976,7 +976,7 @@ describe('without the dnie-phone feature flag', () => {
     return { relay, app, dnie, ...session };
   }
 
-  it('never starts the companion and refuses pairing and new DNIe credentials', async () => {
+  it('never starts the companion and refuses pairing and new DNI credentials', async () => {
     const { relay, app: a } = await setupOff();
     expect(a.services.companion).toBeUndefined();
     for (const method of [
@@ -994,7 +994,7 @@ describe('without the dnie-phone feature flag', () => {
     expect(a.events.some((e) => e.type === 'companion.changed')).toBe(false);
   });
 
-  it('hides a saved DNIe from Mis datos and agents, and keeps it stored', async () => {
+  it('hides a saved DNI from Mis datos and agents, and keeps it stored', async () => {
     const { app: a, dnie, token } = await setupOff();
     expect((await a.invoke('vault.overview')).credentials).toEqual([]);
     expect((await a.rpc('vault.read', {}, token)).body.result.credentials).toEqual([]);
@@ -1008,16 +1008,16 @@ describe('without the dnie-phone feature flag', () => {
     expect(a.services.companion).toBeDefined();
   });
 
-  it('refuses DNIe logins with an explanation and leaves the DNIe out of signatures', async () => {
+  it('refuses DNI logins with an explanation and leaves the DNI out of signatures', async () => {
     const { relay, app: a, dnie, procedureId, token } = await setupOff();
     const login = await a.rpc('browser.useCertificate', { credentialId: dnie.id }, token);
     expect(login.body.error).toMatchObject({
       code: 'bad_request',
-      message: expect.stringContaining('DNIe through the phone is not available'),
+      message: expect.stringContaining('DNI through the phone is not available'),
     });
     expect(a.pendingPrompt(procedureId)).toBeUndefined();
 
-    // AutoFirma: with only the DNIe saved, there is no certificate to offer.
+    // AutoFirma: with only the DNI saved, there is no certificate to offer.
     expect(await a.services.browser.approveSignature(procedureId, summary)).toBeNull();
     expect(a.pendingPrompt(procedureId)).toBeUndefined();
     expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
@@ -1028,7 +1028,7 @@ describe('without the dnie-phone feature flag', () => {
     expect(a.browser.certificates).toEqual([]);
   });
 
-  it('tells procedure agents the DNIe is off (prompt and tools)', async () => {
+  it('tells procedure agents the DNI is off (prompt and tools)', async () => {
     const { app: a } = await setupOff();
     const provider = {
       baseUrl: 'http://127.0.0.1:8789/v1',
@@ -1046,7 +1046,7 @@ describe('without the dnie-phone feature flag', () => {
 });
 
 describe('in the prerelease of the dnie-phone feature flag', () => {
-  it('starts the companion, and offers the DNIe to agents while it is saved', async () => {
+  it('starts the companion, and offers the DNI to agents while it is saved', async () => {
     const a = await createTestApp({
       env: { relayServerUrl: 'wss://relay.example.test' },
       relaySocket: new MemoryRelay().WebSocket,
@@ -1063,7 +1063,7 @@ describe('in the prerelease of the dnie-phone feature flag', () => {
     const { procedureId } = await a.startProcedure();
     expect(a.agentFor(procedureId)?.launch.config).toMatchObject({ dniePhone: false });
 
-    // "Ya tengo la app, habilitar DNIe" saves the DNIe.
+    // "Ya tengo la app, habilitar DNI" saves the DNI.
     const dnie = await a.invoke('vault.addDnie');
     expect((await a.invoke('vault.overview')).credentials).toMatchObject([{ id: dnie.id }]);
     await a.say('Otro trámite');
