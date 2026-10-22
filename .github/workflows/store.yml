@@ -65,17 +65,20 @@ jobs:
       - if: steps.secrets.outputs.configured == 'true'
         name: Upload the MSIX
         shell: pwsh
-        run: msstore publish "$env:RUNNER_TEMP/msix/SpainAssist-win-x64.msix" --appId $env:PRODUCT_ID --noCommit --uploadTimeout 3600 --verbose
+        run: msstore publish "$env:RUNNER_TEMP/msix/SpainAssist-win-x64.msix" --appId $env:PRODUCT_ID --noCommit --uploadTimeout 3600
       # The first submission was set to wait for "Publish now"; updates go live once certified,
       # like the GitHub release electron-updater already serves. The CLI leaves out null fields.
+      # `update` prints the submission, whose FileUploadUrl is a writable link to the package
+      # until the next day: keep it out of the (public) log.
       - if: steps.secrets.outputs.configured == 'true'
         name: Publish once certified
         shell: pwsh
         run: |
           $submission = msstore submission get $env:PRODUCT_ID | ConvertFrom-Json
           $submission | Add-Member -NotePropertyName targetPublishMode -NotePropertyValue Immediate -Force
-          msstore submission update $env:PRODUCT_ID ($submission | ConvertTo-Json -Depth 100 -Compress)
+          msstore submission update $env:PRODUCT_ID ($submission | ConvertTo-Json -Depth 100 -Compress) | Out-Null
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "Publish mode: $($submission.targetPublishMode)"
       - if: steps.secrets.outputs.configured == 'true'
         name: Submit for certification
         shell: pwsh
