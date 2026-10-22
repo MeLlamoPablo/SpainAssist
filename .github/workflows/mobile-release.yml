@@ -1,16 +1,24 @@
-# Phone app release: pushing a tag `mobile-vX.Y.Z` on a commit of `master` builds the Android
-# App Bundle signed with the upload key, checks the signature and keeps the .aab as the workflow
-# artifact `android-bundle`. The version is X.Y.Z, and the versionCode X*10000 + Y*100 + Z
+# Phone app release: called by release.yml for stable vX.Y.Z tags, or by a mobile-vX.Y.Z tag.
+# Builds the Android App Bundle signed with the upload key, checks the signature and keeps the
+# .aab as the workflow artifact `android-bundle`. Tagged builds then submit it to Google Play.
+# The version is X.Y.Z, and the versionCode X*10000 + Y*100 + Z
 # (`apps/mobile/androidApp/build.gradle.kts`). Running it by hand from a `mobile-v*` tag does the
 # same; from a branch it needs the `version` input and builds a test bundle.
 #
-# It doesn't upload to Google Play yet: the .aab goes to Play Console by hand (Test and release >
-# Production or a testing track > Create new release). Play App Signing re-signs it for users.
+# Play defaults to an internal draft while the app awaits its first review. Repository variables
+# PLAY_TRACK and PLAY_RELEASE_STATUS select the track and draft/completed status after approval.
+# Branch dispatches only build; they never upload. Play App Signing re-signs bundles for users.
 # The tag is also the source of that release, which the EUPL requires (`Licenses.SOURCE_URL`).
 # Setup (upload key, secrets) is in `apps/mobile/README.md`, "Releasing".
 name: Phone release
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        description: Stable X.Y.Z from the release tag
+        required: true
+        type: string
   push:
     tags: ['mobile-v*']
   workflow_dispatch:
@@ -44,11 +52,16 @@ jobs:
           INPUT: ${{ inputs.version }}
         run: |
           if [[ "$REF_TYPE" == tag ]]; then
-            if [[ ! "$TAG" =~ ^mobile-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "::error::Tag $TAG is not mobile-vX.Y.Z"
+            if [[ ! "$TAG" =~ ^(mobile-)?v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Tag $TAG is not vX.Y.Z or mobile-vX.Y.Z"
               exit 1
             fi
-            version=${TAG#mobile-v}
+            version=${TAG#mobile-}
+            version=${version#v}
+            if [[ -n "$INPUT" && "$INPUT" != "$version" ]]; then
+              echo "::error::Version input does not match tag $TAG"
+              exit 1
+            fi
           else
             version=$INPUT
           fi
@@ -130,6 +143,7 @@ jobs:
           fi
           keytool -printcert -jarfile "$aab" | grep -E 'Owner|SHA256:'
           mv "$aab" "SpainAssist-$VERSION.aab"
+          cp androidApp/build/outputs/mapping/release/mapping.txt mapping.txt
       - name: Remove the keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks"
@@ -138,7 +152,59 @@ jobs:
           name: android-bundle
           path: |
             apps/mobile/SpainAssist-*.aab
-            apps/mobile/androidApp/build/outputs/mapping/release/mapping.txt
+            apps/mobile/mapping.txt
           if-no-files-found: error
-          # Long enough to upload to Play Console after a release.
+          # Keep the bundle and mapping for diagnosis or manual recovery.
           retention-days: 30
+
+  play:
+    name: Submit to Google Play
+    needs: bundle
+    # A branch dispatch builds a test bundle; only immutable release tags reach Play.
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Play edits invalidate each other, even when their tags differ.
+    concurrency:
+      group: android-play
+      cancel-in-progress: false
+    env:
+      PLAY_TRACK: ${{ vars.PLAY_TRACK || 'internal' }}
+      PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
+    steps:
+      - name: Check Play configuration
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [[ -z "$SERVICE_ACCOUNT_JSON" ]]; then
+            echo "::error::Missing PLAY_SERVICE_ACCOUNT_JSON: see apps/mobile/README.md, Releasing. The signed android-bundle artifact is available for manual upload."
+            exit 1
+          fi
+          case "$PLAY_RELEASE_STATUS" in
+            draft|completed) ;;
+            *) echo "::error::PLAY_RELEASE_STATUS must be draft or completed"; exit 1 ;;
+          esac
+      - uses: actions/download-artifact@v5
+        with:
+          name: android-bundle
+          path: ${{ runner.temp }}/android-bundle
+      # Pin the action that receives the Play credential; v1 uses Node 24.
+      - name: Upload the bundle and mapping
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: es.spainassist.firma
+          releaseFiles: ${{ runner.temp }}/android-bundle/SpainAssist-*.aab
+          mappingFile: ${{ runner.temp }}/android-bundle/mapping.txt
+          track: ${{ env.PLAY_TRACK }}
+          status: ${{ env.PLAY_RELEASE_STATUS }}
+          changesNotSentForReview: ${{ env.PLAY_RELEASE_STATUS == 'draft' }}
+      - name: Record the Play submission
+        run: |
+          {
+            echo "### Google Play"
+            echo "Uploaded es.spainassist.firma to **$PLAY_TRACK** with status **$PLAY_RELEASE_STATUS**."
+            if [[ "$PLAY_RELEASE_STATUS" == draft ]]; then
+              echo "The bundle is saved in Play Console. Complete the app setup and send it for review there."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

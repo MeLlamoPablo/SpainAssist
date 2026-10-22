@@ -87,8 +87,11 @@ Android's themed icons). Their `.debug` application ID lets them coexist with pr
 Google Play with Play App Signing: Google keeps the app signing key and signs what users
 install. We sign each bundle with our **upload key**, which Play Console can reset if it's lost.
 
-**Once: the upload key.** Create it outside the repo and keep it (and its passwords) in the
-password manager. Never commit a keystore:
+**Once: the upload key.** The existing upload key is
+`infra/terraform/secrets/android-upload.jks` in the main checkout. Its password is
+`android_upload_keystore_password` in `terraform.tfvars`. Terraform sets the four signing
+secrets below (`github_release.tf`). Keep backups in the password manager; only store keys in
+the repo under the git-crypt encrypted `secrets/` path. For a new app, generate a new key:
 
 ```sh
 keytool -genkeypair -v -keystore ~/spainassist-upload.jks -alias upload \
@@ -120,7 +123,31 @@ SA_UPLOAD_KEYSTORE=~/spainassist-upload.jks SA_UPLOAD_KEYSTORE_PASSWORD=… SA_U
   SA_UPLOAD_KEY_PASSWORD=… ./gradlew :androidApp:bundleRelease -PappVersion=0.3.0
 ```
 
-**Each release.** Tag a commit on `master` and push the tag:
+**Once: Google Play access.** In the `spainassist.es` Google Cloud project, enable the
+[Google Play Android Developer API](https://developers.google.com/android-publisher/getting_started),
+create a service account, and download its JSON key. In Play Console > Users and permissions,
+grant that account access to **Spain Assist** (`es.spainassist.firma`): view app information and
+release apps to testing tracks. Production additionally needs the production release permission.
+Save the key as `infra/terraform/secrets/google-play-service-account.json` in the main checkout
+(git-crypt encrypted), then apply the `github_actions_secret.release` resources with Terraform.
+This configures `PLAY_SERVICE_ACCOUNT_JSON`; the workflow fails clearly if it is absent, keeping
+the signed bundle artifact available. The app must already have had its first bundle uploaded
+through Play Console before the publishing API can access it.
+
+Repository Actions variables select the destination:
+
+| Variable | Default | When to change it |
+| --- | --- | --- |
+| `PLAY_TRACK` | `internal` | The Play track ID, e.g. `alpha` for the default closed test or `production` after approval |
+| `PLAY_RELEASE_STATUS` | `draft` | Set `completed` once Play allows releases on that track |
+
+The initial draft also sets `changesNotSentForReview=true`: bundles are saved in Play Console,
+where the first app setup/review must be completed. With `completed`, changes are submitted to
+Play normally; Google's review and rollout rules still apply.
+
+**Each release.** The main `.github/workflows/release.yml` now calls the phone workflow on
+stable `vX.Y.Z` tags, using the same version. Desktop prereleases skip Android because they
+would consume the stable versionCode. To release the phone separately, tag a commit on `master`:
 
 ```sh
 git tag mobile-v0.3.0 && git push origin mobile-v0.3.0
@@ -129,8 +156,11 @@ git tag mobile-v0.3.0 && git push origin mobile-v0.3.0
 `.github/workflows/mobile-release.yml` checks the tag and the secrets (it fails, naming the
 missing ones), builds `:androidApp:bundleRelease` with that version, checks the bundle is
 signed, and keeps `SpainAssist-X.Y.Z.aab` and R8's `mapping.txt` as the workflow artifact
-`android-bundle`. It doesn't upload to Play yet: upload the .aab in Play Console (Test and
-release > a track > Create new release) and the mapping file under App bundle explorer.
+`android-bundle`. A separate job uploads both files to Google Play, using the track and status
+above. Submissions are serialized across tags to avoid conflicting Play edits. Branch dispatches
+with the `version` input only build; they never upload. Re-run only a failed submission job to
+reuse the same artifact. Play refuses a versionCode it has already accepted, so never release the
+same X.Y.Z through both tag formats, or rebuild and re-upload an accepted version.
 
 - **Licence.** Every build must come with its complete source (see "Licence" below). The tag
   is that source: `Licenses.SOURCE_URL` points at the public repo, so push the tag before

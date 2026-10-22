@@ -1,4 +1,4 @@
-# --- Desktop release signing: GitHub Actions secrets for .github/workflows/release.yml -------
+# --- App release signing: GitHub Actions secrets for .github/workflows/release.yml -------
 #
 # macOS builds are signed with the Developer ID Application certificate and notarized with an
 # App Store Connect API key; the Windows Store MSIX is submitted with an Entra app. Both files live in secrets/, committed encrypted (git-crypt,
@@ -15,6 +15,20 @@ locals {
     APPLE_API_ISSUER = var.apple_api_issuer_id
   }
 
+  # Android signs with the existing Play App Signing upload key (PKCS12, alias upload).
+  android_secrets = var.android_upload_keystore_password == "" ? {} : {
+    SA_UPLOAD_KEYSTORE_BASE64   = filebase64("${path.module}/secrets/android-upload.jks")
+    SA_UPLOAD_KEYSTORE_PASSWORD = var.android_upload_keystore_password
+    SA_UPLOAD_KEY_ALIAS         = "upload"
+    SA_UPLOAD_KEY_PASSWORD      = var.android_upload_keystore_password
+  }
+
+  # The service account must also be granted app access in Play Console. Keep the JSON with
+  # the other git-crypt secrets; omit it until that one-time setup is complete.
+  play_secrets = fileexists("${path.module}/secrets/google-play-service-account.json") ? {
+    PLAY_SERVICE_ACCOUNT_JSON = file("${path.module}/secrets/google-play-service-account.json")
+  } : {}
+
   # The `store` job submits the Store MSIX to Partner Center with these, or warns without them.
   store_secrets = var.partner_center_client_id == "" ? {} : {
     PARTNER_CENTER_TENANT_ID     = var.partner_center_tenant_id
@@ -25,10 +39,10 @@ locals {
 }
 
 resource "github_actions_secret" "release" {
-  # By name: for_each can't take a map with sensitive values.
-  for_each = toset(keys(merge(local.release_secrets, local.store_secrets)))
+  # Only secret names are public; the optional Android map depends on a sensitive password.
+  for_each = nonsensitive(toset(keys(merge(local.release_secrets, local.store_secrets, local.android_secrets, local.play_secrets))))
 
   repository  = split("/", var.github_repository)[1]
   secret_name = each.key
-  value       = merge(local.release_secrets, local.store_secrets)[each.key]
+  value       = merge(local.release_secrets, local.store_secrets, local.android_secrets, local.play_secrets)[each.key]
 }

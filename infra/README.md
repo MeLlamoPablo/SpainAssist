@@ -132,7 +132,7 @@ the IP. The relay and the webhook host are on `<domain>` only.
 | `glitchtip.tf` | GlitchTip's compose file, env vars, restart on change, its admin user |
 | `dns.tf` | Route 53: the registered domain (name servers, auto-renew), its hosted zone, the service records and the website's (Framer) |
 | `aws_iam.tf` | The IAM user Terraform manages AWS with: only `dns.tf`'s resources, never deleting or transferring a domain |
-| `github_release.tf` + `secrets/` | GitHub Actions secrets the desktop release signs and notarizes macOS builds with (`.github/workflows/release.yml`) |
+| `github_release.tf` + `secrets/` | GitHub Actions secrets for macOS signing/notarization, Microsoft Store submission, and Android signing/Google Play submission (`apps/mobile/README.md`, Releasing) |
 | `tf.sh` | Runs Terraform with an SSH tunnel to Coolify's API |
 
 ### Why it looks like this

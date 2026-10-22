@@ -442,3 +442,12 @@ variable "glitchtip_admin_password" {
     error_message = "glitchtip_admin_password must be at least 16 characters."
   }
 }
+
+# --- Android release -----------------------------------------------------------------------
+
+variable "android_upload_keystore_password" {
+  description = "Password of secrets/android-upload.jks (PKCS12, alias upload, same key password). Empty: do not configure Android release signing in GitHub Actions."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
