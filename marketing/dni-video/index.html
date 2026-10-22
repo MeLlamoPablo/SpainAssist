@@ -232,16 +232,28 @@
                 <h3 class="m-title st">Firmar documento</h3>
                 <span class="site st"><span data-icon="lock"></span>sede.agenciatributaria.gob.es</span>
                 <div class="doc st">
+                  <!-- The first page of a Modelo 100 (the income tax return), as the PDF renders. -->
                   <div class="page">
-                    <b>Modelo 030 · Cambio de domicilio fiscal</b>
-                    <p>Nombre: Lucía Martín Ortega</p>
-                    <p>NIF: 12345678Z</p>
-                    <p>Nuevo domicilio: Calle de Alcalá 123, 4.º B</p>
-                    <p>28009 Madrid</p>
-                    <p>Fecha: 11 de octubre de 2026</p>
+                    <div class="pdf-head">
+                      <span class="pdf-org"><i></i>Agencia Tributaria</span>
+                      <span class="pdf-title">Impuesto sobre la Renta<br />de las Personas Físicas</span>
+                      <span class="pdf-model"><small>Modelo</small>100</span>
+                    </div>
+                    <p class="pdf-year">Declaración · Ejercicio 2025</p>
+                    <p class="pdf-sec">Identificación del declarante</p>
+                    <div class="pdf-ids">
+                      <span><small>NIF</small>12345678Z</span>
+                      <span><small>Apellidos y nombre</small>MARTÍN ORTEGA, LUCÍA</span>
+                    </div>
+                    <p class="pdf-sec">Liquidación</p>
+                    <p class="pdf-row"><span>Base liquidable general sometida a gravamen</span><i>0505</i><b>30.480,00</b></p>
+                    <p class="pdf-row"><span>Cuota íntegra estatal</span><i>0545</i><b>3.412,56</b></p>
+                    <p class="pdf-row"><span>Cuota íntegra autonómica</span><i>0546</i><b>3.287,10</b></p>
+                    <p class="pdf-row"><span>Retenciones del trabajo</span><i>0596</i><b>7.120,00</b></p>
+                    <p class="pdf-row total"><span>Resultado de la declaración (a devolver)</span><i>0670</i><b>−420,34</b></p>
                   </div>
                   <span class="open" data-icon="external-link"></span>
-                  <div class="fade"><b>Documento PDF</b><span>180.2 KB</span></div>
+                  <div class="fade"><b>Declaracion_Renta_2025.pdf</b><span>214.6 KB</span></div>
                 </div>
               </div>
               <div class="bottom">
@@ -280,7 +292,7 @@
                 <span class="r-badge" id="r-badge"><svg viewBox="0 0 24 24"><path id="r-check" d="M5.5 12.5l4.3 4.3L18.5 8" /></svg></span>
               </div>
               <div class="bottom">
-                <h3 class="m-title st">Firmado. Sigue en el ordenador.</h3>
+                <h3 class="m-title one st">Firmado. Sigue en el ordenador.</h3>
                 <span class="m-btn p st">Vale</span>
               </div>
             </section>

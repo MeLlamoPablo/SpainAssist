@@ -5,7 +5,7 @@ import { ICONS } from '../icons.js';
  * render.mjs can capture any frame deterministically. Times live in `T`; tweak them there.
  */
 
-export const DURATION = 19.6;
+export const DURATION = 19.0;
 
 const T = {
   winIn: -0.2,
@@ -23,15 +23,14 @@ const T = {
   pair: 8.2,
   tapLink: 9.15,
   paired: 9.3,
-  camPair: 9.6,
-  request: 10.9,
-  review: 11.15,
-  tapSign: 12.8,
-  hold: 12.95,
-  cardIn: 13.2,
-  read: 13.95,
-  signed: 15.3,
-  outro: 16.9,
+  request: 10.3,
+  review: 10.55,
+  tapSign: 12.2,
+  hold: 12.35,
+  cardIn: 12.6,
+  read: 13.35,
+  signed: 14.7,
+  outro: 16.3,
 };
 
 // ------------------------------------------------------------------------------------------
@@ -112,7 +111,6 @@ const CAMERA = [
   // [start, duration, target]
   [T.camCard, 0.9, { cx: 800, cy: 530, z: 1.75 }],
   [T.camDialog, 0.8, { cx: 640, cy: 410, z: 1.4 }],
-  [T.camPair, 0.9, { cx: 860, cy: 410, z: 1.25 }],
   [T.request, 0.9, { cx: 640, cy: 410, z: 1.12 }],
   [T.outro, 0.8, { cx: 640, cy: 410, z: 1.02 }],
 ];
@@ -306,8 +304,7 @@ const VF_C = { x: 212, y: 364.5 };
 const VF = { w: 363.43, h: 632.29 };
 const DP = 0.9625;
 
-/** Beside the computer after pairing, then in the middle while it signs. */
-const SIDE = { x: 1400, y: 86 };
+/** In the middle while it signs. */
 const MIDDLE = { x: 748, y: 86 };
 
 function phonePlace(t, cam) {
@@ -317,15 +314,14 @@ function phonePlace(t, cam) {
   const inP = P(t, T.phoneIn, 0.95, E.spring);
   // Held low to tap "Escanear QR", then raised to the code.
   const lift = P(t, T.scanner + 0.1, 1.25, E.inOut);
-  const side = P(t, T.camPair, 0.9, E.inOut);
   const mid = P(t, T.request, 0.9, E.inOut);
   const out = P(t, T.outro, 0.6, E.in);
-  // A hand holds it: it sways a little until it's put down beside the computer.
-  const hand = 1 - side;
+  // A hand holds it: it sways a little until it moves to the middle to sign.
+  const hand = 1 - mid;
   let x = over.x + (1 - inP) * 160 + Math.sin(t * 1.7) * 3 * hand;
   let y = over.y + 300 * (1 - lift) + (1 - inP) * 820 + Math.cos(t * 1.3) * 3 * hand;
-  x = lerp(lerp(x, SIDE.x, side), MIDDLE.x, mid);
-  y = lerp(lerp(y, SIDE.y, side), MIDDLE.y, mid) + out * 60;
+  x = lerp(x, MIDDLE.x, mid);
+  y = lerp(y, MIDDLE.y, mid) + out * 60;
   return {
     x,
     y,

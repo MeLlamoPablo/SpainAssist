@@ -1328,21 +1328,114 @@ svg.icon {
 }
 .page {
   position: absolute;
-  left: 18px;
-  right: 74px;
-  top: 16px;
-  bottom: -20px;
-  padding: 16px 16px;
+  left: 14px;
+  right: 58px;
+  top: 14px;
+  bottom: -40px;
+  padding: 12px 12px;
   background: #fff;
-  box-shadow: 0 1px 4px rgba(54, 44, 36, 0.12);
-  font-size: 9.5px;
-  line-height: 15px;
-  color: #2c2724;
+  box-shadow: 0 1px 4px rgba(54, 44, 36, 0.14);
+  font-size: 6.4px;
+  line-height: 1.35;
+  color: #1f1f1f;
 }
-.page b {
+.pdf-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1.2px solid #1f1f1f;
+}
+.pdf-org {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 6.6px;
+  font-weight: 600;
+}
+.pdf-org i {
+  width: 12px;
+  height: 14px;
+  border-radius: 2px 2px 6px 6px;
+  background: linear-gradient(#a3a3a3 0 30%, #c8c8c8 30% 100%);
+}
+.pdf-title {
+  flex: 1;
+  text-align: center;
+  font-size: 6.8px;
+  font-weight: 600;
+}
+.pdf-model {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid #1f1f1f;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.pdf-model small {
+  font-size: 5.5px;
+  font-weight: 500;
+}
+.pdf-year {
+  margin: 4px 0 6px;
+  text-align: right;
+  font-size: 6px;
+  color: #555;
+}
+.pdf-sec {
+  margin-top: 5px;
+  padding: 2px 4px;
+  background: #e4e4e4;
+  font-weight: 600;
+}
+.pdf-ids {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+.pdf-ids span {
+  flex: 1;
+  padding: 2px 4px;
+  border: 0.8px solid #9a9a9a;
+  font-weight: 600;
+}
+.pdf-ids span:last-child {
+  flex: 2.6;
+}
+.pdf-ids small {
   display: block;
-  margin-bottom: 6px;
-  font-size: 10.5px;
+  font-size: 5px;
+  font-weight: 400;
+  color: #666;
+}
+.pdf-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border-bottom: 0.6px solid #d6d6d6;
+}
+.pdf-row span {
+  flex: 1;
+}
+.pdf-row i {
+  padding: 0 3px;
+  border: 0.8px solid #9a9a9a;
+  font-style: normal;
+  font-size: 5.6px;
+}
+.pdf-row b {
+  width: 56px;
+  padding: 1px 3px;
+  border: 0.8px solid #9a9a9a;
+  text-align: right;
+  font-weight: 500;
+}
+.pdf-row.total {
   font-weight: 600;
 }
 .open {
@@ -1362,7 +1455,7 @@ svg.icon {
   bottom: 0;
   height: 110px;
   padding: 0 16px 12px;
-  background: linear-gradient(rgba(255, 255, 255, 0), #fff);
+  background: linear-gradient(rgba(255, 255, 255, 0), #fff 62%);
   display: flex;
   align-items: flex-end;
   justify-content: center;
