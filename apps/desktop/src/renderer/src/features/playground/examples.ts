@@ -464,8 +464,8 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     purpose: 'login',
     title: t('Entrar con el DNI', 'Log in with your DNI'),
     message: t(
-      'Aprueba entrar en la sede en tu móvil y mantén el DNI cerca. Puedes cancelar aquí.',
-      'Approve login to the site on your phone and keep your DNI nearby. You can cancel here.',
+      'Aprueba entrar en la sede en tu móvil y mantén el DNI cerca.',
+      'Approve login to the site on your phone and keep your DNI nearby.',
     ),
     details: [{ label: t('Web', 'Website'), value: 'sede.example.gob.es' }],
     stage: 'reviewing',

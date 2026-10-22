@@ -64,7 +64,7 @@ export const companionDict = defineDict({
     login: {
       reviewing: 'Aprueba el acceso en el móvil',
       signing: 'Usando el DNI para entrar…',
-      hint: 'Comprueba la web en el móvil y mantén el DNI cerca. Puedes cancelar aquí.',
+      hint: 'Comprueba la web en el móvil y mantén el DNI cerca.',
       finished: 'Uso del DNI terminado',
       failed: 'No se pudo usar el DNI para entrar',
       cancelled: 'Acceso cancelado',
@@ -155,7 +155,7 @@ export const companionDict = defineDict({
     login: {
       reviewing: 'Approve login on your phone',
       signing: 'Using your DNI to log in…',
-      hint: 'Check the site on your phone and keep your DNI nearby. You can cancel here.',
+      hint: 'Check the site on your phone and keep your DNI nearby.',
       finished: 'DNI use ended',
       failed: 'Could not use your DNI to log in',
       cancelled: 'Login cancelled',
