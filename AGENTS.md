@@ -32,3 +32,16 @@ Tests must never contact real government sites or paid APIs: use `apps/mock-sede
   `git branch -d <your-branch>`. If uncommitted changes in the main checkout block the merge,
   stop and report instead of stashing or discarding them.
 - Only edit files inside the paths your task owns, unless the task says otherwise.
+
+## Production (Coolify)
+
+- Coolify's API and dashboard answer only on the server's loopback (port 8000); see
+  `infra/README.md`. Use Terraform from `infra/terraform` in the main checkout (git-crypt
+  unlocked): `./tf.sh plan|apply|output` opens the SSH tunnel to the API itself. For a direct
+  API call, open the tunnel yourself
+  (`ssh -N -L 18000:127.0.0.1:8000 root@$(./tf.sh output -raw ipv4_address)`) and send
+  `coolify_api_token` from `terraform.tfvars` as a Bearer token to `http://127.0.0.1:18000/api/v1/…`.
+- The dashboard is for humans on the tailnet (`./tf.sh output urls`, `coolify`).
+- Never make Coolify public again: no instance domain, proxy route or published port. GitHub
+  reaches it only through `services/webhook-ingester`, which `./tf.sh apply` deploys (a push
+  doesn't).

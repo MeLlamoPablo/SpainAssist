@@ -1,0 +1,42 @@
+# Written by infra/terraform/webhook_ingester.tf; changes here are overwritten.
+name: sa-webhook-ingester
+
+services:
+  webhook-ingester:
+    image: node:24-slim
+    container_name: sa-webhook-ingester
+    restart: unless-stopped
+    user: node
+    working_dir: /app
+    command: ["node", "src/main.ts"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "8795"
+      COOLIFY_WEBHOOK_URL: http://coolify:8080/webhooks/source/github/events/manual
+    volumes:
+      - ./package.json:/app/package.json:ro
+      - ./src:/app/src:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 64
+    networks: [coolify]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8795/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: coolify
+      traefik.http.routers.sa-hooks.rule: Host(`${host}`)
+      traefik.http.routers.sa-hooks.entrypoints: https
+      traefik.http.routers.sa-hooks.tls.certresolver: letsencrypt
+      traefik.http.services.sa-hooks.loadbalancer.server.port: "8795"
+
+networks:
+  coolify:
+    external: true

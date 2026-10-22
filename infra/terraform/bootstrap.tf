@@ -1,32 +1,32 @@
 # Installs Coolify on the server and prepares it for the Coolify provider: root user, API
-# token, API access and the dashboard domain. Runs over SSH so that no secret goes through
-# cloud-init, and runs again (idempotently) whenever an input changes, e.g. coolify_version
-# (upgrade), the domain or a rotated password/token.
+# token and API access, no instance domain, and Coolify's ports closed on every interface but
+# loopback (templates/sa-coolify-firewall.sh): the dashboard is on the tailnet only (see
+# infra/README.md). Runs over SSH so that no secret goes through cloud-init, and runs again
+# (idempotently) whenever an input changes, e.g. coolify_version (upgrade) or a rotated
+# password/token.
 #
 # The first apply must stop here: `./tf.sh bootstrap` (= apply -target=terraform_data.coolify),
 # because the Coolify provider needs a running Coolify to plan anything else.
 
 locals {
-  coolify_url = "https://${local.hosts.coolify}"
-
   bootstrap_env = join("\n", [for k, v in {
     COOLIFY_VERSION  = var.coolify_version
-    SA_COOLIFY_URL   = local.coolify_url
     SA_ROOT_EMAIL    = var.coolify_root_email != "" ? var.coolify_root_email : "admin@${var.domain}"
     SA_ROOT_PASSWORD = var.coolify_root_password
     SA_API_TOKEN     = var.coolify_api_token
   } : "${k}='${v}'"])
 
   bootstrap_files = {
-    script = file("${path.module}/templates/coolify-bootstrap.sh")
-    php    = file("${path.module}/templates/coolify-bootstrap.php")
+    script   = file("${path.module}/templates/coolify-bootstrap.sh")
+    php      = file("${path.module}/templates/coolify-bootstrap.php")
+    firewall = file("${path.module}/templates/sa-coolify-firewall.sh")
   }
 }
 
 resource "terraform_data" "coolify" {
   triggers_replace = [
     hcloud_server.main.id,
-    sha256(join("\n", [local.bootstrap_env, local.bootstrap_files.script, local.bootstrap_files.php])),
+    sha256(join("\n", [local.bootstrap_env, local.bootstrap_files.script, local.bootstrap_files.php, local.bootstrap_files.firewall])),
   ]
 
   connection {
@@ -45,6 +45,11 @@ resource "terraform_data" "coolify" {
   provisioner "file" {
     content     = local.bootstrap_files.php
     destination = "/root/sa-bootstrap.php"
+  }
+
+  provisioner "file" {
+    content     = local.bootstrap_files.firewall
+    destination = "/usr/local/sbin/sa-coolify-firewall"
   }
 
   provisioner "file" {

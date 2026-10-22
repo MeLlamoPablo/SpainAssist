@@ -9,9 +9,10 @@ output "ipv6_address" {
 }
 
 output "urls" {
-  description = "Public endpoints. The app's PRODUCTION_SERVICES take key_server, feedback_server, maps_server and relay_server."
+  description = "Endpoints, public but for Coolify's dashboard (tailnet only). The app's PRODUCTION_SERVICES take key_server, feedback_server, maps_server and relay_server."
   value = {
-    coolify         = local.coolify_url
+    coolify         = var.coolify_dashboard_url
+    github_webhook  = local.github_webhook_url
     key_server      = "https://${local.hosts.keys}"
     feedback_server = "https://${local.hosts.feedback}"
     maps_server     = "https://${local.hosts.maps}"

@@ -46,14 +46,16 @@ $user->tokens()->create([
     'team_id' => 0,
 ]);
 
-// Instance settings: API on, registration off, dashboard at https://coolify.<domain>.
+// Instance settings: API on, registration off, and no instance domain. With a domain, Coolify's
+// proxy routes it to the dashboard, which anyone can then reach by sending that Host header to
+// the server. The dashboard is on the tailnet instead (Tailscale Serve -> 127.0.0.1:8000).
 $settings = InstanceSettings::get();
 $settings->is_api_enabled = true;
 $settings->is_registration_enabled = false;
-$settings->fqdn = $env('SA_COOLIFY_URL');
+$settings->fqdn = null;
 $settings->save();
 
-// Same as saving the instance domain in the UI: route it through Coolify's proxy.
+// Same as clearing the instance domain in the UI: removes the dashboard's proxy route.
 Server::find(0)?->setupDynamicProxyConfiguration();
 
 echo "coolify-bootstrap: configured\n";

@@ -246,21 +246,22 @@ resource "coolify_application_private_git" "app" {
   depends_on = [github_repository_deploy_key.coolify]
 }
 
-# GitHub -> Coolify push webhook (Coolify's endpoint for repositories cloned with a deploy key).
-# One hook serves both apps: Coolify matches repository and branch, then checks each app's secret.
+# GitHub -> Coolify push webhook, through the webhook ingester (webhook_ingester.tf), which sends
+# a rebuilt copy to Coolify's endpoint for repositories cloned with a deploy key. One hook serves
+# every app: Coolify matches repository and branch, then checks each app's secret.
 resource "github_repository_webhook" "coolify" {
   repository = split("/", var.github_repository)[1]
   events     = ["push"]
   active     = true
 
   configuration {
-    url          = "${local.coolify_url}/webhooks/source/github/events/manual"
+    url          = local.github_webhook_url
     content_type = "json"
     secret       = var.github_webhook_secret
     insecure_ssl = false
   }
 
-  depends_on = [coolify_application_private_git.app]
+  depends_on = [coolify_application_private_git.app, terraform_data.webhook_ingester]
 }
 
 resource "coolify_environment_variable" "app" {

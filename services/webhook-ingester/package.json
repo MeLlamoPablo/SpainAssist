@@ -1,0 +1,12 @@
+{
+  "name": "@sa/webhook-ingester",
+  "version": "0.3.2",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  }
+}

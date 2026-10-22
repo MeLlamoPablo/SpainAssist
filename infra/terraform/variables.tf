@@ -94,6 +94,12 @@ variable "coolify_version" {
   default     = "4.3.24"
 }
 
+variable "coolify_dashboard_url" {
+  description = "Coolify's dashboard: the server's Tailscale Serve name, reachable on the tailnet only (set up by hand, see infra/README.md). Only shown in the urls output."
+  type        = string
+  default     = "https://spainassist.pygmy-reedfish.ts.net"
+}
+
 variable "coolify_root_email" {
   description = "Login e-mail of Coolify's root user. Empty = admin@<domain>."
   type        = string
@@ -143,7 +149,7 @@ variable "git_branch" {
 }
 
 variable "github_webhook_secret" {
-  description = "Secret GitHub signs push webhooks with; Coolify checks it before deploying."
+  description = "Secret GitHub signs push webhooks with; the webhook ingester checks it, and signs what it forwards to Coolify with it."
   type        = string
   sensitive   = true
 

@@ -8,11 +8,11 @@ locals {
 
   ipv4 = hcloud_primary_ip.ipv4.ip_address
   # One host per service, <subdomain>.<domain>; dns.tf has their records.
-  subdomains = ["coolify", "keys", "feedback", "maps", "relay", "llm", "flags", "errors"]
+  subdomains = ["hooks", "keys", "feedback", "maps", "relay", "llm", "flags", "errors"]
   hosts      = { for name in local.subdomains : name => "${name}.${var.domain}" }
   # Released desktop apps call these hosts on the server's sslip.io name, which resolves to the
   # IPv4 without any DNS: they keep answering there too. Never release the reserved IPv4 (the
-  # names are the IP). The relay and Coolify's dashboard only had users of our own.
+  # names are the IP). The relay and the webhook host only ever had callers of our own.
   legacy_domain = "${replace(local.ipv4, ".", "-")}.sslip.io"
   legacy_hosts  = { for name in ["keys", "feedback", "maps", "llm", "flags"] : name => "${name}.${local.legacy_domain}" }
   # Every host a service answers on.
@@ -92,8 +92,19 @@ resource "hcloud_firewall" "server" {
     source_ips  = local.everywhere
   }
 
-  # Not opened on purpose: Coolify's dashboard (8000) and realtime ports (6001, 6002). The
-  # dashboard is served at https://coolify.<domain> through Coolify's proxy, and Terraform
+  # Tailscale's WireGuard port (only authenticated tailnet packets get through). Without it,
+  # direct connections rely on hole punching through this stateful firewall, whose UDP state
+  # expires: the path kept falling back to a DERP relay, and the dashboard stalled for seconds.
+  rule {
+    description = "Tailscale (WireGuard)"
+    direction   = "in"
+    protocol    = "udp"
+    port        = "41641"
+    source_ips  = local.everywhere
+  }
+
+  # Not opened on purpose: Coolify's dashboard (8000) and realtime ports (6001, 6002), which
+  # answer on loopback only. The dashboard is on the tailnet (Tailscale Serve), and Terraform
   # reaches the API through the SSH tunnel.
 }
 

@@ -8,6 +8,7 @@ Four small backends, plus Postgres, a LiteLLM gateway, Unleash and GlitchTip:
 | `feedback-server` | 8788 | `feedback` (role `feedback`) | Anonymous learnings ([README](../services/feedback-server/README.md)) |
 | `maps-server` | 8793 | – | Mapbox address lookups behind users' LiteLLM keys ([README](../services/maps-server/README.md)) |
 | `relay-server` | 8794 | – | Desktop ↔ phone relay for DNIe signatures ([README](../services/relay-server/README.md)) |
+| `webhook-ingester` (production only) | 8795 | – | GitHub push webhooks → Coolify, nothing else ([README](../services/webhook-ingester/README.md)) |
 | `postgres` | internal | – | Postgres 17, one database and one role per service |
 | `litellm` (production only) | 4000 | `litellm` (role `litellm`) | LLM and search gateway: OpenRouter and Parallel behind budget-capped virtual keys |
 | `unleash` (production only) | 4242 | `unleash` (role `unleash`) | Feature flags |
@@ -89,9 +90,11 @@ it and declares everything Coolify runs, with the
 [Coolify provider](https://registry.terraform.io/providers/coolify-terraform/coolify/latest):
 
 ```text
-Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443 (+ ICMP)
+Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443, UDP 41641 (Tailscale) (+ ICMP)
 └─ cx23 (2 vCPU, 4 GB), Ubuntu 26.04, 2 GB swap, daily Hetzner backups
-   └─ Coolify 4.3.24: dashboard https://coolify.<domain>, Traefik + Let's Encrypt
+   ├─ Tailscale: Coolify's dashboard at https://spainassist.<tailnet>.ts.net (tailnet only)
+   ├─ webhook-ingester  https://hooks.<domain>/github  GitHub push webhooks → Coolify
+   └─ Coolify 4.3.24: on loopback only (no public dashboard), Traefik + Let's Encrypt
       └─ project "SpainAssistant" / production
          ├─ postgres          Postgres 17: databases keyserver, feedback, litellm, unleash,
          │                    glitchtip (one role each); daily pg_dump, 7 kept on the server
@@ -115,13 +118,14 @@ Desktop versions released before the move to `<domain>` call the server's sslip.
 (`keys.2-31-6-160.sslip.io` and so on, which resolves to the IP without DNS). So keys, feedback,
 maps, llm and flags answer on both names (`legacy_hosts` in `hetzner.tf`,
 `./tf.sh output legacy_urls`). Keep them, and never release the reserved IPv4: the old names are
-the IP. The relay and the dashboard are on `<domain>` only.
+the IP. The relay and the webhook host are on `<domain>` only.
 
 | File | What |
 | --- | --- |
 | `versions.tf` | Providers: hcloud, tls, github (deploy key), coolify (through the SSH tunnel), unleash, aws |
 | `hetzner.tf` + `templates/cloud-init.yaml.tftpl` | SSH keys, reserved IPs, firewall, server; cloud-init installs updates, swap and Coolify (no secrets) |
-| `bootstrap.tf` + `templates/coolify-bootstrap.*` | Over SSH: Coolify's root user, API token, API access and dashboard domain; upgrades Coolify when `coolify_version` changes |
+| `bootstrap.tf` + `templates/coolify-bootstrap.*`, `templates/sa-coolify-firewall.sh` | Over SSH: Coolify's root user, API token and API access, no instance domain, Coolify's ports on loopback only; upgrades Coolify when `coolify_version` changes |
+| `webhook_ingester.tf` + `templates/webhook-ingester.compose.yaml.tftpl` | The webhook ingester's container (GitHub → Coolify), uploaded from this checkout |
 | `coolify.tf` + `templates/databases.sql.tftpl` | Project, Postgres, its per-service roles and daily backup, GitHub deploy key and webhook, the four apps, their env vars and deployments |
 | `litellm.tf` + `templates/litellm_sa_pricing.py` | LiteLLM's compose file, `config.yaml` (models, search tools), pricing callback, env vars, restart on change |
 | `unleash.tf` | Unleash's compose file, env vars, restart on change, the desktop app's frontend tokens |
@@ -147,9 +151,20 @@ the IP. The relay and the dashboard are on `<domain>` only.
 - **No secrets in cloud-init.** The metadata service that serves user data is readable from
   every container on the VM. cloud-init installs Coolify without a root user (nobody can
   reach the dashboard yet: port 8000 is closed); the secrets go over SSH afterwards.
-- **The Coolify API is not public.** Terraform reaches it through an SSH tunnel (`tf.sh`), so
-  port 8000 stays closed and the provider's endpoint is known before the server exists. The
-  dashboard is served through Coolify's proxy at `https://coolify.<domain>`.
+- **Coolify itself is not public.** Its dashboard, API and realtime ports (8000, 6001, 6002)
+  answer on loopback only: `templates/sa-coolify-firewall.sh` drops them on every other
+  interface (in `mangle PREROUTING`, because Tailscale accepts tailnet traffic before Docker's
+  `DOCKER-USER` chain), and Coolify has no instance domain, so its proxy routes nothing to it.
+  Terraform reaches the API through an SSH tunnel (`tf.sh`); people reach the dashboard on the
+  tailnet ([Coolify's dashboard](#coolifys-dashboard-tailnet)). This came after
+  CVE-2026-109618/109619 (unauthenticated PHP RCE, October 2026): a public Coolify is a public
+  PHP application.
+- **GitHub reaches Coolify only through the webhook ingester** (`webhook_ingester.tf`,
+  [services/webhook-ingester](../services/webhook-ingester/README.md)), at
+  `https://hooks.<domain>/github`. It checks GitHub's signature, then sends Coolify a new request
+  with only the fields Coolify deploys from, re-signed, so nothing unsigned (and nothing but
+  those fields) ever reaches Coolify's PHP. It is a plain container next to Coolify, not a
+  Coolify app: it runs without Coolify and deploys from your checkout, without a push.
 - **One Postgres, one role per service.** Coolify's API cannot run init scripts, so
   `terraform_data.databases` creates roles and databases over SSH (idempotent).
 - **Builds from GitHub, deploys on push.** Coolify clones the private repository with a
@@ -208,6 +223,8 @@ cp terraform.tfvars.example terraform.tfvars   # fill in; see the comments
 ./tf.sh output urls
 ```
 
+Then put the server on the tailnet ([Coolify's dashboard](#coolifys-dashboard-tailnet)).
+
 Log in to Coolify with `./tf.sh output coolify_root_email` and `coolify_root_password` from
 `terraform.tfvars`; to LiteLLM's UI (`/ui`) as `admin` with `litellm_ui_password`; to Unleash as
 `admin` with `unleash_admin_password` (only applied on Unleash's first start: change it later in
@@ -222,6 +239,32 @@ also all that versions up to 0.3.0 understand), `must-update` (constrained on th
 e.g. `SEMVER_LT 0.3.0`: without a constraint it blocks every version) and `error-reports` (type
 kill switch, on in production). The desktop reads them at start-up, and every flag is off when
 Unleash can't be reached (`FEATURE_FLAG_NAMES` in `@sa/shared`).
+
+### Coolify's dashboard (tailnet)
+
+The dashboard is at `https://spainassist.pygmy-reedfish.ts.net` (`var.coolify_dashboard_url`),
+for devices on the tailnet only: Tailscale Serve terminates HTTPS with a Tailscale certificate
+and proxies to Coolify on loopback, including its websockets (realtime on `/app`, terminal on
+`/terminal/ws`, which Coolify uses when the page has no port). Terraform doesn't manage
+Tailscale; on a new server, as root:
+
+```sh
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up --auth-key=<key from the admin console> --hostname=spainassist --accept-dns=false
+tailscale serve --bg --https=443 http://127.0.0.1:8000
+tailscale serve --bg --https=443 --set-path=/app http://127.0.0.1:6001/app
+tailscale serve --bg --https=443 --set-path=/terminal/ws http://127.0.0.1:6002/terminal/ws
+```
+
+The Hetzner firewall lets Tailscale's UDP port 41641 in: without it, direct connections rely on
+hole punching through the stateful firewall, keep falling back to a DERP relay, and the dashboard
+stalls. Coolify's nginx only compresses in its HTTPS mode, so the bootstrap turns gzip on with
+`docker-compose.custom.yml` (Traefik used to compress the dashboard; Serve doesn't).
+`--accept-dns=false` leaves the server's resolver (and so the containers' DNS) alone. Serve
+strips the mount path before proxying, hence the path repeated in the targets. The
+configuration survives reboots (`tailscale serve status`). Without Tailscale, the SSH tunnel
+still works: `ssh -L 8000:127.0.0.1:8000 root@<ip>` and http://localhost:8000 (no realtime
+updates).
 
 ### Error reports (GlitchTip)
 
@@ -243,8 +286,8 @@ only changes its DSN.
 ### Day to day
 
 - **Deploy new code**: push to `git_branch` (`master`). A GitHub webhook
-  (`github_repository_webhook.coolify`, signed with `github_webhook_secret`) tells Coolify,
-  which redeploys each app whose `watch_paths` the push touched (the key server also watches
+  (`github_repository_webhook.coolify`, signed with `github_webhook_secret`) tells Coolify
+  through the webhook ingester, and Coolify redeploys each app whose `watch_paths` the push touched (the key server also watches
   `models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`, for its scan deciders): its `services/<name>/**`, the
   workspace packages it uses, the root manifests and the lockfile. A commit message with
   `[skip ci]` skips the deploy. To redeploy without a push, change `deploy_revision` and apply,
@@ -256,7 +299,10 @@ only changes its DSN.
   `relay_server_env`. Changed app variables redeploy that app; LiteLLM restarts when its config
   or variables change.
 - **Upgrade Coolify**: bump `coolify_version` and apply (the bootstrap re-runs the installer;
-  auto-update is off so the provider and Coolify stay compatible).
+  auto-update is off so the provider and Coolify stay compatible). The installer always
+  downloads the newest release's compose files, so the bootstrap replaces them with the ones
+  from the version's git tag (`v<coolify_version>`) and restarts Coolify with them. Check that Coolify's GitHub
+  webhook still reads only what the webhook ingester sends (its README).
 - **Upstream keys**: set `openrouter_api_key` and `parallel_api_key` and apply. An empty
   Parallel key leaves its search tool out of LiteLLM's config.
 - **Vouchers**: `corepack pnpm vouchers` (repo root, git-crypt unlocked) opens
