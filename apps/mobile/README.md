@@ -115,24 +115,37 @@ set, as environment variables or as the Gradle properties `saUploadKeystore`,
 they are unsigned, as in CI; with only some, the build fails. The version is
 `-PappVersion=X.Y.Z` (or `SA_APP_VERSION`), and the versionCode X×10000 + Y×100 + Z (0.3.0 is
 300), unless `-PversionCode=N` (or `SA_VERSION_CODE`) sets it. It must be above 4, the last
-build numbered by hand; without a version, the build is 0.2.1 (4). Minor and patch stay below
-100.
+legacy build numbered by hand; without a version, the build is 0.2.1 (4). Minor and patch stay
+below 100. Play has already consumed codes 300 and 301 (both named 0.3.0), so the first
+automated release must be 0.3.2 (302) or higher.
 
 ```sh
 SA_UPLOAD_KEYSTORE=~/spainassist-upload.jks SA_UPLOAD_KEYSTORE_PASSWORD=… SA_UPLOAD_KEY_ALIAS=upload \
-  SA_UPLOAD_KEY_PASSWORD=… ./gradlew :androidApp:bundleRelease -PappVersion=0.3.0
+  SA_UPLOAD_KEY_PASSWORD=… ./gradlew :androidApp:bundleRelease -PappVersion=0.3.3
 ```
 
-**Once: Google Play access.** In the `spainassist.es` Google Cloud project, enable the
-[Google Play Android Developer API](https://developers.google.com/android-publisher/getting_started),
-create a service account, and download its JSON key. In Play Console > Users and permissions,
-grant that account access to **Spain Assist** (`es.spainassist.firma`): view app information and
-release apps to testing tracks. Production additionally needs the production release permission.
-Save the key as `infra/terraform/secrets/google-play-service-account.json` in the main checkout
-(git-crypt encrypted), then apply the `github_actions_secret.release` resources with Terraform.
-This configures `PLAY_SERVICE_ACCOUNT_JSON`; the workflow fails clearly if it is absent, keeping
-the signed bundle artifact available. The app must already have had its first bundle uploaded
-through Play Console before the publishing API can access it.
+**Google Play access.** Releases use GitHub OIDC / Workload Identity Federation to impersonate
+`github-play-releases@deep-mark-512418-h5.iam.gserviceaccount.com`, in the **SpainAssist Play
+Releases** Google Cloud project (`deep-mark-512418-h5`, owned by `pablo@spainassist.es`).
+The Google Play Android Developer API is enabled. Play Console grants the service account
+access to Spain Assist (`es.spainassist.firma`): app information, draft apps and testing releases.
+Production additionally needs the production release permission.
+
+The provider is
+`projects/1031188171407/locations/global/workloadIdentityPools/github-play-releases/providers/github`.
+The identity pool trusts only this repository's numeric ID (`1402133301`, owner `11708035`)
+and release tags. Its provider maps `google.subject=assertion.sub` and
+`attribute.repository_id=assertion.repository_id`; its condition restricts the repository,
+owner and `refs/tags/` prefix. The service account grants Workload Identity User only to that
+repository ID in the pool. Google blocks private-key creation here; the workflow uses a
+short-lived credential file, removed by the authentication action after the job.
+
+Terraform sets `PLAY_WORKLOAD_IDENTITY_PROVIDER` and `PLAY_SERVICE_ACCOUNT` as repository
+Actions variables, from `google_play_workload_identity_provider` and
+`google_play_service_account` in `terraform.tfvars`. The workflow fails clearly if either
+is absent and keeps the signed bundle artifact available. To recreate the Google Cloud side,
+follow [Google's deployment-pipeline federation guide](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines)
+with the same mappings, conditions, service-account binding and Play app permissions.
 
 Repository Actions variables select the destination:
 
@@ -150,7 +163,7 @@ stable `vX.Y.Z` tags, using the same version. Desktop prereleases skip Android b
 would consume the stable versionCode. To release the phone separately, tag a commit on `master`:
 
 ```sh
-git tag mobile-v0.3.0 && git push origin mobile-v0.3.0
+git tag mobile-v0.3.3 && git push origin mobile-v0.3.3
 ```
 
 `.github/workflows/mobile-release.yml` checks the tag and the secrets (it fails, naming the

@@ -164,6 +164,9 @@ jobs:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
     # Play edits invalidate each other, even when their tags differ.
     concurrency:
       group: android-play
@@ -172,12 +175,14 @@ jobs:
       PLAY_TRACK: ${{ vars.PLAY_TRACK || 'internal' }}
       PLAY_RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
     steps:
+      - uses: actions/checkout@v5
       - name: Check Play configuration
         env:
-          SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          WORKLOAD_IDENTITY_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.PLAY_SERVICE_ACCOUNT }}
         run: |
-          if [[ -z "$SERVICE_ACCOUNT_JSON" ]]; then
-            echo "::error::Missing PLAY_SERVICE_ACCOUNT_JSON: see apps/mobile/README.md, Releasing. The signed android-bundle artifact is available for manual upload."
+          if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" || -z "$SERVICE_ACCOUNT" ]]; then
+            echo "::error::Missing PLAY_WORKLOAD_IDENTITY_PROVIDER or PLAY_SERVICE_ACCOUNT: see apps/mobile/README.md, Releasing. The signed android-bundle artifact is available for manual upload."
             exit 1
           fi
           case "$PLAY_RELEASE_STATUS" in
@@ -188,11 +193,18 @@ jobs:
         with:
           name: android-bundle
           path: ${{ runner.temp }}/android-bundle
-      # Pin the action that receives the Play credential; v1 uses Node 24.
+      - id: auth
+        name: Authenticate with GitHub identity
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          export_environment_variables: false
+      # The temporary credential file uses identity federation; no service-account key is stored.
       - name: Upload the bundle and mapping
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          serviceAccountJson: ${{ steps.auth.outputs.credentials_file_path }}
           packageName: es.spainassist.firma
           releaseFiles: ${{ runner.temp }}/android-bundle/SpainAssist-*.aab
           mappingFile: ${{ runner.temp }}/android-bundle/mapping.txt

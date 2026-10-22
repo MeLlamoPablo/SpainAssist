@@ -404,6 +404,9 @@ jobs:
 
   android:
     name: Android / Google Play
+    permissions:
+      contents: read
+      id-token: write
     needs: check
     if: needs.check.outputs.prerelease == 'false'
     uses: ./.github/workflows/mobile-release.yml

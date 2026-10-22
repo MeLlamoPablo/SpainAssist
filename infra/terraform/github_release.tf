@@ -23,11 +23,11 @@ locals {
     SA_UPLOAD_KEY_PASSWORD      = var.android_upload_keystore_password
   }
 
-  # The service account must also be granted app access in Play Console. Keep the JSON with
-  # the other git-crypt secrets; omit it until that one-time setup is complete.
-  play_secrets = fileexists("${path.module}/secrets/google-play-service-account.json") ? {
-    PLAY_SERVICE_ACCOUNT_JSON = file("${path.module}/secrets/google-play-service-account.json")
-  } : {}
+  # Google Play authenticates GitHub's OIDC identity through a service account, without a key.
+  play_variables = var.google_play_workload_identity_provider == "" || var.google_play_service_account == "" ? {} : {
+    PLAY_WORKLOAD_IDENTITY_PROVIDER = var.google_play_workload_identity_provider
+    PLAY_SERVICE_ACCOUNT            = var.google_play_service_account
+  }
 
   # The `store` job submits the Store MSIX to Partner Center with these, or warns without them.
   store_secrets = var.partner_center_client_id == "" ? {} : {
@@ -40,9 +40,17 @@ locals {
 
 resource "github_actions_secret" "release" {
   # Only secret names are public; the optional Android map depends on a sensitive password.
-  for_each = nonsensitive(toset(keys(merge(local.release_secrets, local.store_secrets, local.android_secrets, local.play_secrets))))
+  for_each = nonsensitive(toset(keys(merge(local.release_secrets, local.store_secrets, local.android_secrets))))
 
   repository  = split("/", var.github_repository)[1]
   secret_name = each.key
-  value       = merge(local.release_secrets, local.store_secrets, local.android_secrets, local.play_secrets)[each.key]
+  value       = merge(local.release_secrets, local.store_secrets, local.android_secrets)[each.key]
+}
+
+resource "github_actions_variable" "play" {
+  for_each = local.play_variables
+
+  repository    = split("/", var.github_repository)[1]
+  variable_name = each.key
+  value         = each.value
 }

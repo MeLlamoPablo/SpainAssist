@@ -451,3 +451,15 @@ variable "android_upload_keystore_password" {
   sensitive   = true
   default     = ""
 }
+
+variable "google_play_workload_identity_provider" {
+  description = "Workload identity provider resource name for Google Play releases (projects/NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER). Empty: omit Play Actions variables."
+  type        = string
+  default     = ""
+}
+
+variable "google_play_service_account" {
+  description = "Email of the Google service account granted Spain Assist testing release access in Play Console and Workload Identity User access for the GitHub pool."
+  type        = string
+  default     = ""
+}
