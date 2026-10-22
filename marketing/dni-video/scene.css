@@ -538,7 +538,7 @@ svg.icon {
   box-shadow: var(--shadow-xs);
 }
 
-/* The DNIe's early-access card (AddCard) and its saved credential (DnieCard) */
+/* The DNI's early-access card (AddCard) and its saved credential (DnieCard) */
 #dnie-slot {
   position: relative;
   overflow: hidden;
@@ -600,6 +600,43 @@ svg.icon {
   width: 46px;
   background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.95), transparent);
   opacity: 0;
+}
+/* What makes "Acceso anticipado" flashier: a warm gradient, a rocket that lifts off, sparks. */
+.early-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.early::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, #efe7ff 0%, #e2d6ff 35%, #fbe2f0 65%, #efe7ff 100%);
+  background-size: 220% 100%;
+  background-position: var(--bgx, 0%) 0;
+  opacity: var(--hot, 0);
+}
+.early > * {
+  position: relative;
+}
+.early > .shine {
+  position: absolute;
+}
+#rocket {
+  display: inline-flex;
+}
+#sparks i {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  background: var(--progress-dot);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0;
+}
+#sparks i:nth-child(even) {
+  background: #f0a4c8;
 }
 #dnie-saved {
   position: absolute;
@@ -743,24 +780,6 @@ svg.icon {
   gap: 16px;
   padding: 8px 24px 28px;
 }
-.dlg-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  color: var(--fg);
-}
-.dlg-link [data-icon] {
-  font-size: 16px;
-}
-.dlg-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-  background: rgba(252, 251, 249, 0.6);
-  padding: 14px 24px;
-}
 .qr {
   position: relative;
   width: 232px;
@@ -874,14 +893,6 @@ svg.icon {
   overflow: hidden;
   background: #fff;
 }
-.sc {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 396px;
-  height: 880px;
-  opacity: 0;
-}
 .punch {
   position: absolute;
   left: 50%;
@@ -893,59 +904,6 @@ svg.icon {
   background: #050505;
   box-shadow: inset 0 0 0 2px #151515;
 }
-/* Crops of a screenshot, animated on their own (the spinner, the result's check). */
-.part {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  overflow: hidden;
-}
-.part img {
-  position: absolute;
-  width: 396px;
-  height: 880px;
-}
-#spinner {
-  position: absolute;
-  left: 215.6px;
-  top: 226.6px;
-  width: 32.2px;
-  height: 32.2px;
-  opacity: 0;
-}
-#spinner img {
-  left: -215.6px;
-  top: -226.6px;
-}
-#check {
-  position: absolute;
-  left: 154.7px;
-  top: 145.2px;
-  width: 86.6px;
-  height: 86.6px;
-  opacity: 0;
-}
-#check img {
-  left: -154.7px;
-  top: -145.2px;
-}
-#check .cover {
-  position: absolute;
-  inset: -2px;
-  border-radius: 50%;
-  background: #fff;
-}
-#check-ring {
-  position: absolute;
-  left: 198px;
-  top: 188.5px;
-  width: 90px;
-  height: 90px;
-  margin: -45px 0 0 -45px;
-  border-radius: 50%;
-  border: 2px solid var(--done-dot);
-  opacity: 0;
-}
 #tap {
   position: absolute;
   width: 64px;
@@ -956,57 +914,7 @@ svg.icon {
   opacity: 0;
 }
 
-/* The camera's view of the desktop's QR code, in the scanner's viewfinder. */
-#feed {
-  position: absolute;
-  left: 23.1px;
-  top: 46.2px;
-  width: 349.4px;
-  height: 608.3px;
-  border-radius: 15.4px;
-  overflow: hidden;
-  background: #6f6862;
-  opacity: 0;
-  perspective: 900px;
-}
-.feed-scene {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 640px;
-  height: 900px;
-  margin: -450px 0 0 -320px;
-  background: radial-gradient(60% 45% at 50% 48%, #a39a92 0%, #8a827b 55%, #5d5650 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.feed-dlg {
-  width: 300px;
-  padding: 18px 20px 24px;
-  border-radius: 16px;
-  background: #fbf9f6;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  box-shadow: 0 18px 48px -12px rgba(34, 24, 17, 0.4);
-}
-.feed-dlg p {
-  align-self: flex-start;
-  font-size: 13px;
-  font-weight: 600;
-}
-.feed-dlg b {
-  font-size: 11px;
-  font-weight: 600;
-}
-.feed-dlg .qr {
-  width: 200px;
-  height: 200px;
-}
-
-/* ---------------- The DNIe ---------------- */
+/* ---------------- The DNI ---------------- */
 #dnie {
   position: absolute;
   left: 0;
@@ -1135,7 +1043,445 @@ svg.icon {
   height: 50px;
 }
 
-/* Stacking: the DNIe under the rings, under the phone; the titles on top. */
+/* ---------------- The phone app (FirmaApp.kt), in dp ---------------- */
+/* 1080×2400 at 2.625 dpi: 411.4×914.3 dp on a 396×880 screen. */
+.ui {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 411.43px;
+  height: 914.29px;
+  transform: scale(0.9625);
+  transform-origin: 0 0;
+  color: var(--fg);
+  font-size: 16px;
+}
+.status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 24px;
+  padding: 2px 28px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+}
+.sys {
+  display: flex;
+  gap: 3px;
+}
+.sys svg {
+  width: 14px;
+  height: 14px;
+  fill: var(--fg);
+}
+.app {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 24px;
+  bottom: 0;
+}
+.dots {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fg);
+}
+.wordmark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 128px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 11px;
+  font-size: 44px;
+}
+.wordmark .brand-name {
+  letter-spacing: -0.88px;
+}
+.wordmark i.brand-name {
+  font-style: italic;
+}
+.m-flag {
+  width: 39px;
+  height: 26px;
+  border-radius: 5px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: inset 0 0 0 1.3px #d4d0cb;
+}
+.m-flag i {
+  flex: 1;
+  background: #c60b1e;
+}
+.m-flag i:nth-child(2) {
+  flex: 2;
+  background: #ffc400;
+}
+.scr {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.bottom {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+}
+.words {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.m-title {
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 600;
+}
+/* Compose sets Inter a hair tighter: this title fits one line there. */
+.m-title.one {
+  white-space: nowrap;
+  letter-spacing: -0.3px;
+}
+.m-body {
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--fg-subtle);
+}
+.words .m-body + .m-body {
+  margin-top: 12px;
+}
+.m-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+.m-btn.p {
+  background: var(--fg);
+  color: #fff;
+  font-weight: 600;
+}
+.m-btn.s {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  font-weight: 500;
+}
+
+/* Scanner */
+.vf {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 24px;
+  bottom: 234px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+}
+#feed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1280px;
+  height: 820px;
+  transform-origin: 0 0;
+  background: #e9e1d8;
+  box-shadow: 0 0 0 600px #e3d9ce;
+}
+#brackets {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100px;
+  height: 100px;
+}
+#brackets i {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border: 0 solid var(--lock, #fff);
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.55)) drop-shadow(0 1px 4px rgba(0, 0, 0, 0.3));
+}
+#brackets i:nth-child(1) {
+  left: 0;
+  top: 0;
+  border-width: 5px 0 0 5px;
+  border-top-left-radius: 14px;
+}
+#brackets i:nth-child(2) {
+  right: 0;
+  top: 0;
+  border-width: 5px 5px 0 0;
+  border-top-right-radius: 14px;
+}
+#brackets i:nth-child(3) {
+  left: 0;
+  bottom: 0;
+  border-width: 0 0 5px 5px;
+  border-bottom-left-radius: 14px;
+}
+#brackets i:nth-child(4) {
+  right: 0;
+  bottom: 0;
+  border-width: 0 5px 5px 0;
+  border-bottom-right-radius: 14px;
+}
+#flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+}
+
+/* Home */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--done-bg);
+  color: var(--done-fg);
+  font-size: 15px;
+  line-height: 21px;
+}
+.banner svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.banner circle {
+  fill: var(--done-fg);
+}
+.banner path {
+  fill: none;
+  stroke: var(--done-bg);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Review */
+.top {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.site {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+}
+.site [data-icon] {
+  font-size: 18px;
+  color: var(--done-fg);
+}
+.doc {
+  position: relative;
+  align-self: stretch;
+  height: 200px;
+  margin-top: 4px;
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.page {
+  position: absolute;
+  left: 18px;
+  right: 74px;
+  top: 16px;
+  bottom: -20px;
+  padding: 16px 16px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(54, 44, 36, 0.12);
+  font-size: 9.5px;
+  line-height: 15px;
+  color: #2c2724;
+}
+.page b {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.open {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--fg-subtle);
+  color: #fff;
+  font-size: 14px;
+}
+.fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 110px;
+  padding: 0 16px 12px;
+  background: linear-gradient(rgba(255, 255, 255, 0), #fff);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  line-height: 24px;
+}
+.fade b {
+  font-weight: 600;
+}
+.fade span {
+  font-size: 13px;
+  color: var(--fg-subtle);
+}
+
+/* "Acerca el DNI": a card with a phone on it (CardIllustration) */
+.illus {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: 128px;
+  height: 170px;
+}
+.i-card {
+  position: absolute;
+  left: 86.5px;
+  top: 25px;
+  width: 190px;
+  height: 120px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--fg);
+  font-weight: 600;
+}
+.i-phone {
+  position: absolute;
+  left: 173.5px;
+  top: 25px;
+  width: 86px;
+  height: 150px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: inset 0 0 0 2px var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#i-spin {
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+}
+#i-spin circle {
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 20 100;
+}
+.swap-words {
+  display: grid;
+}
+.swap-words > * {
+  grid-area: 1 / 1;
+  align-self: end;
+}
+#w-read {
+  opacity: 0;
+}
+
+/* The result */
+.result {
+  position: absolute;
+  left: 50%;
+  top: 128px;
+  width: 88px;
+  height: 88px;
+  margin-left: -44px;
+}
+.r-badge {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--done-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.r-badge svg {
+  width: 44px;
+  height: 44px;
+  fill: none;
+  stroke: var(--done-fg);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#r-check {
+  stroke-dasharray: 22;
+}
+#burst i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px;
+  border-radius: 50%;
+  opacity: 0;
+  background: var(--done-dot);
+}
+#burst i:nth-child(3n + 1) {
+  background: #c60b1e;
+}
+#burst i:nth-child(3n + 2) {
+  background: #ffc400;
+}
+
+/* Stacking: the DNI under the rings, under the phone; the titles on top. */
 #dnie {
   z-index: 1;
 }

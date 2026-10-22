@@ -1,4 +1,4 @@
-// Renders a video frame by frame: `node marketing/render.mjs launch-video` (or `dnie-video`).
+// Renders a video frame by frame: `node marketing/render.mjs launch-video` (or `dni-video`).
 //   --stills 3,7.5   PNGs of those seconds instead of the video
 //   --fps 60         frame rate (default 60)
 //   --out <path>     output file (default marketing/<video>/out/spain-assist-<video>.mp4)
@@ -25,7 +25,7 @@ const { values: args, positionals } = parseArgs({
 });
 const video = positionals[0];
 if (!video || !statSync(join(here, video, 'index.html'), { throwIfNoEntry: false })) {
-  console.error('Usage: node marketing/render.mjs <launch-video|dnie-video> [--stills 3,7.5]');
+  console.error('Usage: node marketing/render.mjs <launch-video|dni-video> [--stills 3,7.5]');
   process.exit(1);
 }
 args.out ??= join(here, video, `out/spain-assist-${video}.mp4`);

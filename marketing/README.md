@@ -6,16 +6,15 @@ the timing in its `T` table.
 
 - `launch-video`: 18 seconds, the desktop app's happy path ("Me quiero empadronar" → rental
   contract → DNIe signature → certificate) for the launch announcement.
-- `dnie-video`: 22 seconds, the call for Android testers. Mis datos shows "DNIe con el móvil"
-  with its "Acceso anticipado" pill, "Probar" opens the early-access dialog and then the pairing
-  QR, and a Pixel scans it and signs a PDF with the DNIe. The phone's screens in `phone/` are
-  real: the debug app's `PreviewActivity` (apps/mobile/README.md) on the `sa_preview` emulator
-  in light mode, captured with `adb exec-out screencap`. `qr.svg` is the web preview's pairing QR
-  (`?dnie=prerelease`).
+- `dni-video`: 20 seconds, the call for Android testers. Mis datos shows "DNI con el móvil" with
+  its "Acceso anticipado" pill, "Probar" opens the pairing QR, and a Pixel held up to the screen
+  scans it (its viewfinder films a copy of the window) and signs a PDF with the DNI. The phone's
+  screens are rebuilt in dp from `apps/mobile/…/ui/FirmaApp.kt` and its strings, with a few
+  animations of their own. `qr.svg` is the web preview's pairing QR (`?dnie=prerelease`).
 
 ```sh
-node marketing/render.mjs dnie-video                 # → marketing/dnie-video/out/spain-assist-dnie-video.mp4
-node marketing/render.mjs dnie-video --stills 3,7.5  # PNGs of those seconds
+node marketing/render.mjs dni-video                 # → marketing/dni-video/out/spain-assist-dni-video.mp4
+node marketing/render.mjs dni-video --stills 3,7.5  # PNGs of those seconds
 ```
 
 Needs ffmpeg and the Chromium that `apps/desktop`'s playwright-core expects.
