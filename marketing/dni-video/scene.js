@@ -86,8 +86,6 @@ export async function ready() {
   M.tabsTop = $('pane').offsetTop + $('pane').querySelector('.subtabs-slot').offsetTop;
   M.pillW = $('early').offsetWidth;
   M.outroPillW = $('t-pill').offsetWidth;
-  M.try = center($('btn-try'));
-
   M.qrH = $('dlg-qr').offsetHeight;
   set($('dialog'), { top: `${410 - M.qrH / 2}px`, height: `${M.qrH}px` });
   const qr = $('dialog').querySelector('.qr');
@@ -95,6 +93,9 @@ export async function ready() {
   // The pane scrolls as the new option appears (so the saved DNI, taller, fits later too), and
   // the camera centres it vertically.
   M.scroll = 150;
+  // "Probar", where the pointer finds it once the pane has scrolled.
+  M.try = center($('btn-try'));
+  M.try.y -= M.scroll;
   CAMERA[0][2].cy = center($('dnie-add')).y - M.scroll;
 
   // What the phone's camera films: the window as it stands while the phone scans, copied once.
