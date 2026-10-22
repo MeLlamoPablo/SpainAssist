@@ -87,12 +87,15 @@ export async function ready() {
   M.pillW = $('early').offsetWidth;
   M.outroPillW = $('t-pill').offsetWidth;
   M.try = center($('btn-try'));
+
   M.qrH = $('dlg-qr').offsetHeight;
   set($('dialog'), { top: `${410 - M.qrH / 2}px`, height: `${M.qrH}px` });
   const qr = $('dialog').querySelector('.qr');
   M.qr = { ...center(qr), size: qr.offsetWidth };
-  // Scroll so the saved DNI, which is taller, ends up whole in the window.
+  // The pane scrolls as the new option appears (so the saved DNI, taller, fits later too), and
+  // the camera centres it vertically.
   M.scroll = 150;
+  CAMERA[0][2].cy = center($('dnie-add')).y - M.scroll;
 
   // What the phone's camera films: the window as it stands while the phone scans, copied once.
   // The copy keeps the ids (and so the styles); getElementById still finds the originals first.
@@ -109,7 +112,7 @@ export async function ready() {
 const FULL = { cx: 640, cy: 410, z: 1.2 };
 const CAMERA = [
   // [start, duration, target]
-  [T.camCard, 0.9, { cx: 800, cy: 530, z: 1.75 }],
+  [T.camCard, 0.9, { cx: 800, cy: 530, z: 1.75 }], // cy: the DNI card's, measured in ready()
   [T.camDialog, 0.8, { cx: 640, cy: 410, z: 1.4 }],
   [T.request, 0.9, { cx: 640, cy: 410, z: 1.12 }],
   [T.outro, 0.8, { cx: 640, cy: 410, z: 1.02 }],
@@ -208,8 +211,8 @@ const DIMMED = ['#side', '.tabs', '.promises', '.lead', '#subtabs', '.creds > .c
 );
 
 function vault(t) {
-  // "Probar" saves the DNI under the pairing dialog; the pane scrolls and the sub-tabs stick.
-  const scroll = M.scroll * P(t, T.press1 + 0.2, 0.6, E.inOut);
+  // The pane scrolls to the new option; the sub-tabs stick.
+  const scroll = M.scroll * P(t, T.camCard, 0.9, E.inOut);
   set($('pane'), { transform: `translateY(${-scroll}px)` });
   set($('subtabs'), { top: `${Math.max(M.tabsTop - scroll, 0)}px` });
 
@@ -336,21 +339,22 @@ function phonePlace(t, cam) {
   // In front of the QR code: the viewfinder's centre on it.
   const qr = onStage(cam, M.qr.x, M.qr.y);
   const over = { x: qr.x - VF_C.x, y: qr.y - VF_C.y };
-  const inP = P(t, T.phoneIn, 0.95, E.spring);
+  // It glides in and settles, without bouncing.
+  const inP = P(t, T.phoneIn, 1.05, E.out5);
   // It comes in with the scanner open, and rises the last bit to the code.
   const lift = P(t, T.scanner + 0.3, 1.1, E.inOut);
   const mid = P(t, T.request, 0.9, E.inOut);
   const out = P(t, T.outro, 0.6, E.in);
   // A hand holds it: it sways a little until it moves to the middle to sign.
   const hand = 1 - mid;
-  let x = over.x + (1 - inP) * 160 + Math.sin(t * 1.7) * 3 * hand;
-  let y = over.y + 160 * (1 - lift) + (1 - inP) * 820 + Math.cos(t * 1.3) * 3 * hand;
+  let x = over.x + (1 - inP) * 60 + Math.sin(t * 1.7) * 3 * hand;
+  let y = over.y + 160 * (1 - lift) + (1 - inP) * 700 + Math.cos(t * 1.3) * 3 * hand;
   x = lerp(x, MIDDLE.x, mid);
   y = lerp(y, MIDDLE.y, mid) + out * 60;
   return {
     x,
     y,
-    rot: (1 - inP) * 9 + Math.sin(t * 1.1) * 0.6 * hand,
+    rot: (1 - inP) * 3 + Math.sin(t * 1.1) * 0.6 * hand,
     tilt: 14 * (1 - lift) * hand,
     scale: 1 + 0.08 * mid - 0.06 * out,
     out,
