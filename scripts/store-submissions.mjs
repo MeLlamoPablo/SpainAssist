@@ -17,7 +17,22 @@ const submittedWindowsStates = new Set([
 async function request(fetcher, url, options, label) {
   const response = await fetcher(url, { signal: AbortSignal.timeout(600_000), ...options });
   // Submission responses can contain writable upload URLs. Never print their bodies.
-  if (!response.ok) throw new Error(`${label}: HTTP ${response.status}`);
+  if (!response.ok) {
+    let detail = '';
+    if (new URL(url).hostname === 'androidpublisher.googleapis.com') {
+      const body = await response.json().catch(() => undefined);
+      if (typeof body?.error?.message === 'string') {
+        detail = body.error.message
+          .replaceAll(options.headers.Authorization.slice('Bearer '.length), '[redacted]')
+          .replace(/https?:\/\/\S+/g, '[redacted URL]')
+          .replace(/\s+/g, ' ')
+          .slice(0, 1000);
+      }
+    }
+    throw new Error(`${label}: HTTP ${response.status}${detail ? `: ${detail}` : ''}`, {
+      cause: { status: response.status },
+    });
+  }
   return response.status === 204 ? undefined : response.json();
 }
 
@@ -181,7 +196,20 @@ export async function submitPlay({
       track,
       releases: status === 'draft' ? [...releases, release] : [release],
     });
-    await call(`${editUrl}:commit?changesNotSentForReview=${status === 'draft'}`, 'POST');
+    try {
+      await call(`${editUrl}:commit?changesNotSentForReview=${status === 'draft'}`, 'POST');
+    } catch (error) {
+      // Some apps/tracks reject this optional flag, including internal draft releases.
+      // Retry only that explicit rejection, keeping the same edit and draft/completed status.
+      if (
+        error.cause?.status !== 400 ||
+        !error.message.includes('The query parameter changesNotSentForReview must not be set')
+      ) {
+        throw error;
+      }
+      console.log('Google Play requires omitting changesNotSentForReview; retrying the same edit.');
+      await call(`${editUrl}:commit`, 'POST');
+    }
     committed = true;
     return `Android ${name} (${code}): ${reuse ? 'reused the existing bundle' : 'uploaded bundle and mapping'}; saved to ${track} (${status}).`;
   } finally {

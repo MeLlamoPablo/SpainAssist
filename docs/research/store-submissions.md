@@ -54,6 +54,14 @@ Save a draft alongside the current live release; a completed release replaces th
 basis. A response lost after a successful commit is handled by the next run's state check.
 Submissions retain their existing per-app concurrency group.
 
+The optional review flag can be rejected for some apps/tracks, including internal drafts.
+On HTTP 400 with `The query parameter changesNotSentForReview must not be set`, retry the
+same commit once without that parameter. The track's draft/completed status stays unchanged;
+the bundle and mapping are not uploaded again. Other errors still fail and clean up the edit.
+This follows [Fastlane's commit handling](https://github.com/fastlane/fastlane/blob/master/supply/lib/supply/client.rb).
+Google Play errors include only the structured error message, with URLs and the access token
+redacted; response bodies and unrelated fields are never logged.
+
 An uploaded bundle that Play no longer exposes in an edit may still have consumed its code;
 Play will reject a duplicate upload. The workflow reports that failure and never silently
 increments the code. A mapping missing from an already accepted bundle requires manual repair.

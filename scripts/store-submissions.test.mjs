@@ -324,6 +324,84 @@ test('Android: a fresh completed release replaces the previous completed release
   });
 });
 
+test('Android: Play can require omitting the review flag without re-uploading or changing the draft', async (t) => {
+  const result = await submitPlay({
+    ...playOptions,
+    fetcher: api(t, [
+      insert,
+      tracks(),
+      bundles(),
+      upload,
+      mapping,
+      update([{ ...release('draft'), name: '0.3.3' }]),
+      {
+        ...commit(),
+        status: 400,
+        body: {
+          error: {
+            message:
+              'Changes are sent for review automatically. The query parameter changesNotSentForReview must not be set.',
+          },
+        },
+      },
+      { path: '/edit:commit', method: 'POST', body: { id: 'edit' } },
+    ]),
+  });
+  assert.match(result, /saved to internal \(draft\)/);
+});
+
+test('Android: an unrelated commit rejection is reported with redacted details and is not retried', async (t) => {
+  await assert.rejects(
+    submitPlay({
+      ...playOptions,
+      fetcher: api(t, [
+        insert,
+        tracks(),
+        bundles([303]),
+        update([{ ...release('draft'), name: '0.3.3' }]),
+        {
+          ...commit(),
+          status: 400,
+          body: {
+            error: {
+              message: 'Invalid app setup\nSee https://example.com/private?token=secret test-token',
+              fileUploadUrl: 'never-print-this-field',
+            },
+          },
+        },
+        cleanup,
+      ]),
+    }),
+    {
+      message:
+        'Google Play POST edit:commit: HTTP 400: Invalid app setup See [redacted URL] [redacted]',
+    },
+  );
+});
+
+test('Android: only a bad-request rejection can trigger the review-flag retry', async (t) => {
+  await assert.rejects(
+    submitPlay({
+      ...playOptions,
+      fetcher: api(t, [
+        insert,
+        tracks(),
+        bundles([303]),
+        update([{ ...release('draft'), name: '0.3.3' }]),
+        {
+          ...commit(),
+          status: 403,
+          body: {
+            error: { message: 'The query parameter changesNotSentForReview must not be set' },
+          },
+        },
+        cleanup,
+      ]),
+    }),
+    /HTTP 403/,
+  );
+});
+
 test('Android: a bundle on another track is reused for the requested track', async (t) => {
   await submitPlay({
     ...playOptions,

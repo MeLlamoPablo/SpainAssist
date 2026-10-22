@@ -154,9 +154,10 @@ Repository Actions variables select the destination:
 | `PLAY_TRACK` | `internal` | The Play track ID, e.g. `alpha` for the default closed test or `production` after approval |
 | `PLAY_RELEASE_STATUS` | `draft` | Set `completed` once Play allows releases on that track |
 
-The initial draft also sets `changesNotSentForReview=true`: bundles are saved in Play Console,
-where the first app setup/review must be completed. With `completed`, changes are submitted to
-Play normally; Google's review and rollout rules still apply.
+The initial draft also sets `changesNotSentForReview=true`; if Play explicitly rejects that
+optional flag, it retries the same commit without it, keeping the release a draft. Bundles are
+saved in Play Console, where the first app setup/review must be completed. With `completed`,
+changes are submitted to Play normally; Google's review and rollout rules still apply.
 
 **Each release.** Android releases independently from `android/vX.Y.Z` tags; desktop releases
 use `vX.Y.Z` tags and never start an Android release. Keep the versions aligned when practical;
