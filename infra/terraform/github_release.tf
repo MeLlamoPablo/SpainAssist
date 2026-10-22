@@ -1,7 +1,7 @@
 # --- Desktop release signing: GitHub Actions secrets for .github/workflows/release.yml -------
 #
 # macOS builds are signed with the Developer ID Application certificate and notarized with an
-# App Store Connect API key. Both files live in secrets/, committed encrypted (git-crypt,
+# App Store Connect API key; the Windows Store MSIX is submitted with an Entra app. Both files live in secrets/, committed encrypted (git-crypt,
 # .gitattributes); their non-file values are in terraform.tfvars.
 
 locals {
@@ -14,13 +14,21 @@ locals {
     APPLE_API_KEY_ID = var.apple_api_key_id
     APPLE_API_ISSUER = var.apple_api_issuer_id
   }
+
+  # The `store` job submits the Store MSIX to Partner Center with these, or warns without them.
+  store_secrets = var.partner_center_client_id == "" ? {} : {
+    PARTNER_CENTER_TENANT_ID     = var.partner_center_tenant_id
+    PARTNER_CENTER_CLIENT_ID     = var.partner_center_client_id
+    PARTNER_CENTER_CLIENT_SECRET = var.partner_center_client_secret
+    PARTNER_CENTER_SELLER_ID     = var.partner_center_seller_id
+  }
 }
 
 resource "github_actions_secret" "release" {
   # By name: for_each can't take a map with sensitive values.
-  for_each = toset(keys(local.release_secrets))
+  for_each = toset(keys(merge(local.release_secrets, local.store_secrets)))
 
   repository  = split("/", var.github_repository)[1]
   secret_name = each.key
-  value       = local.release_secrets[each.key]
+  value       = merge(local.release_secrets, local.store_secrets)[each.key]
 }

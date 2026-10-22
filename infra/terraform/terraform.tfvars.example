@@ -55,3 +55,9 @@ glitchtip_admin_password = "..." # admin@<domain> at https://errors.<domain>
 
 openrouter_api_key = "" # https://openrouter.ai/settings/keys
 parallel_api_key   = "" # https://platform.parallel.ai
+
+# Optional: the release workflow submits the Store MSIX with an Entra app (github_release.tf).
+# partner_center_tenant_id     = "..." # Entra admin center > Overview > Tenant ID
+# partner_center_client_id     = "..." # App registrations > the app > Application (client) ID
+# partner_center_client_secret = "..." # the app > Certificates & secrets > New client secret
+# partner_center_seller_id     = "..." # Partner Center > Account settings > Legal info > Seller ID

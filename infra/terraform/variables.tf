@@ -183,6 +183,32 @@ variable "apple_api_issuer_id" {
   type        = string
 }
 
+# Leave the Partner Center values empty to keep submitting the Store MSIX by hand.
+variable "partner_center_tenant_id" {
+  description = "Tenant ID of the Entra directory linked to Partner Center."
+  type        = string
+  default     = ""
+}
+
+variable "partner_center_client_id" {
+  description = "Application (client) ID of the Entra app added to Partner Center (Account settings > User management > Microsoft Entra applications) with the Manager role."
+  type        = string
+  default     = ""
+}
+
+variable "partner_center_client_secret" {
+  description = "A client secret of that Entra app. It expires: renew it in Entra and here before it does."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "partner_center_seller_id" {
+  description = "Seller ID of the Partner Center account (Account settings > Legal info > Developer)."
+  type        = string
+  default     = ""
+}
+
 # --- Postgres (one container, one database and one role per service) ----------------------
 
 variable "postgres_password" {
