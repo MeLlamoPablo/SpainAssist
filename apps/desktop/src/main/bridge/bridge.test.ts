@@ -1039,6 +1039,20 @@ describe('bridge: client certificates', () => {
     expect(JSON.stringify(res.body)).not.toContain('pw-123');
   });
 
+  it('allows a p12 certificate to use built-in origins without an explicit target', async () => {
+    const call = app.rpc('browser.useCertificate', { credentialId: certId }, token);
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
+      kind: 'confirm',
+      approved: true,
+    });
+    expect((await call).body.result).toMatchObject({
+      enabled: true,
+      origins: ['https://pasarela-ident.clave.gob.es'],
+    });
+    expect(app.browser.certificates).toEqual([{ origin: 'https://pasarela-ident.clave.gob.es' }]);
+  });
+
   it('refuses non-official origins and non-certificate credentials', async () => {
     const res = await app.rpc(
       'browser.useCertificate',

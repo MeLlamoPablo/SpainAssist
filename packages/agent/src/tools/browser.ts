@@ -390,13 +390,13 @@ export function browserTools(bridge: BridgeTransport, options: BrowserToolOption
     defineSaTool({
       name: 'browser_use_certificate',
       label: 'Use certificate',
-      description: `Enable TLS client-certificate login with the user's digital certificate${options.dniePhone ? ' or DNI in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser: for sites where the browser itself asks for a certificate when you open the login page (e.g. "Certificado electrónico" in Cl@ve, AEAT). The app may ask the user to approve. Afterwards click the site's certificate login button.${options.dniePhone ? " With the DNI, the user approves each login on their phone, once for all the hosts of one organisation (e.g. Seguridad Social's idp, ipce and w2), and must keep the card on the phone until the login ends. Browser results say in Notes when a DNI login waits for the user, was approved or failed: while one waits, use browser_wait instead of clicking again, and tell the user what to do if it fails." : ''} Not for AutoFirma logins and signatures (the page uses AutoFirma or its "Acceder"/"Firmar" button calls AutoScript): there, just click the button; the app signs.`,
+      description: `Enable TLS client-certificate login with the user's digital certificate${options.dniePhone ? ' or DNI in the paired phone' : ''} (credentialId from vault_read) in this procedure's browser: for sites where the browser itself asks for a certificate when you open the login page (e.g. "Certificado electrónico" in Cl@ve, AEAT). The app may ask the user to approve. Afterwards click the site's certificate login button.${options.dniePhone ? " With the DNI, origins is required: put the actual https certificate-login origin first, even for a built-in site. Missing or empty origins returns a tool error before asking the user. The user approves each login on their phone, once for all the hosts of one organisation (e.g. Seguridad Social's idp, ipce and w2), and must keep the card on the phone until the login ends. Browser results say in Notes when a DNI login waits for the user, was approved or failed: while one waits, use browser_wait instead of clicking again, and tell the user what to do if it fails." : ''} Not for AutoFirma logins and signatures (the page uses AutoFirma or its "Acceder"/"Firmar" button calls AutoScript): there, just click the button; the app signs.`,
       parameters: Type.Object({
         credentialId: Type.String({ minLength: 1, maxLength: 120 }),
         origins: Type.Optional(
           Type.Array(Type.String({ maxLength: 300 }), {
             maxItems: 10,
-            description: 'Extra https origins that will ask for the certificate',
+            description: `Https origins that ask for the certificate${options.dniePhone ? '; required for DNI, with the actual login origin first, even for a built-in site' : '; added to the built-in list'}`,
           }),
         ),
       }),

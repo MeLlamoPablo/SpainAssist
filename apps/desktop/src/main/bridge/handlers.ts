@@ -849,6 +849,12 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
           'bad_request',
           'This certificate has expired. Tell the user to renew it.',
         );
+      // DNI consent is site-specific: the built-in origins do not identify the intended login.
+      if (credential.kind === 'dnie' && !params.origins?.length)
+        throw new BridgeError(
+          'bad_request',
+          'DNIe login requires a target site in origins. Pass the actual https origin that asks for the certificate first, even for a built-in site. No approval or PIN has been requested.',
+        );
       const requested: string[] = [];
       for (const raw of params.origins ?? []) {
         const url = new URL(raw);

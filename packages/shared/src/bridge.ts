@@ -248,7 +248,7 @@ export const BridgeParams = {
   /** Enable TLS client-certificate login for this procedure's browser (may ask the user). */
   'browser.useCertificate': z.object({
     credentialId: z.string(),
-    /** Extra origins to present the certificate to, besides the built-in list. */
+    /** Origins added to the built-in list. Required for DNIe; first is its intended login site. */
     origins: z.array(z.string().url()).max(10).optional(),
   }),
   'browser.close': z.object({}),

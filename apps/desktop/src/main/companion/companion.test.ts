@@ -923,6 +923,36 @@ it('keeps the login approval when the browser drops a connection', async () => {
   );
 });
 
+it.each([
+  { label: 'omitted', origins: undefined },
+  { label: 'empty', origins: [] },
+])(
+  'rejects a missing DNI login target ($label) before consent, pairing or browser work',
+  async ({ origins }) => {
+    const { relay, app: a, procedureId, token, dnie } = await setup();
+    for (const policy of ['ask', 'auto'] as const) {
+      await a.vault.setCredentialPolicy(dnie.id, policy);
+      const response = await a.rpc(
+        'browser.useCertificate',
+        { credentialId: dnie.id, origins },
+        token,
+      );
+      expect(response).toMatchObject({
+        status: 400,
+        body: {
+          ok: false,
+          error: { code: 'bad_request', message: expect.stringContaining('origins') },
+        },
+      });
+    }
+    expect(a.pendingPrompt(procedureId)).toBeUndefined();
+    expect(a.services.procedures.transcript(procedureId)).toEqual([]);
+    expect(relay.rooms.size).toBe(0);
+    expect(a.browser.calls).toEqual([]);
+    expect(a.vault.getCredential(dnie.id)?.lastUsedAt).toBeUndefined();
+  },
+);
+
 it('enables DNI browser login after origin policy, desktop consent and phone approval', async () => {
   const { relay, app: a, procedureId, token, dnie } = await setup();
   await a.vault.setCredentialPolicy(dnie.id, 'ask');
