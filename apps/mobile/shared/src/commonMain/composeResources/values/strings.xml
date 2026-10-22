@@ -74,7 +74,7 @@
     <string name="working_signed">Firmas hechas: %1$d</string>
 
     <!-- Results -->
-    <string name="result_signed">Firmado. Sigue en el ordenador.</string>
+    <string name="result_signed">Firma completada.</string>
     <string name="result_certificate">Listo. Sigue en el ordenador.</string>
     <string name="result_declined">No has firmado.</string>
     <string name="result_cancelled">Has cancelado la firma.</string>

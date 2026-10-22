@@ -74,7 +74,7 @@
     <string name="working_signed">Signatures done: %1$d</string>
 
     <!-- Results -->
-    <string name="result_signed">Signed. Carry on on your computer.</string>
+    <string name="result_signed">Signing complete.</string>
     <string name="result_certificate">Done. Carry on on your computer.</string>
     <string name="result_declined">You didn’t sign.</string>
     <string name="result_cancelled">You cancelled the signature.</string>
