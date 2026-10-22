@@ -5,7 +5,7 @@ import { ICONS } from '../icons.js';
  * render.mjs can capture any frame deterministically. Times live in `T`; tweak them there.
  */
 
-export const DURATION = 20.2;
+export const DURATION = 19.25;
 
 const T = {
   winIn: -0.2,
@@ -17,20 +17,19 @@ const T = {
   dialogIn: 4.4,
   camDialog: 4.35,
   phoneIn: 5.3,
-  tapScan: 6.3,
-  scanner: 6.4,
-  detect: 7.85,
-  pair: 8.2,
-  tapLink: 9.15,
-  paired: 9.3,
-  request: 10.3,
-  review: 10.55,
-  tapSign: 12.2,
-  hold: 12.35,
-  cardIn: 12.6,
-  read: 13.35,
-  signed: 14.7,
-  outro: 16.3,
+  scanner: 5.3,
+  detect: 6.9,
+  pair: 7.25,
+  tapLink: 8.2,
+  paired: 8.35,
+  request: 9.35,
+  review: 9.6,
+  tapSign: 11.25,
+  hold: 11.4,
+  cardIn: 11.65,
+  read: 12.4,
+  signed: 13.75,
+  outro: 15.35,
 };
 
 // ------------------------------------------------------------------------------------------
@@ -338,14 +337,14 @@ function phonePlace(t, cam) {
   const qr = onStage(cam, M.qr.x, M.qr.y);
   const over = { x: qr.x - VF_C.x, y: qr.y - VF_C.y };
   const inP = P(t, T.phoneIn, 0.95, E.spring);
-  // Held low to tap "Escanear QR", then raised to the code.
-  const lift = P(t, T.scanner + 0.1, 1.25, E.inOut);
+  // It comes in with the scanner open, and rises the last bit to the code.
+  const lift = P(t, T.scanner + 0.3, 1.1, E.inOut);
   const mid = P(t, T.request, 0.9, E.inOut);
   const out = P(t, T.outro, 0.6, E.in);
   // A hand holds it: it sways a little until it moves to the middle to sign.
   const hand = 1 - mid;
   let x = over.x + (1 - inP) * 160 + Math.sin(t * 1.7) * 3 * hand;
-  let y = over.y + 300 * (1 - lift) + (1 - inP) * 820 + Math.cos(t * 1.3) * 3 * hand;
+  let y = over.y + 160 * (1 - lift) + (1 - inP) * 820 + Math.cos(t * 1.3) * 3 * hand;
   x = lerp(x, MIDDLE.x, mid);
   y = lerp(y, MIDDLE.y, mid) + out * 60;
   return {
@@ -360,7 +359,6 @@ function phonePlace(t, cam) {
 
 /** The screens in order: each one's elements spring in one after another. */
 const SCREENS = [
-  ['s-inicio', T.phoneIn + 0.15],
   ['s-scan', T.scanner],
   ['s-pair', T.pair],
   ['s-home', T.paired],
@@ -386,19 +384,15 @@ function screens(t) {
     });
   });
 
-  // The wordmark stays while the start, pairing and home screens follow each other.
-  const first = 1 - P(t, T.scanner, 0.16, E.lin);
-  const again = P(t, T.pair + 0.05, 0.6, E.back) * (1 - P(t, T.review, 0.16, E.lin));
-  const wm = t < T.pair ? (t >= T.phoneIn ? first : 0) : again;
-  const wmIn = t < T.pair ? 1 : again;
+  // The wordmark stays while the pairing and home screens follow each other.
+  const wm = P(t, T.pair + 0.05, 0.6, E.back) * (1 - P(t, T.review, 0.16, E.lin));
   set($('wordmark'), {
     opacity: clamp01(wm),
-    transform: `scale(${0.85 + 0.15 * wmIn})`,
+    transform: `scale(${0.85 + 0.15 * wm})`,
   });
   set($('dots'), { opacity: clamp01(wm) });
 
   for (const [id, at] of [
-    ['b-scan', T.tapScan],
     ['b-link', T.tapLink],
     ['b-sign', T.tapSign],
   ]) {
@@ -494,12 +488,11 @@ function phone(t) {
   });
 
   screens(t);
-  if (t > T.scanner && t < T.pair + 0.3) scanner(t, place, cam);
+  if (t >= T.scanner && t < T.pair + 0.3) scanner(t, place, cam);
   signing(t);
 
   // Taps on the screen, in screen pixels.
   const taps = [
-    [T.tapScan, 198, 793],
     [T.tapLink, 198, 720],
     [T.tapSign, 198, 720],
   ];
