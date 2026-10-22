@@ -15,7 +15,7 @@ fun setting(property: String, env: String): String? =
 
 /**
  * The version (README, "Releasing"): `-PappVersion=X.Y.Z` or `SA_APP_VERSION`, as the
- * `mobile-vX.Y.Z` tag gives it. versionCode is X*10000 + Y*100 + Z unless `-PversionCode` or
+ * `android/vX.Y.Z` tag gives it. versionCode is X*10000 + Y*100 + Z unless `-PversionCode` or
  * `SA_VERSION_CODE` sets it. Without them, the last values set by hand (0.2.1, 4).
  */
 val appVersion = setting("appVersion", "SA_APP_VERSION")

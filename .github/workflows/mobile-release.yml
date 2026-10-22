@@ -1,8 +1,8 @@
-# Phone app release: called by release.yml for stable vX.Y.Z tags, or by a mobile-vX.Y.Z tag.
+# Android release: pushing an `android/vX.Y.Z` tag releases independently of desktop's `vX.Y.Z`.
 # Builds the Android App Bundle signed with the upload key, checks the signature and keeps the
 # .aab as the workflow artifact `android-bundle`. Tagged builds then submit it to Google Play.
 # The version is X.Y.Z, and the versionCode X*10000 + Y*100 + Z
-# (`apps/mobile/androidApp/build.gradle.kts`). Running it by hand from a `mobile-v*` tag does the
+# (`apps/mobile/androidApp/build.gradle.kts`). Running it by hand from an `android/v*` tag does the
 # same; from a branch it needs the `version` input and builds a test bundle.
 #
 # Play defaults to an internal draft while the app awaits its first review. Repository variables
@@ -13,18 +13,12 @@
 name: Phone release
 
 on:
-  workflow_call:
-    inputs:
-      version:
-        description: Stable X.Y.Z from the release tag
-        required: true
-        type: string
   push:
-    tags: ['mobile-v*']
+    tags: ['android/v*']
   workflow_dispatch:
     inputs:
       version:
-        description: 'X.Y.Z, when not run from a mobile-v* tag'
+        description: 'X.Y.Z, when not run from an android/v* tag'
         required: false
 
 permissions:
@@ -52,12 +46,11 @@ jobs:
           INPUT: ${{ inputs.version }}
         run: |
           if [[ "$REF_TYPE" == tag ]]; then
-            if [[ ! "$TAG" =~ ^(mobile-)?v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "::error::Tag $TAG is not vX.Y.Z or mobile-vX.Y.Z"
+            if [[ ! "$TAG" =~ ^android/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Tag $TAG is not android/vX.Y.Z"
               exit 1
             fi
-            version=${TAG#mobile-}
-            version=${version#v}
+            version=${TAG#android/v}
             if [[ -n "$INPUT" && "$INPUT" != "$version" ]]; then
               echo "::error::Version input does not match tag $TAG"
               exit 1
@@ -66,7 +59,7 @@ jobs:
             version=$INPUT
           fi
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::No version: run this from a mobile-vX.Y.Z tag, or give X.Y.Z as the version input"
+            echo "::error::No version: run this from an android/vX.Y.Z tag, or give X.Y.Z as the version input"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"

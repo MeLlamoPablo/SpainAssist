@@ -1,4 +1,4 @@
-# App release: pushing a tag `vX.Y.Z` (or `vX.Y.Z-suffix`, a prerelease) on a
+# Desktop release: pushing a tag `vX.Y.Z` (or `vX.Y.Z-suffix`, a prerelease) on a
 # commit of `master` builds the installers on one native runner per target and publishes
 # them as a GitHub Release, with SHA256SUMS.txt. Windows also uploads `latest.yml` and the
 # installer's blockmap, macOS `latest-mac.yml` and the zips' blockmaps, and Linux
@@ -31,8 +31,7 @@
 # Windows builds are unsigned for now: signing turns on when its secrets are passed as the
 # environment variables `apps/desktop/electron-builder.ts` reads. Linux has no code signing:
 # SHA256SUMS.txt covers the .deb.
-# Stable releases also build and submit Android through mobile-release.yml. Prereleases skip
-# Android: its versionCode is shared with the stable X.Y.Z release.
+# Android releases independently from `android/vX.Y.Z` tags through mobile-release.yml.
 name: Release
 
 on:
@@ -401,16 +400,4 @@ jobs:
     permissions:
       actions: read
       contents: read
-    secrets: inherit
-
-  android:
-    name: Android / Google Play
-    permissions:
-      contents: read
-      id-token: write
-    needs: check
-    if: needs.check.outputs.prerelease == 'false'
-    uses: ./.github/workflows/mobile-release.yml
-    with:
-      version: ${{ needs.check.outputs.version }}
     secrets: inherit

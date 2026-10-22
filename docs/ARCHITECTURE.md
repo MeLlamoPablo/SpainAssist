@@ -66,6 +66,9 @@ and `.deb` update themselves from GitHub Releases; the Store updates the MSIX. A
 flag can block old versions. A weekly workflow bumps playwright-core, which brings the new
 Chromium.
 
+Desktop releases use `vX.Y.Z` tags (`release.yml`); Android releases use `android/vX.Y.Z` tags
+(`mobile-release.yml`). Their versions can stay aligned, but each app releases independently.
+
 ## 3. Key flows
 
 ### Conversation and delegation

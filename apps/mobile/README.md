@@ -158,12 +158,12 @@ The initial draft also sets `changesNotSentForReview=true`: bundles are saved in
 where the first app setup/review must be completed. With `completed`, changes are submitted to
 Play normally; Google's review and rollout rules still apply.
 
-**Each release.** The main `.github/workflows/release.yml` now calls the phone workflow on
-stable `vX.Y.Z` tags, using the same version. Desktop prereleases skip Android because they
-would consume the stable versionCode. To release the phone separately, tag a commit on `master`:
+**Each release.** Android releases independently from `android/vX.Y.Z` tags; desktop releases
+use `vX.Y.Z` tags and never start an Android release. Keep the versions aligned when practical;
+either app can ship without the other. To release Android, tag a commit on `master`:
 
 ```sh
-git tag mobile-v0.3.3 && git push origin mobile-v0.3.3
+git tag android/v0.3.3 && git push origin android/v0.3.3
 ```
 
 `.github/workflows/mobile-release.yml` checks the tag and the secrets (it fails, naming the
