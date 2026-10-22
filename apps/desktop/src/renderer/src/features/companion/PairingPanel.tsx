@@ -2,6 +2,7 @@ import { type CompanionStatus, companionOutdatedSide } from '@sa/shared';
 import { Loader2, RotateCw, Smartphone, TriangleAlert, WifiOff } from 'lucide-react';
 import { useMemo } from 'react';
 import { encode } from 'uqr';
+import { BrandMark } from '../../components/brand';
 import { Button } from '../../components/ui/button';
 import { useT } from '../../i18n';
 import { api, errorMessage } from '../../lib/api';
@@ -14,31 +15,57 @@ import { companionDict } from './i18n';
  * The pairing link as a QR code. Always dark modules on a white tile, whatever the theme:
  * phone scanners read inverted codes badly.
  */
-function CompanionQr({ link, size = 196 }: { link: string; size?: number }) {
+function CompanionQr({ link, size = 232 }: { link: string; size?: number }) {
   const t = useT(companionDict);
   const path = useMemo(() => {
-    const qr = encode(link, { ecc: 'M', border: 2 });
+    // Leave a full quiet zone and enough redundancy for the small centre mark.
+    const qr = encode(link, { ecc: 'H', border: 4 });
+    const finders = [
+      [4, 4],
+      [qr.size - 11, 4],
+      [4, qr.size - 11],
+    ];
     let d = '';
     qr.data.forEach((row, y) => {
       row.forEach((dark, x) => {
-        if (dark) d += `M${x} ${y}h1v1h-1z`;
+        if (!dark || finders.some(([fx, fy]) => x >= fx && x < fx + 7 && y >= fy && y < fy + 7))
+          return;
+        d += `M${x + 0.2} ${y}h.6q.2 0 .2.2v.6q0 .2-.2.2h-.6q-.2 0-.2-.2v-.6q0-.2.2-.2z`;
       });
     });
-    return { d, size: qr.size };
+    return { d, size: qr.size, finders };
   }, [link]);
   return (
-    <svg
-      role="img"
-      aria-label={t.qrLabel}
-      viewBox={`0 0 ${path.size} ${path.size}`}
-      width={size}
-      height={size}
-      shapeRendering="crispEdges"
-      className="shrink-0 rounded-xl bg-white ring-1 ring-line"
-      data-testid="companion-qr"
+    <div
+      className="relative shrink-0 overflow-hidden rounded-2xl bg-white shadow-xs ring-1 ring-line"
+      style={{ width: size, height: size }}
     >
-      <path d={path.d} fill="#000" />
-    </svg>
+      <svg
+        role="img"
+        aria-label={t.qrLabel}
+        viewBox={`0 0 ${path.size} ${path.size}`}
+        width={size}
+        height={size}
+        data-testid="companion-qr"
+      >
+        <rect width={path.size} height={path.size} fill="#fff" />
+        <path d={path.d} fill="#201c19" />
+        {path.finders.map(([x, y]) => (
+          <g key={`${x}-${y}`}>
+            <rect x={x} y={y} width={7} height={7} rx={1.4} fill="#201c19" />
+            <rect x={x + 1} y={y + 1} width={5} height={5} rx={0.8} fill="#fff" />
+            <rect x={x + 2} y={y + 2} width={3} height={3} rx={0.6} fill="#201c19" />
+          </g>
+        ))}
+      </svg>
+      <span
+        aria-hidden
+        className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg bg-white"
+        style={{ width: size * 0.18, height: size * 0.18 }}
+      >
+        <BrandMark size={size * 0.15} />
+      </span>
+    </div>
   );
 }
 
@@ -118,8 +145,9 @@ export function PairingPanel({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center',
-        paired && request ? 'gap-3' : 'gap-5',
+        'flex items-center',
+        paired || stalled ? 'flex-wrap gap-5' : 'flex-col gap-4 py-2',
+        paired && request && 'gap-3',
         className,
       )}
       data-testid="companion-pairing"
@@ -127,7 +155,7 @@ export function PairingPanel({
     >
       {status.outdated ? <OutdatedNotice side={companionOutdatedSide(status.outdated)} /> : null}
       {stalled && !paired ? (
-        <div className="flex size-[196px] items-center justify-center rounded-xl bg-st-attention-bg">
+        <div className="flex size-[232px] items-center justify-center rounded-2xl bg-st-attention-bg">
           <WifiOff size={22} className="text-st-attention-fg" aria-hidden />
         </div>
       ) : status.link ? (
@@ -141,11 +169,11 @@ export function PairingPanel({
           <Smartphone size={20} className="text-fg-subtle" aria-hidden />
         </div>
       ) : (
-        <div className="flex size-[196px] items-center justify-center rounded-xl bg-surface-2">
+        <div className="flex size-[232px] items-center justify-center rounded-2xl bg-surface-2">
           <Loader2 size={20} className="animate-spin text-fg-subtle" aria-hidden />
         </div>
       )}
-      <div className="min-w-[200px] flex-1">
+      <div className={cn('min-w-[200px] flex-1', !paired && !stalled && 'text-center')}>
         {paired && request ? (
           <>
             <p className="text-[14.5px] font-semibold text-fg" data-testid="companion-open-app">
@@ -193,10 +221,7 @@ export function PairingPanel({
             </Button>
           </div>
         ) : (
-          <>
-            <p className="text-[14px] font-semibold text-fg">{t.scanTitle}</p>
-            <p className="mt-1 text-[13px] text-fg-muted">{t.scanBody}</p>
-          </>
+          <p className="text-[14px] font-semibold text-fg">{t.scanTitle}</p>
         )}
         {stalled && paired ? (
           <p
@@ -212,7 +237,6 @@ export function PairingPanel({
             {t.connecting}
           </p>
         ) : null}
-        {paired || stalled ? null : <p className="mt-3 text-[12.5px] text-fg-subtle">{t.getApp}</p>}
       </div>
     </div>
   );

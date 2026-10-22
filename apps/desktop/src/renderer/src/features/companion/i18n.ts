@@ -5,10 +5,6 @@ export const companionDict = defineDict({
   es: {
     app: 'Spain Assist',
     scanTitle: 'Escanea este código con el móvil',
-    scanBody:
-      'Abre la app Spain Assist en el móvil y escanea el código. También puedes escanearlo con la cámara del móvil.',
-    getApp:
-      '¿No tienes la app? Búscala en Google Play como «Spain Assist». Necesitas un móvil Android con NFC.',
     qrLabel: 'Código para vincular el móvil',
     connecting: 'Conectando…',
     unavailable: 'Ahora mismo no se puede usar el móvil para firmar. Inténtalo más tarde.',
@@ -21,6 +17,7 @@ export const companionDict = defineDict({
     otherPhone: '¿Has cambiado de móvil? Vincula el nuevo con un código nuevo.',
     pairOther: 'Vincular otro móvil',
     connected: (device: string) => `Conectado con ${device}`,
+    paired: (device?: string) => (device ? `Móvil vinculado: ${device}` : 'Móvil vinculado'),
     stage: {
       unlock: 'Escribe los datos de tu DNIe',
       phone: 'Mira tu móvil',
@@ -79,9 +76,7 @@ export const companionDict = defineDict({
     pair: 'Vincular el móvil',
     unpair: 'Desvincular',
     unpaired: 'Móvil desvinculado',
-    pairTitle: 'Vincula tu móvil',
-    pairLead:
-      'El móvil lee tu DNIe por NFC y firma con él. La vinculación dura 72 horas o hasta que cierres la app.',
+    pairTitle: 'Vincular aplicación de Android',
     noPhone: 'Ningún móvil vinculado',
     /** Why the last pairing ended, when the user didn't unpair on the desktop. */
     ended: {
@@ -101,15 +96,10 @@ export const companionDict = defineDict({
     /** The relay hasn't been reached for a while. */
     stalled: 'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
     retry: 'Reintentar',
-    done: 'Hecho',
   },
   en: {
     app: 'Spain Assist',
     scanTitle: 'Scan this code with your phone',
-    scanBody:
-      'Open the Spain Assist app on your phone and scan the code. You can also scan it with the phone camera.',
-    getApp:
-      "Don't have the app? Look for “Spain Assist” on Google Play. You need an Android phone with NFC.",
     qrLabel: 'Code to pair your phone',
     connecting: 'Connecting…',
     unavailable: "Signing with your phone isn't available right now. Try again later.",
@@ -121,6 +111,7 @@ export const companionDict = defineDict({
     otherPhone: 'Using a different phone? Pair it with a new code.',
     pairOther: 'Pair another phone',
     connected: (device: string) => `Connected to ${device}`,
+    paired: (device?: string) => (device ? `Paired phone: ${device}` : 'Phone paired'),
     stage: {
       unlock: 'Type your DNIe details',
       phone: 'Look at your phone',
@@ -176,9 +167,7 @@ export const companionDict = defineDict({
     pair: 'Pair your phone',
     unpair: 'Unpair',
     unpaired: 'Phone unpaired',
-    pairTitle: 'Pair your phone',
-    pairLead:
-      'The phone reads your DNIe over NFC and signs with it. The pairing lasts 72 hours or until you quit the app.',
+    pairTitle: 'Pair Android app',
     noPhone: 'No phone paired',
     ended: {
       phone_unpaired: 'It was unpaired from the phone.',
@@ -193,6 +182,5 @@ export const companionDict = defineDict({
     },
     stalled: "Can't connect to the server. Check your internet connection.",
     retry: 'Try again',
-    done: 'Done',
   },
 });

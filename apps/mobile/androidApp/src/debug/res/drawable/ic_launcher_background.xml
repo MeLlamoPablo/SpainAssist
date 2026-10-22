@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Blueprint's blue canvas. The adaptive icon's visible 72 dp maps to the SVG's 128 units. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <path android:pathData="M0,0h128v128h-128z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="21.333333"
+                android:startY="21.333333"
+                android:endX="51.2"
+                android:endY="106.666667"
+                android:type="linear">
+                <item android:offset="0" android:color="#369FFC" />
+                <item android:offset="1" android:color="#1554C9" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <group
+        android:pivotX="64"
+        android:pivotY="64"
+        android:scaleX="0.6666667"
+        android:scaleY="0.6666667">
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeAlpha="0.14"
+            android:strokeWidth="0.5"
+            android:pathData="M-30,-32v192M-20,-32v192M-10,-32v192M0,-32v192M10,-32v192M20,-32v192M30,-32v192M40,-32v192M50,-32v192M60,-32v192M70,-32v192M80,-32v192M90,-32v192M100,-32v192M110,-32v192M120,-32v192M130,-32v192M140,-32v192M150,-32v192M160,-32v192M-32,-30h192M-32,-20h192M-32,-10h192M-32,0h192M-32,10h192M-32,20h192M-32,30h192M-32,40h192M-32,50h192M-32,60h192M-32,70h192M-32,80h192M-32,90h192M-32,100h192M-32,110h192M-32,120h192M-32,130h192M-32,140h192M-32,150h192M-32,160h192" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeAlpha="0.14"
+            android:strokeWidth="0.6"
+            android:pathData="M108,64a44,44 0,1 0,-88 0a44,44 0,1 0,88 0M64,14v100M14,64h100" />
+    </group>
+</vector>

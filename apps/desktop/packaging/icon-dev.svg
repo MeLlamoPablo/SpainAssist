@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 128 128">
+  <title>Spain Assist Dev — Blueprint</title>
+  <!-- Render with packaging/render-icon.mjs in development mode for PNG and macOS ICNS. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.35" y2="1">
+      <stop stop-color="#369ffc"/>
+      <stop offset="1" stop-color="#1554c9"/>
+    </linearGradient>
+    <clipPath id="tile-clip">
+      <rect x="12" y="12" width="104" height="104" rx="23"/>
+    </clipPath>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dy="2" stdDeviation="1.6" flood-color="#122e5d" flood-opacity="0.2"/>
+    </filter>
+    <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+      <path d="M10 0H0V10" fill="none" stroke="#fff" stroke-opacity="0.14" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect x="12" y="12" width="104" height="104" rx="23" fill="url(#tile)" filter="url(#shadow)"/>
+  <rect x="12.5" y="12.5" width="103" height="103" rx="22.5" fill="none" stroke="#fff" stroke-opacity="0.28"/>
+  <g clip-path="url(#tile-clip)">
+    <rect width="128" height="128" fill="url(#grid)"/>
+    <circle cx="64" cy="64" r="44" fill="none" stroke="#fff" stroke-opacity="0.14" stroke-width="0.6"/>
+    <path d="M64 14v100M14 64h100" stroke="#fff" stroke-opacity="0.14" stroke-width="0.6"/>
+  </g>
+  <g fill="none" stroke="#eef8ff" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="27" y="39" width="74" height="50" rx="10" stroke-width="2.7"/>
+    <path d="M28 51.5h72M28 76.5h72" stroke-width="2"/>
+    <path d="M23 33h82M23 95h82M21 35v58M107 35v58" stroke-width="0.6" opacity="0.45"/>
+    <path d="M27 30v6m74-6v6M27 92v6m74-6v6M18 39h6m-6 50h6m80-50h6m-6 50h6" stroke-width="0.75" opacity="0.75"/>
+  </g>
+</svg>

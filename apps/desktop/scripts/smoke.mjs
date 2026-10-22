@@ -47,7 +47,11 @@ try {
   });
 
   const info = await call('app.info');
-  assert.equal(info.name, 'Spain Assist');
+  assert.equal(info.name, 'Spain Assist Dev');
+  assert.equal(
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle()),
+    'Spain Assist Dev',
+  );
   assert.equal(info.isE2E, true);
   results.info = info;
 

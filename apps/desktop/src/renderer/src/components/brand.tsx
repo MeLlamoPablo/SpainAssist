@@ -2,7 +2,15 @@ import { useId } from 'react';
 import { cn } from '../lib/cn';
 
 /** Flag and typography from Framer's Design page, without the splash background. */
-export function BrandMark({ size = 28, className }: { size?: number; className?: string }) {
+export function BrandMark({
+  size = 28,
+  className,
+  development = false,
+}: {
+  size?: number;
+  className?: string;
+  development?: boolean;
+}) {
   const id = useId();
   return (
     <svg
@@ -11,7 +19,7 @@ export function BrandMark({ size = 28, className }: { size?: number; className?:
       viewBox="0 0 58 58"
       className={cn('shrink-0', className)}
       role="img"
-      aria-label="Spain Assist"
+      aria-label={development ? 'Spain Assist Dev' : 'Spain Assist'}
     >
       <defs>
         <clipPath id={`${id}-flag`}>
@@ -19,8 +27,8 @@ export function BrandMark({ size = 28, className }: { size?: number; className?:
         </clipPath>
       </defs>
       <g clipPath={`url(#${id}-flag)`}>
-        <path fill="var(--sa-flag-red)" d="M0 9h58v40H0z" />
-        <path fill="var(--sa-flag-yellow)" d="M0 19h58v20H0z" />
+        <path fill={development ? '#1554c9' : 'var(--sa-flag-red)'} d="M0 9h58v40H0z" />
+        <path fill={development ? '#369ffc' : 'var(--sa-flag-yellow)'} d="M0 19h58v20H0z" />
       </g>
       <rect
         x="1"

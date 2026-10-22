@@ -1,7 +1,6 @@
 import {
   type CredentialPolicy,
   type CredentialSummary,
-  companionOutdatedSide,
   DniePin,
   type VaultOverview,
 } from '@sa/shared';
@@ -36,6 +35,7 @@ import { reloadVault } from '../../store/sync';
 import { toast } from '../../store/toast';
 import { usePersonal, useVaultStore } from '../../store/vault';
 import { chatDict } from '../chat/i18n';
+import { DnieHelp } from '../companion/DnieHelp';
 import { companionDict } from '../companion/i18n';
 import { PairingPanel } from '../companion/PairingPanel';
 import { vaultDict } from './i18n';
@@ -327,7 +327,10 @@ function CredentialCard({
         <IconButton
           icon={Trash}
           label={`${t.credentials.remove} ${title}`}
-          onClick={() => setConfirm(true)}
+          onClick={() => {
+            if (c.kind === 'dnie') void remove();
+            else setConfirm(true);
+          }}
         />
       </div>
       {/* Cl@ve Móvil and the DNIe are always approved on the phone. */}
@@ -354,15 +357,17 @@ function CredentialCard({
           />
         </div>
       ) : null}
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title={t.credentials.deleteTitle(title)}
-        description={t.credentials.deleteBody}
-        confirmLabel={tc.delete}
-        cancelLabel={tc.cancel}
-        onConfirm={remove}
-      />
+      {c.kind !== 'dnie' ? (
+        <ConfirmDialog
+          open={confirm}
+          onOpenChange={setConfirm}
+          title={t.credentials.deleteTitle(title)}
+          description={t.credentials.deleteBody}
+          confirmLabel={tc.delete}
+          cancelLabel={tc.cancel}
+          onConfirm={remove}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -441,16 +446,15 @@ function DnieCard({
   const [pinOpen, setPinOpen] = useState(false);
   const [pinDelete, setPinDelete] = useState(false);
   const info = c.certificate;
-  const connected = companion.state === 'connected';
-  const paired = connected || companion.state === 'away';
+  const paired =
+    companion.state === 'connected' ||
+    companion.state === 'away' ||
+    (companion.state === 'connecting' && !!companion.device);
   // Why the last pairing ended, unless the user unpaired here.
   const ended = companion.state === 'off' ? companion.reason : undefined;
-  // What keeps the phone from signing now: an app to update, or no relay.
-  const problem = companion.outdated
-    ? tc.outdated[companionOutdatedSide(companion.outdated)]
-    : companion.state === 'connecting' && companion.stalled
-      ? tc.stalled
-      : undefined;
+  useEffect(() => {
+    if (paired) setPairing(false);
+  }, [paired]);
 
   const pair = async () => {
     setPairing(true);
@@ -498,17 +502,12 @@ function DnieCard({
                 aria-hidden
               />
               <span className="font-medium text-fg">{t.credentials.dnie.pin}</span>
-              {c.hasPin ? t.credentials.dnie.pinSaved : t.credentials.dnie.pinNone}
+              {c.hasPin ? t.credentials.dnie.pinSaved : null}
             </p>
             {c.hasPin ? (
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" onClick={() => setPinOpen(true)}>
-                  {t.credentials.dnie.pinChange}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setPinDelete(true)}>
-                  {t.credentials.dnie.pinRemove}
-                </Button>
-              </div>
+              <Button variant="ghost" size="sm" onClick={() => setPinDelete(true)}>
+                {t.credentials.dnie.pinRemove}
+              </Button>
             ) : (
               <Button
                 variant="secondary"
@@ -526,19 +525,11 @@ function DnieCard({
                 <Smartphone
                   size={15}
                   className={
-                    connected && !problem
-                      ? 'text-st-done-fg'
-                      : ended || problem
-                        ? 'text-st-attention-fg'
-                        : 'text-fg-subtle'
+                    paired ? 'text-st-done-fg' : ended ? 'text-st-attention-fg' : 'text-fg-subtle'
                   }
                   aria-hidden
                 />
-                {connected
-                  ? tc.connected(companion.device ?? tc.app)
-                  : companion.state === 'away' && companion.device
-                    ? tc.away(companion.device)
-                    : tc.noPhone}
+                {paired ? tc.paired(companion.device) : tc.noPhone}
               </p>
               {ended ? (
                 <p
@@ -546,13 +537,6 @@ function DnieCard({
                   data-testid="companion-ended"
                 >
                   {tc.ended[ended]}
-                </p>
-              ) : problem ? (
-                <p
-                  className="mt-0.5 pl-[23px] text-[12.5px] text-st-attention-fg"
-                  data-testid="companion-problem"
-                >
-                  {problem}
                 </p>
               ) : null}
             </div>
@@ -576,17 +560,11 @@ function DnieCard({
         </>
       ) : null}
       <Dialog
-        open={pairing}
+        open={pairing && !paired}
         onOpenChange={setPairing}
         title={tc.pairTitle}
-        description={tc.pairLead}
-        closeLabel={tc.done}
-        width="lg"
-        footer={
-          <Button variant={connected ? 'primary' : 'secondary'} onClick={() => setPairing(false)}>
-            {tc.done}
-          </Button>
-        }
+        closeLabel={tcommon.close}
+        width="sm"
       >
         <PairingPanel status={companion} />
       </Dialog>
@@ -604,7 +582,7 @@ function DnieCard({
   );
 }
 
-/** Saves or changes the DNIe PIN. Write-only: main never sends it back. */
+/** Saves the DNIe PIN. Write-only: main never sends it back. */
 function DniePinDialog({
   credentialId,
   open,
@@ -653,7 +631,6 @@ function DniePinDialog({
       open={open}
       onOpenChange={close}
       title={t.credentials.dnie.pinDialogTitle}
-      description={t.credentials.dnie.pinDialogLead}
       closeLabel={tc.close}
       width="sm"
       footer={
@@ -693,6 +670,7 @@ function DniePinDialog({
             />
           )}
         </Field>
+        <DnieHelp pin />
         <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
       </form>
     </Dialog>

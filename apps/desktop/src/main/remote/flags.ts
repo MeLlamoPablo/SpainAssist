@@ -77,7 +77,7 @@ export async function loadFeatureFlags(deps: {
   try {
     const json = await requestJson(deps.fetch, joinUrl(deps.url, `/api/frontend?${query}`), {
       headers: { authorization: deps.token },
-      timeoutMs: deps.timeoutMs ?? 3_000,
+      timeoutMs: deps.timeoutMs ?? 10_000,
     });
     const parsed = FrontendResponse.parse(json);
     const features = featuresFromNames(

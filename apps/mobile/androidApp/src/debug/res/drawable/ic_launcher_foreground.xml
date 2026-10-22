@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Blueprint from apps/desktop/packaging/icon-dev.svg, inside the adaptive icon's safe area. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <group
+        android:pivotX="64"
+        android:pivotY="64"
+        android:scaleX="0.6666667"
+        android:scaleY="0.6666667">
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#EEF8FF"
+            android:strokeWidth="2.7"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M37,39h54a10,10 0,0 1,10 10v30a10,10 0,0 1,-10 10h-54a10,10 0,0 1,-10 -10v-30a10,10 0,0 1,10 -10z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#EEF8FF"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:pathData="M28,51.5h72M28,76.5h72" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#EEF8FF"
+            android:strokeAlpha="0.45"
+            android:strokeWidth="0.6"
+            android:strokeLineCap="round"
+            android:pathData="M23,33h82M23,95h82M21,35v58M107,35v58" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#EEF8FF"
+            android:strokeAlpha="0.75"
+            android:strokeWidth="0.75"
+            android:strokeLineCap="round"
+            android:pathData="M27,30v6m74,-6v6M27,92v6m74,-6v6M18,39h6m-6,50h6m80,-50h6m-6,50h6" />
+    </group>
+</vector>

@@ -8,7 +8,6 @@ import {
   type PromptItem,
 } from '@sa/shared';
 import {
-  ChevronDown,
   IdCard,
   KeyRound,
   Loader2,
@@ -27,6 +26,7 @@ import { api, errorMessage } from '../../../lib/api';
 import { cn } from '../../../lib/cn';
 import { useAppStore } from '../../../store/app';
 import { toast } from '../../../store/toast';
+import { DnieHelp } from '../../companion/DnieHelp';
 import { companionDict } from '../../companion/i18n';
 import { OutdatedNotice, PairingPanel } from '../../companion/PairingPanel';
 import { chatDict } from '../i18n';
@@ -246,7 +246,6 @@ function UnlockForm({
   const [pin, setPin] = useState('');
   const [errors, setErrors] = useState<{ can?: string; pin?: string }>({});
   const [busy, setBusy] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
 
   const refused =
     unlock.refused === 'can'
@@ -351,31 +350,7 @@ function UnlockForm({
         ) : null}
       </div>
 
-      <div className="rounded-lg border border-line bg-surface">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-fg hover:text-accent"
-          aria-expanded={helpOpen}
-          onClick={() => setHelpOpen((o) => !o)}
-          data-testid="dnie-unlock-help"
-        >
-          {unlock.pin ? tu.helpTitle : tu.canHelpTitle}
-          <ChevronDown
-            size={15}
-            className={cn('shrink-0 text-fg-subtle transition-transform', helpOpen && 'rotate-180')}
-            aria-hidden
-          />
-        </button>
-        {helpOpen ? (
-          <ul className="flex list-disc flex-col gap-1.5 border-t border-line py-3 pr-3 pl-7 text-[13px] text-fg-muted">
-            {(unlock.pin ? tu.help : [tu.canWhere]).map((line) => (
-              <li key={line} className="whitespace-pre-line">
-                {line}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+      <DnieHelp pin={unlock.pin} />
 
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel} disabled={busy} data-testid="dnie-cancel">

@@ -5,12 +5,17 @@
 //   `appx` target reads that folder; `.scale-*` and `.targetsize-*` files make it index them).
 // Uses Playwright's Chromium (already in the cache when you have run the app or the e2e tests).
 //   node apps/desktop/packaging/render-icon.mjs
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+// With --dev, renders icon-dev.svg to icon-dev.png and (on macOS) icon-dev.icns instead.
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 
 const dir = import.meta.dirname;
-const svg = readFileSync(join(dir, 'icon.svg'), 'utf8');
+const dev = process.argv.includes('--dev');
+const name = dev ? 'icon-dev' : 'icon';
+const svg = readFileSync(join(dir, `${name}.svg`), 'utf8');
 
 /**
  * The Store package's images: `[file, width, height, icon]`, where `icon` is the side of the
@@ -44,13 +49,38 @@ try {
     );
     await page.screenshot({ path: file, omitBackground: true });
   };
-  await render(join(dir, 'icon.png'), 1024, 1024, 1024);
-  const appx = join(dir, 'appx');
-  rmSync(appx, { recursive: true, force: true });
-  mkdirSync(appx);
-  for (const [name, width, height, icon] of appxImages)
-    await render(join(appx, name), width, height, icon);
+  await render(join(dir, `${name}.png`), 1024, 1024, 1024);
+  if (dev && process.platform === 'darwin') {
+    const temporary = mkdtempSync(join(tmpdir(), 'sa-dev-icon-'));
+    const iconset = join(temporary, 'dev.iconset');
+    mkdirSync(iconset);
+    try {
+      for (const size of [16, 32, 128, 256, 512]) {
+        await render(join(iconset, `icon_${size}x${size}.png`), size, size, size);
+        await render(join(iconset, `icon_${size}x${size}@2x.png`), size * 2, size * 2, size * 2);
+      }
+      execFileSync('iconutil', [
+        '--convert',
+        'icns',
+        '--output',
+        join(dir, `${name}.icns`),
+        iconset,
+      ]);
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  } else if (!dev) {
+    const appx = join(dir, 'appx');
+    rmSync(appx, { recursive: true, force: true });
+    mkdirSync(appx);
+    for (const [name, width, height, icon] of appxImages)
+      await render(join(appx, name), width, height, icon);
+  }
 } finally {
   await browser.close();
 }
-console.log(`packaging/icon.png, packaging/appx/ (${appxImages.length} images)`);
+console.log(
+  dev
+    ? `packaging/icon-dev.png${process.platform === 'darwin' ? ', packaging/icon-dev.icns' : ''}`
+    : `packaging/icon.png, packaging/appx/ (${appxImages.length} images)`,
+);

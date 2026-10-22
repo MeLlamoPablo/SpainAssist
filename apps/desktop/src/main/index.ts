@@ -80,6 +80,7 @@ import { createSafeStorageKeyProvider, createTouchIdBiometric } from './vault/ke
 // ---------------------------------------------------------------------------------------------
 
 const isDev = !app.isPackaged;
+const displayName = isDev ? 'Spain Assist Dev' : 'Spain Assist';
 // Launch Services does not inherit the terminal environment. Receive it privately,
 // before reading configuration; API keys must never appear in launcher arguments.
 // The launcher keeps the socket open while it lives: quit when it closes, so a killed
@@ -119,11 +120,11 @@ if (isDev) {
 }
 const env = parseEnv(process.env, { packaged: app.isPackaged });
 const devUrl = isDev ? process.env.ELECTRON_RENDERER_URL : undefined;
-// Packaged builds carry the icon electron-builder makes from this PNG; dev runs Electron's binary.
-const devIcon = isDev ? join(app.getAppPath(), 'packaging/icon.png') : undefined;
+// Development uses Blueprint; packaged builds carry the production icon from electron-builder.
+const devIcon = isDev ? join(app.getAppPath(), 'packaging/icon-dev.png') : undefined;
 
 // Internal name (also the macOS safeStorage keychain item and the userData folder): renaming it
-// would orphan existing vaults. UI-facing copy uses "Spain Assist". The Microsoft Store build has
+// would orphan existing vaults. UI-facing copy uses displayName. The Microsoft Store build has
 // its own folder (`migrate/nsis-import.ts`).
 app.setName('SpainAssistant');
 app.setPath(
@@ -173,7 +174,7 @@ if (!gotLock) {
 function fatal(err: unknown): void {
   logger?.error('startup failed', { error: errorMessage(err) });
   dialog.showErrorBox(
-    'Spain Assist',
+    displayName,
     `No se ha podido iniciar la aplicación.\n\n${errorMessage(err)}`,
   );
   app.exit(1);
@@ -190,7 +191,7 @@ function createWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    title: 'Spain Assist',
+    title: displayName,
     icon: devIcon,
     // No system title bar: the app's headers are the title bar (`drag` areas). macOS insets its
     // traffic lights; Windows and Linux draw their controls over the top-right corner.
@@ -214,6 +215,8 @@ function createWindow(): BrowserWindow {
       backgroundThrottling: !env.hideWindow,
     },
   });
+  // The renderer's production HTML title must not replace the development window's name.
+  if (isDev) win.on('page-title-updated', (event) => event.preventDefault());
   // Electron's default File/Edit/View/Window bar means nothing to this app. macOS keeps it, in
   // the system menu bar, for the standard shortcuts (copy, paste, quit).
   if (process.platform !== 'darwin') win.removeMenu();
@@ -418,7 +421,7 @@ async function main(): Promise<void> {
 
   let hostScript: string | undefined;
   const appInfo: AppInfo = {
-    name: 'Spain Assist',
+    name: displayName,
     version: app.getVersion(),
     platform: process.platform as AppInfo['platform'],
     installChannel: channel,

@@ -199,7 +199,7 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
 
           <div className="px-6 py-2">
             <div className="flex items-center gap-4">
-              <BrandMark size={44} />
+              <BrandMark size={44} development={info?.isDev} />
               <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-2 text-[15px] font-semibold text-fg">
                   <BrandName className="text-[24px]" />

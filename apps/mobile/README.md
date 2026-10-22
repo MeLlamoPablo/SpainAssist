@@ -59,6 +59,9 @@ cd apps/mobile
 ./gradlew :androidApp:assembleRelease          # R8, wss:// only, unsigned (see "Releasing")
 ```
 
+Debug builds appear as **Spain Assist Dev** with the blue Blueprint launcher icon (including
+Android's themed icons). Their `.debug` application ID lets them coexist with production.
+
 - **Interop with the desktop**, without a phone or a card:
   `corepack pnpm --filter @sa/relay-server interop`. It runs the relay and a `DesktopPairing`,
   starts `InteropTest` (this app's controller, channel and ktor client, with a software RSA key

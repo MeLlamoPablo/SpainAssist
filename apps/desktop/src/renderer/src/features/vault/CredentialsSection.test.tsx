@@ -99,14 +99,14 @@ describe('Mis datos: DNIe with the phone', () => {
     expect(render('release')).not.toContain('Acceso anticipado');
   });
 
-  it('offers to save the DNIe PIN, and to change or delete a saved one (never shown)', () => {
+  it('offers to save the DNIe PIN, or delete a saved one (never shown)', () => {
     const none = render(true, [{ ...DNIE, hasPin: false }]);
     expect(none).toContain('dnie-pin-row');
-    expect(none).toContain('Sin guardar');
+    expect(none).not.toContain('Sin guardar');
     expect(none).toContain('Guardar PIN');
     const saved = render(true, [{ ...DNIE, hasPin: true }]);
     expect(saved).toContain('Guardado. El asistente nunca lo ve.');
-    expect(saved).toContain('Cambiar');
+    expect(saved).not.toContain('Cambiar');
     expect(saved).toContain('Borrar');
     expect(saved).not.toContain('Guardar PIN');
   });
@@ -127,21 +127,24 @@ describe('Mis datos: DNIe with the phone', () => {
     expect(render(true, [DNIE])).not.toContain('companion-ended');
   });
 
-  it('says which app to update, or that the server is out of reach', () => {
-    const away = { state: 'away', device: 'Pixel 8' } as const;
-    const phone = render(true, [DNIE], { ...away, outdated: { phone: 5, desktop: 6 } });
-    expect(phone).toContain('data-testid="companion-problem"');
-    expect(phone).toContain(
-      'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
-    );
-    expect(phone).toContain('Desvincular');
-    expect(render(true, [DNIE], { ...away, outdated: { phone: 7, desktop: 6 } })).toContain(
-      'Actualiza Spain Assist en el ordenador',
-    );
-    expect(render(true, [DNIE], { state: 'connecting', stalled: true })).toContain(
-      'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
-    );
-    expect(render(true, [DNIE], away)).not.toContain('companion-problem');
-    expect(render(true, [DNIE], { state: 'connecting' })).not.toContain('companion-problem');
+  it('shows the saved pairing independently of live phone or relay status', () => {
+    const paired = render(true, [DNIE], { state: 'connected', device: 'Pixel 8' });
+    expect(paired).toContain('Móvil vinculado: Pixel 8');
+    expect(paired).toContain('Desvincular');
+    expect(paired).not.toContain('Conectado');
+    for (const status of [
+      { state: 'away', device: 'Pixel 8' },
+      { state: 'connecting', device: 'Pixel 8' },
+      { state: 'connecting', device: 'Pixel 8', stalled: true },
+      { state: 'away', device: 'Pixel 8', outdated: { phone: 5, desktop: 6 } },
+      { state: 'connected', device: 'Pixel 8', outdated: { phone: 7, desktop: 6 } },
+    ] satisfies CompanionStatus[]) {
+      expect(render(true, [DNIE], status)).toBe(paired);
+    }
+    const unpaired = render(true, [DNIE], { state: 'connecting', stalled: true });
+    expect(unpaired).toContain('Ningún móvil vinculado');
+    expect(unpaired).toContain('Vincular el móvil');
+    expect(unpaired).not.toContain('Desvincular');
+    expect(unpaired).not.toContain('No se puede conectar');
   });
 });

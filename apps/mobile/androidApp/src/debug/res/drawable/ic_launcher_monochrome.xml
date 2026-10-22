@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep the Blueprint outline, distinct from production's filled flag, when Android tints it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
+    <group
+        android:pivotX="64"
+        android:pivotY="64"
+        android:scaleX="0.6666667"
+        android:scaleY="0.6666667">
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.7"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M37,39h54a10,10 0,0 1,10 10v30a10,10 0,0 1,-10 10h-54a10,10 0,0 1,-10 -10v-30a10,10 0,0 1,10 -10z" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:pathData="M28,51.5h72M28,76.5h72" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeAlpha="0.75"
+            android:strokeWidth="0.75"
+            android:strokeLineCap="round"
+            android:pathData="M27,30v6m74,-6v6M27,92v6m74,-6v6M18,39h6m-6,50h6m80,-50h6m-6,50h6" />
+    </group>
+</vector>
