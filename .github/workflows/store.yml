@@ -1,0 +1,85 @@
+# Microsoft Store submission: uploads a release run's `store-msix` artifact to Partner Center and
+# submits it for certification, with the Microsoft Store Developer CLI (msstore) and an Entra app
+# (the PARTNER_CENTER_* secrets `infra/terraform/github_release.tf` sets; without them it only warns,
+# and the MSIX is uploaded by hand: Apps and games > Spain Assist > new submission > Packages).
+#
+# release.yml calls it after a stable tag's release. To submit again without rebuilding (after a
+# failed submission), run it by hand with the release run's ID: Actions > Microsoft Store > Run
+# workflow, or `gh workflow run store.yml -f run-id=<id>`. The artifact is kept for 30 days.
+name: Microsoft Store
+
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: ID of the release run whose store-msix artifact to submit
+        required: true
+
+permissions:
+  actions: read
+
+jobs:
+  submit:
+    name: Submit to the Microsoft Store
+    runs-on: windows-latest
+    env:
+      PRODUCT_ID: 9ND5MF94VKGC
+    steps:
+      - id: secrets
+        name: Check the Partner Center secrets
+        shell: bash
+        env:
+          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: |
+          if [[ -z "$CLIENT_SECRET" ]]; then
+            echo "::warning::No Partner Center secrets (infra/terraform/github_release.tf): upload the store-msix artifact by hand"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Called from release.yml, github.run_id is the release run's.
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/download-artifact@v5
+        with:
+          name: store-msix
+          path: ${{ runner.temp }}/msix
+          run-id: ${{ inputs.run-id || github.run_id }}
+          github-token: ${{ github.token }}
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+      - if: steps.secrets.outputs.configured == 'true'
+        name: Sign in to Partner Center
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
+      # `publish` starts a new draft from the last published submission (listings, notes for
+      # certification, options) with this package in place of the old one. It replaces a pending
+      # draft, so submitting again is safe; a submission still in certification makes it fail
+      # until that one is through. A loose .msix is passed as the path; the upload of ~400 MB
+      # needs more than the default 100 s.
+      - if: steps.secrets.outputs.configured == 'true'
+        name: Upload the MSIX
+        shell: pwsh
+        run: msstore publish "$env:RUNNER_TEMP/msix/SpainAssist-win-x64.msix" --appId $env:PRODUCT_ID --noCommit --uploadTimeout 3600 --verbose
+      # The first submission was set to wait for "Publish now"; updates go live once certified,
+      # like the GitHub release electron-updater already serves. The CLI leaves out null fields.
+      - if: steps.secrets.outputs.configured == 'true'
+        name: Publish once certified
+        shell: pwsh
+        run: |
+          $submission = msstore submission get $env:PRODUCT_ID | ConvertFrom-Json
+          $submission | Add-Member -NotePropertyName targetPublishMode -NotePropertyValue Immediate -Force
+          msstore submission update $env:PRODUCT_ID ($submission | ConvertTo-Json -Depth 100 -Compress)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - if: steps.secrets.outputs.configured == 'true'
+        name: Submit for certification
+        shell: pwsh
+        run: |
+          msstore submission publish $env:PRODUCT_ID
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          msstore submission status $env:PRODUCT_ID

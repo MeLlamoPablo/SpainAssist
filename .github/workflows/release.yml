@@ -11,10 +11,8 @@
 #
 # Windows also builds the Microsoft Store MSIX (`SpainAssist-win-x64.msix`) in the same run. It
 # isn't part of the release: it is the workflow artifact `store-msix`. After a stable tag's release,
-# the `store` job submits it to Partner Center with the Microsoft Store Developer CLI (msstore) and
-# an Entra app, from the PARTNER_CENTER_* secrets `infra/terraform/github_release.tf` sets; without
-# them it only warns, and the MSIX is uploaded by hand (Apps and games > Spain Assist > new
-# submission > Packages). Prereleases are never submitted: the Store needs a higher version each
+# the `store` job submits it to Partner Center (store.yml, which can also resubmit a run's MSIX by
+# hand). Prereleases are never submitted: the Store needs a higher version each
 # time, and `vX.Y.Z-suffix` builds as X.Y.Z.0 too. A prerelease's MSIX is for sideload testing
 # (signed locally with a certificate for the `appx.publisher` subject). The Store signs the package
 # it ships.
@@ -392,63 +390,13 @@ jobs:
             --verify-tag --notes "" --title "Spain Assist $VERSION" "${flags[@]}"
 
   store:
-    name: Submit to the Microsoft Store
+    name: Microsoft Store
     needs: [check, build, release]
     # Only stable tags: a prerelease builds as X.Y.Z.0 too, and the Store needs a higher version
     # each time.
     if: needs.check.outputs.prerelease == 'false'
-    runs-on: windows-latest
-    env:
-      PRODUCT_ID: 9ND5MF94VKGC
-    steps:
-      - id: secrets
-        name: Check the Partner Center secrets
-        shell: bash
-        env:
-          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-        run: |
-          if [[ -z "$CLIENT_SECRET" ]]; then
-            echo "::warning::No Partner Center secrets (infra/terraform/github_release.tf): upload the store-msix artifact by hand"
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.secrets.outputs.configured == 'true'
-        uses: actions/download-artifact@v5
-        with:
-          name: store-msix
-          path: ${{ runner.temp }}/msix
-      - if: steps.secrets.outputs.configured == 'true'
-        uses: microsoft/microsoft-store-apppublisher@v1.1
-      - if: steps.secrets.outputs.configured == 'true'
-        name: Sign in to Partner Center
-        shell: pwsh
-        env:
-          TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
-          SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
-          CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-        run: msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
-      # `publish` starts a new draft from the last published submission (listings, notes for
-      # certification, options) with this package in place of the old one. It replaces a pending
-      # draft, so re-running the job is safe; a submission still in certification makes it fail
-      # until that one is through.
-      - if: steps.secrets.outputs.configured == 'true'
-        name: Upload the MSIX
-        shell: pwsh
-        run: msstore publish --inputFile "$env:RUNNER_TEMP/msix/SpainAssist-win-x64.msix" --appId $env:PRODUCT_ID --noCommit
-      # The first submission was set to wait for "Publish now"; updates go live once certified,
-      # like the GitHub release electron-updater already serves.
-      - if: steps.secrets.outputs.configured == 'true'
-        name: Publish once certified
-        shell: pwsh
-        run: |
-          $submission = msstore submission get $env:PRODUCT_ID | ConvertFrom-Json
-          $submission.TargetPublishMode = 'Immediate'
-          msstore submission update $env:PRODUCT_ID ($submission | ConvertTo-Json -Depth 100 -Compress)
-      - if: steps.secrets.outputs.configured == 'true'
-        name: Submit for certification
-        shell: pwsh
-        run: |
-          msstore submission publish $env:PRODUCT_ID
-          msstore submission status $env:PRODUCT_ID
+    uses: ./.github/workflows/store.yml
+    permissions:
+      actions: read
+    secrets: inherit
+
