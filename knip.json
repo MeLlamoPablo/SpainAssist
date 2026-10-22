@@ -4,8 +4,8 @@
     ".": {
       "entry": [
         "scripts/*.mjs",
-        "marketing/launch-video/render.mjs",
-        "marketing/launch-video/scene.js",
+        "marketing/render.mjs",
+        "marketing/*/scene.js",
         "tools/scan-eval/run.mjs"
       ],
       "project": ["scripts/**", "tools/scan-eval/**", "marketing/**/*.{js,mjs}"],

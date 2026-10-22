@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Spain Assist · DNIe video</title>
+<link rel="stylesheet" href="scene.css" />
+</head>
+<body>
+<div id="stage">
+  <div id="bg"><div class="blob" id="blob-r"></div><div class="blob" id="blob-y"></div><div class="blob" id="blob-s"></div></div>
+
+  <!-- The app window, in "world" coordinates (1280×820) moved by the camera. -->
+  <div id="world">
+    <div id="win">
+      <!-- Left: chat, empty -->
+      <aside id="side">
+        <header class="side-head">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="brand"><svg class="flag" viewBox="0 0 58 58"><use href="#flag" /></svg><span class="brand-name">Spain <i>Assist</i></span></div>
+        </header>
+        <div id="hero">
+          <svg class="flag hero-flag" viewBox="0 0 58 58"><use href="#flag" /></svg>
+          <h1>¿En qué te ayudo?</h1>
+          <ul>
+            <li><span class="tick" data-icon="check"></span>Investigo los requisitos</li>
+            <li><span class="tick" data-icon="check"></span>Expido los documentos que necesitas</li>
+            <li><span class="tick" data-icon="check"></span>Tus datos se guardan en este ordenador</li>
+          </ul>
+        </div>
+        <div id="composer">
+          <div class="field"><span id="placeholder">Escribe aquí…</span></div>
+          <div class="composer-row"><span class="clip" data-icon="paperclip"></span><span id="send" data-icon="arrow-up"></span></div>
+        </div>
+      </aside>
+
+      <!-- Right: Mis datos › Credenciales (features/vault/CredentialsSection.tsx) -->
+      <main id="main">
+        <nav class="tabs">
+          <span class="tab"><span data-icon="clipboard-list"></span>Mis trámites<b class="badge">2</b></span>
+          <span class="tab on"><span data-icon="shield-check"></span>Mis datos</span>
+          <span class="tab"><span data-icon="settings"></span>Ajustes</span>
+          <span class="credits">420&nbsp;✦</span>
+        </nav>
+        <div id="viewport">
+          <div id="pane">
+            <ul class="promises">
+              <li><span data-icon="lock"></span>Tus datos solo se almacenan cifrados en este dispositivo.</li>
+              <li><span data-icon="eye-off"></span>El asistente nunca ve tus contraseñas.</li>
+              <li><span data-icon="shield-check"></span>La IA solo recibe los datos relevantes para tus trámites.</li>
+            </ul>
+            <div class="subtabs-slot"></div>
+            <p class="lead">Delega en el asistente el acceso a las webs oficiales.</p>
+            <div class="creds">
+              <div class="cred">
+                <div class="cred-top">
+                  <span class="cred-icon" data-icon="key-round"></span>
+                  <div class="cred-main">
+                    <p class="cred-title">Cl@ve Permanente</p>
+                    <p class="cred-sub">Último uso hace 2 días</p>
+                    <dl class="meta"><div><dt>Usuario</dt><dd class="mono">•••••678Z</dd></div></dl>
+                  </div>
+                  <span class="trash" data-icon="trash"></span>
+                </div>
+                <div class="cred-foot">
+                  <div><p class="foot-title">Cuándo usarla</p><p class="foot-text">La uso sin preguntarte, solo en webs oficiales.</p></div>
+                  <div class="seg"><span class="on">Usar automáticamente</span><span>Preguntar antes</span></div>
+                </div>
+              </div>
+              <div class="cred">
+                <div class="cred-top">
+                  <span class="cred-icon" data-icon="smartphone"></span>
+                  <div class="cred-main">
+                    <p class="cred-title">Cl@ve Móvil</p>
+                    <p class="cred-sub">Último uso hace 1 día</p>
+                    <dl class="meta"><p class="note">Te avisaré cuando tengas que aprobar algo en el móvil.</p></dl>
+                  </div>
+                  <span class="trash" data-icon="trash"></span>
+                </div>
+              </div>
+
+              <!-- The DNIe: the early-access card, then the saved credential. -->
+              <div id="dnie-slot">
+                <div class="add" id="dnie-add">
+                  <span class="add-icon" data-icon="id-card"></span>
+                  <div class="add-main">
+                    <div class="add-head">
+                      <p class="cred-title">DNIe con el móvil</p>
+                      <span class="early" id="early"><span data-icon="rocket"></span>Acceso anticipado<i class="shine" id="shine"></i></span>
+                    </div>
+                    <p class="add-text">Firma con tu DNI electrónico con la app Spain Assist del móvil.</p>
+                  </div>
+                  <span class="btn secondary" id="btn-try"><span data-icon="shield-check"></span>Probar</span>
+                </div>
+                <div class="cred" id="dnie-saved">
+                  <div class="cred-top">
+                    <span class="cred-icon" data-icon="id-card"></span>
+                    <div class="cred-main">
+                      <p class="cred-title">DNIe con el móvil</p>
+                      <p class="cred-sub">Aún no se ha usado</p>
+                      <div class="row first">
+                        <p><span class="row-icon" data-icon="key-round"></span><b>PIN del DNIe</b></p>
+                        <span class="btn secondary sm"><span data-icon="key-round"></span>Guardar PIN</span>
+                      </div>
+                      <div class="row">
+                        <p id="phone-row"><span class="row-icon" id="phone-icon" data-icon="smartphone"></span><span class="swap"><span id="no-phone">Ningún móvil vinculado</span><span id="yes-phone">Móvil vinculado: Pixel 11</span></span></p>
+                        <span class="swap btns">
+                          <span class="btn secondary sm" id="btn-link"><span data-icon="smartphone"></span>Vincular el móvil</span>
+                          <span class="btn ghost sm" id="btn-unlink">Desvincular</span>
+                        </span>
+                      </div>
+                    </div>
+                    <span class="trash" data-icon="trash"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="cred">
+                <div class="cred-top">
+                  <span class="cred-icon" data-icon="file-key"></span>
+                  <div class="cred-main">
+                    <p class="cred-title">Certificado digital <span class="cred-kind">· Certificado FNMT</span></p>
+                    <p class="cred-sub">Aún no se ha usado</p>
+                    <dl class="meta">
+                      <div><dt>Titular</dt><dd>LUCÍA MARTÍN ORTEGA</dd></div>
+                      <div><dt>Emitido por</dt><dd>AC FNMT Usuarios</dd></div>
+                      <div><dt>Válido hasta</dt><dd>20 de octubre de 2030</dd></div>
+                    </dl>
+                  </div>
+                  <span class="trash" data-icon="trash"></span>
+                </div>
+                <div class="cred-foot">
+                  <div><p class="foot-title">Cuándo usarla</p><p class="foot-text">Te pido permiso cada vez, con Touch ID.</p></div>
+                  <div class="seg"><span>Usar automáticamente</span><span class="on">Preguntar antes</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Sticky, like the real tab list once the pane scrolls. -->
+          <div class="subtabs" id="subtabs">
+            <span>Datos personales<b>18</b></span>
+            <span>Documentos<b>5</b></span>
+            <span class="on">Credenciales<b>3</b></span>
+          </div>
+        </div>
+      </main>
+
+      <!-- Dialogs (components/ui/dialog.tsx) -->
+      <div id="overlay"></div>
+      <div id="dialog">
+        <div class="dlg" id="dlg-early">
+          <div class="dlg-head"><h2>Acceso anticipado a DNIe</h2><span class="dlg-x" data-icon="x"></span></div>
+          <div class="dlg-body">
+            <p>Si tienes Android, puedes usar tu móvil para firmar con tu DNIe.</p>
+            <p>La app Spain Assist está en pruebas, así que tienes que pedir una invitación a Pablo (creador de Spain Assist) para que te dé acceso.</p>
+            <span class="dlg-link"><span data-icon="external-link"></span>Pablo Caballero en Twitter</span>
+          </div>
+          <div class="dlg-foot"><span class="btn ghost">Volver</span><span class="btn primary" id="btn-enable">Ya tengo la app, habilitar DNIe</span></div>
+        </div>
+        <div class="dlg" id="dlg-qr">
+          <div class="dlg-head"><h2>Vincular aplicación de Android</h2><span class="dlg-x" data-icon="x"></span></div>
+          <div class="dlg-body center">
+            <div class="qr"><img src="qr.svg" alt="" /><span class="qr-flag"><svg viewBox="0 0 58 58"><use href="#flag" /></svg></span></div>
+            <p class="qr-caption">Escanea este código con el móvil</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <svg id="cursor" viewBox="0 0 24 24"><path d="M5 3l14 8.2-6.3 1.4-3.4 6.4z" fill="#28211d" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" /></svg>
+    <div id="click"></div>
+  </div>
+
+  <div id="veil"></div>
+
+  <!-- The DNIe, under the phone -->
+  <div id="dnie">
+    <div class="dnie-top"><div class="chipgold"></div><div class="dnie-title">DNIe</div></div>
+    <div class="dnie-body"><div class="avatar"></div><div class="lines"><i class="w80"></i><i class="w70"></i><i class="w40"></i><i class="w90"></i></div></div>
+  </div>
+
+  <!-- A Pixel 11 with the real app's screens (debug PreviewActivity, apps/mobile) -->
+  <div id="phone">
+    <i class="key power"></i><i class="key vol"></i>
+    <div class="bezel">
+      <div class="screen" id="screen">
+        <img class="sc" id="sc-inicio" src="phone/inicio.png" alt="" />
+        <img class="sc" id="sc-escanear" src="phone/escanear.png" alt="" />
+        <div id="feed">
+          <div class="feed-scene" id="feed-scene">
+            <div class="feed-dlg">
+              <p>Vincular aplicación de Android</p>
+              <div class="qr"><img src="qr.svg" alt="" /><span class="qr-flag"><svg viewBox="0 0 58 58"><use href="#flag" /></svg></span></div>
+              <b>Escanea este código con el móvil</b>
+            </div>
+          </div>
+        </div>
+        <img class="sc" id="sc-vincular" src="phone/vincular.png" alt="" />
+        <img class="sc" id="sc-conectado" src="phone/conectado.png" alt="" />
+        <img class="sc" id="sc-revisar" src="phone/revisar.png" alt="" />
+        <img class="sc" id="sc-acerca" src="phone/acerca.png" alt="" />
+        <img class="sc" id="sc-leyendo" src="phone/leyendo.png" alt="" />
+        <div id="spinner"><div class="part" id="spinner-part"><img src="phone/leyendo.png" alt="" /></div></div>
+        <img class="sc" id="sc-firmado" src="phone/firmado.png" alt="" />
+        <div id="check"><i class="cover"></i><div class="part" id="check-part"><img src="phone/firmado.png" alt="" /></div></div>
+        <i id="check-ring"></i>
+        <div id="tap"></div>
+        <i class="punch"></i>
+      </div>
+    </div>
+  </div>
+  <div id="rings"><i></i><i></i><i></i></div>
+
+  <div id="title">
+    <div class="logo"><svg class="flag" id="t-flag" viewBox="0 0 58 58"><use href="#flag" /></svg><span class="brand-name"><span class="mask"><span id="t-w1">Spain</span></span> <span class="mask"><i id="t-w2">Assist</i></span></span></div>
+    <p id="t-tag"></p>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <clipPath id="flag-clip"><rect x="1" y="10" width="56" height="38" rx="7" /></clipPath>
+    <g id="flag">
+      <g clip-path="url(#flag-clip)"><path fill="#C60B1E" d="M0 9h58v40H0z" /><path fill="#FFC400" d="M0 19h58v20H0z" /></g>
+      <rect x="1" y="10" width="56" height="38" rx="7" fill="none" stroke="#D4D0CB" stroke-width="2" />
+    </g>
+  </defs>
+</svg>
+<script type="module" src="scene.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
-// Renders the launch video frame by frame: `node marketing/launch-video/render.mjs`.
+// Renders a video frame by frame: `node marketing/render.mjs launch-video` (or `dnie-video`).
 //   --stills 3,7.5   PNGs of those seconds instead of the video
 //   --fps 60         frame rate (default 60)
-//   --out <path>     output file (default marketing/launch-video/out/spain-assist-launch.mp4)
+//   --out <path>     output file (default marketing/<video>/out/spain-assist-<video>.mp4)
 // Needs ffmpeg on PATH and the Chromium that apps/desktop's playwright-core expects.
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
@@ -12,16 +12,23 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = resolve(here, '../..');
+const repo = resolve(here, '..');
 const { chromium } = createRequire(join(repo, 'apps/desktop/package.json'))('playwright-core');
 
-const { values: args } = parseArgs({
+const { values: args, positionals } = parseArgs({
+  allowPositionals: true,
   options: {
     stills: { type: 'string' },
     fps: { type: 'string', default: '60' },
-    out: { type: 'string', default: join(here, 'out/spain-assist-launch.mp4') },
+    out: { type: 'string' },
   },
 });
+const video = positionals[0];
+if (!video || !statSync(join(here, video, 'index.html'), { throwIfNoEntry: false })) {
+  console.error('Usage: node marketing/render.mjs <launch-video|dnie-video> [--stills 3,7.5]');
+  process.exit(1);
+}
+args.out ??= join(here, video, `out/spain-assist-${video}.mp4`);
 
 const TYPES = {
   '.html': 'text/html',
@@ -29,6 +36,8 @@ const TYPES = {
   '.css': 'text/css',
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
 };
 const server = createServer((req, res) => {
   const path = normalize(join(repo, decodeURIComponent(new URL(req.url, 'http://x').pathname)));
@@ -40,7 +49,7 @@ const server = createServer((req, res) => {
   res.end(readFileSync(path));
 });
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-const url = `http://127.0.0.1:${server.address().port}/marketing/launch-video/index.html`;
+const url = `http://127.0.0.1:${server.address().port}/marketing/${video}/index.html`;
 
 const browser = await chromium.launch();
 const page = await browser.newPage({

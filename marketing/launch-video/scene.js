@@ -1,4 +1,4 @@
-import { ICONS } from './icons.js';
+import { ICONS } from '../icons.js';
 
 /**
  * The launch video as a pure function of time: `seek(t)` sets every style for second `t`, so
