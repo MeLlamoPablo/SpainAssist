@@ -5,7 +5,7 @@ import { ICONS } from '../icons.js';
  * render.mjs can capture any frame deterministically. Times live in `T`; tweak them there.
  */
 
-export const DURATION = 19.0;
+export const DURATION = 20.2;
 
 const T = {
   winIn: -0.2,
@@ -86,6 +86,7 @@ export async function ready() {
   M.savedH = $('dnie-saved').offsetHeight;
   M.tabsTop = $('pane').offsetTop + $('pane').querySelector('.subtabs-slot').offsetTop;
   M.pillW = $('early').offsetWidth;
+  M.outroPillW = $('t-pill').offsetWidth;
   M.try = center($('btn-try'));
   M.qrH = $('dlg-qr').offsetHeight;
   set($('dialog'), { top: `${410 - M.qrH / 2}px`, height: `${M.qrH}px` });
@@ -163,8 +164,25 @@ function title(t) {
   });
   set($('t-w1'), { transform: `translateY(${(1 - w1) * 110}%)` });
   set($('t-w2'), { transform: `translateY(${(1 - w2) * 110}%)` });
-  $('t-tag').textContent = 'Firma con tu DNI';
   set($('t-tag'), { opacity: tag, transform: `translateY(${(1 - tag) * 16}px)` });
+
+  // Then "Acceso anticipado" joins it: the tagline slides left, the pill springs in and glows.
+  const a = t0 + 1.45;
+  const room = P(t, a, 0.7, E.inOut);
+  const pop = P(t, a + 0.2, 0.8, E.spring);
+  const glow = P(t, a + 0.3, 0.5);
+  set($('t-slot'), { width: `${room * (M.outroPillW + 22)}px` });
+  set($('t-pill'), {
+    opacity: clamp01(P(t, a + 0.2, 0.2, E.lin)),
+    transform: `scale(${0.4 + 0.6 * pop}) rotate(${(1 - pop) * -6}deg)`,
+    backgroundPosition: `${lerp(0, 100, P(t, a, 2.4, E.inOut))}% 0`,
+    boxShadow: `inset 0 0 0 1.5px var(--progress-line), 0 0 ${36 * glow}px rgba(131, 89, 227, ${0.35 * glow})`,
+  });
+  const sweep = clamp01((t - a - 0.75) / 0.7);
+  set($('t-shine'), {
+    opacity: sweep > 0 && sweep < 1 ? Math.sin(sweep * Math.PI) : 0,
+    transform: `translateX(${lerp(-100, M.outroPillW + 20, sweep)}px) skewX(-16deg)`,
+  });
 }
 
 function windowAndCamera(t) {
@@ -185,6 +203,10 @@ function windowAndCamera(t) {
     opacity: clamp01(p * 2.5),
   });
 }
+
+const DIMMED = ['#side', '.tabs', '.promises', '.lead', '#subtabs', '.creds > .cred'].flatMap(
+  (q) => [...document.querySelectorAll(q)],
+);
 
 function vault(t) {
   // "Probar" saves the DNI under the pairing dialog; the pane scrolls and the sub-tabs stick.
@@ -207,6 +229,10 @@ function vault(t) {
     transform: `translateY(${(1 - pop) * 18}px) scale(${0.97 + 0.03 * pop})`,
   });
   set($('dnie-saved'), { opacity: saved });
+
+  // The rest steps back while the new option shows itself, until "Probar" is clicked.
+  const dim = 1 - 0.55 * inOut(t, T.dnieIn, 0.5, T.press1 - 0.05, 0.35);
+  for (const el of DIMMED) set(el, { opacity: dim });
 
   pill(t);
   set($('btn-try'), { transform: `scale(${1 - 0.06 * press(t, T.press1)})` });

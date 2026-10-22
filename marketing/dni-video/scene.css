@@ -1035,12 +1035,55 @@ svg.icon {
   display: inline-block;
 }
 #t-tag {
+  display: flex;
+  align-items: center;
   margin-top: 34px;
   font-size: 40px;
   font-weight: 500;
   letter-spacing: -0.02em;
   color: var(--fg-muted);
-  height: 50px;
+  height: 56px;
+  white-space: nowrap;
+}
+/* The pill opens a space beside the tagline, which slides left to make room. */
+#t-slot {
+  position: relative;
+  display: block;
+  width: 0;
+  height: 56px;
+}
+.t-pill {
+  position: absolute;
+  left: 22px;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: -26px;
+  height: 52px;
+  padding: 0 20px;
+  border-radius: 16px;
+  background: linear-gradient(100deg, #efe7ff 0%, #e2d6ff 35%, #fbe2f0 65%, #efe7ff 100%);
+  background-size: 220% 100%;
+  box-shadow: inset 0 0 0 1.5px var(--progress-line);
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  color: var(--progress-fg);
+  overflow: hidden;
+  transform-origin: 0 50%;
+  opacity: 0;
+}
+.t-pill [data-icon] {
+  font-size: 30px;
+}
+.t-shine {
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  left: 0;
+  width: 90px;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+  opacity: 0;
 }
 
 /* ---------------- The phone app (FirmaApp.kt), in dp ---------------- */
