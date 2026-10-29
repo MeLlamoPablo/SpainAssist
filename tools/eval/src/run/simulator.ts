@@ -15,6 +15,7 @@ import type {
   ObservationSink,
   PendingPrompt,
 } from '../contracts';
+import { documentForField, type FixtureDocument, renderDocument } from '../documents';
 import { type Answerer, AnswererError, type ConversationTurn } from '../llm';
 
 /**
@@ -24,6 +25,11 @@ import { type Answerer, AnswererError, type ConversationTurn } from '../llm';
  * UI's path `addClave` + `respond`), `freeform` answers and the `answerer` policy go to the
  * answerer model, which is only created the first time it is needed. What no scripted answer
  * covers follows `Fixture.unexpectedPrompt`.
+ *
+ * Document fields are never the answerer's: whoever answers the rest of a form, each document
+ * field gets the persona's document that matches what it asks for (`documentForField`), the one
+ * already saved or, the first time, uploaded through the UI's path (`addDocument`), as a person
+ * picks a file. A form of document fields only needs no answerer at all.
  *
  * Problems end up in two callbacks: `onUnexpected` (the fixture's `fail` policy met a prompt it
  * has no answer for, or a prompt the simulator cannot answer at all) and `onFatal` (a fixture
@@ -53,8 +59,8 @@ export class SimulatorError extends Error {
 }
 
 export interface UserSimulatorOptions {
-  fixture: Pick<Fixture, 'persona' | 'language' | 'answerGroups' | 'unexpectedPrompt'>;
-  app: Pick<EvalApp, 'pendingPrompts' | 'respond' | 'addClave'>;
+  fixture: Pick<Fixture, 'persona' | 'language' | 'answerGroups' | 'unexpectedPrompt' | 'seed'>;
+  app: Pick<EvalApp, 'pendingPrompts' | 'respond' | 'addClave' | 'addDocument' | 'vaultDocuments'>;
   log: ObservationFeed;
   /** The answer cursor of a checkpoint. */
   state?: AnswerStateSnapshot;
@@ -147,6 +153,10 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
   let working = false;
   let stopped = false;
   let answerer: Promise<Answerer> | undefined;
+  const documents: readonly FixtureDocument[] = fixture.seed?.documents ?? [];
+  /** Vault ids of the persona's documents once picked (saved or uploaded), by key; names by id. */
+  const documentIds = new Map<string, string>();
+  const documentNames = new Map<string, string>();
 
   const busy = () => !stopped && (working || queue.length > 0);
 
@@ -272,7 +282,9 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
             `answer ${answer.id}: ignored fields that the form does not have: ${resolved.ignored.join(', ')}`,
           );
         }
-        await send(prompt, formResponse(prompt, resolved.values), {
+        const values = { ...resolved.values, ...(await documentValues(prompt, resolved.values)) };
+        if (stopped) return;
+        await send(prompt, formResponse(prompt, values), {
           by: 'structured',
           answerId: answer.id,
         });
@@ -349,6 +361,20 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
       );
       return;
     }
+    const fields = prompt.fields ?? [];
+    const onlyDocuments =
+      fields.some((field) => field.type === 'document') &&
+      fields.every((field) => field.type === 'document' || field.secret || field.type === 'secret');
+    if (onlyDocuments) {
+      const picked = await documentValues(prompt, {});
+      if (stopped) return;
+      await send(
+        prompt,
+        Object.keys(picked).length > 0 ? formResponse(prompt, picked) : dismissal(),
+        { by: 'structured', ...(answerId ? { answerId } : {}) },
+      );
+      return;
+    }
     if (!options.answerer) {
       throw new SimulatorError(
         'invalid_answer',
@@ -385,14 +411,70 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
     if (checked.issues.length > 0) {
       note(`answerer values dropped for ${describePrompt(prompt)}: ${checked.issues.join('; ')}`);
     }
-    const response =
-      Object.keys(checked.values).length === 0 ? dismissal() : formResponse(prompt, checked.values);
+    const values =
+      Object.keys(checked.values).length === 0
+        ? {}
+        : { ...checked.values, ...(await documentValues(prompt, checked.values)) };
+    if (stopped) return;
+    const response = Object.keys(values).length === 0 ? dismissal() : formResponse(prompt, values);
     await send(prompt, response, { by: 'answerer', ...(answerId ? { answerId } : {}) });
   }
 
   // -------------------------------------------------------------------------------------------
   // Answering
   // -------------------------------------------------------------------------------------------
+
+  /** The vault id of a persona's document: the saved one, or uploaded the first time it is picked. */
+  async function documentId(document: FixtureDocument, prompt: PendingPrompt): Promise<string> {
+    const known = documentIds.get(document.key);
+    if (known) return known;
+    const file = renderDocument(document);
+    let id = document.saved
+      ? (await app.vaultDocuments()).find((saved) => saved.name === file.name)?.id
+      : undefined;
+    id ??= await app.addDocument({
+      name: file.name,
+      mimeType: file.mimeType,
+      bytes: file.bytes,
+      ...(prompt.procedureId ? { procedureId: prompt.procedureId } : {}),
+    });
+    documentIds.set(document.key, id);
+    documentNames.set(id, file.name);
+    return id;
+  }
+
+  /**
+   * The document fields of a form, filled as a person picks files: each with the persona's
+   * document that matches what it asks for, at most once per form. Fields hidden by a select stay
+   * out; a required field no document matches is left empty, with a note.
+   */
+  async function documentValues(
+    prompt: PendingPrompt,
+    values: Record<string, string | string[] | boolean>,
+  ): Promise<Record<string, string>> {
+    const fields = prompt.fields ?? [];
+    const current: Record<string, unknown> = {
+      ...initialValues(toFormFields(fields)),
+      ...values,
+    };
+    const picked: Record<string, string> = {};
+    const taken = new Set<string>();
+    for (const field of fields) {
+      if (field.type !== 'document') continue;
+      const gate = field.visibleWhen;
+      if (gate && !gate.values.includes(String(current[gate.field] ?? ''))) continue;
+      const document = documentForField(field, documents, taken);
+      if (!document) {
+        if (field.required !== false) {
+          note(`no document of the persona answers "${field.label}" in ${describePrompt(prompt)}`);
+        }
+        continue;
+      }
+      taken.add(document.key);
+      picked[field.key] = await documentId(document, prompt);
+    }
+    return picked;
+  }
 
   function dismissal(): PromptResponse {
     return { kind: 'form', dismissed: true, savedToVault: [] };
@@ -450,7 +532,8 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
     for (const field of prompt.fields ?? []) {
       const value = response.values?.[field.key];
       if (value === undefined || field.secret || field.type === 'secret') continue;
-      const label = (raw: string) => field.options?.find((o) => o.value === raw)?.label ?? raw;
+      const label = (raw: string) =>
+        field.options?.find((o) => o.value === raw)?.label ?? documentNames.get(raw) ?? raw;
       const shown = Array.isArray(value) ? value.map(label).join(', ') : label(String(value));
       lines.push(`${field.label}: ${shown}`);
     }

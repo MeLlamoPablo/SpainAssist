@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { HeadlessApp } from '@sa/desktop/headless';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { renderDocument } from '../../../src/documents';
+import { DANIEL, SALE_IBIZA, SALE_ZIP, tasa } from '../../../src/fixtures/transferencia-data';
 import {
   copyProfile,
   isEmptyDirectory,
@@ -117,6 +119,20 @@ describe('seedVault', () => {
         { username: '53918274H', password: 'Contraseña-1', label: 'Cl@ve Permanente' },
       ],
       ['vault.addClave', { username: '12345678Z', password: 'Contraseña-2' }],
+    ]);
+  });
+
+  it("saves the persona's saved documents as the documents page does, and leaves the others", async () => {
+    const { fake, calls } = app();
+    const fee = tasa(SALE_IBIZA, DANIEL, { saved: true });
+    const onHand = { ...tasa(SALE_ZIP, DANIEL, { saved: false }), key: 'otra' };
+    await seedVault(fake, { documents: [fee, onHand] }, () => {});
+    const file = renderDocument(fee);
+    expect(calls).toEqual([
+      [
+        'vault.addDocument',
+        { name: file.name, mimeType: 'application/pdf', bytes: file.bytes, source: 'user' },
+      ],
     ]);
   });
 

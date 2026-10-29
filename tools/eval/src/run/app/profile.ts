@@ -8,6 +8,7 @@ import { cp, mkdir, rm } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import type { HeadlessApp } from '@sa/desktop/headless';
 import type { FixtureSeed } from '../../contracts';
+import { renderDocument } from '../../documents';
 
 /**
  * What a profile copy leaves out: the logs (they belong to the run that wrote them), the staging
@@ -46,7 +47,8 @@ function customLabel(key: string): string {
 
 /**
  * Puts the fixture's saved data in the vault, through the renderer API (the app validates it as
- * it does what a user types). `registerSecret` is told every password first.
+ * it does what a user types): personal data, Cl@ve credentials and the documents marked `saved`
+ * (uploaded as the "Mis documentos" page does). `registerSecret` is told every password first.
  */
 export async function seedVault(
   app: HeadlessApp,
@@ -63,6 +65,16 @@ export async function seedVault(
       username: clave.username,
       password: clave.password,
       ...(clave.label ? { label: clave.label } : {}),
+    });
+  }
+  for (const document of seed?.documents ?? []) {
+    if (!document.saved) continue;
+    const file = renderDocument(document);
+    await app.invoke('vault.addDocument', {
+      name: file.name,
+      mimeType: file.mimeType,
+      bytes: file.bytes,
+      source: 'user',
     });
   }
 }

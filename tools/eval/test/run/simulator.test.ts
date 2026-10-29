@@ -2,12 +2,17 @@ import '../llm/helpers/no-network';
 import type { PromptResponse } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import type { AnswerGroup, Fixture, Observation, PendingPrompt } from '../../src/contracts';
+import type { FixtureDocument } from '../../src/documents';
+import { itp, MARTA, SALE_YARIS, tasa } from '../../src/fixtures/transferencia-data';
 import { AnswererError, type AnswererResult } from '../../src/llm';
 import { createUserSimulator, ObservationLog, SimulatorError } from '../../src/run';
 import { prompt } from '../rules/support/run';
 import { fakeAnswerer } from './support/harness';
 
-type SimFixture = Pick<Fixture, 'persona' | 'language' | 'answerGroups' | 'unexpectedPrompt'>;
+type SimFixture = Pick<
+  Fixture,
+  'persona' | 'language' | 'answerGroups' | 'unexpectedPrompt' | 'seed'
+>;
 
 const methods = (itemId = 'form-1'): PendingPrompt =>
   prompt({
@@ -90,6 +95,28 @@ class SimApp {
     this.claves.push(input);
     return `cred-${this.claves.length}`;
   };
+
+  readonly documents: { id: string; name: string; mimeType: string; procedureId?: string }[] = [];
+
+  addDocument = async (input: {
+    name: string;
+    mimeType: string;
+    bytes: Uint8Array;
+    procedureId?: string;
+  }): Promise<string> => {
+    this.order.push(`addDocument:${input.name}`);
+    const id = `doc-${this.documents.length + 1}`;
+    this.documents.push({
+      id,
+      name: input.name,
+      mimeType: input.mimeType,
+      ...(input.procedureId ? { procedureId: input.procedureId } : {}),
+    });
+    return id;
+  };
+
+  vaultDocuments = async () =>
+    this.documents.map((doc) => ({ ...doc, read: async () => new Uint8Array() }));
 }
 
 function setup(
@@ -923,5 +950,143 @@ describe('pacing and stopping', () => {
       ],
     });
     expect(t.sim.unusedRequired()).toEqual(['never']);
+  });
+});
+
+describe('document fields', () => {
+  const sale = SALE_YARIS;
+  const onHand = (): FixtureDocument[] => [
+    itp(
+      sale,
+      MARTA,
+      {
+        number: '6212410391207',
+        accrual: '2026-09-02',
+        declaredValue: 9500,
+        paidAt: '2026-10-14T10:27',
+        nrc: '6210263051C4HT81N2P7Z5',
+      },
+      { saved: false },
+    ),
+    tasa(sale, MARTA, { saved: false }),
+  ];
+  const papers = (itemId = 'form-docs', extra: NonNullable<PendingPrompt['fields']> = []) =>
+    prompt({
+      itemId,
+      procedureId: 'p_1',
+      agent: 'procedure',
+      title: 'Documentos para la transferencia',
+      fields: [
+        { key: 'impuesto', type: 'document', label: 'Justificante del ITP (modelo 621)' },
+        { key: 'tasa', type: 'document', label: 'Justificante de la tasa de Tráfico' },
+        ...extra,
+      ],
+    });
+
+  it('uploads the matching documents of the persona, as the UI does, with no answerer', async () => {
+    const t = setup({
+      answerGroups: [],
+      unexpectedPrompt: 'answerer',
+      seed: { documents: onHand() },
+    });
+    t.show(papers());
+    await t.sim.settled();
+    expect(t.fatal).toEqual([]);
+    expect(t.app.documents).toEqual([
+      {
+        id: 'doc-1',
+        name: 'Justificante_Modelo621_6212410391207.pdf',
+        mimeType: 'application/pdf',
+        procedureId: 'p_1',
+      },
+      {
+        id: 'doc-2',
+        name: 'Justificante_Tasa_791263051942.pdf',
+        mimeType: 'application/pdf',
+        procedureId: 'p_1',
+      },
+    ]);
+    expect(t.app.responses[0]!.response).toMatchObject({
+      kind: 'form',
+      values: { impuesto: 'doc-1', tasa: 'doc-2' },
+      dismissed: false,
+    });
+    expect(t.answered()).toMatchObject([{ itemId: 'form-docs', by: 'structured' }]);
+  });
+
+  it('picks a saved document from the vault instead of uploading it again, and reuses an uploaded one', async () => {
+    const documents = onHand().map((d) => ({ ...d, saved: d.key === 'tasa' }));
+    const t = setup({ answerGroups: [], unexpectedPrompt: 'answerer', seed: { documents } });
+    t.app.documents.push({
+      id: 'saved-1',
+      name: 'Justificante_Tasa_791263051942.pdf',
+      mimeType: 'application/pdf',
+    });
+    t.show(papers('form-a'));
+    await t.sim.settled();
+    t.show(papers('form-b'));
+    await t.sim.settled();
+    expect(t.app.documents.map((d) => d.id)).toEqual(['saved-1', 'doc-2']);
+    expect(t.app.responses.map((r) => r.response)).toMatchObject([
+      { values: { impuesto: 'doc-2', tasa: 'saved-1' } },
+      { values: { impuesto: 'doc-2', tasa: 'saved-1' } },
+    ]);
+  });
+
+  it('lets the answerer answer the other fields and never shows it a document', async () => {
+    const answerer = fakeAnswerer([
+      () => ({ type: 'values', values: { email: 'marta.jimenez.ortiz@hotmail.com' }, skipped: [] }),
+    ]);
+    const t = setup(
+      { answerGroups: [], unexpectedPrompt: 'answerer', seed: { documents: onHand() } },
+      { answerer },
+    );
+    t.show(papers('form-mixed', [{ key: 'email', type: 'email', label: 'Correo' }]));
+    await t.sim.settled();
+    expect(t.app.responses[0]!.response).toMatchObject({
+      values: { email: 'marta.jimenez.ortiz@hotmail.com', impuesto: 'doc-1', tasa: 'doc-2' },
+    });
+    expect(JSON.stringify(answerer.state.requests)).not.toContain('Justificante_');
+    expect(t.app.order.filter((step) => step.startsWith('addDocument'))).toHaveLength(2);
+  });
+
+  it('gives each document once per form and notes a required field nothing answers', async () => {
+    const t = setup({
+      answerGroups: [],
+      unexpectedPrompt: 'answerer',
+      seed: { documents: onHand().filter((d) => d.key === 'tasa') },
+    });
+    t.show(
+      prompt({
+        itemId: 'form-two',
+        title: 'Adjunta',
+        fields: [
+          { key: 'tasa1', type: 'document', label: 'Tasa' },
+          { key: 'tasa2', type: 'document', label: 'Otra tasa' },
+          { key: 'contrato', type: 'document', label: 'Contrato de compraventa' },
+        ],
+      }),
+    );
+    await t.sim.settled();
+    expect(t.app.responses[0]!.response).toMatchObject({ values: { tasa1: 'doc-1' } });
+    const values = (t.app.responses[0]!.response as { values?: Record<string, unknown> }).values;
+    expect(values).not.toHaveProperty('tasa2');
+    expect(values).not.toHaveProperty('contrato');
+    expect(t.notes().filter((n) => n.startsWith('no document of the persona answers'))).toEqual([
+      'no document of the persona answers "Otra tasa" in procedure form "Adjunta"',
+      'no document of the persona answers "Contrato de compraventa" in procedure form "Adjunta"',
+    ]);
+  });
+
+  it('dismisses a form of documents the persona does not have', async () => {
+    const t = setup({ answerGroups: [], unexpectedPrompt: 'answerer' });
+    t.show(papers());
+    await t.sim.settled();
+    expect(t.app.responses[0]!.response).toEqual({
+      kind: 'form',
+      dismissed: true,
+      savedToVault: [],
+    });
+    expect(t.app.documents).toEqual([]);
   });
 });

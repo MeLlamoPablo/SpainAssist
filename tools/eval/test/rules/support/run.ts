@@ -191,6 +191,6 @@ export const net = (overrides: Partial<NetRecord> = {}): ObservationDraft => ({
 });
 
 export const benchEvent = (
-  what: 'wrong_turn' | 'exfil' | 'download',
+  what: 'wrong_turn' | 'exfil' | 'download' | 'submission',
   data: unknown = {},
 ): ObservationDraft => ({ type: 'bench', what, data });

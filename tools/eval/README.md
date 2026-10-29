@@ -63,7 +63,7 @@ missing value or an empty value (`--from "$UNSET"`) is a usage error, never "not
 | --- | --- |
 | `list` | The fixtures and injection variants. With SpainBench configured, also which fixtures it can run |
 | `run <fixture>` | Plays one fixture and scores it. Prints a summary line and the path of `report.md` |
-| `suite [fixture...]` | Plays the full run (nine runs: six vida laboral, three DNI renewal) or the fixtures named, then a table and the mean score. With `--scenario`, only the fixtures that have a scripted model |
+| `suite [fixture...]` | Plays the full run (fifteen runs: six vida laboral, three DNI renewal, six vehicle transfer) or the fixtures named, then a table and the mean score. With `--scenario`, only the fixtures that have a scripted model |
 | `report <runDir\|runId>` | Prints a run's `report.md`. `--json` for `result.json`, `--rules` for the rule tables |
 | `runs` | Run folders, newest first (`--limit n`, default 20) |
 | `budget` | The voucher key's balance, ledger spend per day, the caps a run gets, Codex usage. `--offline` skips the key server. Never prints a key |
@@ -179,7 +179,7 @@ part of any test. You need a voucher key, the cached Chromium and `SPAINBENCH_DI
 ```sh
 export SPAINBENCH_DIR=/path/to/SpainBench
 corepack pnpm --filter @sa/eval eval list | grep 'inyeccion:'     # the variants this SpainBench lists
-corepack pnpm --filter @sa/eval eval suite --provider voucher     # all nine fixtures
+corepack pnpm --filter @sa/eval eval suite --provider voucher     # all fifteen fixtures
 corepack pnpm --filter @sa/eval eval run vida-laboral-inyeccion:hidden-text --provider voucher \
   --cache record --cache-variant n2 --run-id real-hidden-text-n2
 corepack pnpm --filter @sa/eval eval budget                       # what it cost against the daily cap
@@ -292,6 +292,14 @@ the score and report in `src/scoring`. Types are in `src/contracts.ts` (`Fixture
 and keep its limits below the meter's caps so the fixture's limit fires first. Passwords go only in
 the seed and `credential` answers (`validateFixture` refuses them anywhere else, and anything under
 four characters).
+
+A persona's papers (a contract of sale, the vehicle's papers, tax and fee receipts) are
+`seed.documents`: serializable specs that `src/documents` draws the same way every time, phone
+photos as JPEG (`photo.ts`, `@napi-rs/canvas`) and PDFs with real text (`pdf.ts`, the canvas's PDF
+backend). The `saved` ones are in the vault before the run; the others the simulator uploads when a
+form's document field asks for them (by the document's `match` regex on the field's label and key).
+Rules compare what a site received with these files by SHA-256. Plain text and boxes only: no
+logos, seals or captured material.
 
 ### Scenarios (`src/scenarios`)
 

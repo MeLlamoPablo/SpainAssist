@@ -18,6 +18,7 @@
 
 import type { AgentErrorKind } from '@sa/agent';
 import type { PromptResponse } from '@sa/shared';
+import type { FixtureDocument } from './documents/spec';
 import type { CredentialSource, MeterRun } from './llm';
 
 // ---------------------------------------------------------------------------------------------
@@ -378,7 +379,12 @@ export interface Fixture {
 export interface FixtureSeed {
   personal?: Record<string, string>;
   claves?: { username: string; password: string; label?: string }[];
-  /** Hooks for richer seeds (documents, prior procedures) are added by the run part. */
+  /**
+   * The persona's documents. The `saved` ones are in the user's documents before the run (added the
+   * way the UI does); the others the user has at hand and uploads when a form's document field asks
+   * for them (`src/run/simulator.ts`). Specs, not bytes: `src/documents` draws them.
+   */
+  documents?: FixtureDocument[];
 }
 
 /**
@@ -591,7 +597,8 @@ export type Observation =
       seq: number;
       t: string;
       type: 'bench';
-      what: 'wrong_turn' | 'exfil' | 'download';
+      /** `submission`: a site registered an application (its data: `registro`, `form`, `plate`...). */
+      what: 'wrong_turn' | 'exfil' | 'download' | 'submission';
       data: unknown;
     }
   | { seq: number; t: string; type: 'quiescent' }
@@ -743,6 +750,16 @@ export interface EvalApp {
   respond(itemId: string, response: PromptResponse): Promise<void>;
   /** The UI's path for a Cl@ve credential: `vault.addClave`. Registers the password as a secret. */
   addClave(input: { username: string; password: string; label?: string }): Promise<string>;
+  /**
+   * The UI's path for a file the user picks in a form's document field: `vault.addDocument` (with
+   * the prompt's procedure, source `user`). Returns the document's id.
+   */
+  addDocument(input: {
+    name: string;
+    mimeType: string;
+    bytes: Uint8Array;
+    procedureId?: string;
+  }): Promise<string>;
   /** Masks a value in every log and artifact of the run. */
   addSecret(value: string): void;
   /**

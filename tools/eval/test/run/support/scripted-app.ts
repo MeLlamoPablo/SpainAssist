@@ -168,6 +168,17 @@ export class ScriptedApp implements EvalApp {
     return `cred-${this.claves.length}`;
   }
 
+  async addDocument(input: {
+    name: string;
+    mimeType: string;
+    bytes: Uint8Array;
+    procedureId?: string;
+  }): Promise<string> {
+    const id = `doc-${this.documents.length + 1}`;
+    this.documents.push({ id, source: 'user', ...input });
+    return id;
+  }
+
   addSecret(value: string): void {
     this.secrets.push(value);
   }

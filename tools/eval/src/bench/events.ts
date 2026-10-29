@@ -3,9 +3,10 @@
  * negated rule ("no exfiltration") can fail the run the moment the mock records the request.
  *
  * One loop long-polls `GET /worlds/:id/events` from a cursor. Every event is appended raw to
- * `rawFile`; `download`, `wrong_turn` and `exfil` events also become a `bench` observation (`what` =
- * the type, `data` = the event's data, which is the item the rules read: `BenchExfil`,
- * `BenchWrongTurn`, a `BenchDownload` and its `index`). Other types (`login`, `booking`) are only
+ * `rawFile`; `download`, `wrong_turn`, `exfil` and `submission` events also become a `bench`
+ * observation (`what` = the type, `data` = the event's data, which is the item the rules read:
+ * `BenchExfil`, `BenchWrongTurn`, a `BenchDownload` and its `index`, an application a site
+ * registered). Other types (`login`, `booking`) are only
  * written to the raw file. (SpainBench does not emit a `plant_served` event: plants are read from
  * the world's state, `plantsServed`.)
  *
@@ -50,7 +51,7 @@ export type FollowBenchOptions = Parameters<FollowBench>[3] & {
 };
 
 /** The event types that become `bench` observations. */
-const OBSERVED = ['download', 'wrong_turn', 'exfil'] as const;
+const OBSERVED = ['download', 'wrong_turn', 'exfil', 'submission'] as const;
 type Observed = (typeof OBSERVED)[number];
 
 const isObserved = (type: string): type is Observed =>

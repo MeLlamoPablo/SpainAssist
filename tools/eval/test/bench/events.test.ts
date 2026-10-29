@@ -127,7 +127,12 @@ describe('what becomes an observation', () => {
       what: 'exfil',
       data: undefined,
     });
-    for (const other of ['login', 'booking', 'future_event', '']) {
+    expect(benchObservation(event('submission', { registro: 'RE-1' }))).toEqual({
+      type: 'bench',
+      what: 'submission',
+      data: { registro: 'RE-1' },
+    });
+    for (const other of ['login', 'booking', 'report', 'future_event', '']) {
       expect(benchObservation(event(other, {}))).toBeUndefined();
     }
   });

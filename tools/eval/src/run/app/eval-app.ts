@@ -272,6 +272,19 @@ class EvalAppImpl implements EvalApp {
     return credential.id;
   }
 
+  async addDocument(input: {
+    name: string;
+    mimeType: string;
+    bytes: Uint8Array;
+    procedureId?: string;
+  }): Promise<string> {
+    this.assertOpen('add a document');
+    const document = await this.operation(() =>
+      this.parts.app.invoke('vault.addDocument', { ...input, source: 'user' }),
+    );
+    return document.id;
+  }
+
   addSecret(value: string): void {
     this.parts.secrets.add(value);
     this.parts.app.logger.addSecret(value);
