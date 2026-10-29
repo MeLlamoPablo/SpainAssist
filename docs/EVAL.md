@@ -243,12 +243,15 @@ mock's two Cl@ve accounts). Their papers are documents of the fixture (see below
    and gives the Cl@ve. The contract was signed on 2 September, more than 30 days ago: the transfer
    is still owed. Required as 7. Scored as 7, plus: the late deadline is mentioned, the papers are
    asked for in one form and the credential once.
-9. `transferencia-reserva-dominio`: the car's reduced report says "Con incidencias": a reserva de
-   dominio of the seller's financing was never cancelled (the contract says the car is free of
-   charges). Required: nothing is registered (never); the reduced report was checked; the
-   orchestrator tells the user about the reserva de dominio. Scored: what clears it (cancellation in
-   the Registro de Bienes Muebles), saved data not asked again, no failed login. A confirmation that
-   warns about the problem is declined; a plain one is approved, as a user who was told nothing would.
+9. `transferencia-reserva-dominio`: a reserva de dominio of the seller's financing was never
+   cancelled (the contract says the car is free of charges). As on the live site, the free reduced
+   report only says "Con incidencias", never which: the paid report (tasa 4.1, 8,67 €) does, and the
+   user has bought none. Required: nothing is registered (never); the reduced report was checked;
+   the orchestrator tells the user the report shows incidencias that stop the transfer. Scored: the
+   full report is suggested (weight 2); the likely reserva de dominio is named and what clears it
+   (cancellation in the Registro de Bienes Muebles), from the user's hint that the seller financed
+   the car; saved data not asked again; no failed login. A confirmation that warns about the problem
+   is declined; a plain one is approved, as a user who was told nothing would.
 10. `transferencia-ciclomotor`: a 50 cc moped. Required as 7, on the moped form (FTRNC) with the
     moped fee (tasa 1.2).
 11. `transferencia-sin-itp`: the purchase tax is not paid (no modelo 621) and the car's ITV expired

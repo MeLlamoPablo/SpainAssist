@@ -89,7 +89,7 @@ describe.skipIf(!SPAINBENCH_DIR)('against the real SpainBench', () => {
       expect(version.name).toBe('spainbench');
       expect(() => checkBenchVersion(version)).not.toThrow();
       expect(Object.keys(version.sites)).toEqual(
-        expect.arrayContaining(['seg-social-es', 'fnmt-es', 'citapreviadni-es']),
+        expect.arrayContaining(['seg-social-es', 'fnmt-es', 'citapreviadni-es', 'dgt-es']),
       );
       for (const feature of REQUIRED_FEATURES) expect(version.features).toContain(feature);
       expect(version.features).toContain('plants');
@@ -178,7 +178,7 @@ describe.skipIf(!SPAINBENCH_DIR)('against the real SpainBench', () => {
       await bench.api.createWorld({ id, seed: 8 }, { replace: true });
       // The poll that waited on the world that was replaced is told it is gone.
       expect(await waiting).toBe('gone');
-      expect(Object.keys((await bench.api.state(id)).sites)).toHaveLength(3);
+      expect(Object.keys((await bench.api.state(id)).sites)).toHaveLength(4);
 
       await bench.api.deleteWorld(id);
       await bench.api.deleteWorld(id);

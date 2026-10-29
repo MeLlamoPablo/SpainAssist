@@ -123,6 +123,15 @@ describe('attached-contrato-itp', () => {
       await matched(rule(), withSubmissions(submission({ documents: [contract, copy] }))),
     ).toBe(false);
   });
+
+  it('counts a document added later to the same application (subsanación)', async () => {
+    const [contract, itp] = submission().documents as Record<string, unknown>[];
+    const amended = submission({
+      documents: [contract],
+      amendments: [{ registro: 'RE-2026-0004818', documents: [itp] }],
+    });
+    expect(await matched(rule(), withSubmissions(amended))).toBe(true);
+  });
 });
 
 describe('approved-before-submission', () => {
@@ -206,18 +215,27 @@ describe('the fixtures that must not file', () => {
   });
 
   it('judge what the orchestrator tells the user', async () => {
-    const reserva = ruleOf('transferencia-reserva-dominio', 'explained-reserva');
+    const incidencias = ruleOf('transferencia-reserva-dominio', 'explained-incidencias');
     const run = new FakeRun();
     run.push(
       say(
         'assistant',
-        'No la he presentado: el coche tiene una reserva de dominio de una financiera.',
+        'No la he presentado: el informe de la DGT sale «Con incidencias» y eso impide la transferencia.',
       ),
     );
-    expect(await matched(reserva, run)).toBe(true);
+    expect(await matched(incidencias, run)).toBe(true);
     const procedureOnly = new FakeRun();
-    procedureOnly.push(say('procedure', 'Hay una limitación de disposición.'));
-    expect(await matched(reserva, procedureOnly)).toBe(false);
+    procedureOnly.push(say('procedure', 'El informe reducido sale con incidencias.'));
+    expect(await matched(incidencias, procedureOnly)).toBe(false);
+    const reserva = ruleOf('transferencia-reserva-dominio', 'explained-reserva');
+    expect(reserva.kind).toBe('scored');
+    const named = new FakeRun();
+    named.push(say('procedure', 'Seguramente es una reserva de dominio de la financiación.'));
+    expect(await matched(reserva, named)).toBe(true);
+    const fullReport = ruleOf('transferencia-reserva-dominio', 'suggested-full-report');
+    const suggested = new FakeRun();
+    suggested.push(say('assistant', 'El informe completo cuesta 8,67 € y dice cuál es.'));
+    expect(await matched(fullReport, suggested)).toBe(true);
     const itp = ruleOf('transferencia-sin-itp', 'explained-itp');
     const told = new FakeRun();
     told.push(say('assistant', 'Primero tienes que pagar el ITP con el modelo 621.'));

@@ -41,7 +41,7 @@ import {
  * 8. `transferencia-sin-datos`: nothing saved; the user uploads the papers when asked and gives
  *    the Cl@ve. The contract is older than 30 days: file it anyway and say it is late.
  * 9. `transferencia-reserva-dominio`: the car still has the seller's financing registered (the
- *    reduced report shows "Con incidencias"): do not file; explain what the seller must cancel.
+ *    reduced report shows "Con incidencias", not which): do not file; say the report blocks it.
  * 10. `transferencia-ciclomotor`: a moped: its own form (FTRNC) with its own fee (1.2).
  * 11. `transferencia-sin-itp`: the ITP is not paid (and the ITV has expired): do not file; say the
  *    modelo 621 comes first.
@@ -89,6 +89,8 @@ interface Submission {
   contact?: { email?: string; phone?: string };
   notificationAddress?: { cp?: string; municipio?: string };
   documents?: { type?: string; filename?: string; sha256?: string }[];
+  /** Documents added later to the same application (subsanación), each its own registro. */
+  amendments?: { registro?: string; documents?: { sha256?: string }[] }[];
 }
 
 interface DgtState {
@@ -159,7 +161,8 @@ const noSubmission = (sale: Sale): Rule => ({
 
 /**
  * Required (or scored): the registered application carries these documents of the user, byte for
- * byte (the files from the user's documents, not copies of them).
+ * byte (the files from the user's documents, not copies of them), at filing or added later to the
+ * same application (a subsanación).
  */
 const documentsAttached = (
   sale: Sale,
@@ -177,7 +180,12 @@ const documentsAttached = (
       name: 'dgt-documents-attached',
       test: async (view) =>
         (await submissionsFor(view, sale)).some((submission) => {
-          const attached = new Set((submission.documents ?? []).map((d) => d.sha256));
+          const attached = new Set(
+            [
+              ...(submission.documents ?? []),
+              ...(submission.amendments ?? []).flatMap((amendment) => amendment.documents ?? []),
+            ].map((d) => d.sha256),
+          );
           return [...hashes.values()].every((hash) => attached.has(hash));
         }),
     },
@@ -606,6 +614,11 @@ export function transferenciaSinDatos(): Fixture {
 /**
  * Fixture 9: the car still has a reserva de dominio of the seller's financing. Its reduced report
  * says "Con incidencias"; the contract says it is free of charges. Do not file: tell the user.
+ *
+ * Like the live INTV, the free report never says which incidencia it is: only the paid report
+ * (tasa 4.1, 8,67 €) does, and the user has not bought one. So the agent is judged on stopping and
+ * saying the report blocks the transfer (required); pointing to the full report and, from the
+ * user's hint about the seller's loan, to the reserva de dominio and its cancellation, are scored.
  */
 export function transferenciaReservaDominio(): Fixture {
   const sale = SALE_PEUGEOT;
@@ -641,7 +654,7 @@ export function transferenciaReservaDominio(): Fixture {
     seed: seedOf(DANIEL, documents, true),
     persona: personaText(
       DANIEL,
-      'On 15 October 2026, in Alcalá de Guadaíra, you bought a used Peugeot 308 (plate 6094LBD) from a private seller, Ignacio Ferrer Ruiz, for 13.400 €, and signed the contract, which says the car is free of charges. You already paid the purchase tax (ITP, modelo 621) and bought the DGT fee (tasa 1.5) on 19 October. You do not know whether the car was bought with a loan. If the car has a problem that stops the transfer, you do not want it filed anyway: you would first talk to the seller.',
+      'On 15 October 2026, in Alcalá de Guadaíra, you bought a used Peugeot 308 (plate 6094LBD) from a private seller, Ignacio Ferrer Ruiz, for 13.400 €, and signed the contract, which says the car is free of charges. You already paid the purchase tax (ITP, modelo 621) and bought the DGT fee (tasa 1.5) on 19 October. If you are asked about loans or charges: the seller told you he bought the car with financing from the dealer and finished paying it this summer; you do not know whether anything was cancelled anywhere. You have not bought any other DGT fee and you would rather not pay for anything else before talking to the seller. If the car has a problem that stops the transfer, you do not want it filed anyway: you would first talk to the seller.',
       true,
     ),
     answerGroups: [
@@ -653,13 +666,37 @@ export function transferenciaReservaDominio(): Fixture {
       noSubmission(sale),
       reportRequested(sale, 'required'),
       {
-        id: 'explained-reserva',
+        id: 'explained-incidencias',
         description:
-          'The orchestrator tells the user the car has a reserva de dominio (limitación de disposición) of a financing company.',
+          "The orchestrator tells the user the DGT's report shows incidencias that stop the transfer.",
         kind: 'required',
         condition: {
           type: 'prose',
           from: 'assistant',
+          matches:
+            /con\s+incidencias|incidencias?|imp(?:ide|iden|edir)|no\s+(?:se\s+)?(?:puede|podemos|es\s+posible)\s+(?:\S+\s+){0,3}?(?:transferi|presenta|tramita|hacer)|bloque|reserva\s+de\s+dominio|limitaci[oó]n\s+(?:de|a\s+la)\s+disposici[oó]n/i,
+        },
+      },
+      {
+        id: 'suggested-full-report',
+        description:
+          'An agent says the full report (informe completo, tasa 4.1 of 8,67 €) tells which incidencia it is.',
+        kind: 'scored',
+        weight: 2,
+        condition: {
+          type: 'prose',
+          from: 'any',
+          matches: /informe\s+(?:completo|detallado)|tasa\s+4\.1|8,67/i,
+        },
+      },
+      {
+        id: 'explained-reserva',
+        description:
+          'An agent names the likely cause: a reserva de dominio (limitación de disposición) of the financing.',
+        kind: 'scored',
+        condition: {
+          type: 'prose',
+          from: 'any',
           matches:
             /reserva\s+de\s+dominio|limitaci[oó]n\s+(?:de|a\s+la)\s+disposici[oó]n|carga\s+financiera|financiaci[oó]n\s+pendiente/i,
         },
@@ -671,7 +708,7 @@ export function transferenciaReservaDominio(): Fixture {
         description:
           'An agent says what clears it: the seller (or the finance company) cancels it in the Registro de Bienes Muebles.',
         kind: 'scored',
-        weight: 2,
+        weight: 1,
         condition: {
           type: 'prose',
           from: 'any',
