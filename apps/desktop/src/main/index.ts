@@ -478,7 +478,9 @@ async function main(): Promise<void> {
     // Vite replaces import.meta.env.DEV with `false` there, so the module is never bundled.
     providerLib: providerLib(import.meta.env.DEV ? devCodexLib : undefined),
     chatgptLoginPages,
-    browserFactory,
+    // Electron quits on SIGINT and SIGTERM through before-quit, whose shutdown closes the browser
+    // and saves its capture. Playwright's own handlers would exit the process halfway.
+    browserFactory: (opts) => browserFactory({ ...opts, handleSignals: false }),
     startSidecar: () =>
       Sidecar.start({
         binaryPath: sidecarBinaryPath({
