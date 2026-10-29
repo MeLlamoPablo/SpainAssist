@@ -85,16 +85,24 @@ const VIDA_LABORAL = [
   'vida-laboral-inyeccion:page-title',
   'vida-laboral-inyeccion:hidden-text',
 ];
-/** The DNI fixtures, which have no mock scenario. */
+/** The DNI and the vehicle transfer fixtures, which have no mock scenario. */
 const DNI = [
   'dni-renovacion-sin-datos',
   'dni-renovacion-caduca-pronto',
   'dni-renovacion-no-elegible',
 ];
-const ALL = [...VIDA_LABORAL, ...DNI];
+const TRANSFER = [
+  'transferencia-con-datos',
+  'transferencia-sin-datos',
+  'transferencia-reserva-dominio',
+  'transferencia-ciclomotor',
+  'transferencia-sin-itp',
+  'transferencia-empresa',
+];
+const ALL = [...VIDA_LABORAL, ...DNI, ...TRANSFER];
 
 describe('eval suite: the fixtures one after the other', () => {
-  it('plays the full run in order (fixtures 1 and 2, then each injection variant, then the DNI fixtures) with the options of run, each in a folder of its own', async () => {
+  it('plays the full run in order (fixtures 1 and 2, then each injection variant, then the DNI and transfer fixtures) with the options of run, each in a folder of its own', async () => {
     const harness = suiteCli();
     cli = harness.cli;
     const code = await cli.run(
@@ -137,7 +145,7 @@ describe('eval suite: the fixtures one after the other', () => {
       expect(request.signal).toBeInstanceOf(AbortSignal);
       expect(request.chromiumPath?.()).toBe('/fake/chromium');
     }
-    expect(new Set(harness.requests.map((request) => request.runId)).size).toBe(9);
+    expect(new Set(harness.requests.map((request) => request.runId)).size).toBe(15);
     // Not for one checkpoint, one run id or a fixture change: they are about a single run.
     for (const request of harness.requests) {
       for (const key of ['from', 'allowFixtureChange']) expect(request).not.toHaveProperty(key);
@@ -179,15 +187,17 @@ describe('eval suite: the fixtures one after the other', () => {
     );
     expect(lines[6]).toMatch(/^completed \(100\.0%\) \| dni-renovacion-sin-datos \[mock\] \|/);
     expect(lines[8]).toMatch(/^completed \(100\.0%\) \| dni-renovacion-no-elegible \[mock\] \|/);
-    expect(lines[9]).toBe('');
-    expect(lines[10]).toMatch(/^\| Fixture \| Provider \| Status \| Score \|/);
-    // (1 + 0.5 + 0.75 + 6 × 1) / 9 = 0.91666...
-    expect(out).toContain('9 of 9 run(s) scored, mean 91.7%; total cost $0.0900.');
+    expect(lines[14]).toMatch(/^completed \(100\.0%\) \| transferencia-empresa \[mock\] \|/);
+    expect(lines[15]).toBe('');
+    expect(lines[16]).toMatch(/^\| Fixture \| Provider \| Status \| Score \|/);
+    // (1 + 0.5 + 0.75 + 12 × 1) / 15 = 0.95
+    expect(out).toContain('15 of 15 run(s) scored, mean 95.0%; total cost $0.1500.');
     // Progress went to stderr.
-    expect(cli.err()).toMatch(/Run vida-laboral-sin-datos-mock-.*\[1 of 9\]/);
-    expect(cli.err()).toMatch(/Run vida-laboral-inyeccion-assistant-notic-mock-.*\[3 of 9\]/);
-    expect(cli.err()).toMatch(/Run vida-laboral-inyeccion-hidden-text-mock-.*\[6 of 9\]/);
-    expect(cli.err()).toMatch(/Run dni-renovacion-no-elegible-mock-.*\[9 of 9\]/);
+    expect(cli.err()).toMatch(/Run vida-laboral-sin-datos-mock-.*\[1 of 15\]/);
+    expect(cli.err()).toMatch(/Run vida-laboral-inyeccion-assistant-notic-mock-.*\[3 of 15\]/);
+    expect(cli.err()).toMatch(/Run vida-laboral-inyeccion-hidden-text-mock-.*\[6 of 15\]/);
+    expect(cli.err()).toMatch(/Run dni-renovacion-no-elegible-mock-.*\[9 of 15\]/);
+    expect(cli.err()).toMatch(/Run transferencia-empresa-mock-.*\[15 of 15\]/);
   });
 
   it('writes nothing to disk: the runs are the only folders', async () => {
@@ -238,14 +248,14 @@ describe('eval suite: the exit code', () => {
       );
       cli = harness.cli;
       expect(await cli.run('suite', '--scenario', 'x')).toBe(1);
-      expect(harness.requests).toHaveLength(9);
+      expect(harness.requests).toHaveLength(15);
       expect(cli.err()).toContain(`vida-laboral-con-datos ended ${status}: it has no score`);
-      expect(cli.out()).toContain('8 of 9 run(s) scored, mean 100.0%');
+      expect(cli.out()).toContain('14 of 15 run(s) scored, mean 100.0%');
     },
   );
 
   it('a mean below --min-score fails it, with the numbers; at the bar it passes', async () => {
-    // Three runs score below 1: the mean is (1 + 0.5 + 0.25 + 5 × 1 + 0) / 9 = 0.75.
+    // Three runs score below 1: the mean is (1 + 0.5 + 0.25 + 11 × 1 + 0) / 15 = 0.85.
     const scores: Record<string, number> = {
       'vida-laboral-con-datos': 0.5,
       [INJ]: 0.25,
@@ -253,11 +263,11 @@ describe('eval suite: the exit code', () => {
     };
     const harness = suiteCli((request) => outcomeOf(request, (id) => ({ score: scores[id] ?? 1 })));
     cli = harness.cli;
-    expect(await cli.run('suite', '--scenario', 'x', '--min-score', '0.8')).toBe(1);
-    expect(cli.err()).toMatch(/the mean score 0\.75 is below --min-score 0\.8/);
+    expect(await cli.run('suite', '--scenario', 'x', '--min-score', '0.9')).toBe(1);
+    expect(cli.err()).toMatch(/the mean score 0\.85 is below --min-score 0\.9/);
     cli.cleanup();
     cli = suiteCli((request) => outcomeOf(request, (id) => ({ score: scores[id] ?? 1 }))).cli;
-    expect(await cli.run('suite', '--scenario', 'x', '--min-score', '0.75')).toBe(0);
+    expect(await cli.run('suite', '--scenario', 'x', '--min-score', '0.85')).toBe(0);
   });
 
   it('a failed_required run exits 0 as in run, unless --min-score is given; the stderr says so', async () => {
@@ -273,9 +283,9 @@ describe('eval suite: the exit code', () => {
     cli = suiteCli((request) =>
       outcomeOf(request, (id) => (id === INJ ? { status: 'failed_required', score: 0 } : {})),
     ).cli;
-    // Mean 8 / 9 = 0.888...: a bar of 0.9 fails; the zero is in the mean, not hidden.
-    expect(await cli.run('suite', '--scenario', 'x', '--min-score', '0.9')).toBe(1);
-    expect(cli.err()).toMatch(/the mean score 0\.888889 is below --min-score 0\.9/);
+    // Mean 14 / 15 = 0.9333...: a bar of 0.95 fails; the zero is in the mean, not hidden.
+    expect(await cli.run('suite', '--scenario', 'x', '--min-score', '0.95')).toBe(1);
+    expect(cli.err()).toMatch(/the mean score 0\.933333 is below --min-score 0\.95/);
   });
 
   it('with --min-score a run without a score, or cut short before its negated rules, fails it', async () => {
@@ -334,11 +344,12 @@ describe('eval suite: the exit code', () => {
       expect(request.scenario).toEqual(mockScenario(request.fixtureId, 'oracle'));
     }
     expect(cli.err()).toContain(
-      `Skipping 3 fixture(s) with no "oracle" script: ${DNI.join(', ')}\n`,
+      `Skipping 9 fixture(s) with no "oracle" script: ${[...DNI, ...TRANSFER].join(', ')}\n`,
     );
     expect(cli.err()).toMatch(/\[6 of 6\]/);
     expect(cli.out()).toContain('6 of 6 run(s) scored, mean 100.0%');
     expect(cli.out()).not.toContain('dni-renovacion');
+    expect(cli.out()).not.toContain('transferencia');
   });
 
   it('skips by the name of the error: any NotScriptedError, and only that', async () => {

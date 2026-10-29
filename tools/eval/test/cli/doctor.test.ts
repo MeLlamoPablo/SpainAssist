@@ -15,10 +15,11 @@ const ALL_VARIANTS = ['assistant-notice', 'fake-verification', 'page-title', 'hi
   (id) => ({ id, summary: 'a variant' }),
 );
 
-/** The fake's sites plus the Cita Previa DNI mock: every fixture's site. */
+/** The fake's sites plus the Cita Previa DNI and DGT mocks: every fixture's site. */
 const ALL_SITES = {
   ...benchVersion().sites,
   'citapreviadni-es': { version: '1', contentHash: 'd'.repeat(64) },
+  'dgt-es': { version: '1', contentHash: 'e'.repeat(64) },
 };
 
 function server(version = benchVersion({ sites: ALL_SITES, injections: ALL_VARIANTS })) {
@@ -59,7 +60,7 @@ describe('eval doctor', () => {
     expect(line(out, 'SpainBench reachable')).toMatch(/^ok .*spainbench 0\.3\.0 \(started here\)/);
     expect(line(out, 'SpainBench scoring API')).toMatch(/^ok .*v1 \(supported\)/);
     expect(line(out, 'Fixtures runnable')).toMatch(
-      /^ok .*9 of 9 \(vida-laboral-sin-datos, vida-laboral-con-datos, vida-laboral-inyeccion:assistant-notice, vida-laboral-inyeccion:fake-verification, vida-laboral-inyeccion:page-title, vida-laboral-inyeccion:hidden-text, dni-renovacion-sin-datos, dni-renovacion-caduca-pronto, dni-renovacion-no-elegible\)/,
+      /^ok .*15 of 15 \(vida-laboral-sin-datos, vida-laboral-con-datos, vida-laboral-inyeccion:assistant-notice, vida-laboral-inyeccion:fake-verification, vida-laboral-inyeccion:page-title, vida-laboral-inyeccion:hidden-text, dni-renovacion-sin-datos, dni-renovacion-caduca-pronto, dni-renovacion-no-elegible, transferencia-con-datos, transferencia-sin-datos, transferencia-reserva-dominio, transferencia-ciclomotor, transferencia-sin-itp, transferencia-empresa\)/,
     );
     expect(line(out, 'Injection variants')).toMatch(
       /^ok .*4 listed \(assistant-notice, fake-verification, page-title, hidden-text\)/,
@@ -153,22 +154,37 @@ describe('eval doctor', () => {
     cli = makeCli({ env: SPAINBENCH, deps: { openBench: bench.openBench } });
     expect(await cli.run('doctor')).toBe(1);
     expect(line(cli.out(), 'Fixtures runnable')).toMatch(
-      /^FAIL .*7 of 9; vida-laboral-inyeccion:assistant-notice: the server does not list injection variant "assistant-notice"/,
+      /^FAIL .*13 of 15; vida-laboral-inyeccion:assistant-notice: the server does not list injection variant "assistant-notice"/,
     );
   });
 
   it('fails when SpainBench does not serve the Cita Previa DNI site, naming the DNI fixtures', async () => {
-    // The default fake serves the Seguridad Social and FNMT sites only.
-    const bench = server(benchVersion({ injections: ALL_VARIANTS }));
+    // The fake serves the Seguridad Social, FNMT and DGT sites only.
+    const { 'citapreviadni-es': _dni, ...sites } = ALL_SITES;
+    const bench = server(benchVersion({ sites, injections: ALL_VARIANTS }));
     cli = makeCli({ env: SPAINBENCH, deps: { openBench: bench.openBench } });
     expect(await cli.run('doctor')).toBe(1);
     const runnable = line(cli.out(), 'Fixtures runnable');
     expect(runnable).toMatch(
-      /^FAIL .*6 of 9; dni-renovacion-sin-datos: the server has no site "citapreviadni-es"/,
+      /^FAIL .*12 of 15; dni-renovacion-sin-datos: the server has no site "citapreviadni-es"/,
     );
     expect(runnable).toContain('dni-renovacion-caduca-pronto: the server has no site');
     expect(runnable).toContain('dni-renovacion-no-elegible: the server has no site');
     expect(runnable).not.toContain('vida-laboral');
+    expect(runnable).not.toContain('transferencia');
+  });
+
+  it('fails when SpainBench does not serve the DGT site, naming the transfer fixtures', async () => {
+    const { 'dgt-es': _dgt, ...sites } = ALL_SITES;
+    const bench = server(benchVersion({ sites, injections: ALL_VARIANTS }));
+    cli = makeCli({ env: SPAINBENCH, deps: { openBench: bench.openBench } });
+    expect(await cli.run('doctor')).toBe(1);
+    const runnable = line(cli.out(), 'Fixtures runnable');
+    expect(runnable).toMatch(
+      /^FAIL .*9 of 15; transferencia-con-datos: the server has no site "dgt-es"/,
+    );
+    expect(runnable).toContain('transferencia-empresa: the server has no site');
+    expect(runnable).not.toContain('dni-renovacion');
   });
 
   it('warns when SpainBench lists no injection variant', async () => {

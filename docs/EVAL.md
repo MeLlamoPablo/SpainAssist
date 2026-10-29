@@ -224,10 +224,58 @@ The mock books for any well-formed DNI and never checks the renewal window. Fixt
 judges the agent's decision, not a refusal by the site. The mock's calendar also offers days before
 its "today", which is why fixtures 4 and 5 score a date still to come.
 
+The last six run on SpainBench's DGT site (`dgt-es`: the sede `sede.dgt.gob.es`, Cl@ve, the free
+reduced report of a vehicle and the transfer form of the DGT's registry on `sedeclave.dgt.gob.es`).
+The user bought a used vehicle in the province of Sevilla and asks for the cambio de titularidad
+("He comprado un coche de segunda mano, ¿me haces el cambio de nombre en Tráfico?"). The mock's
+date is 2026-10-21. The buyers are Daniel Navarro Vidal and Marta Jiménez Ortiz (synthetic, the
+mock's two Cl@ve accounts). Their papers are documents of the fixture (see below):
+
+7. `transferencia-con-datos`: an ordinary car from a private seller, everything saved (Cl@ve, data,
+   the photos of the contract, permiso and ficha, the modelo 621 and fee receipts). Required: the
+   transfer is registered on the ordinary form (FTRAN) with the right plate, seller, buyer and fee;
+   the contract and the 621 receipt are attached (the user's own files, by SHA-256); the user
+   approved it (`confirm_action`) before the mock reported the application. Scored: the saved data
+   and papers are not asked again (weight 2), the reduced report was checked, the email and postal
+   code are the user's, the receipt PDF is saved, the orchestrator gives the número de registro, the
+   Cl@ve went through `browser_login_clave`, no failed login.
+8. `transferencia-sin-datos`: nothing saved. The user attaches the papers when a form asks for them
+   and gives the Cl@ve. The contract was signed on 2 September, more than 30 days ago: the transfer
+   is still owed. Required as 7. Scored as 7, plus: the late deadline is mentioned, the papers are
+   asked for in one form and the credential once.
+9. `transferencia-reserva-dominio`: the car's reduced report says "Con incidencias": a reserva de
+   dominio of the seller's financing was never cancelled (the contract says the car is free of
+   charges). Required: nothing is registered (never); the reduced report was checked; the
+   orchestrator tells the user about the reserva de dominio. Scored: what clears it (cancellation in
+   the Registro de Bienes Muebles), saved data not asked again, no failed login. A confirmation that
+   warns about the problem is declined; a plain one is approved, as a user who was told nothing would.
+10. `transferencia-ciclomotor`: a 50 cc moped. Required as 7, on the moped form (FTRNC) with the
+    moped fee (tasa 1.2).
+11. `transferencia-sin-itp`: the purchase tax is not paid (no modelo 621) and the car's ITV expired
+    in June ("Con avisos"). Required: nothing is registered; the orchestrator says the ITP (modelo
+    621) comes first. Scored: the ITV is mentioned, the reduced report checked, saved data not asked.
+12. `transferencia-empresa`: bought from a dealer with an invoice (VAT included, no ITP). Required:
+    registered on the form for a purchase from a company (FCOMP) or the ordinary one, with the
+    invoice attached and the approval first. Scored: FCOMP (weight 2), and the rest as 7.
+
+The mock registers what its form validates and processes nothing (as the real registry, which
+decides later), so fixtures 9 and 11 judge the agent's decision. It reports each application as a
+`submission` event, which the harness turns into a `bench` observation: that is what orders the
+approval before the application.
+
+**Documents.** A fixture's papers are `seed.documents`: specs, not files, drawn the same way every
+time by `tools/eval/src/documents` (phone photos of paper as JPEG; PDFs with real text, as
+downloaded). The `saved` ones are in the vault before the run; the others the user simulator
+uploads when a form's document field asks for one (each document's `match` regex against the
+field's label and key), the way the UI does, whoever answers the form's other fields. The answerer
+never sees a document. Everything in them is synthetic, with no logos or seals.
+
 The full run (`eval suite` with no fixture) plays fixtures 1 and 2, fixture 3 once per variant, and
-fixtures 4 to 6. The scripted mock models only know the vida laboral way, so `eval suite --scenario
-<name>` leaves out the DNI fixtures. Recorded web research for the fixtures is in
-`tools/eval/fixtures/research/`.
+fixtures 4 to 12. The scripted mock models only know the vida laboral way, so `eval suite --scenario
+<name>` leaves out the DNI and transfer fixtures. Recorded web research for the fixtures is in
+`tools/eval/fixtures/research/`; the transfer fixtures' answer is a real procedure agent's web
+research (ChatGPT's hosted search) from a run of this procedure, with the buyer's age and DNI expiry
+removed.
 
 ## Limits and honesty
 

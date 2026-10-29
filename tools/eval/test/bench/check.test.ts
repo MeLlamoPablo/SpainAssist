@@ -48,6 +48,7 @@ describe('runnable', () => {
             sites: {
               ...benchVersion().sites,
               'citapreviadni-es': { version: '1', contentHash: 'd'.repeat(64) },
+              'dgt-es': { version: '1', contentHash: 'e'.repeat(64) },
             },
             injections: [
               { id: 'assistant-notice', summary: '' },

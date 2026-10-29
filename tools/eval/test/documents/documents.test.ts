@@ -3,12 +3,14 @@ import { extractText, getDocumentProxy } from 'unpdf';
 import { describe, expect, it } from 'vitest';
 import {
   documentForField,
+  documentMimeType,
   type FixtureDocument,
   renderDocument,
 } from '../../src/documents';
 import { euros, inWords, slashDate } from '../../src/documents/format';
 import { renderFactura, renderModelo621, renderTasa791 } from '../../src/documents/pdf';
 import { renderPhoto } from '../../src/documents/photo';
+import { listFixtures } from '../../src/fixtures';
 import {
   contrato,
   DANIEL,
@@ -144,5 +146,22 @@ describe('documentForField', () => {
     const field = { key: 'x', label: 'Tasa o contrato' };
     expect(documentForField(field, documents)?.key).toBe('contrato');
     expect(documentForField(field, documents, new Set(['contrato']))?.key).toBe('tasa');
+  });
+});
+
+describe('the transfer fixtures', () => {
+  const transfers = listFixtures().filter((f) => f.id.startsWith('transferencia-'));
+
+  it('give every document a unique key and a file that renders', () => {
+    expect(transfers).toHaveLength(6);
+    for (const fixture of transfers) {
+      const documents = fixture.seed?.documents ?? [];
+      expect(new Set(documents.map((d) => d.key)).size).toBe(documents.length);
+      for (const document of documents) {
+        const file = renderDocument(document);
+        expect(file.mimeType).toBe(documentMimeType(document.spec));
+        expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+      }
+    }
   });
 });

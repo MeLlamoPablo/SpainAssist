@@ -16,13 +16,14 @@ import {
   validateFixture,
 } from '../../src/fixtures';
 import { injectionVariantOf } from '../../src/fixtures/registry';
+import { TRANSFER_LIMITS } from '../../src/fixtures/transferencia';
 import { DEFAULT_LIMITS } from '../../src/llm';
 import { RuleEngine } from '../../src/rules';
 
 const researchDir = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures/research');
 
 describe('registry', () => {
-  it('lists the full run in order: fixtures 1 and 2, then fixture 3 once per injection variant, then the DNI fixtures', () => {
+  it('lists the full run in order: fixtures 1 and 2, then fixture 3 once per injection variant, then the DNI and the vehicle transfer fixtures', () => {
     expect(FIXTURE_IDS).toEqual([
       'vida-laboral-sin-datos',
       'vida-laboral-con-datos',
@@ -33,6 +34,12 @@ describe('registry', () => {
       'dni-renovacion-sin-datos',
       'dni-renovacion-caduca-pronto',
       'dni-renovacion-no-elegible',
+      'transferencia-con-datos',
+      'transferencia-sin-datos',
+      'transferencia-reserva-dominio',
+      'transferencia-ciclomotor',
+      'transferencia-sin-itp',
+      'transferencia-empresa',
     ]);
     expect(listFixtures().map((f) => f.id)).toEqual([...FIXTURE_IDS]);
   });
@@ -49,7 +56,7 @@ describe('registry', () => {
 
   it('does not hand out the list itself', () => {
     listFixtures().pop();
-    expect(listFixtures()).toHaveLength(9);
+    expect(listFixtures()).toHaveLength(15);
   });
 
   it('creates injection variants on demand and caches them', () => {
@@ -109,14 +116,26 @@ describe.each(listFixtures().map((f) => [f.id, f] as const))('fixture %s', (_id,
     ).not.toThrow();
   });
 
+  const transfer = fixture.id.startsWith('transferencia-');
+
   it('has the documented limits', () => {
-    expect(fixture.limits).toEqual({
-      wallClockMs: 20 * 60_000,
-      maxToolCalls: 400,
-      maxRequests: 150,
-      maxCostUsd: 0.3,
-      maxPrompts: 12,
-    });
+    expect(fixture.limits).toEqual(
+      transfer
+        ? {
+            wallClockMs: 40 * 60_000,
+            maxToolCalls: 500,
+            maxRequests: 190,
+            maxCostUsd: 0.34,
+            maxPrompts: 16,
+          }
+        : {
+            wallClockMs: 20 * 60_000,
+            maxToolCalls: 400,
+            maxRequests: 150,
+            maxCostUsd: 0.3,
+            maxPrompts: 12,
+          },
+    );
   });
 
   it("the limits fire before the meter's per-run and per-agent caps, so a looping agent is scored", () => {
@@ -126,7 +145,7 @@ describe.each(listFixtures().map((f) => [f.id, f] as const))('fixture %s', (_id,
     expect(fixture.limits.maxRequests).toBeLessThan(DEFAULT_LIMITS.perRunRequests);
     expect(fixture.limits.maxCostUsd).toBeLessThan(DEFAULT_LIMITS.perAgentUsd);
     expect(fixture.limits.maxCostUsd).toBeLessThan(DEFAULT_LIMITS.dailyUsd);
-    expect(RUN_LIMITS).toEqual(fixture.limits);
+    expect(transfer ? TRANSFER_LIMITS : RUN_LIMITS).toEqual(fixture.limits);
   });
 
   it('ids are unique and rules are not shared between fixtures', () => {

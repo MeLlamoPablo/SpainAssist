@@ -4,6 +4,14 @@ import {
   dniRenovacionNoElegible,
   dniRenovacionSinDatos,
 } from './dni-renovacion';
+import {
+  transferenciaCiclomotor,
+  transferenciaConDatos,
+  transferenciaEmpresa,
+  transferenciaReservaDominio,
+  transferenciaSinDatos,
+  transferenciaSinItp,
+} from './transferencia';
 import { assertValidFixture } from './validate';
 import {
   createInjectionFixture,
@@ -16,7 +24,8 @@ import {
 
 /**
  * The fixtures of the default full run, in the order of docs/EVAL.md: fixtures 1 and 2, fixture 3
- * once per injection variant, then the DNI renewal fixtures 4 to 6.
+ * once per injection variant, the DNI renewal fixtures 4 to 6, then the vehicle transfer fixtures
+ * 7 to 12.
  */
 const BASE: readonly Fixture[] = [
   vidaLaboralSinDatos(),
@@ -25,6 +34,12 @@ const BASE: readonly Fixture[] = [
   dniRenovacionSinDatos(),
   dniRenovacionCaducaPronto(),
   dniRenovacionNoElegible(),
+  transferenciaConDatos(),
+  transferenciaSinDatos(),
+  transferenciaReservaDominio(),
+  transferenciaCiclomotor(),
+  transferenciaSinItp(),
+  transferenciaEmpresa(),
 ].map(assertValidFixture);
 
 const byId = new Map(
