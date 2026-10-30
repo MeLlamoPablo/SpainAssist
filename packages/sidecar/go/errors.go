@@ -41,6 +41,7 @@ func classify(err error) *certError {
 		return &certError{code: "server_certificate", detail: err.Error()}
 	}
 	message := err.Error()
+	// Go's own text for a server's TLS alert (crypto/tls), the same in every system language.
 	if strings.Contains(message, "remote error: tls:") {
 		return &certError{code: "rejected", detail: message}
 	}
@@ -132,24 +133,65 @@ func writeCertError(w http.ResponseWriter, lang, hostname string, ce *certError)
 }
 
 // netErrorCode names a failed connection the way Chromium does, so the app can explain it as if
-// the browser had connected directly.
+// the browser had connected directly. It goes by the error's number, never its message: Windows
+// words its messages in the system's language.
 func netErrorCode(err error) string {
 	var dns *net.DNSError
-	switch {
-	case errors.As(err, &dns):
+	if errors.As(err, &dns) {
 		return "ERR_NAME_NOT_RESOLVED"
-	case errors.Is(err, syscall.ECONNREFUSED) || strings.Contains(err.Error(), "refused"):
-		return "ERR_CONNECTION_REFUSED"
-	case errors.Is(err, syscall.ECONNRESET):
-		return "ERR_CONNECTION_RESET"
-	case errors.Is(err, syscall.ENETUNREACH) || errors.Is(err, syscall.EHOSTUNREACH):
-		return "ERR_ADDRESS_UNREACHABLE"
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		if code, ok := errnoCodes[errno]; ok {
+			return code
+		}
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return "ERR_CONNECTION_TIMED_OUT"
 	}
 	return "ERR_CONNECTION_FAILED"
+}
+
+// Windows's numbers for failed connections. Go's syscall.ECONNREFUSED and the like are made-up
+// values there that no system call returns (errors.Is doesn't map them either): sockets fail with
+// Winsock's WSAE* numbers, or their Win32 ERROR_* equivalents. All are above 1000, where no Unix
+// errno is, so one table serves every OS.
+const (
+	wsaENETDOWN             syscall.Errno = 10050
+	wsaENETUNREACH          syscall.Errno = 10051
+	wsaECONNABORTED         syscall.Errno = 10053
+	wsaECONNRESET           syscall.Errno = 10054
+	wsaETIMEDOUT            syscall.Errno = 10060
+	wsaECONNREFUSED         syscall.Errno = 10061
+	wsaEHOSTUNREACH         syscall.Errno = 10065
+	errorConnectionRefused  syscall.Errno = 1225
+	errorNetworkUnreachable syscall.Errno = 1231
+	errorHostUnreachable    syscall.Errno = 1232
+	errorConnectionAborted  syscall.Errno = 1236
+)
+
+// errnoCodes maps an errno to Chromium's name for it (net/base/net_errors_{posix,win}.cc).
+var errnoCodes = map[syscall.Errno]string{
+	syscall.ECONNREFUSED:    "ERR_CONNECTION_REFUSED",
+	wsaECONNREFUSED:         "ERR_CONNECTION_REFUSED",
+	errorConnectionRefused:  "ERR_CONNECTION_REFUSED",
+	syscall.ECONNRESET:      "ERR_CONNECTION_RESET",
+	wsaECONNRESET:           "ERR_CONNECTION_RESET",
+	syscall.ECONNABORTED:    "ERR_CONNECTION_ABORTED",
+	wsaECONNABORTED:         "ERR_CONNECTION_ABORTED",
+	errorConnectionAborted:  "ERR_CONNECTION_ABORTED",
+	syscall.ENETUNREACH:     "ERR_ADDRESS_UNREACHABLE",
+	wsaENETUNREACH:          "ERR_ADDRESS_UNREACHABLE",
+	errorNetworkUnreachable: "ERR_ADDRESS_UNREACHABLE",
+	syscall.EHOSTUNREACH:    "ERR_ADDRESS_UNREACHABLE",
+	wsaEHOSTUNREACH:         "ERR_ADDRESS_UNREACHABLE",
+	errorHostUnreachable:    "ERR_ADDRESS_UNREACHABLE",
+	syscall.ENETDOWN:        "ERR_INTERNET_DISCONNECTED",
+	wsaENETDOWN:             "ERR_INTERNET_DISCONNECTED",
+	// Windows's own connect timeout: Errno.Timeout() is false for it there.
+	syscall.ETIMEDOUT: "ERR_CONNECTION_TIMED_OUT",
+	wsaETIMEDOUT:      "ERR_CONNECTION_TIMED_OUT",
 }
 
 // writeNetworkError answers a proxy request whose site couldn't be reached.
