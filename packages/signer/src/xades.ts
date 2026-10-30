@@ -103,11 +103,26 @@ function parseInputXml(data: Buffer): Document | null {
   const text = decodeXmlText(data);
   // AutoFirma's secure parser rejects DOCTYPEs: such documents are signed as binary data.
   if (/<!DOCTYPE/i.test(text)) return null;
+  let doc: Document;
   try {
-    return parseXml(text);
+    doc = parseXml(text);
   } catch {
     return null;
   }
+  // It also rejects text outside the root element, which xmldom ignores: binary data containing a
+  // well-formed fragment (a PDF's XMP packet) would otherwise be signed as just that fragment.
+  return hasTextOutsideRoot(text, doc) ? null : doc;
+}
+
+/** What may precede the root element (DOCTYPEs aside): whitespace, comments and PIs. */
+const PROLOG = /^(?:[ \t\r\n]+|<!--[\s\S]*?-->|<\?[\s\S]*?\?>)*/;
+
+function hasTextOutsideRoot(text: string, doc: Document): boolean {
+  if (!text.replace(PROLOG, '').startsWith('<')) return true;
+  for (let n = doc.documentElement.nextSibling; n; n = n.nextSibling) {
+    if (n.nodeType === 3 && /[^ \t\r\n]/.test(n.nodeValue ?? '')) return true;
+  }
+  return false;
 }
 
 function inScopeNamespaces(node: Node): { prefix: string; namespaceURI: string }[] {

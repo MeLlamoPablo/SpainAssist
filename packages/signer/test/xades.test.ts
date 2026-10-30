@@ -14,7 +14,11 @@ const FORM_XML = Buffer.from(
 const DEFAULT_NS_XML = Buffer.from(
   '<Registro xmlns="urn:reg:v1"><Asunto>Instancia</Asunto><Texto>Hola</Texto></Registro>',
 );
-const PDF_LIKE = Buffer.concat([Buffer.from('%PDF-1.7\n'), crypto.randomBytes(200)]);
+// xmldom alone parses this as XML (just the XMP element): the text around it must make it binary
+const PDF_LIKE = Buffer.concat([
+  Buffer.from('%PDF-1.7\n<x:xmpmeta xmlns:x="adobe:ns:meta/"/>\n'),
+  Buffer.from('c4e2a10f0099fe7d8b5e13f2d0c7a4910b6e8f2955d1e0b37a1c9d40f8e265b7', 'hex'),
+]);
 
 async function sign(
   id: TestIdentity,
@@ -167,6 +171,19 @@ describe('XAdES', () => {
       'http://www.w3.org/2000/09/xmldsig#base64',
     );
     await expect(sign(id, withDoctype, 'format=XAdES Enveloped')).rejects.toThrow(/solo pueden/);
+  });
+
+  it('signs data with text outside the root element as binary data, like AutoFirma', async () => {
+    const id = rsaIdentity();
+    for (const text of ['<a>b</a> fin', '<?xml version="1.0"?>\nNota: <a>b</a>']) {
+      const out = await sign(id, Buffer.from(text), null);
+      expect(all(parse(out), DS, 'Object')[0].getAttribute('Encoding')).toBe(
+        'http://www.w3.org/2000/09/xmldsig#base64',
+      );
+    }
+    // whitespace, comments and processing instructions around the root are still XML
+    const out = await sign(id, Buffer.from('\n<!-- c --><?pi x?>\n<a>b</a>\n<!-- fin -->\n'), null);
+    expect(all(parse(out), DS, 'Object')[0].getAttribute('MimeType')).toBe('text/xml');
   });
 
   it('honours referencesDigestMethod and signer roles / production place', async () => {
