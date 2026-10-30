@@ -13,7 +13,9 @@ corepack pnpm e2e
 
 ## What runs
 
-- **Electron tests** (`tests/desktop.spec.ts`) launch the built app with Playwright. Each test
+Three Playwright projects; `--project <name>` runs one.
+
+- **Electron tests** (`electron`, `tests/desktop.spec.ts`) launch the built app with Playwright. Each test
   starts the real key and feedback servers on fresh in-memory PGlite databases, a scripted mock
   model and a mock HTTPS government site, all on random ports. Each app gets a temporary
   profile and a test encryption key provider; closing the test shuts everything down and
@@ -21,9 +23,18 @@ corepack pnpm e2e
   procedure, its question on the card, its report and a restart; secret answers kept out of
   model requests and transcripts, and stopping a procedure; and a procedure agent opening the
   mock government site through the browser bridge.
-- **Web preview tests** (`map-options.spec.ts`, `shell-scroll.spec.ts`) run the renderer's web
-  build with its mock API (`build:web`, served on port 5186): map selection with mouse and
+- **Web preview tests** (`web`, `map-options.spec.ts`, `shell-scroll.spec.ts`) run the renderer's
+  web build with its mock API (`build:web`, served on port 5186): map selection with mouse and
   keyboard, typed addresses, and settings navigation and scrolling.
+- **Parity tests** (`parity`, `tests/parity.spec.ts`) run the agent's browser as users get it:
+  headed with its windows minimized, and with a CRLSet (the app's bundled fixture,
+  `SA_CRLSET_FIXTURE`), where the Electron tests run it headless without one. A procedure opens
+  the mock site, closes its browser, waits and opens it again in two tabs: the app's log must
+  show one launch and no disconnection. They also run the built app's `--self-test`
+  (`apps/desktop/src/main/app/self-test.ts`). On Windows and Linux headed Chromium quits with its
+  last window, which only these runs show (v0.3.2's browser died after every launch on Windows):
+  CI runs this project on Linux under `xvfb-run` and on Windows. Locally it puts minimized Chrome
+  for Testing windows in the Dock while it runs.
 
 No real credentials, government sites or paid APIs are used. Tests run in parallel on half the
 CPU cores. They need Playwright's cached Chromium and never download it; on a new machine run

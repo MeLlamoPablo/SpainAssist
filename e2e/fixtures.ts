@@ -77,10 +77,20 @@ export interface Harness {
   restart(): Promise<void>;
 }
 
-export const test = base.extend<{ harness: Harness }>({
+export interface E2eOptions {
+  /**
+   * The parity project (playwright.config.ts): the agent's browser runs as users get it, headed
+   * with its windows minimized and a CRLSet (the app's bundled fixture, installed offline).
+   * Otherwise it runs headless without one.
+   */
+  parity: boolean;
+}
+
+export const test = base.extend<{ harness: Harness } & E2eOptions>({
+  parity: [false, { option: true }],
   // Like browser tests, the app window stays hidden unless run with --headed (or headless: false);
   // UI mode and traces still show it through DOM snapshots and screencast frames.
-  harness: async ({ headless }, use, testInfo) => {
+  harness: async ({ headless, parity }, use, testInfo) => {
     const tracing = runnerTracing(testInfo);
     const userData = await mkdtemp(join(tmpdir(), 'sa-e2e-'));
     const close: (() => Promise<unknown>)[] = [
@@ -133,6 +143,8 @@ export const test = base.extend<{ harness: Harness }>({
       );
       delete env.ELECTRON_RUN_AS_NODE;
       delete env.ELECTRON_RENDERER_URL;
+      delete env.SA_BROWSER_HEADLESS;
+      delete env.SA_CRLSET_FIXTURE;
       Object.assign(env, {
         SA_E2E: '1',
         SA_USER_DATA_DIR: userData,
@@ -140,7 +152,7 @@ export const test = base.extend<{ harness: Harness }>({
         SA_FEEDBACK_SERVER_URL: feedbackUrl,
         SA_FEATURE_FLAGS: 'dnie-phone',
         SA_EXTRA_TRUSTED_HOSTS: 'localhost,127.0.0.1',
-        SA_BROWSER_HEADLESS: '1',
+        ...(parity ? { SA_CRLSET_FIXTURE: '1' } : { SA_BROWSER_HEADLESS: '1' }),
         SA_HIDE_WINDOW: headless ? '1' : '0',
         SA_AGENT_HOST: join(root, 'packages/agent/dist/host.js'),
       });

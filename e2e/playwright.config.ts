@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
+import type { E2eOptions } from './fixtures';
 
-export default defineConfig({
+export default defineConfig<E2eOptions>({
   testDir: './tests',
   // Each test gets its own app profile and backends on random ports, so tests run in parallel.
   fullyParallel: true,
@@ -15,4 +16,10 @@ export default defineConfig({
     timeout: 120_000,
   },
   use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  projects: [
+    { name: 'electron', testMatch: 'desktop.spec.ts' },
+    { name: 'web', testMatch: ['map-options.spec.ts', 'shell-scroll.spec.ts'] },
+    // The agent's browser as users get it (fixtures.ts, `parity`), and the app's --self-test.
+    { name: 'parity', testMatch: 'parity.spec.ts', use: { parity: true } },
+  ],
 });
