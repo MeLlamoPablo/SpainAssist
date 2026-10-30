@@ -20,6 +20,7 @@ export {
   pkcs12ToPem,
 } from './certificate';
 export { VaultError, type VaultErrorCode } from './errors';
+export { retryWhileLocked } from './files';
 export { compactId, isDni, isNie, isSpanishId } from './ids';
 export {
   createSafeStorageKeyProvider,

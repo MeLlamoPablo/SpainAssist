@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { CrlSetComponent } from '@sa/browser';
+import { retryWhileLocked } from '../core/fs';
 import type { Logger } from '../core/logger';
 import { errorMessage } from '../core/util';
 import type { FetchFn } from '../remote/http';
@@ -137,8 +138,9 @@ export class CrlSetStore {
       await mkdir(dirname(join(staging, name)), { recursive: true });
       await writeFile(join(staging, name), data);
     }
-    await rm(dir, { recursive: true, force: true });
-    await rename(staging, dir);
+    // Windows' antivirus scans the files just written, which blocks moving their folder.
+    await retryWhileLocked(() => rm(dir, { recursive: true, force: true }));
+    await retryWhileLocked(() => rename(staging, dir));
     this.current = { version, dir, blocked };
     this.deps.logger.info('CRLSet updated', { version, blockedKeys: blocked.size });
     // Older versions: a browser launched earlier copied its own already.

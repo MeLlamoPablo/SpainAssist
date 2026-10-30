@@ -10,6 +10,9 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { extname, join } from 'node:path';
+import { retryWhileLocked } from '@sa/vault';
+
+export { retryWhileLocked };
 
 /** Creates a directory only the current user can access (0700). */
 export async function ensurePrivateDir(dir: string): Promise<void> {
@@ -17,7 +20,10 @@ export async function ensurePrivateDir(dir: string): Promise<void> {
   if (process.platform !== 'win32') await chmod(dir, 0o700).catch(() => {});
 }
 
-/** Atomic write: temp file in the same directory + rename. Files are 0600. */
+/**
+ * Atomic write: temp file in the same directory + rename, retried while Windows has either
+ * locked (`retryWhileLocked`). Files are 0600. A failure leaves no temp file.
+ */
 export async function writeFileAtomic(
   path: string,
   data: string | Uint8Array,
@@ -26,9 +32,9 @@ export async function writeFileAtomic(
   const tmp = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
   try {
     await writeFile(tmp, data, { mode });
-    await rename(tmp, path);
+    await retryWhileLocked(() => rename(tmp, path));
   } catch (err) {
-    await rm(tmp, { force: true }).catch(() => {});
+    await retryWhileLocked(() => rm(tmp, { force: true })).catch(() => {});
     throw err;
   }
 }
@@ -59,7 +65,7 @@ export async function writeNewFile(
       await file.sync();
     } catch (err) {
       await file.close();
-      await rm(path, { force: true });
+      await retryWhileLocked(() => rm(path, { force: true }));
       throw err;
     }
     await file.close();

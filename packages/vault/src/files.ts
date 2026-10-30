@@ -47,6 +47,39 @@ export async function listDir(dir: string): Promise<string[]> {
   }
 }
 
+/**
+ * What a rename, delete or open fails with on Windows while another process holds the file:
+ * antivirus, the search indexer, and backup and sync tools open new and changed files for a
+ * moment, often without letting others delete them (ERROR_ACCESS_DENIED is EPERM,
+ * ERROR_SHARING_VIOLATION EBUSY).
+ */
+const LOCKED = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+/**
+ * Pauses before each retry: 3.3 s in all. A scanner holds a small file for milliseconds to a few
+ * hundred; graceful-fs waits up to a minute, which suits npm, but here a vault commit holds the
+ * vault's lock and a settings save holds the UI. A lock that outlasts this isn't a passing one.
+ */
+const LOCK_RETRY_DELAYS_MS = [20, 40, 80, 160, 320, 640, 1000, 1000];
+
+/**
+ * Runs a file operation, and on Windows retries it with backoff while it fails because another
+ * process holds the file for a moment (see LOCKED). Any other error, a lock that doesn't go away,
+ * and every failure on other systems are thrown as they are.
+ */
+export async function retryWhileLocked<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation();
+    } catch (e) {
+      const delay = LOCK_RETRY_DELAYS_MS[attempt];
+      if (process.platform !== 'win32' || delay === undefined || !LOCKED.has(errnoCode(e) ?? ''))
+        throw e;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 async function fsyncDir(dir: string): Promise<void> {
   if (isWindows) return; // directories cannot be opened for fsync on Windows
   let handle: fsp.FileHandle | undefined;
@@ -62,8 +95,9 @@ async function fsyncDir(dir: string): Promise<void> {
 
 /**
  * Writes `data` to `path` atomically: a private temp file in the same directory is written and
- * fsynced, then renamed over the target, then the directory is fsynced. A crash at any point
- * leaves either the old or the new file, never a mix.
+ * fsynced, then renamed over the target (retried while Windows has either locked), then the
+ * directory is fsynced. A crash at any point leaves either the old or the new file, never a mix,
+ * and a failure leaves no temp file.
  */
 export async function writeFileAtomic(path: string, data: Buffer): Promise<void> {
   const tmp = `${path}${TEMP_MARK}${randomBytes(6).toString('hex')}`;
@@ -75,10 +109,10 @@ export async function writeFileAtomic(path: string, data: Buffer): Promise<void>
     await handle.sync();
     await handle.close();
     handle = undefined;
-    await fsp.rename(tmp, path);
+    await retryWhileLocked(() => fsp.rename(tmp, path));
   } catch (e) {
     await handle?.close().catch(() => undefined);
-    await fsp.rm(tmp, { force: true }).catch(() => undefined);
+    await retryWhileLocked(() => fsp.rm(tmp, { force: true })).catch(() => undefined);
     throw ioError(`save ${basename(path)}`, e);
   }
   await fsyncDir(dirname(path));
@@ -110,7 +144,7 @@ export async function secureDelete(path: string): Promise<void> {
     await handle?.close().catch(() => undefined);
   }
   try {
-    await fsp.unlink(path);
+    await retryWhileLocked(() => fsp.unlink(path));
   } catch (e) {
     if (errnoCode(e) !== 'ENOENT') throw ioError(`delete ${basename(path)}`, e);
   }

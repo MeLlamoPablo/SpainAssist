@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
 import { ChatItem, Procedure } from '@sa/shared';
 import { type ProcedurePaths, procedurePaths } from '../app/paths';
-import { DebouncedWriter, ensurePrivateDir, readJsonFile, writeFileAtomic } from '../core/fs';
+import {
+  DebouncedWriter,
+  ensurePrivateDir,
+  readJsonFile,
+  retryWhileLocked,
+  writeFileAtomic,
+} from '../core/fs';
 import type { Logger } from '../core/logger';
 import { isSafeId } from '../core/util';
 
@@ -95,7 +101,7 @@ export class ProcedureStore {
 
   async delete(id: string): Promise<void> {
     await this.writer.cancel(`${id}/`);
-    await rm(this.paths(id).dir, { recursive: true, force: true });
+    await retryWhileLocked(() => rm(this.paths(id).dir, { recursive: true, force: true }));
   }
 
   flush(): Promise<void> {

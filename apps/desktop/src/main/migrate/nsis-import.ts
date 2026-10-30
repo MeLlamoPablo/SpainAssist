@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 import type { DataImportStatus } from '@sa/shared';
 import { z } from 'zod';
 import { type AppPaths, assistantPaths, createAppPaths } from '../app/paths';
-import { readJsonFile, writeFileAtomic } from '../core/fs';
+import { readJsonFile, retryWhileLocked, writeFileAtomic } from '../core/fs';
 import type { Logger } from '../core/logger';
 import { errorMessage } from '../core/util';
 import { normalizeSettings } from '../settings/store';
@@ -246,14 +246,16 @@ export async function openDataImport(deps: DataImportDeps): Promise<DataImport> 
     logger.info('NSIS data import: copied, restarting');
     await deps.stop();
     try {
+      // Windows' antivirus may still be scanning the copies, which blocks moving them.
       for (const entry of entries) {
-        await rm(join(userData, entry), { recursive: true, force: true });
+        await retryWhileLocked(() => rm(join(userData, entry), { recursive: true, force: true }));
         const staged = join(staging, entry);
-        if (await exists(staged)) await rename(staged, join(userData, entry));
+        if (await exists(staged))
+          await retryWhileLocked(() => rename(staged, join(userData, entry)));
       }
       const stagedLocalState = join(staging, LOCAL_STATE);
       if (await exists(stagedLocalState))
-        await rename(stagedLocalState, join(userData, STAGED_LOCAL_STATE));
+        await retryWhileLocked(() => rename(stagedLocalState, join(userData, STAGED_LOCAL_STATE)));
       await decide('imported');
       await rm(staging, { recursive: true, force: true }).catch(() => {});
     } catch (err) {

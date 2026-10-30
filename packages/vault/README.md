@@ -105,6 +105,8 @@ original error).
 - Writes: temp file (`O_EXCL`, 0600) → fsync → rename → fsync directory. State changes are
   copy-on-write: memory only changes after the new file is on disk. A write mutex serializes
   all changes. On open, temp files from crashes and unreferenced document files are removed.
+  On Windows the rename, and deleting a document, wait up to 3.3 s for a file that antivirus,
+  the search indexer or a backup tool holds (`retryWhileLocked`, also used by the app).
 - `wipe()` destroys `key.bin` first (crypto-shredding), overwrites every file with random
   bytes before unlinking, then creates a new key and an empty state. On SSD/APFS overwriting
   cannot guarantee physical erasure; the guarantee comes from destroying the key.
