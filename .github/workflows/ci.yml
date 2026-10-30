@@ -61,8 +61,10 @@ jobs:
       # installs the headless shell); the system libraries come with --with-deps.
       - name: Install Chromium
         run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
+      # A display, so the browser's CRLSet test also runs Chromium headed, which on Linux (as on
+      # Windows) quits with its last window (packages/browser/README.md, "Revoked certificates").
       - name: Test
-        run: corepack pnpm test
+        run: xvfb-run --auto-servernum corepack pnpm test
       - name: Store submission retries (mock APIs)
         if: ${{ !cancelled() }}
         run: node --test scripts/store-submissions.test.mjs

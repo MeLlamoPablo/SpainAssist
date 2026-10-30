@@ -108,6 +108,16 @@ const CRLSET_SETTLE_MS = 5_000;
 const NO_COMPONENT_UPDATES = '--component-updater=url-source=http://127.0.0.1:9/';
 /** Temporary profiles of CRLSet launches, in the OS temp directory. */
 export const PROFILE_PREFIX = 'sa-agent-profile-';
+/**
+ * A browser that closes by itself this soon after launch, before any of its pages loaded a site,
+ * never got going. After EARLY_EXITS_LIMIT of those in a row the service stops relaunching:
+ * agents retry a closed browser, so one that dies at startup would relaunch on every tool call.
+ */
+const EARLY_EXIT_MS = 10_000;
+const EARLY_EXITS_LIMIT = 2;
+const BROWSER_CLOSED = 'The browser window was closed or crashed. Try again: it will be reopened.';
+const BROWSER_UNAVAILABLE =
+  'The browser keeps closing by itself right after it starts, so it was not opened again. Do not retry browser actions: tell the user the browser could not start on this computer, and that restarting the app may help.';
 
 const silentLogger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
 
@@ -175,6 +185,10 @@ export class PlaywrightBrowserService implements BrowserService {
   private readonly trackers = new WeakMap<Page, NetworkTracker>();
   private browser?: Browser;
   private launching?: Promise<Browser>;
+  /** The browser of the last launch until it closes: since when, and whether a page loaded. */
+  private launched?: { browser: Browser; at: number; loaded: boolean };
+  /** Browsers in a row that closed by themselves before loading a page (EARLY_EXIT_MS). */
+  private earlyExits = 0;
   private userAgent?: string;
   private readonly budget: number;
   private readonly actionTimeout: number;
@@ -653,6 +667,9 @@ export class PlaywrightBrowserService implements BrowserService {
     await Promise.all(sessions.map((s) => this.disposeSession(s)));
     const browser = this.browser ?? (await this.launching?.catch(() => undefined));
     this.browser = undefined;
+    // Closed on purpose: no early exit, and a later call may launch again.
+    this.launched = undefined;
+    this.earlyExits = 0;
     await browser?.close().catch(noop);
     if (this.captureScratch) {
       await settleAll(this.captureWork, 60_000);
@@ -808,6 +825,9 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   private async launch(): Promise<Browser> {
+    if (this.earlyExits >= EARLY_EXITS_LIMIT)
+      throw new BrowserError('unavailable', BROWSER_UNAVAILABLE);
+    const started = Date.now();
     const headless = !!this.opts.headless;
     const options: LaunchOptions = {
       headless,
@@ -835,18 +855,29 @@ export class PlaywrightBrowserService implements BrowserService {
     const browser = crlSet
       ? await this.launchWithCrlSet(options, crlSet)
       : await chromium.launch(options);
+    const launched = { browser, at: Date.now(), loaded: false };
+    this.launched = launched;
+    browser.on('disconnected', () => this.onBrowserDisconnected(browser));
+    // Already closed by itself (before the listener): an early exit all the same.
+    if (!browser.isConnected()) this.onBrowserDisconnected(browser);
     if (this.opts.certificates) {
       try {
         await answerProxyLogins(browser, this.opts.certificates.credentials);
       } catch (err) {
+        // Closed here on purpose, unless it already closed by itself.
+        if (this.launched === launched) this.launched = undefined;
         await browser.close().catch(noop);
         throw err;
       }
     }
-    browser.on('disconnected', () => this.onBrowserDisconnected(browser));
     this.userAgent = headless ? await headfulUserAgent(browser) : undefined;
+    if (!browser.isConnected()) throw new BrowserError('closed', BROWSER_CLOSED);
     this.browser = browser;
-    this.log.info('browser launched', { headless, version: browser.version() });
+    this.log.info('browser launched', {
+      headless,
+      version: browser.version(),
+      launchMs: launched.at - started,
+    });
     return browser;
   }
 
@@ -856,6 +887,15 @@ export class PlaywrightBrowserService implements BrowserService {
    * (deleted when the browser goes away) whose browser gives sessions their contexts as usual.
    * Chromium loads a seeded CRLSet only while its component updater runs (NO_COMPONENT_UPDATES),
    * and enforces it a moment later, so this waits CRLSET_SETTLE_MS before the first page.
+   *
+   * The persistent launch opens a blank window (Playwright passes `about:blank` instead of
+   * `--no-startup-window`), and that window stays open for the browser's whole life, minimized
+   * after the wait with `startHidden`: Chromium enforces the CRLSet in after-startup tasks that
+   * never run if it closes first, and on Windows and Linux a browser started this way quits when
+   * its last window closes (on macOS it keeps running). Closed, it took the browser down as soon
+   * as no session had a window, so before the first one. It belongs to the persistent context,
+   * which no session uses: sessions get their own contexts, so tabs, snapshots and captures
+   * never see it.
    */
   private async launchWithCrlSet(
     options: LaunchOptions,
@@ -878,9 +918,14 @@ export class PlaywrightBrowserService implements BrowserService {
       if (!browser) throw new Error('The persistent launch returned no browser');
       browser.on('disconnected', () => void removeProfile());
       await sleep(CRLSET_SETTLE_MS);
-      // Its blank first window, only now: Chromium enforces the CRLSet in its after-startup
-      // tasks, which never run if the browser's only window closes first. Sessions open their own.
-      await Promise.all(context.pages().map((page) => page.close().catch(noop)));
+      // Minimized only now, like the windows of sessions: macOS ignores --start-minimized for it.
+      if (this.opts.startHidden && !options.headless) {
+        for (const page of context.pages()) {
+          await this.setWindowState(page, 'minimized').catch((err) =>
+            this.log.warn('could not minimize browser window', { error: errorMessage(err) }),
+          );
+        }
+      }
       this.log.info('browser enforces a CRLSet', { version: crlSet.version });
       return browser;
     } catch (err) {
@@ -900,7 +945,25 @@ export class PlaywrightBrowserService implements BrowserService {
       // Saves what the run has (no HAR or trace: they died with the browser).
       if (s.capture) void this.endCapture(s);
     }
-    this.log.warn('browser disconnected');
+    const launched = this.launched?.browser === browser ? this.launched : undefined;
+    if (!launched) {
+      // Closed by the service (closeAll, a failed launch).
+      this.log.warn('browser disconnected');
+      return;
+    }
+    this.launched = undefined;
+    const afterLaunchMs = Date.now() - launched.at;
+    const early = afterLaunchMs < EARLY_EXIT_MS && !launched.loaded;
+    this.earlyExits = early ? this.earlyExits + 1 : 0;
+    this.log.warn('browser disconnected', {
+      afterLaunchMs,
+      pageLoaded: launched.loaded,
+      earlyExits: this.earlyExits,
+    });
+    if (this.earlyExits >= EARLY_EXITS_LIMIT)
+      this.log.error('browser keeps closing right after launch: not relaunching it', {
+        earlyExits: this.earlyExits,
+      });
   }
 
   private async ensureContext(s: Session): Promise<BrowserContext> {
@@ -1057,6 +1120,11 @@ export class PlaywrightBrowserService implements BrowserService {
       if (frame === page.mainFrame() && s.active === page && isHttpUrl(frame.url())) {
         s.lastUrl = frame.url();
       }
+    });
+    page.on('domcontentloaded', () => {
+      // The browser got going: closing later is not an early exit (EARLY_EXIT_MS).
+      const launched = this.launched;
+      if (launched?.browser === context.browser() && isHttpUrl(page.url())) launched.loaded = true;
     });
     // Popups and new tabs become the active page.
     this.activate(s, page);
@@ -1924,10 +1992,7 @@ function publicError(s: Session, err: unknown): BrowserError {
       raw,
     )
   ) {
-    return new BrowserError(
-      'closed',
-      'The browser window was closed or crashed. Try again: it will be reopened.',
-    );
+    return new BrowserError('closed', BROWSER_CLOSED);
   }
   return new BrowserError('internal', maskSecrets(cleanPlaywrightMessage(raw), s.secretVariants));
 }

@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { type BrowserContext, chromium, type Page } from 'playwright-core';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PROFILE_PREFIX } from '../src/service';
-import type { CrlSetComponent } from '../src/types';
+import type { BrowserServiceOptions, CrlSetComponent } from '../src/types';
 import { createTestService, page, startServer, type TestServer } from './helpers';
 
 /**
@@ -36,6 +37,70 @@ function writeComponent(dir: string): void {
     path.join(dir, 'manifest.json'),
     JSON.stringify({ manifest_version: 2, name: 'crl-set-test.data', version: VERSION }),
   );
+}
+
+/**
+ * Headed Chromium started persistently quits when its last window closes on Windows and Linux,
+ * but not on macOS, nor headless: only a headed run off macOS shows whether the browser survives.
+ * Linux needs a display (CI runs the unit tests under xvfb-run); SA_TEST_BROWSER_WINDOWS=1 runs it
+ * on macOS too (windows on the desktop, minimized).
+ */
+const headed =
+  (process.platform !== 'linux' || !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) &&
+  (process.platform !== 'darwin' || process.env.SA_TEST_BROWSER_WINDOWS === '1');
+
+async function windowState(page: Page): Promise<string | undefined> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    return (await cdp.send('Browser.getWindowForTarget')).bounds.windowState;
+  } finally {
+    await cdp.detach();
+  }
+}
+
+/**
+ * The launch's blank window outlives every session window, and no session sees it: v0.3.2 closed
+ * it after the settle, so on Windows the browser quit right away and every call relaunched it.
+ */
+async function keepsItsWindow(overrides: Partial<BrowserServiceOptions>): Promise<void> {
+  const launched: BrowserContext[] = [];
+  const launch = chromium.launchPersistentContext.bind(chromium);
+  const spy = vi
+    .spyOn(chromium, 'launchPersistentContext')
+    .mockImplementation(async (dir, options) => {
+      const context = await launch(dir, options);
+      launched.push(context);
+      return context;
+    });
+  const component: CrlSetComponent = { version: VERSION, dir: componentDir };
+  const t = createTestService({ crlSet: async () => component, ...overrides });
+  try {
+    const obs = await t.service.open('window', `${server.origin}/`);
+    expect(obs.title).toBe('Inicio');
+    const own = launched[0] as BrowserContext;
+    const browser = own.browser();
+    expect(own.pages().map((p) => p.url())).toEqual(['about:blank']);
+    if (overrides.startHidden && process.platform !== 'linux') {
+      // Minimized (on Linux that is up to the window manager, which xvfb-run has none of).
+      expect(await windowState(own.pages()[0] as Page)).toBe('minimized');
+    }
+    expect(obs.tabs).toEqual([expect.objectContaining({ url: `${server.origin}/`, active: true })]);
+    expect(await t.service.tabs('window', 'list')).toHaveLength(1);
+
+    // The session's only window closes: the browser keeps running on its own.
+    await t.service.close('window');
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    expect(browser?.isConnected()).toBe(true);
+    expect(own.pages()).toHaveLength(1);
+
+    const again = await t.service.open('window-2', `${server.origin}/`);
+    expect(again.title).toBe('Inicio');
+    expect(again.tabs).toHaveLength(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+  } finally {
+    spy.mockRestore();
+    await t.cleanup();
+  }
 }
 
 function profiles(): Set<string> {
@@ -74,6 +139,12 @@ describe('crlSet', () => {
     // Deleted when the browser goes away (asynchronously, after `disconnected`).
     await expect.poll(() => [...profiles()].filter((name) => !before.has(name))).toEqual([]);
   });
+
+  it('keeps the blank window of the launch, which no session sees', () => keepsItsWindow({}));
+
+  it.skipIf(!headed)('keeps a headed browser running when no session has a window', () =>
+    keepsItsWindow({ headless: false, startHidden: true }),
+  );
 
   it('launches without a CRLSet when the app has none', async () => {
     const before = profiles();

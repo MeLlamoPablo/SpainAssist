@@ -1,11 +1,15 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { type Browser, chromium } from 'playwright-core';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { Logger } from '../src/types';
 import { createTestService, page, sendHtml, startServer, type TestServer } from './helpers';
 
 let server: TestServer;
 const marker = `sa-test-${randomUUID()}`;
 let t: ReturnType<typeof createTestService>;
+/** The browser of the latest launch in the early-exit tests, which `/dies` closes. */
+let latest: Browser | undefined;
 
 beforeAll(async () => {
   server = await startServer({
@@ -13,6 +17,8 @@ beforeAll(async () => {
       sendHtml(res, page('<h1>Dentro</h1>'), { 'set-cookie': 'sid=abc123; Path=/' }),
     '/me': (req, res) => sendHtml(res, page(`<p>Cookies: ${req.headers.cookie ?? ''}</p>`)),
     '/crash': page('<p>Pestaña</p>'),
+    // Closes the browser before its page loads (the answer never comes).
+    '/dies': () => void latest?.close(),
   });
   // A unique (ignored) switch lets the test find and kill this browser's processes.
   t = createTestService({ launchArgs: [`--sa-test-marker=${marker}`] });
@@ -111,4 +117,88 @@ describe('crash recovery', () => {
     expect(obs.snapshot).toContain('Pestaña');
     expect(obs.notes.join('\n')).toContain('crashed');
   });
+});
+
+describe('a browser that closes by itself right after launch', () => {
+  async function withLaunches(
+    test: (opts: {
+      t: ReturnType<typeof createTestService>;
+      launches: () => number;
+      warnings: { msg: string; data?: unknown }[];
+      /** Opens `/dies` and waits until its browser is gone. */
+      dies: () => Promise<void>;
+    }) => Promise<void>,
+  ): Promise<void> {
+    const launch = chromium.launch.bind(chromium);
+    const spy = vi.spyOn(chromium, 'launch').mockImplementation(async (options) => {
+      latest = await launch(options);
+      return latest;
+    });
+    const warnings: { msg: string; data?: unknown }[] = [];
+    const logger: Logger = {
+      debug: () => {},
+      info: () => {},
+      warn: (msg, data) => warnings.push({ msg, data }),
+      error: (msg, data) => warnings.push({ msg, data }),
+    };
+    const service = createTestService({ logger });
+    const dies = async () => {
+      // It may fail or not, depending on when the browser goes: only the browser matters here.
+      await service.service.open('dies', `${server.origin}/dies`).catch(() => undefined);
+      await expect.poll(() => latest?.isConnected()).toBe(false);
+    };
+    try {
+      await test({ t: service, launches: () => spy.mock.calls.length, warnings, dies });
+    } finally {
+      spy.mockRestore();
+      await service.cleanup();
+    }
+  }
+
+  it('is relaunched once, then the service stops relaunching it', () =>
+    withLaunches(async ({ t, launches, warnings, dies }) => {
+      await dies();
+      await dies();
+      expect(launches()).toBe(2);
+      const error = await t.service.open('next', `${server.origin}/crash`).catch((e) => e);
+      expect(error).toMatchObject({ code: 'unavailable' });
+      expect(error.message).toMatch(/Do not retry/);
+      expect(launches()).toBe(2);
+      expect(warnings).toContainEqual({
+        msg: 'browser disconnected',
+        data: { afterLaunchMs: expect.any(Number), pageLoaded: false, earlyExits: 2 },
+      });
+    }));
+
+  it('counts only browsers in a row that close before loading a page', () =>
+    withLaunches(async ({ t, launches, warnings, dies }) => {
+      await dies();
+      // This one loads a page before it closes: the count starts over.
+      await t.service.open('ok', `${server.origin}/crash`);
+      await latest?.close();
+      await dies();
+      const obs = await t.service.open('ok', `${server.origin}/crash`);
+      expect(obs.snapshot).toContain('Pestaña');
+      expect(launches()).toBe(4);
+      expect(
+        warnings
+          .filter((w) => w.msg === 'browser disconnected')
+          .map((w) => (w.data as { earlyExits: number }).earlyExits),
+      ).toEqual([1, 0, 1]);
+    }));
+
+  it('starts over after closeAll, whose own close is not an early exit', () =>
+    withLaunches(async ({ t, launches, dies }) => {
+      await dies();
+      await dies();
+      await t.service.closeAll();
+      // A browser that loaded nothing, closed by closeAll: not an early exit, so one more early
+      // exit still leaves the browser one relaunch.
+      await t.service.open('blank', 'about:blank');
+      await t.service.closeAll();
+      await dies();
+      const obs = await t.service.open('fresh', `${server.origin}/crash`);
+      expect(obs.snapshot).toContain('Pestaña');
+      expect(launches()).toBe(5);
+    }));
 });

@@ -22,6 +22,8 @@ export type BrowserErrorCode =
   | 'expectation_failed'
   /** The service was shut down. */
   | 'closed'
+  /** The browser keeps closing by itself right after launch, so the service stopped relaunching it. */
+  | 'unavailable'
   | 'internal';
 
 export class BrowserError extends Error {

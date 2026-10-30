@@ -26,7 +26,10 @@ See `src/types.ts` for the complete API and options.
   file is deleted afterwards. Inline PDF responses are captured too.
 - `saveMedia` optionally persists throttled JPEGs; `startScreencast` follows the active tab.
 - `exportState`/`importState` serialize browser storage; the caller must encrypt it. A browser
-  that disconnects is relaunched on the next operation.
+  that disconnects is relaunched on the next operation, unless two in a row closed by
+  themselves within 10 s of launch, before any page loaded: the service then stops relaunching
+  (code `unavailable`, an error that tells the agent not to retry) until `closeAll`. Each
+  disconnection is logged with how long after launch it came.
 
 ## Secrets
 
@@ -63,10 +66,21 @@ profile. Chromium loads a seeded CRLSet only while its component updater runs, s
 is on, pointed at port 9, which Chromium never connects to: nothing is downloaded and nothing
 is sent. Chromium enforces the CRLSet in its after-startup tasks, about 2 s after launch on a
 Mac (it's listed in `chrome://components` sooner), so the launch waits 5 s before the first
-page. Those tasks need a window: the profile's own blank window is closed only after the wait
-(closed at once, the CRLSet is never enforced). Sessions use contexts of that browser as
-usual, and the profile is deleted when the browser goes away. An expired CRLSet still blocks
-the keys it lists.
+page. Those tasks need a window, and the persistent launch opens a blank one: Playwright passes
+`about:blank` (with `--no-startup-window`, a headed persistent launch waits for a first page
+until it times out). That window stays open for the browser's whole life, minimized after the
+wait with `startHidden` (macOS ignores `--start-minimized` for it). Closed at once, the CRLSet
+is never enforced; closed after the wait, as v0.3.2 did, the browser quit on Windows and Linux,
+where a browser started without `--no-startup-window` quits with its last window (macOS keeps
+it running): no session had a window yet, so every tool call launched a browser that died. The
+window belongs to the persistent context, which no session uses: sessions get their own
+contexts of that browser, so tabs, snapshots and captures never see it. The profile is deleted
+when the browser goes away. An expired CRLSet still blocks the keys it lists.
+
+`test/crlset.test.ts` checks the window outlives every session's, also headed where Chromium
+would quit without it: on Windows, and on Linux with a display (CI runs the unit tests under
+`xvfb-run`). `SA_TEST_BROWSER_WINDOWS=1` runs the headed case on macOS too, where it can't fail
+that way.
 
 A local server can't show the CRLSet being enforced (an untrusted test certificate fails
 first, and a trusted one skips revocation), so the desktop app has a live test against a site
