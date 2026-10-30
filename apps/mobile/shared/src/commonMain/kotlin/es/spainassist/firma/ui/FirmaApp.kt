@@ -72,6 +72,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -428,6 +429,12 @@ private fun StartScreen(s: Screen.Start, actions: FirmaActions, openLicenses: ()
             }
             NfcBanner(s.nfc, actions)
             Primary(stringResource(Res.string.start_scan), onClick = scan, enabled = s.nfc != NfcAvailability.Missing)
+            // Google Play asks apps that touch government services to say they don't represent one
+            // (docs/research/play-policy.md). Framer's "Móvil · Inicio": 10/18, centred, fg-subtle.
+            Text(
+                stringResource(Res.string.start_disclaimer), Modifier.fillMaxWidth(),
+                fontSize = 10.sp, lineHeight = 18.sp, textAlign = TextAlign.Center, color = colors.fgSubtle,
+            )
         }
     }
 }

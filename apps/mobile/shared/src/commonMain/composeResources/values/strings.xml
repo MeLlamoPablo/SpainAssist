@@ -4,6 +4,7 @@
 
     <!-- Start -->
     <string name="start_scan">Escanear QR</string>
+    <string name="start_disclaimer">Spain Assist no está afiliada a ninguna administración pública</string>
     <string name="scan_title">Apunta al código del ordenador</string>
     <string name="camera_denied">Para escanear el código, deja que la app use la cámara.</string>
     <string name="camera_allow">Dar permiso a la cámara</string>

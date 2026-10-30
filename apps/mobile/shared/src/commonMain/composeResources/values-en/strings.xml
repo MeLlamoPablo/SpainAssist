@@ -4,6 +4,7 @@
 
     <!-- Start -->
     <string name="start_scan">Scan QR code</string>
+    <string name="start_disclaimer">Spain Assist is not affiliated with any government body</string>
     <string name="scan_title">Point at the code on your computer</string>
     <string name="camera_denied">To scan the code, let the app use the camera.</string>
     <string name="camera_allow">Allow the camera</string>

@@ -75,6 +75,7 @@ class PreviewActivity : ComponentActivity() {
             "revisar-desconocido" to signing(document.copy(official = false), Step.Review),
             "revisar-varios" to signing(several, Step.Review),
             "certificado-revisar" to signing(review(Purpose.Certificate), Step.Review),
+            "pin-pedir" to signing(document, Step.WaitForComputer(Need.Pin, refused = false, triesLeft = null)),
             "pin" to signing(document, Step.WaitForComputer(Need.Pin, refused = true, triesLeft = 2)),
             "acerca" to signing(document, Step.HoldCard(moved = false)),
             "movido" to signing(document, Step.HoldCard(moved = true)),
