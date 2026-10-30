@@ -125,6 +125,8 @@ const BROWSER_UNAVAILABLE =
  */
 const NO_FRAME = /Unable to capture screenshot/;
 const NO_FRAME_RETRY_MS = 200;
+/** New tabs, navigations and observations this slow get a debug line with their timings. */
+const SLOW_MS = 5_000;
 
 const silentLogger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
 
@@ -245,7 +247,12 @@ export class PlaywrightBrowserService implements BrowserService {
           await page.close().catch(noop);
           page = undefined;
         }
-        if (!page) page = await context.newPage();
+        if (!page) {
+          const started = Date.now();
+          page = await context.newPage();
+          const ms = Date.now() - started;
+          if (ms >= SLOW_MS) this.log.debug('slow new tab', { procedureId, ms });
+        }
         this.activate(s, page);
         await this.navigate(s, page, target);
         return this.observe(s);
@@ -1170,6 +1177,13 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   private async navigate(s: Session, page: Page, url: string): Promise<void> {
+    const started = Date.now();
+    // Diagnostics: a navigation that ends without its page, or slowly. The host only, never the URL.
+    const ended = (outcome: string) => {
+      const ms = Date.now() - started;
+      if (outcome !== 'loaded' || ms >= SLOW_MS)
+        this.log.debug('navigation', { procedureId: s.id, host: hostOf(url), outcome, ms });
+    };
     let response: Response | null;
     try {
       response = await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -1184,6 +1198,7 @@ export class PlaywrightBrowserService implements BrowserService {
         );
         if (cause) msg = msg.replace('ERR_TUNNEL_CONNECTION_FAILED', cause);
       }
+      ended(navigationOutcome(msg));
       if (/Download is starting/i.test(msg)) return; // handled by the download listener
       if (CLIENT_CERT_NET_ERROR.test(msg)) {
         s.notes.push(certificateRequestedNote(hostOf(url)));
@@ -1203,8 +1218,10 @@ export class PlaywrightBrowserService implements BrowserService {
       );
     }
     // A plain http:// site the sidecar couldn't reach: its answer says why.
-    const unreachable = response?.headers()['x-sa-network-error'];
-    if (unreachable && /^ERR_[A-Z_]+$/.test(unreachable))
+    const header = response?.headers()['x-sa-network-error'];
+    const unreachable = header && /^ERR_[A-Z_]+$/.test(header) ? header : undefined;
+    ended(unreachable ?? 'loaded');
+    if (unreachable)
       throw new BrowserError(
         'navigation',
         `Could not open ${url}: ${unreachable} (${netErrorHint(unreachable)})`,
@@ -1427,8 +1444,11 @@ export class PlaywrightBrowserService implements BrowserService {
     const first = this.livePage(s);
     if (!first)
       throw new BrowserError('no_page', 'No tab is open. Use browser_open with a URL first.');
+    const started = Date.now();
     await this.settle(s, first, opts.initialWait ?? 100);
+    const settled = Date.now();
     await this.waitForBackgroundWork(s);
+    const reading = Date.now();
 
     let page = this.livePage(s) ?? first;
     let before: Awaited<ReturnType<typeof collectPasswordValues>>;
@@ -1462,11 +1482,21 @@ export class PlaywrightBrowserService implements BrowserService {
     const url = page.url();
     if (isHttpUrl(url)) s.lastUrl = url;
 
+    const read = Date.now();
     const [title, tabs, imageId] = await Promise.all([
       withTimeout(page.title(), 2_000, ''),
       this.tabsInfo(s),
       this.captureMedia(s, page, sha256(`${url}\n${rendered.text}`)),
     ]);
+    const done = Date.now();
+    if (done - started >= SLOW_MS)
+      this.log.debug('slow observation', {
+        procedureId: s.id,
+        settleMs: settled - started,
+        backgroundMs: reading - settled,
+        snapshotMs: read - reading,
+        titleTabsScreenshotMs: done - read,
+      });
 
     const notes = s.notes.splice(0);
     notes.push(
@@ -2060,6 +2090,15 @@ function netErrorHint(code: string): string {
   if (/INTERNET_DISCONNECTED|NETWORK_CHANGED/.test(code)) return 'no internet connection';
   if (/CERT_/.test(code)) return 'the site has an invalid security certificate; do not continue';
   return 'network error';
+}
+
+/** How a failed `page.goto` ended, for the log: no URL, which its message carries. */
+function navigationOutcome(msg: string): string {
+  if (/Timeout \d+ms exceeded/i.test(msg)) return 'timeout';
+  if (/Download is starting/i.test(msg)) return 'download';
+  if (/frame was detached/i.test(msg)) return 'frame detached';
+  if (/navigation .*interrupted/i.test(msg)) return 'interrupted by another navigation';
+  return /net::(ERR_[A-Z_]+)/.exec(msg)?.[1] ?? 'error';
 }
 
 interface FieldState {

@@ -95,6 +95,8 @@ test('the browser outlives its windows: a procedure closes it, waits and browses
       return lines.some((line) => line.includes('browser enforces a CRLSet'));
     })
     .toBe(true);
+  // In CI's log even when it passes: the launch, and any slow navigation or observation (debug).
+  for (const line of lines) console.log(line);
   const launches = lines.filter((line) => line.includes('browser launched'));
   expect(launches, lines.join('\n')).toHaveLength(1);
   expect(launches[0]).toContain('"headless":false');
@@ -127,7 +129,12 @@ test('the development build passes its --self-test', async () => {
   const last = stdout.trim().split('\n').at(-1) ?? '';
   await test.info().attach('self-test.json', { body: last, contentType: 'application/json' });
   expect(code, `${stdout}\n${stderr}`).toBe(0);
-  const report = JSON.parse(last) as { ok: boolean; checks: { name: string; ok: boolean }[] };
+  const report = JSON.parse(last) as {
+    ok: boolean;
+    checks: { name: string; ok: boolean; ms: number; detail?: string }[];
+  };
+  // In CI's log even when it passes: how long the first launch and page took on that runner.
+  for (const c of report.checks) console.log(`self-test ${c.name}: ${c.ms} ms, ${c.detail}`);
   expect(report.ok).toBe(true);
   expect(report.checks.map((c) => [c.name, c.ok])).toEqual([
     ['browser-executable', true],

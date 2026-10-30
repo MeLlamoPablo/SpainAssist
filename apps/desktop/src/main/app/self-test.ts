@@ -11,6 +11,10 @@
  *   second tab without a relaunch: v0.3.2's quit there on Windows and Linux, on every launch.
  * - sa-sidecar starts and proxies a request, and every page the browser loads.
  *
+ * A page that doesn't show in time fails its check with what the browser showed instead (`page`:
+ * its URL, title, tabs and the service's notes, where navigation errors land), and a failed
+ * report carries the run's log, debug lines included (index.ts).
+ *
  * Small and safe in shipped builds: index.ts runs it on a new temporary profile, never the
  * user's, with no single-instance lock (it runs next to the app) and no error reports. It reads
  * no user data and talks to no running instance; its server, the sidecar and the browser's pages
@@ -21,6 +25,7 @@ import http, { type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import type { Logger as BrowserLogger } from '@sa/browser';
+import type { BrowserObservation } from '@sa/shared';
 import { Sidecar } from '@sa/sidecar';
 import { createLogger } from '../core/logger';
 import { errorMessage } from '../core/util';
@@ -37,6 +42,13 @@ const FIXTURE_VERSION = '10850';
  * itself already waited out the CRLSet's settle; v0.3.2's browser quit at once.
  */
 const WITHOUT_WINDOWS_MS = 3_000;
+/**
+ * How long a page may take to show, from its `open`. The first one includes the launch, and a
+ * browser started for the first time on a machine can be slow to show it: on CI's Windows runner
+ * it wasn't there when its `open` returned, 30 s after the launch. Later pages get those 30 s.
+ */
+const FIRST_PAGE_MS = 60_000;
+const PAGE_MS = 30_000;
 /** The whole run's limit: a browser that never starts must not hang a release job. */
 export const SELF_TEST_TIMEOUT_MS = 180_000;
 
@@ -47,12 +59,36 @@ interface SelfTestCheck {
   ms: number;
   detail?: string;
   error?: string;
+  /** A page that didn't show: what the browser showed instead. */
+  page?: PageSeen;
+}
+
+/**
+ * What the browser showed last instead of a page, and the service's notes of every observation
+ * of it (they say why it didn't load).
+ */
+interface PageSeen {
+  url: string;
+  title: string;
+  notes: string[];
+  tabs: string[];
+  /** Since the page was opened. */
+  ms: number;
+}
+
+class PageError extends Error {
+  constructor(
+    message: string,
+    readonly page: PageSeen,
+  ) {
+    super(message);
+  }
 }
 
 export interface SelfTestReport {
   ok: boolean;
   checks: SelfTestCheck[];
-  /** The run's log lines (there is no user data in them to hide). */
+  /** The run's log lines, debug ones included (there is no user data in them to hide). */
   log: string[];
 }
 
@@ -68,6 +104,8 @@ export interface SelfTestOptions {
   browserFactory: BrowserFactory;
   /** Tests only, where there is no display: the app always runs the browser headed. */
   headless?: boolean;
+  /** Tests only: how long a page may take to show (FIRST_PAGE_MS, then PAGE_MS). */
+  pageMs?: number;
 }
 
 /** The checks, in order: the report fails when one is missing. */
@@ -98,7 +136,13 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
       checks.push({ name, ok: true, ms: Date.now() - started, ...(detail ? { detail } : {}) });
       return true;
     } catch (err) {
-      checks.push({ name, ok: false, ms: Date.now() - started, error: errorMessage(err) });
+      checks.push({
+        name,
+        ok: false,
+        ms: Date.now() - started,
+        error: errorMessage(err),
+        ...(err instanceof PageError ? { page: err.page } : {}),
+      });
       return false;
     }
   };
@@ -175,17 +219,18 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
     });
     cleanup.unshift(() => service.closeAll());
     const named = (msg: string) => events.filter((e) => e.msg === msg);
+    const show = (session: string, path: string, title: string, ms: number, newTab = false) =>
+      showPage(service, session, `${server.origin}${path}`, title, opts.pageMs ?? ms, newTab);
 
     const launched = await check('browser-launch', async () => {
-      const obs = await service.open('self-test-1', `${server.origin}/one`);
-      if (obs.title !== 'Uno') throw new Error(`the page's title is "${obs.title}", not "Uno"`);
+      const { ms } = await show('self-test-1', '/one', 'Uno', FIRST_PAGE_MS);
       const crlSet = named('browser enforces a CRLSet')[0]?.data as
         | { version?: string }
         | undefined;
       if (crlSet?.version !== FIXTURE_VERSION) throw new Error('the browser enforces no CRLSet');
       const version = (named('browser launched')[0]?.data as { version?: string } | undefined)
         ?.version;
-      return `Chromium ${version ?? '?'} with CRLSet ${crlSet.version}`;
+      return `Chromium ${version ?? '?'} with CRLSet ${crlSet.version}, launched and showing its first page in ${ms} ms`;
     });
     if (!launched) return report(checks, lines);
 
@@ -201,11 +246,9 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
     });
 
     await check('browser-second-session', async () => {
-      const first = await service.open('self-test-2', `${server.origin}/two`);
-      if (first.title !== 'Dos') throw new Error(`the page's title is "${first.title}", not "Dos"`);
-      const second = await service.open('self-test-2', `${server.origin}/one`, { newTab: true });
-      if (second.title !== 'Uno' || second.tabs.length !== 2)
-        throw new Error(`the new tab shows "${second.title}" of ${second.tabs.length} tabs`);
+      await show('self-test-2', '/two', 'Dos', PAGE_MS);
+      const { obs: second } = await show('self-test-2', '/one', 'Uno', PAGE_MS, true);
+      if (second.tabs.length !== 2) throw new Error(`the new tab is one of ${second.tabs.length}`);
       if (!service.isOpen('self-test-2')) throw new Error('the session closed');
       const launches = named('browser launched').length;
       if (launches !== 1) throw new Error(`the browser was launched ${launches} times`);
@@ -218,6 +261,39 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
     for (const close of cleanup) await close().catch(() => {});
   }
   return report(checks, lines);
+}
+
+/**
+ * Opens `url` and waits up to `ms` for the page titled `title`, observing it again each second:
+ * an `open` returns after its own wait with what the browser shows by then.
+ */
+async function showPage(
+  service: BrowserPort,
+  session: string,
+  url: string,
+  title: string,
+  ms: number,
+  newTab: boolean,
+): Promise<{ obs: BrowserObservation; ms: number }> {
+  const started = Date.now();
+  let obs = await service.open(session, url, { newTab });
+  // Each note comes once, with the observation after its cause (a navigation that timed out...).
+  const notes = [...obs.notes];
+  while (obs.title !== title && Date.now() - started < ms) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    obs = await service.snapshot(session);
+    notes.push(...obs.notes);
+  }
+  const elapsed = Date.now() - started;
+  if (obs.title !== title)
+    throw new PageError(`the page's title is "${obs.title}", not "${title}", after ${elapsed} ms`, {
+      url: obs.url,
+      title: obs.title,
+      notes: [...new Set(notes)],
+      tabs: obs.tabs.map((tab) => tab.url),
+      ms: elapsed,
+    });
+  return { obs, ms: elapsed };
 }
 
 function report(checks: SelfTestCheck[], log: string[]): SelfTestReport {
