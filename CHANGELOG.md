@@ -3,6 +3,61 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.3.3 (2026-10-30)
+
+Installed apps update to it. What changed since 0.3.2.
+
+### App
+
+- **The assistant's browser works again on Windows and Linux.** In 0.3.2 it closed by itself
+  right after every launch, so procedures saw a browser open and close over and over without
+  showing anything. It now keeps running, minimized, for as long as the app needs it, and a
+  browser that keeps closing at once is no longer relaunched in a loop. Temporary browser
+  profiles are deleted once the browser exits. (69133f8, 16ea474)
+- **Windows:**
+  - Saving or deleting a file waits a moment when an antivirus, the search indexer or a backup
+    tool briefly holds it, instead of failing. (b37a13f)
+  - Documents and downloads always get names that Windows accepts ("CON.pdf", a trailing dot,
+    names that are too long), also when they were saved on a Mac. (58328a2)
+  - The Microsoft Store version finds the GitHub version's install when the Windows user
+    folder has accents (for example `C:\Users\José`), so it can bring its data over.
+    (39579da)
+  - A connection the sede refuses or resets is reported as such in any Windows language.
+    (8df82c4)
+- **The first screenshot of a procedure** is no longer missing when the browser has only just
+  started. (5a36c3e)
+- **Signing:** data that holds a fragment of XML (such as a PDF's metadata) is signed as binary
+  data, as AutoFirma does, instead of as just that fragment. (9e01755)
+- **DNI with the phone, early access:** the assistant must name the site that asks for the DNI
+  before you are asked to approve a login. Shorter texts that say "DNI" throughout, the PIN help
+  folds out, pairing shows a branded QR code and closes itself once the phone connects, and
+  deleting a saved DNI no longer asks for confirmation. (4e09680, 245fa03, bda5175, 2819014,
+  501b1ba)
+- **Procedures:** their requirements and summary can be selected and copied, the details toggle
+  always says "Detalles", and a procedure waiting on the administration no longer repeats it
+  next to its next step. (fc353a4, 87f572d, 9dfc41d)
+- **Exportar historial** adds the app's technical logs to the zip, so a bug report shows what
+  the app did. (37fbf0f)
+- **Electron 44.10.0**, which distrusts the compromised eMudhra intermediate certificates, and
+  dependencies upgraded. (c5cd452, 1bdffae)
+
+### Releases
+
+- A release builds nothing until CI passed for its commit, and CI now also runs the browser
+  headed on Linux and Windows and the unit tests on Windows. Each installer is installed and
+  runs the app's new `--self-test` (its browser must start headed with a CRLSet, outlive its
+  windows and open a second session; the sidecar must proxy) before anything is published.
+  (6dbce2a, 24a85f2, 6f88ad8, 9daffb6, 9117269)
+- Desktop and Android release independently (`vX.Y.Z` and `android/vX.Y.Z` tags); Android
+  builds upload to Google Play, and Store and Play submissions are safe to retry. (16b74af,
+  70105ef, 5ab38e4, 9fd0604, 226d241, d150fbd, 39761e9, 76167e6, 180d6f1)
+
+### Services and maintenance
+
+- Relay: verified Android pairing links, and a redesigned landing page.
+  (909b059, a01b7a1)
+- Version 0.3.3 everywhere except the phone app.
+
 ## 0.3.2 (2026-10-21)
 
 Installed apps update to it. What changed since 0.3.1.
