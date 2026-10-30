@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { crc32, inflateRawSync } from 'node:zlib';
@@ -46,6 +46,7 @@ beforeEach(async () => {
     assistantDir: join(dir, 'assistant'),
     proceduresDir: join(dir, 'procedures'),
     scanTranscriptsDir: join(dir, 'scanner'),
+    logsDir: join(dir, 'logs'),
     downloadsDir: join(dir, 'Downloads'),
     flush: async () => {
       flushed++;
@@ -98,6 +99,7 @@ describe('exportTranscripts', () => {
       version: '1.2.3',
       platform: 'darwin',
       exportedAt: '2026-10-12T10:30:00.000Z',
+      logs: [],
     });
   });
 
@@ -114,11 +116,85 @@ describe('exportTranscripts', () => {
     expect(await readdir(join(dir, 'Downloads'))).toHaveLength(2);
   });
 
+  it('adds the logs and their rotated predecessor, without other files', async () => {
+    await put('logs/main.log', '2026-10-12T10:29:00.000Z INFO  starting\n');
+    await put('logs/main.1.log', '2026-10-11T09:00:00.000Z INFO  bye\n');
+    await put('logs/crash.dmp', 'binary');
+    await put('logs/old/main.log', 'nested');
+    await put('outside.log', 'outside');
+    await symlink(join(dir, 'outside.log'), join(dir, 'logs/link.log'));
+
+    await exportTranscripts(deps);
+    const files = unzip(
+      await readFile(join(dir, 'Downloads', 'SpainAssist-transcripts-2026-10-12.zip')),
+    );
+    expect([...files.keys()]).toEqual(['manifest.json', 'logs/main.1.log', 'logs/main.log']);
+    expect(files.get('logs/main.log')).toBe('2026-10-12T10:29:00.000Z INFO  starting\n');
+    expect(files.get('logs/main.1.log')).toBe('2026-10-11T09:00:00.000Z INFO  bye\n');
+    expect(JSON.parse(files.get('manifest.json')!).logs).toEqual([
+      { file: 'logs/main.1.log', bytes: 35 },
+      { file: 'logs/main.log', bytes: 40 },
+    ]);
+  });
+
+  it('keeps the last 5 MiB of a larger log, from a line start, and says so', async () => {
+    const line = (i: number) => `2026-10-12T10:00:00.000Z DEBUG line ${i} ${'x'.repeat(80)}\n`;
+    const log = Array.from({ length: 70_000 }, (_, i) => line(i)).join('');
+    expect(log.length).toBeGreaterThan(5 * 1024 * 1024);
+    await put('logs/main.1.log', log);
+
+    await exportTranscripts(deps);
+    const files = unzip(
+      await readFile(join(dir, 'Downloads', 'SpainAssist-transcripts-2026-10-12.zip')),
+    );
+    const zipped = files.get('logs/main.1.log')!;
+    const [note, first] = zipped.split('\n');
+    const kept = zipped.slice(note!.length + 1);
+    expect(kept.length).toBeLessThanOrEqual(5 * 1024 * 1024);
+    expect(kept.length).toBeGreaterThan(5 * 1024 * 1024 - line(0).length * 2);
+    expect(log.endsWith(kept)).toBe(true);
+    expect(first).toMatch(/^2026-10-12T10:00:00\.000Z DEBUG line \d+ x+$/);
+    expect(note).toBe(
+      `[Spain Assist export: only the last ${kept.length} of this log's ${log.length} bytes]`,
+    );
+    expect(JSON.parse(files.get('manifest.json')!).logs).toEqual([
+      { file: 'logs/main.1.log', bytes: log.length, keptLastBytes: kept.length },
+    ]);
+  });
+
+  it('exports anyway when a log is unreadable or the logs are not a folder', async () => {
+    await put('logs/main.log', 'readable\n');
+    await put('logs/main.1.log', 'unreadable\n');
+    await chmod(join(dir, 'logs/main.1.log'), 0);
+
+    await exportTranscripts(deps);
+    let files = unzip(
+      await readFile(join(dir, 'Downloads', 'SpainAssist-transcripts-2026-10-12.zip')),
+    );
+    expect([...files.keys()]).toEqual(['manifest.json', 'logs/main.log']);
+    expect(JSON.parse(files.get('manifest.json')!).logs).toEqual([
+      { file: 'logs/main.1.log', error: 'EACCES' },
+      { file: 'logs/main.log', bytes: 9 },
+    ]);
+
+    deps.logsDir = join(dir, 'logs/main.log');
+    expect(await exportTranscripts(deps)).toBe('SpainAssist-transcripts-2026-10-12 (1).zip');
+    files = unzip(
+      await readFile(join(dir, 'Downloads', 'SpainAssist-transcripts-2026-10-12 (1).zip')),
+    );
+    expect([...files.keys()]).toEqual(['manifest.json']);
+    expect(JSON.parse(files.get('manifest.json')!).logs).toEqual([
+      { file: 'logs/', error: 'ENOTDIR' },
+    ]);
+  });
+
   it('includes changes still waiting to be written (IPC)', async () => {
     const app = await createTestApp();
     try {
       const { procedureId } = await app.procedureWithToken('Empadronamiento');
       app.services.procedures.addNotice(procedureId, 'info', 'Aviso recién escrito');
+      await mkdir(app.paths.logsDir, { recursive: true });
+      await writeFile(join(app.paths.logsDir, 'main.log'), 'INFO  ready\n');
       const name = await app.invoke('app.exportTranscripts');
       const files = unzip(await readFile(join(app.dir, 'Downloads', name)));
       expect(files.get(`procedures/${procedureId}/transcript.json`)).toContain(
@@ -127,6 +203,7 @@ describe('exportTranscripts', () => {
       expect(JSON.parse(files.get(`procedures/${procedureId}/procedure.json`)!)).toMatchObject({
         title: 'Empadronamiento',
       });
+      expect(files.get('logs/main.log')).toBe('INFO  ready\n');
     } finally {
       await app.close();
     }

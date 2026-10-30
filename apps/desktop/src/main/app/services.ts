@@ -607,6 +607,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         assistantDir: paths.assistantDir,
         proceduresDir: paths.proceduresDir,
         scanTranscriptsDir: paths.scanTranscriptsDir,
+        logsDir: paths.logsDir,
         downloadsDir: deps.documentDownloadsDir,
         flush: async () => {
           await Promise.all([procedures.flush(), conversation.flush()]);

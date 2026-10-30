@@ -142,7 +142,7 @@ export const settingsDict = defineDict({
     },
     history: {
       title: 'Exportar historial',
-      body: 'Exporta un archivo .zip con tus conversaciones con el asistente. Útil para compartirlo con el equipo de Spain Assist si algo falló.\n\nContiene tus datos personales.',
+      body: 'Exporta un archivo .zip con tus conversaciones con el asistente y los registros técnicos de la app. Útil para compartirlo con el equipo de Spain Assist si algo falló.\n\nContiene tus datos personales.',
       export: 'Exportar',
       saved: (name: string) => `Guardado en Descargas: ${name}`,
     },
@@ -294,7 +294,7 @@ export const settingsDict = defineDict({
     },
     history: {
       title: 'Export history',
-      body: 'Exports a .zip file with your conversations with the assistant. Useful to share with the Spain Assist team if something went wrong.\n\nIt contains your personal data.',
+      body: 'Exports a .zip file with your conversations with the assistant and the app’s technical logs. Useful to share with the Spain Assist team if something went wrong.\n\nIt contains your personal data.',
       export: 'Export',
       saved: (name: string) => `Saved in Downloads: ${name}`,
     },
