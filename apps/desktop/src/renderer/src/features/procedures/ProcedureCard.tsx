@@ -145,7 +145,7 @@ export const ProcedureCard = memo(function ProcedureCard({
               className="-mr-2 flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[12.5px] font-medium text-fg-subtle hover:bg-surface-3/70 hover:text-fg"
               data-testid="card-details"
             >
-              {expanded ? t.hideDetails : t.details}
+              {t.details}
               <ChevronDown
                 size={14}
                 className={cn('transition-transform duration-150', expanded && 'rotate-180')}
