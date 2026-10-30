@@ -5,9 +5,10 @@
 # PHP unless GitHub signed it, and then only the fields Coolify deploys from.
 #
 # A plain container next to Coolify rather than a Coolify app: it must not depend on Coolify to
-# run, and it deploys from this checkout (no push needed). It runs on node:24-slim with Node's
-# built-in TypeScript support and no dependencies; Coolify's proxy routes the host to it through
-# Docker labels. Changing its source or settings re-uploads and restarts it.
+# run, and it deploys from this checkout (no push needed). It runs on node:24.22.1-slim (pinned
+# by digest in its compose template) with Node's built-in TypeScript support and no
+# dependencies; Coolify's proxy routes the host to it through Docker labels. Changing its source,
+# image or settings re-uploads and restarts it.
 
 locals {
   github_webhook_url = "https://${local.hosts.hooks}/github"

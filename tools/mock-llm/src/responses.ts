@@ -69,10 +69,15 @@ export function responsesToChatRequest(body: ResponsesRequest): ChatRequest {
       : Array.isArray(body.input)
         ? body.input
         : [];
+  const tools = [...(body.tools ?? [])];
   for (const raw of items) {
     const item = (raw ?? {}) as Record<string, unknown>;
     const type = typeof item.type === 'string' ? item.type : 'message';
-    if (type === 'function_call') {
+    if (type === 'additional_tools' && Array.isArray(item.tools)) {
+      // Codex models that take tool changes mid-conversation get their tools here instead of in
+      // `tools` (pi 1.4); each batch adds to the ones before.
+      tools.push(...(item.tools as NonNullable<ResponsesRequest['tools']>));
+    } else if (type === 'function_call') {
       const call = {
         id: String(item.call_id ?? ''),
         function: { name: String(item.name ?? ''), arguments: String(item.arguments ?? '') },
@@ -99,8 +104,7 @@ export function responsesToChatRequest(body: ResponsesRequest): ChatRequest {
     ...(body.model ? { model: body.model } : {}),
     ...(body.stream !== undefined ? { stream: body.stream } : {}),
     messages,
-    tools: (body.tools ?? [])
-      .map((tool) => tool.name ?? tool.type)
+    tools: [...new Set(tools.map((tool) => tool.name ?? tool.type))]
       .filter((name): name is string => typeof name === 'string')
       .map((name) => ({ type: 'function', function: { name } })),
   };

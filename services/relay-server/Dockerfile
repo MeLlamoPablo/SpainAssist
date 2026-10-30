@@ -2,7 +2,7 @@
 # SpainAssist relay server. Build context = repository root:
 #   docker build -f services/relay-server/Dockerfile -t spainassistant/relay-server .
 # Runtime config (see README): TRUST_PROXY, ANDROID_CERT_SHA256, limits.
-FROM node:24-slim
+FROM node:24.22.1-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c
 
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     ELECTRON_SKIP_BINARY_DOWNLOAD=1 \

@@ -14,10 +14,10 @@
     "test": "cd go && go test -buildvcs=false -count=1 ./... && cd .. && vitest run"
   },
   "dependencies": {
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node-forge": "^1.3.11",
+    "@types/node-forge": "^1.3.14",
     "node-forge": "^1.4.0"
   }
 }

@@ -14,8 +14,14 @@ allowBuilds:
   protobufjs: false
   electron-winstaller: false
 
-# electron-vite 5 found the bundle's last import with a regex, which a string ending in
-# ` import'` fooled into splicing its CommonJS shim into that string. The patch backports 6.0's
-# AST lookup; drop it when upgrading to electron-vite 6.
-patchedDependencies:
-  electron-vite@5.0.0: patches/electron-vite@5.0.0.patch
+# Only install versions published at least a week ago (minutes), so a compromised release has
+# time to be caught before it reaches us. Setting it makes pnpm fail instead of falling back.
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  # Distrusts the compromised eMudhra intermediates (published 2026-10-27); drop after 2026-11-03.
+  - electron@44.10.0
+
+# pi pins undici 8.10.2 exactly, which has advisories fixed in 8.12.2 (TLS validation among them).
+# Drop this once pi depends on a fixed undici.
+overrides:
+  'undici@>=8.0.0 <8.12.2': ^8.12.2

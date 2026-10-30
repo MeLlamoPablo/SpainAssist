@@ -17,7 +17,7 @@ terraform {
     }
     coolify = {
       source  = "coolify-terraform/coolify"
-      version = "~> 0.1.25"
+      version = "~> 0.1.27"
     }
     unleash = {
       source  = "Unleash/unleash"

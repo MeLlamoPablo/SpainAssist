@@ -40,11 +40,15 @@ systemctl restart sa-coolify-firewall.service
 log "Waiting for cloud-init (first boot: package upgrades and the Coolify install)"
 cloud-init status --wait >/dev/null || true
 
-# Coolify's installer (and the upgrade.sh it runs) installs the requested image but always
-# downloads the newest release's compose files from Coolify's CDN: 4.3.24 got 4.4's, which drop
-# the coolify-realtime container that 4.3's health check needs, so it never became healthy. The
-# compose files therefore come from the pinned version's git tag, and Coolify restarts with
-# them whenever they or the version change (cloud-init's first install gets the CDN's too).
+# Coolify's installer, and the upgrade.sh it runs, install the requested image but take
+# everything else from Coolify's CDN, which serves the newest release: its scripts, its compose
+# files and the helper image's version (4.3.24 got 4.4's compose files, which drop the
+# coolify-realtime container that 4.3's health check needs, so it never became healthy). So the
+# bootstrap runs v$COOLIFY_VERSION's own install.sh and upgrade.sh from its git tag, pointed at
+# a copy of that tag's files instead of the CDN. The compose files are checked against the tag
+# again below, and Coolify restarts with them whenever they or the version change (cloud-init's
+# first install, and an installer that failed half-way, leave the CDN's).
+TAG_URL="https://raw.githubusercontent.com/coollabsio/coolify/v$COOLIFY_VERSION"
 SOURCE=/data/coolify/source
 COMPOSE_FILES="docker-compose.yml docker-compose.prod.yml"
 restart=0
@@ -52,10 +56,19 @@ restart=0
 installed=$(docker inspect --format '{{.Config.Image}}' coolify 2>/dev/null | sed 's/.*://' || true)
 if [ "$installed" != "$COOLIFY_VERSION" ]; then
   log "Installing Coolify $COOLIFY_VERSION (installed: ${installed:-none}); log: /var/log/coolify-install.log"
-  curl -fsSL https://cdn.coollabs.io/coolify/install.sh -o /root/coolify-install.sh
-  # Not final: it fails when the CDN's compose files don't fit this version, which the pinned
-  # files below fix. If they don't, the restart below fails instead.
-  if ! AUTOUPDATE=false bash /root/coolify-install.sh "$COOLIFY_VERSION" >/var/log/coolify-install.log 2>&1; then
+  mirror="/root/sa-coolify-v$COOLIFY_VERSION"
+  rm -rf "$mirror"
+  mkdir -p "$mirror"
+  for f in docker-compose.yml docker-compose.prod.yml .env.production versions.json; do
+    curl -fsSL "$TAG_URL/$f" -o "$mirror/$f"
+  done
+  # Both scripts download from "$CDN/<file>" (curl reads file:// URLs too).
+  for f in install.sh upgrade.sh upgrade-postgres.sh; do
+    curl -fsSL "$TAG_URL/scripts/$f" | sed "s|^CDN=.*|CDN=\"file://$mirror\"|" >"$mirror/$f"
+  done
+  # Not final: if it fails, the pinned compose files below and the restart still bring up this
+  # version. If they don't, the restart fails instead.
+  if ! AUTOUPDATE=false bash "$mirror/install.sh" "$COOLIFY_VERSION" >/var/log/coolify-install.log 2>&1; then
     log "The installer failed; restarting with v$COOLIFY_VERSION's own compose files. Its log ends:"
     tail -n 20 /var/log/coolify-install.log
   fi
@@ -73,7 +86,7 @@ done
 
 tmp=$(mktemp -d)
 for f in $COMPOSE_FILES; do
-  curl -fsSL "https://raw.githubusercontent.com/coollabsio/coolify/v$COOLIFY_VERSION/$f" -o "$tmp/$f"
+  curl -fsSL "$TAG_URL/$f" -o "$tmp/$f"
   if ! cmp -s "$tmp/$f" "$SOURCE/$f"; then
     log "Using $f from Coolify's v$COOLIFY_VERSION tag"
     cat "$tmp/$f" >"$SOURCE/$f" # keeps the installer's owner and mode
@@ -112,6 +125,18 @@ services:
     volumes:
       - /data/coolify/source/nginx-gzip.conf:/etc/nginx/conf.d/sa-gzip.conf:ro
 YAML
+
+# Since 4.4, realtime (Reverb) and the terminal run inside the coolify container, which publishes
+# 6001 and 6002 itself. upgrade.sh removes 4.3's coolify-realtime (Soketi) container; if the
+# installer stopped before that, the old container would keep those ports and the new coolify
+# container could not start. --remove-orphans keeps it: the compose files still name a
+# (disabled) soketi service.
+if ! grep -q 'container_name: coolify-realtime' "$SOURCE/docker-compose.yml" &&
+  docker inspect coolify-realtime >/dev/null 2>&1; then
+  log "Removing the coolify-realtime container (realtime runs inside coolify since 4.4)"
+  docker rm -f coolify-realtime >/dev/null
+  restart=1
+fi
 
 if [ "$restart" = 1 ]; then
   log "Starting Coolify $COOLIFY_VERSION"

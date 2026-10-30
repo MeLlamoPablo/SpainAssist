@@ -68,20 +68,24 @@ browserSuite('a Codex run', () => {
     it("asks the ChatGPT backend through the meter, with the product's Codex models", () => {
       const posts = stack.llm.requests().filter((r) => r.path.endsWith('/codex/responses'));
       expect(posts.length).toBeGreaterThan(0);
+      type Tool = { name?: string };
       const bodies = posts.map(
         (r) =>
           r.body as {
             model: string;
             reasoning?: { effort?: string };
-            tools?: { name?: string }[];
+            tools?: Tool[];
+            input?: { type?: string; tools?: Tool[] }[];
           },
       );
-      const assistant = bodies.filter((b) =>
-        (b.tools ?? []).some((t) => t.name === 'procedure_start'),
-      );
-      const procedure = bodies.filter((b) =>
-        (b.tools ?? []).some((t) => t.name === 'procedure_update'),
-      );
+      // Models that take tool changes mid-conversation get their tools as `additional_tools`
+      // input items instead of `tools`.
+      const declares = (b: (typeof bodies)[number], name: string) =>
+        [...(b.tools ?? []), ...(b.input ?? []).flatMap((item) => item.tools ?? [])].some(
+          (t) => t.name === name,
+        );
+      const assistant = bodies.filter((b) => declares(b, 'procedure_start'));
+      const procedure = bodies.filter((b) => declares(b, 'procedure_update'));
       expect(assistant.length).toBeGreaterThan(0);
       expect(procedure.length).toBeGreaterThan(0);
       // Codex runs each list's first model of the models file.

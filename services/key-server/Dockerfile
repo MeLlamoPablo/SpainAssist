@@ -2,7 +2,7 @@
 # SpainAssist key server. Build context: the repository root.
 #   docker build -f services/key-server/Dockerfile -t spainassistant/key-server .
 # TypeScript runs directly through tsx (no build step), like in development.
-FROM node:24-slim
+FROM node:24.22.1-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c
 
 ENV NODE_ENV=production \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
@@ -13,10 +13,8 @@ WORKDIR /app
 
 # 1. Dependencies: only the workspace manifests, so this layer is cached until one of them or
 #    the lockfile changes. corepack fetches the pnpm version pinned in package.json
-#    (pnpm 12 needs corepack >= 0.36, newer than the one bundled with Node 24). The install
-#    reads every patch pnpm-workspace.yaml names, even of packages it skips.
+#    (pnpm 12 needs corepack >= 0.36, newer than the one bundled with Node 24).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY patches/ patches/
 COPY packages/shared/package.json packages/shared/
 COPY services/key-server/package.json services/key-server/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \

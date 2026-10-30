@@ -1,11 +1,12 @@
 # Weekly Chromium update. The app's browser is the Chromium revision that the pinned
 # playwright-core names in its browsers.json (the Windows MSIX bundles it), so Chromium security
 # fixes reach users only when we bump playwright-core. Every Monday, or when run by hand, this
-# checks npm for a newer playwright-core, bumps it (and the Playwright packages that must match
-# it) in every workspace package.json with scripts/bump-playwright.mjs, updates the lockfile,
-# runs the typecheck and the tests of the packages that use playwright-core, and opens or
-# updates one pull request from the `automation/playwright-core` branch. When a check fails the
-# pull request is a draft and the run fails, so a person picks it up.
+# checks npm for a newer playwright-core at least as old as pnpm's minimumReleaseAge (a week),
+# bumps it (and the Playwright packages that must match it) in every workspace package.json with
+# scripts/bump-playwright.mjs, updates the lockfile, runs the typecheck and the tests of the
+# packages that use playwright-core, and opens or updates one pull request from the
+# `automation/playwright-core` branch. When a check fails the pull request is a draft and the run
+# fails, so a person picks it up.
 #
 # Needs the repository setting "Allow GitHub Actions to create and approve pull requests".
 # Pull requests opened with GITHUB_TOKEN don't trigger other workflows; the checks run here.
@@ -35,28 +36,28 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
-          # It would look for pnpm before Corepack is set up; the pnpm store is cached below.
+          node-version: 24.22.1
+          # setup-node caches only npm projects by itself; keep it off: the pnpm store is cached below.
           package-manager-cache: false
       # The tests of @sa/browser build sa-sidecar.
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version: '1.27.3'
           cache: false
       # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
       - name: Install Corepack
         run: |
-          npm install --global --force corepack@latest
+          npm install --global --force corepack@0.36.0
           echo "$(npm prefix --global)/bin" >> "$GITHUB_PATH"
       - id: pnpm-store
         name: Find the pnpm store
         run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -64,12 +65,30 @@ jobs:
       - name: Install dependencies
         run: corepack pnpm install --frozen-lockfile
 
+      # Not npm's `latest`: pnpm refuses versions younger than minimumReleaseAge (minutes,
+      # pnpm-workspace.yaml), so take the newest release at least that old.
       - id: versions
         name: Look for a newer playwright-core
         run: |
           old=$(node -p "require('./apps/desktop/package.json').dependencies['playwright-core']")
-          new=$(npm view playwright-core@latest version)
-          echo "Pinned $old, latest $new"
+          new=$(npm view playwright-core versions time --json | node -e "
+            const fs = require('node:fs');
+            const age = /^minimumReleaseAge: *(\d+)/m.exec(fs.readFileSync('pnpm-workspace.yaml', 'utf8'))[1];
+            const { versions, time } = JSON.parse(fs.readFileSync(0, 'utf8'));
+            const key = (v) => v.split('.').map(Number);
+            const newest = versions
+              // Releases only (no -alpha, -beta), as old as pnpm wants.
+              .filter((v) => !/[^\d.]/.test(v) && Date.parse(time[v]) <= Date.now() - age * 60_000)
+              .sort((a, b) => {
+                const [x, y] = [key(a), key(b)];
+                const i = x.findIndex((n, k) => n !== y[k]);
+                return i < 0 ? 0 : x[i] - y[i];
+              })
+              .at(-1);
+            if (!newest) throw new Error('No playwright-core release is old enough');
+            console.log(newest);
+          ")
+          echo "Pinned $old, newest old enough for pnpm $new"
           echo "old=$old" >> "$GITHUB_OUTPUT"
           echo "new=$new" >> "$GITHUB_OUTPUT"
           newer=$(node -e "

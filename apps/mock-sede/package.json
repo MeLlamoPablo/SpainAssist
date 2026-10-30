@@ -15,20 +15,20 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.3",
+    "@hono/node-server": "^2.1.5",
     "@sa/shared": "workspace:*",
-    "asn1js": "^3.0.10",
-    "hono": "^4.13.12",
+    "asn1js": "^3.1.0",
+    "hono": "^4.13.13",
     "node-forge": "^1.4.0",
     "pdf-lib": "^1.17.1",
-    "pkijs": "^3.4.1",
-    "zod": "^4.6.5"
+    "pkijs": "^3.4.3",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node-forge": "^1.3.14",
-    "playwright-core": "1.64.1",
     "@sa/browser": "workspace:*",
     "@sa/signer": "workspace:*",
-    "@sa/vault": "workspace:*"
+    "@sa/vault": "workspace:*",
+    "@types/node-forge": "^1.3.14",
+    "playwright-core": "1.64.1"
   }
 }

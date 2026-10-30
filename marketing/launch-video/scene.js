@@ -51,7 +51,7 @@ const T = {
 // ------------------------------------------------------------------------------------------
 
 const $ = (id) => document.getElementById(id);
-const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const clamp01 = (x) => Math.min(Math.max(x, 0), 1);
 const lerp = (a, b, p) => a + (b - a) * p;
 const E = {
   lin: (x) => x,

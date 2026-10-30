@@ -68,8 +68,8 @@ curl -s localhost:8787/admin/vouchers -H "authorization: Bearer $ADMIN_TOKEN" \
 Notes:
 
 - Images build from the repository root (`context: ..`) with `services/<name>/Dockerfile`:
-  `node:24-slim`, `corepack pnpm install --frozen-lockfile --prod --filter @sa/<name>...`, run
-  with `node --import tsx` (no build step). Each service's `Dockerfile.dockerignore` keeps host
+  `node:24.22.1-slim` (pinned by digest), `corepack pnpm install --frozen-lockfile --prod
+  --filter @sa/<name>...`, run with `node --import tsx` (no build step). Each service's `Dockerfile.dockerignore` keeps host
   `node_modules` and `.data` out of the image.
 - Compose reads `infra/.env`. Every variable has a default, and empty values count as unset. The
   stack's own variables are `BIND_ADDRESS` (default `127.0.0.1`: the interface ports are
@@ -94,7 +94,7 @@ Hetzner Cloud, nbg1: reserved IPv4 + IPv6; firewall: 22, 80, 443, UDP 41641 (Tai
 └─ cx23 (2 vCPU, 4 GB), Ubuntu 26.04, 2 GB swap, daily Hetzner backups
    ├─ Tailscale: Coolify's dashboard at https://spainassist.<tailnet>.ts.net (tailnet only)
    ├─ webhook-ingester  https://hooks.<domain>/github  GitHub push webhooks → Coolify
-   └─ Coolify 4.3.24: on loopback only (no public dashboard), Traefik + Let's Encrypt
+   └─ Coolify 4.4.7: on loopback only (no public dashboard), Traefik + Let's Encrypt
       └─ project "SpainAssistant" / production
          ├─ postgres          Postgres 17: databases keyserver, feedback, litellm, unleash,
          │                    glitchtip (one role each); daily pg_dump, 7 kept on the server
@@ -179,12 +179,13 @@ the IP. The relay and the webhook host are on `<domain>` only.
   compose joins the external `coolify` network itself. Coolify copies the image's
   `HEALTHCHECK` timings into the app settings, so `coolify.tf` repeats them to keep plans clean.
 - **The decider route relies on the proxy normalizing paths.** Keys may call
-  `/openrouter/alpha/decisions` (scan screening). LiteLLM v1.104 matches allowed routes as
-  prefixes and its pass-through resolves `..`, so `…/decisions/../../v1/chat/completions` would
-  reach OpenRouter chat on our key with no spend recorded. Coolify's Traefik cleans `..` and
-  `%2e%2e` before LiteLLM sees the path (which LiteLLM then refuses) and rejects encoded
-  slashes; checked on 2026-10-05 with `curl --path-as-is`. Re-check after Traefik or LiteLLM
-  upgrades, or if LiteLLM ever runs behind another proxy.
+  `/openrouter/alpha/decisions` (scan screening). LiteLLM (v1.104, still so in v1.106.2) matches
+  allowed routes as prefixes and its pass-through resolves `..`, so
+  `…/decisions/../../v1/chat/completions` would reach OpenRouter chat on our key with no spend
+  recorded. Coolify's Traefik cleans `..` and `%2e%2e` before LiteLLM sees the path (which
+  LiteLLM then refuses) and rejects encoded slashes; checked on 2026-10-05 with
+  `curl --path-as-is`. Re-check after Traefik or LiteLLM upgrades, or if LiteLLM ever runs behind
+  another proxy.
 - **Prices** come from `templates/litellm_sa_pricing.py` (a LiteLLM callback module written next
   to its config). At start and every 6 hours it loads OpenRouter's public price list
   (`/api/v1/models`) and registers every priced model, so a new model needs no deploy; Perplexity
@@ -299,10 +300,12 @@ only changes its DSN.
   `relay_server_env`. Changed app variables redeploy that app; LiteLLM restarts when its config
   or variables change.
 - **Upgrade Coolify**: bump `coolify_version` and apply (the bootstrap re-runs the installer;
-  auto-update is off so the provider and Coolify stay compatible). The installer always
-  downloads the newest release's compose files, so the bootstrap replaces them with the ones
-  from the version's git tag (`v<coolify_version>`) and restarts Coolify with them. Check that Coolify's GitHub
-  webhook still reads only what the webhook ingester sends (its README).
+  auto-update is off so the provider and Coolify stay compatible). Coolify's installer takes
+  its scripts and compose files from a CDN that serves the newest release, so the bootstrap
+  runs the version's own `install.sh` and `upgrade.sh` from its git tag (`v<coolify_version>`),
+  pointed at a copy of that tag's files, and restarts Coolify with the tag's compose files if
+  anything else is in place. Check that Coolify's GitHub webhook still reads only what the
+  webhook ingester sends (its README).
 - **Upstream keys**: set `openrouter_api_key` and `parallel_api_key` and apply. An empty
   Parallel key leaves its search tool out of LiteLLM's config.
 - **Vouchers**: `corepack pnpm vouchers` (repo root, git-crypt unlocked) opens
@@ -318,7 +321,9 @@ only changes its DSN.
   `ssh_extra_public_keys`, or `./tf.sh output -raw ssh_private_key`.
 - **Backups**: Coolify dumps every database daily at 03:00 and keeps 7 on the server; Hetzner's
   daily server backups take them off the machine. Add an S3 destination in Coolify for
-  off-site copies.
+  off-site copies. Since Coolify 4.4, restoring one PostgreSQL database keeps objects that
+  already exist unless "Replace objects that already exist" is set (the old `--clean`), and
+  skips owners and privileges unless "Keep owners and privileges" is set.
 - **Destroy**: set `protect = false` and apply first (delete protection on the server and IPs).
 
 ### Secrets and git-crypt

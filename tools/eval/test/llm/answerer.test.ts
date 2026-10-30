@@ -361,13 +361,17 @@ describe('answerer: the model call', () => {
     });
   });
 
-  it('cannot switch reasoning off on Haiku 5.5: off and minimal become low, and it says so', async () => {
+  it('switches reasoning off on Haiku 5.5 as effort "none", and turns minimal into low', async () => {
     env = await startEnv({ mock: mockWith(reply({ fullName: 'María' })) });
-    for (const thinking of ['off', 'minimal', 'low'] as const) {
+    for (const [thinking, sent] of [
+      ['off', 'none'],
+      ['minimal', 'low'],
+      ['low', 'low'],
+    ] as const) {
       const { answerer } = await answererFor({ thinking });
-      expect(answerer.thinking).toBe('low');
+      expect(answerer.thinking).toBe(thinking === 'minimal' ? 'low' : thinking);
       await answerer.answer({ persona: PERSONA, prompt: { ...form, fields: [form.fields![0]!] } });
-      expect(bodySent()).toMatchObject({ reasoning_effort: 'low' });
+      expect(bodySent()).toMatchObject({ reasoning_effort: sent });
     }
     const { answerer } = await answererFor({ thinking: 'medium' });
     expect(answerer.thinking).toBe('medium');

@@ -27,15 +27,15 @@ function relaxCspInDev(): Plugin {
 }
 
 export default defineConfig({
-  root: resolve(__dirname, 'src/renderer'),
+  root: resolve(import.meta.dirname, 'src/renderer'),
   resolve: {
-    alias: { '@renderer': resolve(__dirname, 'src/renderer/src') },
+    alias: { '@renderer': resolve(import.meta.dirname, 'src/renderer/src') },
   },
   plugins: [react(), tailwindcss(), relaxCspInDev()],
   server: { port: 5180, strictPort: false, watch: null, hmr: false },
   preview: { port: 5181, strictPort: false },
   build: {
-    outDir: resolve(__dirname, 'out/renderer-web'),
+    outDir: resolve(import.meta.dirname, 'out/renderer-web'),
     emptyOutDir: true,
   },
 });

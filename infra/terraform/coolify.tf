@@ -23,13 +23,15 @@ resource "coolify_project" "main" {
 
 # --- Postgres -----------------------------------------------------------------------------
 
+# A new `image` is an in-place update: Coolify saves it but only uses it when the database next
+# (re)starts, which Terraform doesn't trigger.
 resource "coolify_database_postgresql" "main" {
   name              = "postgres"
   description       = "Databases keyserver, feedback, litellm, unleash and glitchtip (one role each)"
   project_uuid      = coolify_project.main.uuid
   server_uuid       = local.server_uuid
   environment_name  = "production"
-  image             = "postgres:17-alpine"
+  image             = "postgres:17.11-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b"
   postgres_user     = "postgres"
   postgres_password = var.postgres_password
   postgres_db       = "postgres"
@@ -122,7 +124,7 @@ resource "coolify_private_key" "github" {
 
 locals {
   # Shared build inputs: a change in any of them redeploys every app (see watch_paths).
-  workspace_paths = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", "patches/**", "packages/shared/**"]
+  workspace_paths = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", "packages/shared/**"]
 
   apps = {
     key_server = {

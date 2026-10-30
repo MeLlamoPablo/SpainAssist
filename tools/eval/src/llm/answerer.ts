@@ -137,7 +137,7 @@ export interface AnswererOptions {
   model?: string;
   /**
    * Default `low`. A level the model does not support moves to the nearest one it does: Haiku 5.5
-   * cannot switch reasoning off, so `off` and `minimal` become `low` (see `Answerer.thinking`).
+   * has no `minimal`, so it becomes `low`; `off` goes out as effort `none` (`Answerer.thinking`).
    */
   thinking?: EvalModelChoice['answererThinking'];
   /** Default 2048. */

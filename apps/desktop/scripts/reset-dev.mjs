@@ -6,9 +6,9 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 
 const require = createRequire(import.meta.url);
-const { build } = createRequire(require.resolve('electron-vite/package.json'))('esbuild');
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = process.argv[2] ?? 'src/main/dev/reset.ts';
 const temporary = await mkdtemp(join(tmpdir(), 'sa-reset-dev-'));

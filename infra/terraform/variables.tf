@@ -91,7 +91,7 @@ variable "aws_secret_access_key" {
 variable "coolify_version" {
   description = "Coolify version installed by the bootstrap (auto-update is off). Bumping it and applying upgrades Coolify."
   type        = string
-  default     = "4.3.24"
+  default     = "4.4.7"
 }
 
 variable "coolify_dashboard_url" {
@@ -338,9 +338,9 @@ variable "relay_server_env" {
 # --- LiteLLM -------------------------------------------------------------------------------
 
 variable "litellm_image" {
-  description = "LiteLLM proxy image (the -database flavour bundles Prisma for Postgres)."
+  description = "LiteLLM proxy image (the -database flavour bundles Prisma for Postgres), pinned by digest: LiteLLM's v1.107.0 images were compromised on 2026-10-21, so a tag alone is not trusted."
   type        = string
-  default     = "ghcr.io/berriai/litellm-database:v1.104.0"
+  default     = "ghcr.io/berriai/litellm-database:v1.106.2@sha256:35f2cec3a14bb297e08bfab56c1fc377432bc4071aaf71978fdff043a5d91e79"
 }
 
 variable "litellm_master_key" {
@@ -390,7 +390,7 @@ variable "parallel_api_key" {
 variable "unleash_image" {
   description = "Unleash server image."
   type        = string
-  default     = "unleashorg/unleash-server:8.2.0"
+  default     = "unleashorg/unleash-server:8.2.1"
 }
 
 variable "unleash_admin_password" {

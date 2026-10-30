@@ -51,12 +51,12 @@ env:
 jobs:
   check:
     name: Check the tag
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: version
@@ -93,15 +93,15 @@ jobs:
             script: package:linux
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
-          # It would look for pnpm before Corepack is set up; the pnpm store is cached below.
+          node-version: 24.22.1
+          # setup-node caches only npm projects by itself; keep it off: the pnpm store is cached below.
           package-manager-cache: false
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version: '1.27.3'
           cache: false
       # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
       # --force: Windows runners have a global Yarn whose shims Corepack's replace. There npm's
@@ -109,7 +109,7 @@ jobs:
       - name: Install Corepack
         shell: bash
         run: |
-          npm install --global --force corepack@latest
+          npm install --global --force corepack@0.36.0
           prefix=$(npm prefix --global)
           if [[ "$RUNNER_OS" == Windows ]]; then echo "$prefix"; else echo "$prefix/bin"; fi >> "$GITHUB_PATH"
       - name: Check Corepack
@@ -121,7 +121,7 @@ jobs:
         name: Find the pnpm store
         shell: bash
         run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -136,7 +136,7 @@ jobs:
           # Never pick up an identity from a runner's certificate store.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: corepack pnpm --filter @sa/desktop run ${{ matrix.script }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ runner.os }}-${{ runner.arch }}
           path: |
@@ -148,7 +148,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: store-msix
           path: apps/desktop/dist/*.msix
@@ -173,7 +173,7 @@ jobs:
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - name: Set the app version from the tag
         working-directory: apps/desktop
@@ -206,7 +206,7 @@ jobs:
       - name: Pack the signed app
         working-directory: apps/desktop/dist
         run: ditto -c -k --sequesterRsrc --keepParent mac*/"Spain Assist.app" signed-app.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mac-app-signed-${{ matrix.arch }}
           path: apps/desktop/dist/signed-app.zip
@@ -226,8 +226,8 @@ jobs:
     # notarize.sh waits up to 30 min for Apple; a re-run picks up a late ticket.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mac-app-signed-${{ matrix.arch }}
           path: ${{ runner.temp }}/signed
@@ -243,7 +243,7 @@ jobs:
       - name: Pack the notarized app
         working-directory: ${{ runner.temp }}/app
         run: ditto -c -k --sequesterRsrc --keepParent "Spain Assist.app" "$RUNNER_TEMP/notarized-app.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mac-app-notarized-${{ matrix.arch }}
           path: ${{ runner.temp }}/notarized-app.zip
@@ -265,7 +265,7 @@ jobs:
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - name: Set the app version from the tag
         working-directory: apps/desktop
@@ -275,7 +275,7 @@ jobs:
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
           xcodebuild -version
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mac-app-notarized-${{ matrix.arch }}
           path: ${{ runner.temp }}/notarized
@@ -304,7 +304,7 @@ jobs:
             sleep 30
           done
           mv dist/latest-mac.yml "dist/latest-mac-$ARCH.yml"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mac-dist-${{ matrix.arch }}
           path: |
@@ -325,8 +325,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mac-dist-${{ matrix.arch }}
           path: ${{ runner.temp }}/installers
@@ -337,7 +337,7 @@ jobs:
           api-key: ${{ secrets.APPLE_API_KEY_P8 }}
           api-key-id: ${{ secrets.APPLE_API_KEY_ID }}
           api-issuer: ${{ secrets.APPLE_API_ISSUER }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-macOS-${{ matrix.arch }}
           path: ${{ runner.temp }}/installers/*
@@ -347,11 +347,11 @@ jobs:
   release:
     name: Publish the release
     needs: [check, build, notarize-dmg]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: installers-*
           path: installers

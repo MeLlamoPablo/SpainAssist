@@ -3,7 +3,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@12.10.1",
+  "packageManager": "pnpm@12.15.0",
   "engines": {
     "node": ">=22.19.0"
   },
@@ -28,11 +28,11 @@
     "knip": "knip"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
-    "@types/node": "^24.0.0",
-    "knip": "^6.41.0",
+    "@biomejs/biome": "^2.6.2",
+    "@types/node": "^24.19.2",
+    "knip": "^6.42.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }

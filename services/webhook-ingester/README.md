@@ -11,7 +11,7 @@ CVE-2026-109618/109619) has nothing to parse but a small JSON document we wrote.
 
 `POST http://coolify:8080/webhooks/source/github/events/manual` (Coolify's endpoint for apps
 cloned with a deploy key; `manual()` in `app/Http/Controllers/Webhook/Github.php`, checked
-against Coolify 4.3.24) with three headers, `Content-Type: application/json`,
+against Coolify 4.4.7) with three headers, `Content-Type: application/json`,
 `X-GitHub-Event: push` and `X-Hub-Signature-256` (a new signature with the same secret), and
 this body:
 

@@ -41,6 +41,7 @@ const BUILD_ONLY = new Set([
   'electron',
   'electron-builder',
   'electron-vite',
+  'esbuild',
   'vite',
 ]);
 

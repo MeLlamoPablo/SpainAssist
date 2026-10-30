@@ -5,28 +5,28 @@ description: Installs Node, Go and Corepack, restores the pnpm store and install
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v5
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
-        node-version: 24
-        # It would look for pnpm before Corepack is set up; the pnpm store is cached below.
+        node-version: 24.22.1
+        # setup-node caches only npm projects by itself; keep it off: the pnpm store is cached below.
         package-manager-cache: false
     # sa-sidecar (certificate logins) is Go: its tests, the e2e build and the interop check build it.
-    - uses: actions/setup-go@v6
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: stable
+        go-version: '1.27.3'
         # Standard library only: nothing to cache.
         cache: false
     # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
     - name: Install Corepack
       shell: bash
       run: |
-        npm install --global --force corepack@latest
+        npm install --global --force corepack@0.36.0
         echo "$(npm prefix --global)/bin" >> "$GITHUB_PATH"
     - id: pnpm-store
       name: Find the pnpm store
       shell: bash
       run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-    - uses: actions/cache@v4
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.pnpm-store.outputs.path }}
         key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}

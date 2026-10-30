@@ -215,6 +215,14 @@ describe('Responses API and the Codex backend shape', () => {
 
     const tools = await run([userItem('hi')], [{ type: 'web_search' }]);
     expect(tools[0]!.content![0]!.text).toBe('search tool declared');
+
+    // Tools declared in the input, as pi sends them to Codex models that take tool changes.
+    const additional = await run([
+      { type: 'additional_tools', role: 'developer', tools: [{ type: 'function', name: 'x' }] },
+      { type: 'additional_tools', role: 'developer', tools: [{ type: 'web_search' }] },
+      userItem('hi'),
+    ]);
+    expect(additional[0]!.content![0]!.text).toBe('search tool declared');
   });
 
   it('answers errors in the backend shape (usage limit) with headers', async () => {

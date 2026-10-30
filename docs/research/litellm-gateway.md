@@ -25,7 +25,7 @@ temporary keys during a demo session (not by tests). **[live]** I made the call 
 | `models: []` | Means **all models**, not none. |
 | `models: ["no-default-models"]` | Blocks every model (403 `key_model_access_denied`). API only, not in the UI. |
 | `object_permission.search_tools: ["Exa"]` | Limits search tools; an empty list means all. Refusal of another tool is UNVERIFIED (only one existed). |
-| `GET /key/info` with the key itself | 403 for default keys (`llm_api_routes` only). Works when the key's `allowed_routes` include `info_routes`, and still can't read other keys. |
+| `GET /key/info` with the key itself | 403 for default keys (`llm_api_routes` only). Works when the key's `allowed_routes` include `info_routes`. A key without a `user_id` (the key server's) can then read another such key's info (spend, budget, metadata; not the key) given its hash; with a `user_id` of its own that is a 403. Same on v1.104.0 and v1.106.2 (checked 2026-10-30). |
 | Response headers on every LLM call | `x-litellm-response-cost`, `x-litellm-key-spend`, `x-litellm-key-max-budget`, for any key. |
 | Search tools added in the admin UI | Stored in `LiteLLM_SearchToolsTable` with the vendor key **in plain text** (no salt key set). |
 
