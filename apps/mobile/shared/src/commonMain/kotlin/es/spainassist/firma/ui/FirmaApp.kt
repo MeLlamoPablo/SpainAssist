@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -233,11 +234,15 @@ internal fun Wordmark(heading: Boolean = false) {
     }
 }
 
-/** The "⋯" button and its menu: the licences. */
+/** Our privacy policy, which Google Play asks the app to link to (docs/research/play-policy.md). */
+private const val PRIVACY_URL = "https://spainassist.es/legal/politica-de-privacidad"
+
+/** The "⋯" button and its menu: the licences and the privacy policy. */
 @Composable
 private fun MoreMenu(openLicenses: () -> Unit, modifier: Modifier) {
     var open by remember { mutableStateOf(false) }
     val label = stringResource(Res.string.menu_more)
+    val uri = LocalUriHandler.current
     Box(modifier) {
         IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = label }) {
             val fg = colors.fg
@@ -259,6 +264,17 @@ private fun MoreMenu(openLicenses: () -> Unit, modifier: Modifier) {
                 onClick = {
                     open = false
                     openLicenses()
+                },
+            )
+            // In the browser, not in the app. TalkBack reads it as "Privacy policy, opens in the browser".
+            DropdownMenuItem(
+                text = { Text(stringResource(Res.string.privacy_open), fontSize = 16.sp, color = colors.fg) },
+                trailingIcon = {
+                    Icon(LineIcons.OpenOutside, stringResource(Res.string.a11y_opens_browser), Modifier.size(16.dp), tint = colors.fgSubtle)
+                },
+                onClick = {
+                    open = false
+                    uri.openUri(PRIVACY_URL)
                 },
             )
         }

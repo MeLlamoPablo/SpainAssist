@@ -97,9 +97,10 @@
     <string name="result_login_cancelled">The computer cancelled login.</string>
     <string name="result_login_failed">Could not log in. Try again from your computer.</string>
 
-    <!-- Licences -->
+    <!-- The "⋯" menu: licences and privacy -->
     <string name="menu_more">More options</string>
     <string name="licenses_open">Open-source licences</string>
+    <string name="privacy_open">Privacy policy</string>
     <string name="licenses_title">Open-source licences</string>
     <string name="licenses_lead">Our code is free software, under the MIT licence. Here are also the licences of the components by others that the app uses.</string>
     <string name="licenses_lead_eupl">Our code is free software, under the MIT licence. The app includes jmulticard, the Spanish government’s library for reading the DNI. So the app as a whole is distributed under the EUPL 1.2, and you can download all of its source code.</string>
@@ -122,4 +123,5 @@
     <string name="a11y_site_official">Official site</string>
     <string name="a11y_site_unknown">Unrecognised site</string>
     <string name="a11y_scan_camera">Camera to scan the QR code</string>
+    <string name="a11y_opens_browser">Opens in the browser</string>
 </resources>

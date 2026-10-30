@@ -97,9 +97,10 @@
     <string name="result_login_cancelled">El ordenador ha cancelado el acceso.</string>
     <string name="result_login_failed">No se ha podido entrar. Vuelve a intentarlo desde el ordenador.</string>
 
-    <!-- Licences -->
+    <!-- The "⋯" menu: licences and privacy -->
     <string name="menu_more">Más opciones</string>
     <string name="licenses_open">Licencias de código abierto</string>
+    <string name="privacy_open">Política de privacidad</string>
     <string name="licenses_title">Licencias de código abierto</string>
     <string name="licenses_lead">Nuestro código es software libre, con licencia MIT. Aquí tienes también las licencias de los componentes de otros que usa la app.</string>
     <string name="licenses_lead_eupl">Nuestro código es software libre, con licencia MIT. La app incluye jmulticard, la biblioteca del Gobierno para leer el DNI. Por eso la app completa se distribuye con la licencia EUPL 1.2, y puedes descargar todo su código fuente.</string>
@@ -122,4 +123,5 @@
     <string name="a11y_site_official">Sitio oficial</string>
     <string name="a11y_site_unknown">Sitio no reconocido</string>
     <string name="a11y_scan_camera">Cámara para escanear el código QR</string>
+    <string name="a11y_opens_browser">Se abre en el navegador</string>
 </resources>
