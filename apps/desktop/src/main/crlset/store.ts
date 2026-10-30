@@ -9,7 +9,7 @@ import { unpackCrx } from './crx';
 
 /** Chrome's CRLSet component and the update server Chrome gets it from. */
 export const CRLSET_ID = 'hfnkpimlhhgieaddgfemjhofmfblmnib';
-const UPDATE_URL = 'https://update.googleapis.com/service/update2/json';
+export const CRLSET_UPDATE_URL = 'https://update.googleapis.com/service/update2/json';
 /** Chrome's own CRLSets change a few times a day. */
 const REFRESH_MS = 6 * 60 * 60 * 1000;
 /** How long a browser launch waits for the first CRLSet when none is saved yet. */
@@ -102,7 +102,7 @@ export class CrlSetStore {
 
   private async update(): Promise<void> {
     const have = this.current?.version ?? '0.0.0.0';
-    const res = await this.deps.fetch(UPDATE_URL, {
+    const res = await this.deps.fetch(CRLSET_UPDATE_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

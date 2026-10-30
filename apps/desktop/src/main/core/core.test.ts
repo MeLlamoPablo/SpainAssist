@@ -243,6 +243,8 @@ describe('env', () => {
     expect(env.browserCapture).toBe(true);
     expect(parseEnv({ SA_BROWSER_CAPTURE: '1' }, { packaged: true }).browserCapture).toBe(false);
     expect(parseEnv({}).browserCapture).toBe(false);
+    expect(parseEnv({ SA_CRLSET_FIXTURE: '1' }).crlSetFixture).toBe(true);
+    expect(parseEnv({ SA_CRLSET_FIXTURE: '1' }, { packaged: true }).crlSetFixture).toBe(false);
     expect(env.hideWindow).toBe(false);
     expect(env.provider).toEqual({
       kind: 'custom',

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createLogger } from '../core/logger';
 import { unpackCrx } from './crx';
+import { crlSetFixture, fixtureCrlSetFetch } from './fixture';
 import { blockedKeysOf, CRLSET_ID, CrlSetStore } from './store';
 import { blockedInChain, electronChain, spkiHash } from './tls';
 
@@ -141,6 +142,16 @@ describe('CrlSetStore', () => {
     expect(store.version()).toBeUndefined();
     expect(store.blockedKeys().size).toBe(0);
     expect(await readdir(dir).catch(() => [])).toEqual([]);
+  });
+
+  it('installs the bundled fixture from memory, for runs that stay offline', async () => {
+    expect(crlSetFixture().equals(crx)).toBe(true);
+    const offline = fixtureCrlSetFetch(crlSetFixture());
+    const store = new CrlSetStore({ dir, fetch: offline, logger });
+    store.start();
+    expect(await store.component()).toEqual({ version: '10850', dir: join(dir, '10850') });
+    store.stop();
+    await expect(offline('https://example.com/')).rejects.toThrow(/only its update check/);
   });
 
   it("doesn't hold a browser launch back for long when offline", async () => {

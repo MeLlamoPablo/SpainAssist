@@ -2,6 +2,8 @@ import { defineConfig } from 'vitest/config';
 
 // Main-process unit tests: plain Node, no Electron (Electron APIs are injected as fakes).
 export default defineConfig({
+  // `crlset/fixture.ts` imports the CRLSet fixture with `?inline`, like electron.vite.config.ts.
+  assetsInclude: ['**/*.crx3'],
   test: {
     name: 'main',
     environment: 'node',

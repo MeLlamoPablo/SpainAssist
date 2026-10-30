@@ -31,6 +31,10 @@ import type { UserKey } from '../providers/manager';
  *                            feature is off. `dev:local` turns every flag on
  *   SA_EXTRA_TRUSTED_HOSTS   comma-separated host suffixes allowed for credentials (mock sede)
  *   SA_BROWSER_HEADLESS      1/0: development/e2e headless override (no visible help window)
+ *   SA_CRLSET_FIXTURE=1      development only: enforce the bundled fixture CRLSet
+ *                            (crlset/fixture.ts) instead of Chrome's, installed from memory with
+ *                            no download. E2e runs otherwise launch the browser without a CRLSet;
+ *                            the e2e parity project sets it
  *   SA_BROWSER_EXECUTABLE    development only: Chromium executable for the browser (no download)
  *   SA_BROWSER_CAPTURE=1     development only: record each procedure's browsing (HAR, trace,
  *                            HTML, actions.jsonl) in procedures/<id>/capture/, with typed
@@ -72,6 +76,8 @@ export interface SaEnv {
   extraTrustedHosts: string[];
   browserHeadless?: boolean;
   browserExecutable?: string;
+  /** Development only: the fixture CRLSet instead of Chrome's (SA_CRLSET_FIXTURE). */
+  crlSetFixture?: boolean;
   /** Development only: record browsing for offline mock sites (SA_BROWSER_CAPTURE). */
   browserCapture?: boolean;
   hideWindow?: boolean;
@@ -145,6 +151,7 @@ const DEV_ONLY = [
   'SA_HIDE_WINDOW',
   'SA_BROWSER_EXECUTABLE',
   'SA_BROWSER_CAPTURE',
+  'SA_CRLSET_FIXTURE',
   'SA_KEY_SERVER_URL',
   'SA_FEEDBACK_SERVER_URL',
   'SA_MAPS_SERVER_URL',
@@ -189,6 +196,7 @@ export function parseEnv(input: NodeJS.ProcessEnv, opts: { packaged?: boolean } 
     browserHeadless: parseBool(env.SA_BROWSER_HEADLESS),
     browserExecutable: nonEmpty(env.SA_BROWSER_EXECUTABLE),
     browserCapture: parseBool(env.SA_BROWSER_CAPTURE) === true,
+    crlSetFixture: parseBool(env.SA_CRLSET_FIXTURE) === true,
     hideWindow: parseBool(env.SA_HIDE_WINDOW) === true,
     agentHost: nonEmpty(env.SA_AGENT_HOST),
     warnings,

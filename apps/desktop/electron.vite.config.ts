@@ -8,6 +8,8 @@ import { defineConfig } from 'electron-vite';
 // are listed in `dependencies` (electron-vite externalizes exactly those).
 export default defineConfig({
   main: {
+    // The CRLSet fixture the self-test enforces (`crlset/fixture.ts`, imported with `?inline`).
+    assetsInclude: ['**/*.crx3'],
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') },

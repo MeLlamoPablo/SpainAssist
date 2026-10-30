@@ -1,5 +1,7 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { createConnection } from 'node:net';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   type AppInfo,
@@ -52,11 +54,13 @@ import {
   createAppProtocolHandler,
   isAppUrl,
 } from './app/protocol';
+import { runSelfTest, SELF_TEST_FLAG, SELF_TEST_TIMEOUT_MS } from './app/self-test';
 import { createMainServices, type MainServices } from './app/services';
 import { bundledChromiumPath } from './browser/bundled';
 import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
+import { crlSetFixture, fixtureCrlSetFetch } from './crlset/fixture';
 import { CrlSetStore } from './crlset/store';
 import { blockedInChain, blockKeysInNodeTls, electronChain } from './crlset/tls';
 import { errorReportsAllowed } from './errors/gate';
@@ -81,6 +85,10 @@ import { createSafeStorageKeyProvider, createTouchIdBiometric } from './vault/ke
 
 const isDev = !app.isPackaged;
 const displayName = isDev ? 'Spain Assist Dev' : 'Spain Assist';
+// `--self-test` (app/self-test.ts) checks this build and exits. It runs on a new temporary
+// profile and next to a running app: none of the user's data, no single-instance lock, no error
+// reports, no window.
+const selfTest = process.argv.includes(SELF_TEST_FLAG);
 // Launch Services does not inherit the terminal environment. Receive it privately,
 // before reading configuration; API keys must never appear in launcher arguments.
 // The launcher keeps the socket open while it lives: quit when it closes, so a killed
@@ -129,12 +137,14 @@ const devIcon = isDev ? join(app.getAppPath(), 'packaging/icon-dev.png') : undef
 app.setName('SpainAssistant');
 app.setPath(
   'userData',
-  env.userDataDir
-    ? resolve(env.userDataDir)
-    : defaultUserData(app.getPath('appData'), process.platform, process.windowsStore),
+  selfTest
+    ? mkdtempSync(join(tmpdir(), 'sa-self-test-'))
+    : env.userDataDir
+      ? resolve(env.userDataDir)
+      : defaultUserData(app.getPath('appData'), process.platform, process.windowsStore),
 );
 // Before Chromium reads it: the vault key of data imported from the NSIS install.
-applyStagedLocalState(app.getPath('userData'));
+if (!selfTest) applyStagedLocalState(app.getPath('userData'));
 // Error reports: started before `ready` (the SDK registers its IPC scheme), sending nothing
 // until main() opens the gate with the flag and the setting.
 // How this copy was installed: the Microsoft Store's MSIX updates through the Store.
@@ -144,14 +154,15 @@ const channel = installChannel({
   windowsStore: process.windowsStore === true,
   linuxPackageType: linuxPackageType(),
 });
-const errorReports = env.errorReportsDsn
-  ? startErrorReports({
-      dsn: env.errorReportsDsn,
-      release: `spain-assist@${app.getVersion()}`,
-      environment: app.isPackaged ? 'production' : 'development',
-      installChannel: channel,
-    })
-  : undefined;
+const errorReports =
+  env.errorReportsDsn && !selfTest
+    ? startErrorReports({
+        dsn: env.errorReportsDsn,
+        release: `spain-assist@${app.getVersion()}`,
+        environment: app.isPackaged ? 'production' : 'development',
+        installChannel: channel,
+      })
+    : undefined;
 protocol.registerSchemesAsPrivileged([APP_SCHEME_PRIVILEGES]);
 
 let services: MainServices | undefined;
@@ -159,8 +170,9 @@ let logger: (Logger & { close(): void }) | undefined;
 let mainWindow: BrowserWindow | undefined;
 let quitting = false;
 
-const gotLock = env.e2e || app.requestSingleInstanceLock();
-if (!gotLock) {
+if (selfTest) {
+  app.whenReady().then(selfTestMain);
+} else if (!(env.e2e || app.requestSingleInstanceLock())) {
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -349,10 +361,16 @@ async function main(): Promise<void> {
     });
 
   // Chrome's CRLSet: for the agent's browser, and its blocked keys for our own connections from
-  // the first request on (Node's here, Electron's below). Never in e2e runs, which stay offline.
-  const crlSets = env.e2e
-    ? undefined
-    : new CrlSetStore({ dir: paths.crlSetDir, fetch, logger: log.child('crlset') });
+  // the first request on (Node's here, Electron's below). E2e runs stay offline: none, or with
+  // SA_CRLSET_FIXTURE the bundled fixture, installed from memory (the parity project).
+  const crlSets =
+    env.e2e && !env.crlSetFixture
+      ? undefined
+      : new CrlSetStore({
+          dir: paths.crlSetDir,
+          fetch: env.crlSetFixture ? fixtureCrlSetFetch(crlSetFixture()) : fetch,
+          logger: log.child('crlset'),
+        });
   if (crlSets) {
     await crlSets.load();
     blockKeysInNodeTls(() => crlSets.blockedKeys());
@@ -653,6 +671,50 @@ function bundledBrowser(log: Logger): string | undefined {
   }
   log.info('bundled browser', { version: bundled.version });
   return bundled.executable;
+}
+
+/**
+ * `--self-test` (app/self-test.ts): checks this build, prints the report as one JSON line on
+ * stdout and exits 0 when it passed, 1 otherwise. Never a window, a dialog or the user's data.
+ */
+async function selfTestMain(): Promise<void> {
+  app.dock?.hide();
+  const userData = app.getPath('userData');
+  let done = false;
+  const finish = (result: { ok: boolean } & Record<string, unknown>) => {
+    if (done) return;
+    done = true;
+    process.stdout.write(`${JSON.stringify(result)}\n`, () => app.exit(result.ok ? 0 : 1));
+  };
+  const about = {
+    version: app.getVersion(),
+    packaged: app.isPackaged,
+    platform: process.platform,
+    arch: process.arch,
+  };
+  const timer = setTimeout(
+    () => finish({ ok: false, app: about, error: `no result after ${SELF_TEST_TIMEOUT_MS} ms` }),
+    SELF_TEST_TIMEOUT_MS,
+  );
+  try {
+    const { log, ...report } = await runSelfTest({
+      dir: join(userData, 'run'),
+      ...(app.isPackaged ? { chromium: bundledChromiumPath(process.resourcesPath) } : {}),
+      sidecarBinary: sidecarBinaryPath({
+        packaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        appPath: app.getAppPath(),
+      }),
+      browserFactory,
+    });
+    // Electron's own files may stay (in use until it exits): a few KB in the temp folder.
+    await rm(userData, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});
+    finish({ ...report, app: about, ...(report.ok ? {} : { log }) });
+  } catch (err) {
+    finish({ ok: false, app: about, error: errorMessage(err) });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
