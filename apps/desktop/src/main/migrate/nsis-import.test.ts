@@ -1,7 +1,14 @@
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The real copy, which a test makes fail (chmod can't make a file unreadable on Windows).
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, cp: vi.fn(actual.cp) };
+});
+
 import { silentLogger } from '../core/logger';
 import {
   applyStagedLocalState,
@@ -182,7 +189,9 @@ describe('openDataImport', () => {
     await nsisInstall();
     await freshStoreStart();
     // An unreadable file makes the copy fail.
-    await chmod(join(nsis, 'vault', 'items', 'a.bin'), 0);
+    vi.mocked(cp).mockRejectedValueOnce(
+      Object.assign(new Error('EACCES: permission denied, open a.bin'), { code: 'EACCES' }),
+    );
     const d1 = deps();
     const d = await openDataImport(d1);
     await expect(d.run()).rejects.toThrow();

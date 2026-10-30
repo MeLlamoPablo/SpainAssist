@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { Api, Credential, Model } from '@earendil-works/pi-ai';
 import { parseAppLink } from '@sa/shared';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -49,14 +49,18 @@ describe('buildAgentLaunch', () => {
       ELECTRON_RUN_AS_NODE: '1',
       PI_OFFLINE: '1',
       PI_TELEMETRY: '0',
-      PI_CODING_AGENT_DIR: '/tmp/sa/work/p1/pi-agent',
+      // Resolved: on Windows `/tmp/...` gains the current drive and backslashes.
+      PI_CODING_AGENT_DIR: resolve('/tmp/sa/work/p1/pi-agent'),
       SA_BRIDGE_URL: 'http://127.0.0.1:5555',
       SA_BRIDGE_TOKEN: 'tok',
       SA_PROCEDURE_ID: 'p1',
       SA_LANGUAGE: 'es',
       DEBUG_SA: '1',
     });
-    expect(JSON.parse(launch.env.SA_AGENT_CONFIG ?? '{}')).toMatchObject(config);
+    expect(JSON.parse(launch.env.SA_AGENT_CONFIG ?? '{}')).toMatchObject({
+      ...config,
+      sessionFile: resolve(config.sessionFile),
+    });
     for (const name of ['OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'NODE_OPTIONS']) {
       expect(launch.env[name]).toBeUndefined();
     }
@@ -285,15 +289,19 @@ describe('session file', () => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   });
 
+  // Windows has no POSIX modes (Node reports 0o666): the files rely on the profile folder's ACLs.
+  const posix = process.platform !== 'win32';
+
   it('creates a private file in a private directory and tightens existing files', () => {
     dir = mkdtempSync(join(tmpdir(), 'sa-session-'));
     const file = prepareSessionFile(join(dir, 'sessions', 'p1.jsonl'));
-    expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(statSync(join(dir, 'sessions')).mode & 0o777).toBe(0o700);
+    expect(statSync(file).isFile()).toBe(true);
+    if (posix) expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (posix) expect(statSync(join(dir, 'sessions')).mode & 0o777).toBe(0o700);
     const existing = join(dir, 'sessions', 'old.jsonl');
     writeFileSync(existing, '{}\n', { mode: 0o644 });
     prepareSessionFile(existing);
-    expect(statSync(existing).mode & 0o777).toBe(0o600);
+    if (posix) expect(statSync(existing).mode & 0o777).toBe(0o600);
   });
 });
 

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute, join, posix } from 'node:path';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 
@@ -64,7 +64,7 @@ export async function identifyInstaller(
       const mount = entity['mount-point'];
       if (!mount?.startsWith('/Volumes/')) continue;
       try {
-        if ((await readManifest(join(mount, 'Spain Assist.app'))) === manifest)
+        if ((await readManifest(posix.join(mount, 'Spain Assist.app'))) === manifest)
           matches.push({ image: image['image-path'], mount });
       } catch {
         // Other mounted images are unrelated, unreadable, or have no Spain Assist bundle.
@@ -75,7 +75,7 @@ export async function identifyInstaller(
   // Prefer the actual running bundle's volume; retain the unique-manifest fallback for
   // App Translocation, where the executable path no longer points into /Volumes.
   const sourceMatches = matches.filter(
-    ({ mount }) => join(mount, 'Spain Assist.app') === sourceBundle,
+    ({ mount }) => posix.join(mount, 'Spain Assist.app') === sourceBundle,
   );
   if (sourceMatches.length === 1) return sourceMatches[0];
   return matches.length === 1 ? matches[0] : undefined;

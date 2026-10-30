@@ -1,8 +1,16 @@
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { crc32, inflateRawSync } from 'node:zlib';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The real `open`, which a test makes fail for one log (chmod can't make a file unreadable on
+// Windows).
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, open: vi.fn(actual.open) };
+});
+
 import { createTestApp } from '../testing/harness';
 import { exportTranscripts, type TranscriptExportDeps } from './transcripts';
 
@@ -165,9 +173,15 @@ describe('exportTranscripts', () => {
   it('exports anyway when a log is unreadable or the logs are not a folder', async () => {
     await put('logs/main.log', 'readable\n');
     await put('logs/main.1.log', 'unreadable\n');
-    await chmod(join(dir, 'logs/main.1.log'), 0);
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    vi.mocked(open).mockImplementation(async (path, flags, mode) => {
+      if (String(path).endsWith('main.1.log'))
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      return actual.open(path, flags, mode);
+    });
 
     await exportTranscripts(deps);
+    vi.mocked(open).mockImplementation(actual.open);
     let files = unzip(
       await readFile(join(dir, 'Downloads', 'SpainAssist-transcripts-2026-10-12.zip')),
     );

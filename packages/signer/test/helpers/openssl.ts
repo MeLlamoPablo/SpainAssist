@@ -36,7 +36,12 @@ export function tmpDir(): string {
 
 export function openssl(args: string[], input?: Buffer): Buffer {
   if (!OPENSSL) throw new Error('OpenSSL 3 not available');
-  return execFileSync(OPENSSL, args, { input, stdio: ['pipe', 'pipe', 'pipe'] });
+  return execFileSync(OPENSSL, args, {
+    input,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    // A Windows build reads its arguments (`pass:contraseña…`) in the ANSI code page without it.
+    env: { ...process.env, OPENSSL_WIN32_UTF8: '1' },
+  });
 }
 
 export function toPem(der: Buffer, label = 'CERTIFICATE'): string {

@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { REPORT_PREFIX } from '@sa/agent';
 import { ASSISTANT_AGENT_ID, REPORT_TOOL } from '@sa/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -30,12 +31,12 @@ describe('the assistant', () => {
     expect(launch).toMatchObject({
       nodeBinary: '/fake/electron',
       electronRunAsNode: true,
-      cwd: `${app.paths.assistantDir}/work`,
+      cwd: join(app.paths.assistantDir, 'work'),
       bridge: { url: app.services.bridge.url() },
       config: {
         role: 'assistant',
         procedureId: ASSISTANT_AGENT_ID,
-        sessionFile: `${app.paths.assistantDir}/session.jsonl`,
+        sessionFile: join(app.paths.assistantDir, 'session.jsonl'),
         language: 'es',
         model: { provider: 'custom', id: 'mock-model' },
       },

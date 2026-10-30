@@ -107,7 +107,8 @@ describe('HostHooks (real host process)', () => {
     for (const client of clients) await client.stop();
     await llm.close();
     await bridge.close();
-    rmSync(workDir, { recursive: true, force: true });
+    // Retried: on Windows a host that just exited can hold its files for a moment.
+    rmSync(workDir, { recursive: true, force: true, maxRetries: 5 });
   });
 
   const log = (): LogEntry[] =>

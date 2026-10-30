@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path';
+import { posix } from 'node:path';
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import {
   bundleManifest,
@@ -10,6 +10,9 @@ import {
   mountedDiskImages,
   rememberInstaller,
 } from './mac-installer';
+
+// macOS-only code: macOS paths, also where its tests run on another OS.
+const { dirname, join } = posix;
 
 const bundlePath = () => dirname(dirname(dirname(app.getPath('exe'))));
 

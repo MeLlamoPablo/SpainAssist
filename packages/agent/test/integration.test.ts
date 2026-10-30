@@ -158,7 +158,8 @@ describe('agent host over RPC (integration)', () => {
     for (const client of clients) await client.stop();
     await llm.close();
     await bridge.close();
-    rmSync(workDir, { recursive: true, force: true });
+    // Retried: on Windows a host that just exited can hold its files for a moment.
+    rmSync(workDir, { recursive: true, force: true, maxRetries: 5 });
   });
 
   interface StartOptions {
@@ -280,7 +281,8 @@ describe('agent host over RPC (integration)', () => {
     expect(system).toContain('Write for the user in Spanish');
 
     const sessionFile = join(workDir, 'sessions', 'p1.jsonl');
-    expect(statSync(sessionFile).mode & 0o777).toBe(0o600);
+    // Windows has no POSIX modes (Node reports 0o666).
+    if (process.platform !== 'win32') expect(statSync(sessionFile).mode & 0o777).toBe(0o600);
     expect(readFileSync(sessionFile, 'utf8')).toContain('Hola, quiero renovar el DNI');
   });
 
