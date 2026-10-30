@@ -1,6 +1,5 @@
 import type {
   AdministrationLevel,
-  NextActionOwner,
   PersonalDataSource,
   ProcedureStatus,
   RequirementStatus,
@@ -45,9 +44,6 @@ export const common = defineDict({
     } satisfies Record<Exclude<ProcedureStatus, 'researching'>, string>,
     problem: 'Hay un problema',
     working: 'Trabajando…',
-    actorLong: {
-      administration: 'Le toca a la administración',
-    } satisfies Record<Exclude<NextActionOwner, 'user'>, string>,
     level: {
       state: 'Estatal',
       regional: 'Autonómica',
@@ -104,9 +100,6 @@ export const common = defineDict({
     },
     problem: 'Something went wrong',
     working: 'Working…',
-    actorLong: {
-      administration: 'Up to the administration',
-    },
     level: {
       state: 'National',
       regional: 'Regional',

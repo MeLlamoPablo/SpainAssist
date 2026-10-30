@@ -358,11 +358,6 @@ function StatusStrip({
             <span className="font-semibold text-fg">{t.next}: </span>
             {p.nextAction.text}
           </span>
-          {!mine && (
-            <span className="shrink-0 font-medium text-[12px] text-fg-subtle">
-              {tc.actorLong.administration}
-            </span>
-          )}
           {aside}
         </div>
         {appointment ? (
