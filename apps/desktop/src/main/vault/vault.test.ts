@@ -11,7 +11,6 @@ import {
   createTouchIdBiometric,
   type SafeStorageLike,
 } from './keyProvider';
-import { safeFileName } from './service';
 
 function fakeSafeStorage(available = true): SafeStorageLike & { plain: boolean; backend: string } {
   const store = {
@@ -92,17 +91,6 @@ describe('Touch ID', () => {
   });
 });
 
-describe('safeFileName', () => {
-  it('keeps names readable and path-free', () => {
-    expect(safeFileName('../../justificante?.pdf')).toBe('justificante_.pdf');
-    expect(safeFileName('.bashrc')).toBe('bashrc');
-    expect(safeFileName('Certificado de empadronamiento.pdf')).toBe(
-      'Certificado de empadronamiento.pdf',
-    );
-    expect(safeFileName('')).toBe('documento');
-  });
-});
-
 describe('browser wiring', () => {
   let app: TestApp | undefined;
   let dir: string | undefined;
@@ -143,6 +131,39 @@ describe('browser wiring', () => {
       procedureId,
     });
     expect(app.services.browser.downloads.get(procedureId, res.downloadId)).toBeUndefined();
+  });
+
+  it("saves a download under a name that's a valid file name on Windows too", async () => {
+    app = await createTestApp();
+    const { procedureId } = await app.procedureWithToken();
+    dir = await mkdtemp(join(tmpdir(), 'sa-dl-'));
+    const saved: string[] = [];
+    for (const title of [
+      'Informe de vida laboral - 2026-10-12',
+      'Justificante.pdf',
+      'Recibo 2026/10',
+      'Cita: DNI?',
+      'CON',
+      'Lpt1 ',
+    ]) {
+      const file = join(dir, randomBytes(4).toString('hex'));
+      await writeFile(file, '%PDF-1.7');
+      const download = await app.services.browser.onDownload(procedureId, {
+        path: file,
+        suggestedName: 'justificante.pdf',
+        mimeType: 'application/pdf',
+      });
+      const doc = await app.services.browser.saveDownload(procedureId, download.downloadId, title);
+      saved.push(doc?.name ?? '');
+    }
+    expect(saved).toEqual([
+      'Informe de vida laboral - 2026-10-12.pdf',
+      'Justificante.pdf',
+      'Recibo 2026-10.pdf',
+      'Cita_ DNI_.pdf',
+      '_CON.pdf',
+      '_Lpt1.pdf',
+    ]);
   });
 
   it('deleting a credential closes contexts holding its certificate and permits a fresh browser', async () => {

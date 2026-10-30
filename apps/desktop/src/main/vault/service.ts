@@ -1,17 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import { rm } from 'node:fs/promises';
-import { extname, join } from 'node:path';
-import type {
-  AddCertificateInput,
-  AddClaveInput,
-  AddDocumentInput,
-  CredentialPolicy,
-  CredentialSummary,
-  DocumentMeta,
-  Language,
-  PersonalDataInput,
-  PersonalSaveIssue,
-  VaultOverview,
+import { join } from 'node:path';
+import {
+  type AddCertificateInput,
+  type AddClaveInput,
+  type AddDocumentInput,
+  type CredentialPolicy,
+  type CredentialSummary,
+  type DocumentMeta,
+  type Language,
+  type PersonalDataInput,
+  type PersonalSaveIssue,
+  safeFileName,
+  type VaultOverview,
 } from '@sa/shared';
 import { friendlyVaultError, UserError } from '../core/errors';
 import type { EventBus } from '../core/events';
@@ -45,20 +46,6 @@ export interface VaultServiceDeps {
   dniePhone: boolean;
   /** Drops active browser contexts that may retain a deleted client certificate. */
   onCredentialDeleted?(id: string): Promise<void>;
-}
-
-export function safeFileName(name: string): string {
-  const ext = extname(name)
-    .replace(/[^\w.]/g, '')
-    .slice(0, 10);
-  const base = name
-    .slice(0, name.length - extname(name).length)
-    .replace(/[^\p{L}\p{N} ._()-]/gu, '_')
-    .replace(/\.{2,}/g, '_')
-    .replace(/^[._\s]+/, '')
-    .trim()
-    .slice(0, 80);
-  return `${base || 'documento'}${ext}`;
 }
 
 /** "Mis datos" for the renderer (`vault.*`): every mutation emits `vault.changed`. */

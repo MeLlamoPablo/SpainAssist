@@ -4,6 +4,7 @@ export * from './bridge';
 export * from './chat';
 export * from './companion';
 export * from './countries';
+export * from './file-name';
 export * from './ipc';
 export * from './official';
 export * from './procedure';

@@ -85,6 +85,7 @@ beforeAll(async () => {
     '/prefilled': page('<label>Clave guardada <input type=password value="user-typed-pw"></label>'),
     '/downloads': page(
       `<a href="/file.pdf">Descargar justificante</a> <a href="/inline.pdf">Ver PDF</a>
+       <a href="/con.pdf">Ver informe</a>
        <form method=post action="/gen.pdf"><button>Generar PDF</button></form>`,
     ),
     '/file.pdf': (_req, res) => {
@@ -97,6 +98,14 @@ beforeAll(async () => {
     '/inline.pdf': (_req, res) => {
       res.writeHead(200, { 'content-type': 'application/pdf' });
       res.end(PDF('en linea'));
+    },
+    // A name Windows reserves for a device.
+    '/con.pdf': (_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'application/pdf',
+        'content-disposition': 'inline; filename="CON.pdf"',
+      });
+      res.end(PDF('reservado'));
     },
     '/gen.pdf': (req, res) => {
       generated++;
@@ -351,6 +360,10 @@ describe('tabs, dialogs, downloads', () => {
     const gen = t.stored.find((d) => d.name === 'recibo-123.pdf');
     expect(gen?.data.toString('latin1')).toContain('generado 1 POST');
     expect(generated).toBe(1); // captured from the response, not fetched again
+
+    obs = await t.service.back('pdf');
+    obs = await t.service.click('pdf', refOf(obs.snapshot, 'link "Ver informe"'));
+    expect(obs.downloads.map((d) => d.name)).toEqual(['_CON.pdf']);
   });
 });
 

@@ -72,16 +72,6 @@ export function effectiveFrameUrl(frame: Frame): string {
   return frame.url();
 }
 
-// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters
-const UNSAFE_FILE_NAME_CHARS = /[\x00-\x1f\x7f<>:"/\\|?*]+/g;
-
-/** Safe file name (no directories, no control characters), keeping the extension. */
-export function sanitizeFileName(name: string, fallback = 'documento'): string {
-  const base = path.basename(name || '').normalize('NFC');
-  const cleaned = base.replace(UNSAFE_FILE_NAME_CHARS, '_').replace(/^\.+/, '').trim();
-  return (cleaned || fallback).slice(0, 150);
-}
-
 const MIME_BY_EXT: Record<string, string> = {
   pdf: 'application/pdf',
   xml: 'application/xml',

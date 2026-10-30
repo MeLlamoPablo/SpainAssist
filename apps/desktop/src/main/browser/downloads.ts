@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { chmod, copyFile, readFile, rename, rm } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import type { DownloadedFile } from '@sa/browser';
+import { safeFileName } from '@sa/shared';
 import { ensurePrivateDir } from '../core/fs';
 
 export interface TemporaryDownload {
@@ -14,13 +15,14 @@ export interface TemporaryDownload {
 
 /**
  * The file name for a download the agent saves: its readable name (path separators replaced)
- * plus the original extension, which the agent can't change.
+ * plus the original extension, which the agent can't change, made safe on every OS
+ * (`safeFileName`): it is also the name of the document's copies on disk.
  */
 export function documentFileName(name: string, original: string): string {
   const ext = extname(original);
   let base = name.replace(/[\\/]/g, '-').trim();
   if (ext && base.toLowerCase().endsWith(ext.toLowerCase())) base = base.slice(0, -ext.length);
-  return `${base.trim() || basename(original, ext)}${ext}`;
+  return safeFileName(`${base.trim() || basename(original, ext)}${ext}`);
 }
 
 /**

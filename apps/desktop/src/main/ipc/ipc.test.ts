@@ -189,6 +189,26 @@ describe('vault IPC', () => {
     expect(app.vault.getDocument(doc.id)).toBeDefined();
   });
 
+  it('exports documents under names Windows accepts', async () => {
+    const downloads = join(app.dir, 'Downloads');
+    const names: string[] = [];
+    for (const name of ['Informe de vida laboral - 2026-10-12.pdf', 'CON.pdf', 'aux', 'a|b.pdf']) {
+      const doc = await app.invoke('vault.addDocument', {
+        name,
+        mimeType: 'application/pdf',
+        bytes: new Uint8Array([37, 80, 68, 70]),
+      });
+      names.push(await app.invoke('vault.downloadDocument', doc.id));
+    }
+    expect(names).toEqual([
+      'Informe de vida laboral - 2026-10-12.pdf',
+      '_CON.pdf',
+      '_aux',
+      'a_b.pdf',
+    ]);
+    expect((await readdir(downloads)).sort()).toEqual([...names].sort());
+  });
+
   it('rejects unknown documents and never follows a Downloads file symlink', async () => {
     await expect(app.invoke('vault.downloadDocument', 'missing')).rejects.toThrow(
       t('es', 'vaultNotFound'),

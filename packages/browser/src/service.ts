@@ -14,6 +14,7 @@ import {
   type AfirmaReply,
   type BrowserObservation,
   type BrowserTab,
+  safeFileName,
 } from '@sa/shared';
 import {
   type Browser,
@@ -78,7 +79,6 @@ import {
   isHttpUrl,
   noop,
   originOf,
-  sanitizeFileName,
   settleAll,
   sha256,
   sleep,
@@ -503,7 +503,7 @@ export class PlaywrightBrowserService implements BrowserService {
       const page = await this.pageFor(s);
       const loc = await this.resolveRef(page, ref);
       const payload = files.map((f) => ({
-        name: sanitizeFileName(f.name, 'fichero'),
+        name: safeFileName(f.name, 'fichero'),
         mimeType: f.mimeType,
         buffer: f.buffer,
       }));
@@ -1644,7 +1644,7 @@ export class PlaywrightBrowserService implements BrowserService {
     this.track(
       s,
       (async () => {
-        const name = sanitizeFileName(download.suggestedFilename(), 'descarga');
+        const name = safeFileName(download.suggestedFilename(), 'descarga');
         await fs.mkdir(this.opts.downloadsDir, { recursive: true });
         const staged = path.join(this.opts.downloadsDir, `${randomUUID()}-${name}`);
         try {
@@ -1723,8 +1723,8 @@ export class PlaywrightBrowserService implements BrowserService {
         let name =
           fileNameFromContentDisposition(disposition) ??
           fileNameFromUrl(pdfSourceUrl(response, page), 'documento.pdf');
-        name = sanitizeFileName(name, 'documento.pdf');
-        if (!/\.pdf$/i.test(name)) name += '.pdf';
+        name = safeFileName(name, 'documento.pdf');
+        if (!/\.pdf$/i.test(name)) name = safeFileName(`${name}.pdf`);
         await fs.mkdir(this.opts.downloadsDir, { recursive: true });
         const staged = path.join(this.opts.downloadsDir, `${randomUUID()}-${name}`);
         await fs.writeFile(staged, body);
