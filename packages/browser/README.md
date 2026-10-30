@@ -75,7 +75,9 @@ where a browser started without `--no-startup-window` quits with its last window
 it running): no session had a window yet, so every tool call launched a browser that died. The
 window belongs to the persistent context, which no session uses: sessions get their own
 contexts of that browser, so tabs, snapshots and captures never see it. The profile is deleted
-when the browser goes away. An expired CRLSet still blocks the keys it lists.
+when the browser goes away, and again by `closeAll` once its process has exited: headed
+Chromium still writes to it after `disconnected`. An expired CRLSet still blocks the keys it
+lists.
 
 `test/crlset.test.ts` checks the window outlives every session's, also headed where Chromium
 would quit without it: on Windows, and on Linux with a display (CI runs the unit tests under
@@ -93,10 +95,25 @@ signed with eMudhra's leaked key (`apps/desktop/src/main/crlset/live.test.ts`,
 with Node 24 and Go. Tests use local fixture HTTP(S) servers, the cached Chromium and the
 sidecar (built once per run), through which every test browser connects, like the app.
 
+### Headed, as the app runs it
+
+The suite is headless by default. `SA_TEST_HEADED=1` runs every test browser headed with its
+windows minimized (`startHidden`), as the app does, which is where Windows and Linux differ from
+macOS and from headless: there Chromium quits with its last window, and the window sets the
+viewport. CI runs the suite headed on Linux (under `xvfb-run`) and on Windows (`ci.yml`). Run it
+after changing how the browser launches or handles its windows:
+
+```sh
+SA_TEST_HEADED=1 corepack pnpm --filter @sa/browser test
+```
+
+On macOS this puts minimized Chrome for Testing windows in the Dock while it runs.
+
 ### Native window visibility test
 
-The normal suite is headless. Run the window minimize/restore integration test separately on
-an interactive desktop, because concurrent Chromium launches can change native macOS focus:
+The normal suite skips it. Run the window minimize/restore integration test separately on an
+interactive desktop, because concurrent Chromium launches can change native macOS focus (CI
+runs it on Windows, with the headed suite):
 
 ```sh
 SA_TEST_BROWSER_WINDOWS=1 corepack pnpm --filter @sa/browser exec vitest run test/visibility.test.ts

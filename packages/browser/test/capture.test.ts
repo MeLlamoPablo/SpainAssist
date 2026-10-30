@@ -165,7 +165,9 @@ describe('browser capture', () => {
       const runs = await fs.readdir(path.join(t.captures, 'p1', 'capture'));
       expect(runs).toHaveLength(1);
       const run = path.join(t.captures, 'p1', 'capture', runs[0]!);
-      const names = (await filesUnder(run)).map((f) => path.relative(run, f)).sort();
+      const names = (await filesUnder(run))
+        .map((f) => path.relative(run, f).split(path.sep).join('/'))
+        .sort();
       expect(names).toEqual(
         expect.arrayContaining([
           'actions.jsonl',

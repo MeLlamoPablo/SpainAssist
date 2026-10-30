@@ -136,8 +136,11 @@ describe('crlSet', () => {
     } finally {
       await t.cleanup();
     }
-    // Deleted when the browser goes away (asynchronously, after `disconnected`).
-    await expect.poll(() => [...profiles()].filter((name) => !before.has(name))).toEqual([]);
+    // Deleted when the browser goes away (asynchronously, after `disconnected`, and again by
+    // closeAll once the process has exited). NTFS takes a while over a whole profile.
+    await expect
+      .poll(() => [...profiles()].filter((name) => !before.has(name)), { timeout: 15_000 })
+      .toEqual([]);
   });
 
   it('keeps the blank window of the launch, which no session sees', () => keepsItsWindow({}));

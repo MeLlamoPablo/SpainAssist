@@ -84,6 +84,15 @@ export async function startServer(
 
 // --- Service factory ---------------------------------------------------------------------------
 
+/**
+ * `SA_TEST_HEADED=1`: every test service runs Chromium headed with its windows minimized, as the
+ * app does (`startHidden`), instead of headless. Headed Chromium differs where it matters to
+ * users: on Windows and Linux it quits with its last window, and the window sets the viewport.
+ * CI runs the suite this way on Linux (under xvfb-run) and on Windows; locally it is opt-in,
+ * since it puts minimized browser windows on the desktop.
+ */
+const HEADED = process.env.SA_TEST_HEADED === '1';
+
 export interface StoredDocument {
   procedureId: string;
   name: string;
@@ -103,7 +112,8 @@ export function createTestService(overrides: Partial<BrowserServiceOptions> = {}
   const stored: StoredDocument[] = [];
   const media: Buffer[] = [];
   const service = createBrowserService({
-    headless: true,
+    headless: !HEADED,
+    ...(HEADED ? { startHidden: true } : {}),
     downloadsDir,
     settleTimeoutMs: 5_000,
     onDownload: async (procedureId, file) => {

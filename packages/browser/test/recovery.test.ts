@@ -29,35 +29,55 @@ afterAll(async () => {
   await server?.close();
 });
 
-function processesWithMarker(): { pid: number; command: string }[] {
-  return execFileSync('pgrep', ['-f', marker])
+interface ProcessInfo {
+  pid: number;
+  ppid: number;
+  command: string;
+}
+
+/** Every process with its parent and command line: `ps` on macOS and Linux, CIM on Windows. */
+function processes(): ProcessInfo[] {
+  if (process.platform === 'win32') {
+    const json = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress',
+      ],
+      { maxBuffer: 64 * 1024 * 1024 },
+    ).toString();
+    const list = JSON.parse(json) as {
+      ProcessId: number;
+      ParentProcessId: number;
+      CommandLine: string | null;
+    }[];
+    return list.map((p) => ({
+      pid: p.ProcessId,
+      ppid: p.ParentProcessId,
+      command: p.CommandLine ?? '',
+    }));
+  }
+  return execFileSync('ps', ['-A', '-ww', '-o', 'pid=,ppid=,command='], {
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .toString()
-    .trim()
     .split('\n')
-    .map(Number)
-    .map((pid) => ({ pid, command: commandOf(pid) }));
+    .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), command: m[3] as string }));
 }
 
-function commandOf(pid: number): string {
-  try {
-    return execFileSync('ps', ['-o', 'command=', '-p', String(pid)]).toString();
-  } catch {
-    return ''; // exited meanwhile
-  }
+function processesWithMarker(): ProcessInfo[] {
+  return processes().filter((p) => p.command.includes(marker));
 }
 
-function descendants(pid: number): number[] {
-  let children: number[];
-  try {
-    children = execFileSync('pgrep', ['-P', String(pid)])
-      .toString()
-      .trim()
-      .split('\n')
-      .map(Number);
-  } catch {
-    return []; // pgrep exits 1 when there are none
-  }
-  return children.flatMap((child) => [child, ...descendants(child)]);
+/** The process's children, theirs, and so on. */
+function descendants(pid: number, all = processes()): ProcessInfo[] {
+  return all
+    .filter((p) => p.ppid === pid)
+    .flatMap((child) => [child, ...descendants(child.pid, all)]);
 }
 
 async function waitFor(condition: () => boolean, ms = 10_000): Promise<void> {
@@ -104,8 +124,8 @@ describe('crash recovery', () => {
     const browserPid = processesWithMarker().find((p) => !p.command.includes('--type='))?.pid;
     expect(browserPid).toBeDefined();
     let killed = 0;
-    for (const pid of descendants(browserPid as number)) {
-      if (commandOf(pid).includes('--type=renderer')) {
+    for (const { pid, command } of descendants(browserPid as number)) {
+      if (command.includes('--type=renderer')) {
         process.kill(pid, 'SIGKILL');
         killed++;
       }

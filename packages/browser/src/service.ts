@@ -189,6 +189,8 @@ export class PlaywrightBrowserService implements BrowserService {
   private launched?: { browser: Browser; at: number; loaded: boolean };
   /** Browsers in a row that closed by themselves before loading a page (EARLY_EXIT_MS). */
   private earlyExits = 0;
+  /** Deletes the temporary profile of a CRLSet launch (launchWithCrlSet). */
+  private readonly removeProfiles = new WeakMap<Browser, () => Promise<void>>();
   private userAgent?: string;
   private readonly budget: number;
   private readonly actionTimeout: number;
@@ -671,6 +673,9 @@ export class PlaywrightBrowserService implements BrowserService {
     this.launched = undefined;
     this.earlyExits = 0;
     await browser?.close().catch(noop);
+    // Again, now that the process is gone: a headed Chromium still writes to its profile after
+    // `disconnected` (seen on macOS), so that first deletion can fail or be undone.
+    if (browser) await this.removeProfiles.get(browser)?.();
     if (this.captureScratch) {
       await settleAll(this.captureWork, 60_000);
       // Raw trace resources shared by every context of the browser.
@@ -917,6 +922,7 @@ export class PlaywrightBrowserService implements BrowserService {
       const browser = context.browser();
       if (!browser) throw new Error('The persistent launch returned no browser');
       browser.on('disconnected', () => void removeProfile());
+      this.removeProfiles.set(browser, removeProfile);
       await sleep(CRLSET_SETTLE_MS);
       // Minimized only now, like the windows of sessions: macOS ignores --start-minimized for it.
       if (this.opts.startHidden && !options.headless) {

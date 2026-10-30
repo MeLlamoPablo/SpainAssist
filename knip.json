@@ -48,9 +48,6 @@
       "ignoreDependencies": ["typebox"],
       "ignoreBinaries": ["pgrep", "wget", "WGET.exe"]
     },
-    "packages/browser": {
-      "ignoreBinaries": ["pgrep"]
-    },
     "packages/sidecar": {
       "ignoreBinaries": ["go"]
     },
