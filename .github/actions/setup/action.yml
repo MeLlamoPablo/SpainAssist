@@ -1,4 +1,5 @@
-# Node 24, Go, Corepack's pnpm and the workspace's dependencies, for the CI workflow's jobs.
+# Node 24, Go, Corepack's pnpm and the workspace's dependencies, for the jobs of ci.yml,
+# release.yml and browser-update.yml, on Linux, Windows and macOS runners.
 name: Set up the workspace
 description: Installs Node, Go and Corepack, restores the pnpm store and installs dependencies.
 
@@ -17,11 +18,20 @@ runs:
         # Standard library only: nothing to cache.
         cache: false
     # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
+    # --force: Windows runners have a global Yarn whose shims Corepack's replace. There npm's
+    # global prefix (no bin/ folder) comes after Node's bundled, older Corepack on PATH, so it goes
+    # first (GITHUB_PATH prepends).
     - name: Install Corepack
       shell: bash
       run: |
         npm install --global --force corepack@0.36.0
-        echo "$(npm prefix --global)/bin" >> "$GITHUB_PATH"
+        prefix=$(npm prefix --global)
+        if [[ "$RUNNER_OS" == Windows ]]; then echo "$prefix"; else echo "$prefix/bin"; fi >> "$GITHUB_PATH"
+    - name: Check Corepack
+      shell: bash
+      run: |
+        command -v corepack
+        corepack --version
     - id: pnpm-store
       name: Find the pnpm store
       shell: bash

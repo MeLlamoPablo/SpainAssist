@@ -1,8 +1,21 @@
-# Checks every push to master and every pull request: Biome (lint + format), typecheck, knip,
-# the generated colour tokens and the desktop's third-party licences; the unit tests of every
-# package; the Electron e2e suite; and the phone app (host tests, debug build, Android lint and
-# the desktop ↔ phone interop check). Everything runs offline against the mocks (apps/mock-sede,
-# tools/mock-llm): no real government site, paid API or secret is used.
+# Checks the code: Biome (lint + format), typecheck, knip, the generated colour tokens and the
+# desktop's third-party licences; the unit tests of every package; the Electron e2e suite; the
+# phone app (host tests, debug build, Android lint and the desktop ↔ phone interop check); and,
+# where users run the app, Linux and Windows parity:
+# - the browser's unit tests with Chromium headed, as the app runs it (`SA_TEST_HEADED=1`): on
+#   Windows and Linux headed Chromium quits when its last window closes, which headless never
+#   shows (v0.3.2's browser died after every launch on Windows). Linux runs it under xvfb-run;
+# - on Windows, the unit tests of every package the Windows app ships;
+# - the e2e `parity` project (the browser headed with a CRLSet, and the app's --self-test), on
+#   Linux within the e2e job and on Windows in its own.
+# Everything runs offline against the mocks (apps/mock-sede, tools/mock-llm): no real government
+# site, paid API or secret is used.
+#
+# When: every push to master and every manual run (Actions > CI > Run workflow) run every job.
+# Pull requests skip the two Windows jobs, the slowest. browser-update.yml calls this workflow on
+# its pull request's commit (pull requests it opens can't trigger workflows), and release.yml
+# refuses to build a tag whose commit has no successful push or manual run of it (it starts one
+# when there is none: scripts/ci-gate.mjs).
 #
 # CI has no git-crypt key, so encrypted paths (.gitattributes) are binary here: nothing below
 # may read them.
@@ -13,12 +26,19 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to check (by default the caller's)
+        type: string
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A caller's run (browser-update.yml) gets its own group, apart from master's pushes.
+  group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   # A new push to a pull request replaces its run; every master commit is checked.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -32,6 +52,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
       - uses: ./.github/actions/setup
       # `biome ci` is `biome check` without writes, with GitHub annotations.
       - name: Biome
@@ -56,18 +78,68 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
       - uses: ./.github/actions/setup
       # Browser, signer and mock-sede tests launch playwright-core's Chromium (`chromium` also
       # installs the headless shell); the system libraries come with --with-deps.
       - name: Install Chromium
         run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
-      # A display, so the browser's CRLSet test also runs Chromium headed, which on Linux (as on
-      # Windows) quits with its last window (packages/browser/README.md, "Revoked certificates").
+      # A display, so the browser's CRLSet test and the desktop's self-test also run Chromium
+      # headed, which on Linux (as on Windows) quits with its last window
+      # (packages/browser/README.md, "Revoked certificates").
       - name: Test
         run: xvfb-run --auto-servernum corepack pnpm test
-      - name: Store submission retries (mock APIs)
+      - name: Release scripts (mock APIs)
         if: ${{ !cancelled() }}
-        run: node --test scripts/store-submissions.test.mjs
+        run: node --test scripts/store-submissions.test.mjs scripts/ci-gate.test.mjs
+
+  browser-headed:
+    name: Browser, headed (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: ./.github/actions/setup
+      - name: Install Chromium
+        run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
+      # Every test browser headed with its windows minimized, as the app runs it.
+      - name: Test
+        env:
+          SA_TEST_HEADED: '1'
+        run: xvfb-run --auto-servernum corepack pnpm --filter @sa/browser test
+
+  windows:
+    name: Unit tests (Windows)
+    if: github.event_name != 'pull_request'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The same bytes as on Linux and macOS: Git for Windows checks text files out with CRLF.
+      - name: Check out with LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: ./.github/actions/setup
+      - name: Install Chromium
+        run: corepack pnpm --filter @sa/browser exec playwright-core install chromium
+      # The packages the Windows app ships. Their browsers run headed with minimized windows, as
+      # the app's do, and the browser's window test runs too (packages/browser/test/visibility.test.ts).
+      - name: Test
+        env:
+          SA_TEST_HEADED: '1'
+          SA_TEST_BROWSER_WINDOWS: '1'
+        run: >-
+          corepack pnpm --workspace-concurrency=1
+          --filter @sa/shared --filter @sa/pii --filter @sa/vault --filter @sa/signer
+          --filter @sa/sidecar --filter @sa/browser --filter @sa/companion --filter @sa/agent
+          --filter @sa/desktop test
 
   e2e:
     name: Electron e2e
@@ -75,6 +147,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
       - uses: ./.github/actions/setup
       # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces Electron's sandbox needs.
       - name: Allow Electron's sandbox
@@ -86,13 +160,45 @@ jobs:
       # Builds sa-sidecar, the agent host and the app the suite launches.
       - name: Build the app
         run: corepack pnpm --filter @sa/desktop build
-      # Electron needs a display even with its window hidden.
+      # Electron needs a display even with its window hidden, and the parity project's browser
+      # runs headed.
       - name: E2E
         run: xvfb-run --auto-servernum corepack pnpm e2e
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-results
+          path: e2e/test-results
+          retention-days: 7
+
+  e2e-windows:
+    name: Electron e2e, parity (Windows)
+    if: github.event_name != 'pull_request'
+    runs-on: windows-2025
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out with LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: ./.github/actions/setup
+      - name: Install Electron and Chromium
+        run: |
+          corepack pnpm --filter @sa/desktop exec install-electron
+          corepack pnpm --filter @sa/browser exec playwright-core install chromium
+      - name: Build the app
+        run: corepack pnpm --filter @sa/desktop build
+      # The agent's browser headed with a CRLSet, and the app's --self-test (e2e/tests/parity.spec.ts).
+      - name: E2E (parity)
+        run: corepack pnpm e2e --project parity
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results-windows
           path: e2e/test-results
           retention-days: 7
 
@@ -105,6 +211,8 @@ jobs:
         working-directory: apps/mobile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
       - uses: ./.github/actions/setup
       # Gradle picks JDK 17 (gradle/gradle-daemon-jvm.properties) from JAVA_HOME_17_X64.
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0

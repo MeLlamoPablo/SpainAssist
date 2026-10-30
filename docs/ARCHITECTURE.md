@@ -69,6 +69,27 @@ Chromium.
 Desktop releases use `vX.Y.Z` tags (`release.yml`); Android releases use `android/vX.Y.Z` tags
 (`mobile-release.yml`). Their versions can stay aligned, but each app releases independently.
 
+**Checks before users get a build.** Most of the app is tested on Linux, but users run it on
+Windows and macOS, where the browser behaves differently: headed Chromium quits with its last
+window on Windows and Linux, never on macOS nor headless (v0.3.2's browser died after every launch
+on Windows). So:
+- CI (`ci.yml`, every push to master) also runs the browser's tests headed (`SA_TEST_HEADED=1`,
+  on Linux under xvfb and on Windows), the unit tests of every package the Windows app ships on
+  Windows, and the e2e `parity` project (the agent's browser headed with a CRLSet, and the app's
+  self-test) on Linux and Windows. Pull requests skip the Windows jobs.
+- A release tag builds nothing until CI passed for its commit: the release waits for a run in
+  progress and starts one when there is none (`scripts/ci-gate.mjs`).
+- Each build runner installs what it built as users do (the NSIS installer silently, the `.deb`
+  with apt, the signed `.app`) and runs `--self-test` (`src/main/app/self-test.ts`): on a
+  temporary profile, next to any running copy and with nothing beyond loopback, the bundled
+  Chromium must start headed and hidden with a CRLSet, keep running once its windows close, and
+  serve a second session; sa-sidecar must proxy. A failure stops the GitHub release and the Store
+  submission.
+- Not self-tested: the Store's MSIX. That would take signing it with a certificate for its
+  publisher trusted on the runner, `Add-AppxPackage`, and an app execution alias (or
+  `Invoke-CommandInDesktopPackage`) to pass `--self-test` and read its output from inside the
+  package's container.
+
 ## 3. Key flows
 
 ### Conversation and delegation

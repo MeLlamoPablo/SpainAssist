@@ -6,6 +6,12 @@ your task before writing code.
 Tests must never contact real government sites or paid APIs: use `apps/mock-sede` and
 `tools/mock-llm` instead.
 
+After changing how the agent's browser launches or handles its windows (`packages/browser`, the
+CRLSet, `BrowserHolder`), also run it as the app does: `SA_TEST_HEADED=1 corepack pnpm --filter
+@sa/browser test`, and `corepack pnpm e2e --project parity` after building the desktop app. A Mac
+can't show what breaks on Windows and Linux; CI's Windows and Linux jobs can, and a release
+refuses a commit without green CI (`docs/ARCHITECTURE.md`, "Checks before users get a build").
+
 ## Git
 
 - **git-crypt in worktrees**: the key lives only in the main checkout, so in a worktree run git

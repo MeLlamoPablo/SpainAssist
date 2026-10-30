@@ -1,6 +1,16 @@
 # Desktop release: pushing a tag `vX.Y.Z` (or `vX.Y.Z-suffix`, a prerelease) on a
 # commit of `master` builds the installers on one native runner per target and publishes
-# them as a GitHub Release, with SHA256SUMS.txt. Windows also uploads `latest.yml` and the
+# them as a GitHub Release, with SHA256SUMS.txt. Two gates come first and last:
+# - `ci`: nothing is built until CI (ci.yml) passed for the tagged commit. It waits for a run in
+#   progress, and starts one on the tag when the commit has none (scripts/ci-gate.mjs). A failed
+#   CI stops the release: re-run CI's failed jobs, then this run's.
+# - Each build runner installs what it built as a user would (the NSIS installer silently, the
+#   .deb with apt, the signed macOS app) and runs the app's `--self-test`
+#   (apps/desktop/src/main/app/self-test.ts): the bundled Chromium must start headed and keep
+#   running with a CRLSet, and sa-sidecar must proxy. A failing self-test fails its build job, so
+#   neither the GitHub release nor the Microsoft Store submission happens. The Store's MSIX
+#   isn't self-tested: it would need a sideloading certificate, Add-AppxPackage and an app
+#   execution alias to pass arguments (docs/ARCHITECTURE.md, "Shipping"). Windows also uploads `latest.yml` and the
 # installer's blockmap, macOS `latest-mac.yml` and the zips' blockmaps, and Linux
 # `latest-linux.yml`: installed Windows and macOS apps and .deb installs update from them
 # (electron-updater). Linux ships only the .deb: no AppImage, snap or apt
@@ -78,9 +88,30 @@ jobs:
             exit 1
           fi
 
+  ci:
+    name: CI passed for the commit
+    needs: check
+    runs-on: ubuntu-24.04
+    # CI takes about half an hour; a queued Windows or macOS runner can add to that.
+    timeout-minutes: 110
+    permissions:
+      # Reads CI's runs, and starts one when the commit has none.
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - name: Wait for CI's verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: COMMIT=$(git rev-parse HEAD) node scripts/ci-gate.mjs
+
   build:
     name: Build ${{ matrix.name }}
-    needs: check
+    needs: [check, ci]
     strategy:
       fail-fast: false
       matrix:
@@ -93,41 +124,13 @@ jobs:
             script: package:linux
     runs-on: ${{ matrix.runner }}
     steps:
+      # The same bytes as CI tested: Git for Windows would check text files out with CRLF, which
+      # then ship in the app (`?raw` imports, the models file).
+      - name: Check out with LF line endings
+        shell: bash
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24.22.1
-          # setup-node caches only npm projects by itself; keep it off: the pnpm store is cached below.
-          package-manager-cache: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.3'
-          cache: false
-      # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
-      # --force: Windows runners have a global Yarn whose shims Corepack's replace. There npm's
-      # global prefix comes after Node's bundled (older) Corepack on PATH, so put it first.
-      - name: Install Corepack
-        shell: bash
-        run: |
-          npm install --global --force corepack@0.36.0
-          prefix=$(npm prefix --global)
-          if [[ "$RUNNER_OS" == Windows ]]; then echo "$prefix"; else echo "$prefix/bin"; fi >> "$GITHUB_PATH"
-      - name: Check Corepack
-        shell: bash
-        run: |
-          command -v corepack
-          corepack --version
-      - id: pnpm-store
-        name: Find the pnpm store
-        shell: bash
-        run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-
-      - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - name: Set the app version from the tag
         working-directory: apps/desktop
         run: npm pkg set version=${{ needs.check.outputs.version }}
@@ -136,6 +139,34 @@ jobs:
           # Never pick up an identity from a runner's certificate store.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: corepack pnpm --filter @sa/desktop run ${{ matrix.script }}
+      # The one-click installer as users run it, silently: per user, into %LOCALAPPDATA%\Programs,
+      # without starting the app. MSYS_NO_PATHCONV keeps Git Bash from turning /S into a path.
+      - name: Install and self-test (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          installers=(apps/desktop/dist/SpainAssist-win-*.exe)
+          MSYS_NO_PATHCONV=1 "${installers[0]}" /S
+          programs=$(cygpath -u "$LOCALAPPDATA")/Programs
+          for _ in $(seq 60); do
+            exe=$(find "$programs" -maxdepth 2 -name 'Spain Assist.exe' | head -1)
+            [[ -n "$exe" ]] && break
+            sleep 1
+          done
+          echo "Installed: $exe"
+          "$exe" --self-test | tee "$RUNNER_TEMP/self-test.json"
+      # apt runs the .deb's after-install script, which sets up chrome-sandbox and, on Ubuntu
+      # 24.04, the AppArmor profile the app's sandbox needs: the self-test runs the app with them
+      # (unlike ci.yml's e2e job, which lifts the AppArmor restriction instead).
+      - name: Install and self-test (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb ./apps/desktop/dist/*.deb
+          xvfb-run --auto-servernum spain-assist --self-test | tee "$RUNNER_TEMP/self-test.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ runner.os }}-${{ runner.arch }}
@@ -158,7 +189,7 @@ jobs:
 
   build-mac:
     name: Build macOS ${{ matrix.arch }}
-    needs: check
+    needs: [check, ci]
     strategy:
       fail-fast: false
       matrix:
@@ -201,6 +232,15 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: corepack pnpm --filter @sa/desktop run package:mac:app
+      # The signed app, hardened runtime and all (notarizing changes none of its code), before
+      # any time goes into notarizing it.
+      - name: Self-test
+        # Explicitly bash: `-o pipefail`, so the app's exit code survives `tee`.
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          apps=(apps/desktop/dist/mac*/"Spain Assist.app")
+          "${apps[0]}/Contents/MacOS/Spain Assist" --self-test | tee "$RUNNER_TEMP/self-test.json"
       # ditto keeps the bundle's symlinks, permissions and extended attributes; an artifact of the
       # bare folder would lose them and break the signature.
       - name: Pack the signed app

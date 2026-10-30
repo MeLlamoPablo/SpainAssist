@@ -1,15 +1,16 @@
 # Weekly Chromium update. The app's browser is the Chromium revision that the pinned
-# playwright-core names in its browsers.json (the Windows MSIX bundles it), so Chromium security
+# playwright-core names in its browsers.json (every build bundles it), so Chromium security
 # fixes reach users only when we bump playwright-core. Every Monday, or when run by hand, this
 # checks npm for a newer playwright-core at least as old as pnpm's minimumReleaseAge (a week),
 # bumps it (and the Playwright packages that must match it) in every workspace package.json with
-# scripts/bump-playwright.mjs, updates the lockfile, runs the typecheck and the tests of the
-# packages that use playwright-core, and opens or updates one pull request from the
-# `automation/playwright-core` branch. When a check fails the pull request is a draft and the run
-# fails, so a person picks it up.
+# scripts/bump-playwright.mjs, updates the lockfile, and opens or updates one pull request from
+# the `automation/playwright-core` branch, as a draft. Then it runs all of CI (ci.yml) on that
+# commit: Windows, the headed browser and the e2e parity project included. When CI passes the
+# pull request is marked ready; when it fails it stays a draft and the run fails, so a person
+# picks it up.
 #
 # Needs the repository setting "Allow GitHub Actions to create and approve pull requests".
-# Pull requests opened with GITHUB_TOKEN don't trigger other workflows; the checks run here.
+# Pull requests opened with GITHUB_TOKEN don't trigger other workflows, so CI is called from here.
 name: Browser update
 
 on:
@@ -35,35 +36,14 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      # The pushed commit, which CI checks; empty when playwright-core is up to date.
+      sha: ${{ steps.pr.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24.22.1
-          # setup-node caches only npm projects by itself; keep it off: the pnpm store is cached below.
-          package-manager-cache: false
-      # The tests of @sa/browser build sa-sidecar.
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27.3'
-          cache: false
-      # pnpm 12 needs Corepack 0.36 or later; the package scripts call `corepack pnpm` too.
-      - name: Install Corepack
-        run: |
-          npm install --global --force corepack@0.36.0
-          echo "$(npm prefix --global)/bin" >> "$GITHUB_PATH"
-      - id: pnpm-store
-        name: Find the pnpm store
-        run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-
-      - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       # Not npm's `latest`: pnpm refuses versions younger than minimumReleaseAge (minutes,
       # pnpm-workspace.yaml), so take the newest release at least that old.
@@ -122,23 +102,8 @@ jobs:
             'version=' + b.browserVersion + '\nrevision=' + b.revision
           " >> "$GITHUB_OUTPUT"
 
-      # The tests that launch a browser need the new revision (`chromium` also installs the
-      # headless shell). Tests skip browsers that aren't installed, so this keeps them running.
-      - name: Install the new Chromium
-        if: steps.versions.outputs.newer == 'true'
-        run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
-
-      - id: checks
-        name: Typecheck and test the packages that use playwright-core
-        if: steps.versions.outputs.newer == 'true'
-        continue-on-error: true
-        run: |
-          corepack pnpm typecheck
-          corepack pnpm --workspace-concurrency=1 \
-            --filter @sa/browser --filter @sa/signer --filter @sa/mock-sede \
-            --filter @sa/eval --filter @sa/desktop test
-
-      - name: Open or update the pull request
+      - id: pr
+        name: Open or update the pull request
         if: steps.versions.outputs.newer == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -147,16 +112,11 @@ jobs:
           OLD_CHROMIUM: ${{ steps.versions.outputs.old-chromium }}
           NEW_CHROMIUM_VERSION: ${{ steps.chromium.outputs.version }}
           NEW_CHROMIUM_REVISION: ${{ steps.chromium.outputs.revision }}
-          CHECKS: ${{ steps.checks.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Browser: playwright-core $NEW (Chromium $NEW_CHROMIUM_VERSION)"
           major=${NEW_CHROMIUM_VERSION%%.*}
-          if [[ "$CHECKS" == success ]]; then
-            checks="Typecheck and the tests of @sa/browser, @sa/signer, @sa/mock-sede, @sa/eval and @sa/desktop passed."
-          else
-            checks="**The checks failed**: see [the run]($RUN_URL). This pull request is a draft until they are fixed."
-          fi
+          checks="CI runs on this commit in [the browser update run]($RUN_URL): every check, the unit tests (on Windows too, and the browser's headed) and the Electron e2e suite with its parity project (the browser headed with a CRLSet, and the app's --self-test). This pull request stays a draft until it passes."
           cat > "$RUNNER_TEMP/body.md" <<EOF
           Bumps Playwright, and with it the Chromium the app drives (and bundles in the Windows MSIX).
 
@@ -169,8 +129,8 @@ jobs:
           - Chrome $major security fixes: https://chromereleases.googleblog.com/search?q=Chrome+$major
             (the "Security Fixes" list of the stable release for Chrome $major)
 
-          $checks Not run here: the Electron e2e suite and a packaged build. Check a certificate login
-          and a signature in the app before releasing.
+          $checks Not run here: a packaged build (each release self-tests the installed app). Check a
+          certificate login and a signature in the app before releasing.
 
           Opened by [the browser update workflow]($RUN_URL).
           EOF
@@ -181,12 +141,39 @@ jobs:
           git push --force origin "$BRANCH"
           if gh pr view "$BRANCH" --json state --jq .state 2>/dev/null | grep -q OPEN; then
             gh pr edit "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"
-            if [[ "$CHECKS" == success ]]; then gh pr ready "$BRANCH"; else gh pr ready --undo "$BRANCH"; fi
+            gh pr ready --undo "$BRANCH" || true
           else
             gh pr create --base master --head "$BRANCH" --title "$title" \
-              --body-file "$RUNNER_TEMP/body.md" $([[ "$CHECKS" == success ]] || echo --draft)
+              --body-file "$RUNNER_TEMP/body.md" --draft
           fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Fail when the checks failed
-        if: steps.checks.outcome == 'failure'
-        run: exit 1
+  ci:
+    name: CI
+    needs: update
+    if: needs.update.outputs.sha != ''
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.update.outputs.sha }}
+
+  ready:
+    name: Mark the pull request ready
+    needs: [update, ci]
+    if: ${{ !cancelled() && needs.update.outputs.sha != '' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CI_RESULT: ${{ needs.ci.result }}
+    steps:
+      - name: Ready when CI passed, else keep the draft and fail
+        run: |
+          if [[ "$CI_RESULT" == success ]]; then
+            gh pr ready "$BRANCH"
+          else
+            echo "::error::CI $CI_RESULT on the browser update: the pull request stays a draft"
+            exit 1
+          fi
