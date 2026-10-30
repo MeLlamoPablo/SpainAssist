@@ -167,7 +167,8 @@ export const ProcedureCard = memo(function ProcedureCard({
 function Facts({ procedure: p }: { procedure: ProcedureListItem }) {
   const t = useT(procedureDict);
   if (!p.facts.length) {
-    if (p.summary) return <p className="text-[14px] leading-relaxed text-fg">{p.summary}</p>;
+    if (p.summary)
+      return <p className="selectable text-[14px] leading-relaxed text-fg">{p.summary}</p>;
     return (
       <div className="flex flex-col gap-2.5" aria-busy="true">
         <p className="text-[13px] text-fg-subtle">{t.researchingFacts}</p>

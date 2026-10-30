@@ -33,7 +33,7 @@ export function ProcedureDetails({ procedure: p }: { procedure: ProcedureListIte
       <div className="flex flex-col gap-6">
         {p.requirements.length ? <Requirements items={p.requirements} /> : null}
         {p.summary && p.facts.length ? (
-          <p className="text-[13.5px] leading-relaxed text-fg-muted">{p.summary}</p>
+          <p className="selectable text-[13.5px] leading-relaxed text-fg-muted">{p.summary}</p>
         ) : null}
       </div>
       <div className="flex flex-col gap-6">
@@ -130,7 +130,7 @@ function Requirements({ items }: { items: Requirement[] }) {
           return (
             <li key={r.id} className="flex items-start gap-2.5 px-3 py-2.5">
               <Icon size={16} className={cn('mt-px shrink-0', s.icls)} aria-hidden />
-              <div className="min-w-0 flex-1">
+              <div className="selectable min-w-0 flex-1">
                 <p
                   className={cn(
                     'text-[13px] font-medium leading-snug text-fg',
