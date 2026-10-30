@@ -1,14 +1,14 @@
 {
   "version": 1,
   "chatgpt": {
-    "procedures": ["gpt-6.1-sol:high", "gpt-5.6-terra:max"],
+    "procedures": ["gpt-6.1-sol:high", "gpt-6.1-terra:max", "gpt-5.6-terra:max"],
     "assistant": ["gpt-6-luna:high"],
-    "scanner": ["gpt-6.1-sol:low", "gpt-5.6-terra:off"],
+    "scanner": ["gpt-6.1-sol:low", "gpt-6.1-terra:off", "gpt-5.6-terra:off"],
     "decider": "~perplexity/pplx-decider-flash-latest",
     "research": {
       "fast": ["gpt-6-luna:high"],
-      "balanced": ["gpt-6.1-sol:high", "gpt-5.6-terra:high"],
-      "deep": ["gpt-6-astra:high", "gpt-6.1-sol:high", "gpt-5.6-terra:max"]
+      "balanced": ["gpt-6.1-sol:high", "gpt-6.1-terra:high", "gpt-5.6-terra:high"],
+      "deep": ["gpt-6-astra:high", "gpt-6.1-sol:high", "gpt-6.1-terra:max", "gpt-5.6-terra:max"]
     }
   },
   "voucher": {
