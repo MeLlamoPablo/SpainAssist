@@ -105,7 +105,8 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Install Chromium
         run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
-      # Every test browser headed with its windows minimized, as the app runs it.
+      # Every test browser headed, as the app runs it. xvfb has no window manager, so the windows
+      # the app minimizes stay normal here (packages/browser/README.md, "Headed").
       - name: Test
         env:
           SA_TEST_HEADED: '1'

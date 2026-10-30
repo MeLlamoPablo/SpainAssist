@@ -118,6 +118,13 @@ const EARLY_EXITS_LIMIT = 2;
 const BROWSER_CLOSED = 'The browser window was closed or crashed. Try again: it will be reopened.';
 const BROWSER_UNAVAILABLE =
   'The browser keeps closing by itself right after it starts, so it was not opened again. Do not retry browser actions: tell the user the browser could not start on this computer, and that restarting the app may help.';
+/**
+ * Chromium fails a screenshot at once, instead of waiting, while it has no frame of the page to
+ * copy: headed, the pages of a browser that started a moment ago (README.md, "Observations and
+ * actions"). Screenshots try again this often until they time out.
+ */
+const NO_FRAME = /Unable to capture screenshot/;
+const NO_FRAME_RETRY_MS = 200;
 
 const silentLogger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
 
@@ -470,15 +477,11 @@ export class PlaywrightBrowserService implements BrowserService {
     return this.run(procedureId, async (s) => {
       const page = await this.pageFor(s);
       try {
-        const data = await page.screenshot({
-          type: 'jpeg',
-          quality: 70,
-          scale: 'css',
-          fullPage: !!opts.fullPage,
-          mask: this.secretMasks(page),
-          maskColor: '#888888',
-          timeout: 15_000,
-        });
+        const data = await this.takeScreenshot(
+          page,
+          { quality: 70, fullPage: !!opts.fullPage },
+          15_000,
+        );
         return { mimeType: 'image/jpeg' as const, data };
       } catch (err) {
         throw toActionError(err, 'take a screenshot', s.secretVariants);
@@ -1578,20 +1581,43 @@ export class PlaywrightBrowserService implements BrowserService {
     if (last && last.key === key) return last.id;
     if (last && now - last.at < this.mediaInterval) return undefined;
     try {
-      const jpeg = await page.screenshot({
-        type: 'jpeg',
-        quality: 45,
-        scale: 'css',
-        mask: this.secretMasks(page),
-        maskColor: '#888888',
-        timeout: 5_000,
-      });
+      const jpeg = await this.takeScreenshot(page, { quality: 45 }, 5_000);
       const id = await save(s.id, jpeg);
       s.lastMedia = { at: now, id, key };
       return id;
     } catch (err) {
       this.log.debug('ui screenshot failed', { procedureId: s.id, error: errorMessage(err) });
       return undefined;
+    }
+  }
+
+  /**
+   * A JPEG of the page with its secrets masked. While Chromium has no frame of the page yet
+   * (NO_FRAME), it tries again until `timeout`.
+   */
+  private async takeScreenshot(
+    page: Page,
+    opts: { quality: number; fullPage?: boolean },
+    timeout: number,
+  ): Promise<Buffer> {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+      try {
+        return await page.screenshot({
+          type: 'jpeg',
+          quality: opts.quality,
+          scale: 'css',
+          fullPage: !!opts.fullPage,
+          mask: this.secretMasks(page),
+          maskColor: '#888888',
+          // Never 0: a Playwright timeout of 0 means "wait forever".
+          timeout: Math.max(1, deadline - Date.now()),
+        });
+      } catch (err) {
+        if (!NO_FRAME.test(errorMessage(err)) || deadline - Date.now() <= NO_FRAME_RETRY_MS)
+          throw err;
+        await sleep(NO_FRAME_RETRY_MS);
+      }
     }
   }
 

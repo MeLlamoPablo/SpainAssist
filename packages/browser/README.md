@@ -25,6 +25,10 @@ See `src/types.ts` for the complete API and options.
 - `onDownload` must copy the staged file before returning its document descriptor: the staging
   file is deleted afterwards. Inline PDF responses are captured too.
 - `saveMedia` optionally persists throttled JPEGs; `startScreencast` follows the active tab.
+  Screenshots (those and `screenshot`'s) are tried again while Chromium has no frame of the page
+  yet: it then fails them at once ("Unable to capture screenshot") instead of waiting, as it does
+  headed for the pages of a browser that started a moment ago (seen under `xvfb-run`). Any other
+  failure leaves the observation without its JPEG, logged at debug.
 - `exportState`/`importState` serialize browser storage; the caller must encrypt it. A browser
   that disconnects is relaunched on the next operation, unless two in a row closed by
   themselves within 10 s of launch, before any page loaded: the service then stops relaunching
@@ -100,8 +104,10 @@ sidecar (built once per run), through which every test browser connects, like th
 The suite is headless by default. `SA_TEST_HEADED=1` runs every test browser headed with its
 windows minimized (`startHidden`), as the app does, which is where Windows and Linux differ from
 macOS and from headless: there Chromium quits with its last window, and the window sets the
-viewport. CI runs the suite headed on Linux (under `xvfb-run`) and on Windows (`ci.yml`). Run it
-after changing how the browser launches or handles its windows:
+viewport. CI runs the suite headed on Linux (under `xvfb-run`) and on Windows (`ci.yml`). Under
+`xvfb-run` there is no window manager, so windows can't minimize there: each new tab logs "could
+not minimize browser window" and stays a normal window. Run it after changing how the browser
+launches or handles its windows:
 
 ```sh
 SA_TEST_HEADED=1 corepack pnpm --filter @sa/browser test

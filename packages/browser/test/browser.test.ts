@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import type { BrowserObservation } from '@sa/shared';
-import type { Page } from 'playwright-core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { chromium, type Page } from 'playwright-core';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestService, page, refOf, sendHtml, startServer, type TestServer } from './helpers';
 
 const PDF = (label: string) =>
@@ -161,7 +161,7 @@ describe('snapshots and refs', () => {
     expect(obs.snapshot).toContain('heading "Sede de pruebas" [level=1]');
     expect(obs.snapshot).toMatch(/- iframe \[ref=e\d+\]:/);
     expect(obs.tabs).toEqual([{ index: 0, url: `${a.origin}/`, title: 'Inicio', active: true }]);
-    expect(obs.imageId).toMatch(/^img-/);
+    expect(obs.imageId, t.log.join('\n')).toMatch(/^img-/);
     expect(t.media.at(-1)?.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8])); // JPEG
 
     const box = refOf(obs.snapshot, 'textbox "Nombre en iframe"');
@@ -514,6 +514,56 @@ describe('notes, state and lifecycle', () => {
     expect(t.service.isOpen('life')).toBe(false);
     expect(t.service.currentUrl('life')).toBeUndefined();
     await expect(t.service.snapshot('life')).rejects.toMatchObject({ code: 'no_page' });
+  });
+
+  it('screenshots a page Chromium has no frame of yet, as in the first moments of a headed browser', async () => {
+    // Chromium's answer then, at once instead of waiting for a frame: seen headed under xvfb on
+    // the first page of a browser launched a moment ago (README.md, "Observations and actions").
+    const noFrame =
+      'page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot';
+    let failing = 0;
+    let error = noFrame;
+    const launch = chromium.launch.bind(chromium);
+    const spy = vi.spyOn(chromium, 'launch').mockImplementation(async (options) => {
+      const browser = await launch(options);
+      const newContext = browser.newContext.bind(browser);
+      vi.spyOn(browser, 'newContext').mockImplementation(async (contextOptions) => {
+        const context = await newContext(contextOptions);
+        // Registered before the service's own listener, so before its first screenshot.
+        context.on('page', (page) => {
+          const screenshot = page.screenshot.bind(page);
+          vi.spyOn(page, 'screenshot').mockImplementation(async (screenshotOptions) => {
+            if (failing-- > 0) throw new Error(error);
+            return screenshot(screenshotOptions);
+          });
+        });
+        return context;
+      });
+      return browser;
+    });
+    const fx = createTestService({ mediaIntervalMs: 0 });
+    try {
+      failing = 3;
+      const obs = await fx.service.open('noframe', `${a.origin}/popup`);
+      expect(obs.imageId, fx.log.join('\n')).toMatch(/^img-/);
+      expect(failing).toBe(-1);
+      failing = 3;
+      const shot = await fx.service.screenshot('noframe');
+      expect(shot.data.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+      expect(failing).toBe(-1);
+      // Any other failure is not retried: the UI goes without that screenshot.
+      failing = 100;
+      error = 'page.screenshot: Target crashed';
+      const next = await fx.service.open('noframe', `${a.origin}/form`);
+      expect(next.imageId).toBeUndefined();
+      expect(failing).toBe(99);
+      expect(fx.log.filter((line) => line.includes('ui screenshot failed'))).toEqual([
+        expect.stringContaining('Target crashed'),
+      ]);
+    } finally {
+      spy.mockRestore();
+      await fx.cleanup();
+    }
   });
 
   it('explains navigation errors and refuses non-http URLs', async () => {

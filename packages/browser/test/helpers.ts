@@ -105,12 +105,20 @@ export function createTestService(overrides: Partial<BrowserServiceOptions> = {}
   service: BrowserService;
   stored: StoredDocument[];
   media: Buffer[];
+  /** What the service logged, debug lines included: a failed assertion can show them. */
+  log: string[];
   downloadsDir: string;
   cleanup(): Promise<void>;
 } {
   const downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-browser-test-'));
   const stored: StoredDocument[] = [];
   const media: Buffer[] = [];
+  const log: string[] = [];
+  const line =
+    (level: string) =>
+    (msg: string, data?: unknown): void => {
+      log.push(`${level} ${msg}${data === undefined ? '' : ` ${JSON.stringify(data)}`}`);
+    };
   const service = createBrowserService({
     headless: !HEADED,
     ...(HEADED ? { startHidden: true } : {}),
@@ -137,12 +145,14 @@ export function createTestService(overrides: Partial<BrowserServiceOptions> = {}
     },
     // Like the app: every context goes through the TLS sidecar (test/sidecar.ts).
     certificates: (globalThis as { testSidecar?: Sidecar }).testSidecar,
+    logger: { debug: line('debug'), info: line('info'), warn: line('warn'), error: line('error') },
     ...overrides,
   });
   return {
     service,
     stored,
     media,
+    log,
     downloadsDir,
     cleanup: async () => {
       await service.closeAll();
