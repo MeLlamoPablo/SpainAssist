@@ -72,8 +72,9 @@ is sent. Chromium enforces the CRLSet in its after-startup tasks, about 2 s afte
 Mac (it's listed in `chrome://components` sooner), so the launch waits 5 s before the first
 page. Those tasks need a window, and the persistent launch opens a blank one: Playwright passes
 `about:blank` (with `--no-startup-window`, a headed persistent launch waits for a first page
-until it times out). That window stays open for the browser's whole life, minimized after the
-wait with `startHidden` (macOS ignores `--start-minimized` for it). Closed at once, the CRLSet
+until it times out). That window stays open for the browser's whole life, minimized at launch
+with `startHidden` (macOS ignores `--start-minimized` for it): minimized, it still runs the
+after-startup tasks, so the user never watches it during the wait. Closed at once, the CRLSet
 is never enforced; closed after the wait, as v0.3.2 did, the browser quit on Windows and Linux,
 where a browser started without `--no-startup-window` quits with its last window (macOS keeps
 it running): no session had a window yet, so every tool call launched a browser that died. The

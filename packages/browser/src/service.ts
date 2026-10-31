@@ -905,7 +905,7 @@ export class PlaywrightBrowserService implements BrowserService {
    *
    * The persistent launch opens a blank window (Playwright passes `about:blank` instead of
    * `--no-startup-window`), and that window stays open for the browser's whole life, minimized
-   * after the wait with `startHidden`: Chromium enforces the CRLSet in after-startup tasks that
+   * at launch with `startHidden`: Chromium enforces the CRLSet in after-startup tasks that
    * never run if it closes first, and on Windows and Linux a browser started this way quits when
    * its last window closes (on macOS it keeps running). Closed, it took the browser down as soon
    * as no session had a window, so before the first one. It belongs to the persistent context,
@@ -933,8 +933,8 @@ export class PlaywrightBrowserService implements BrowserService {
       if (!browser) throw new Error('The persistent launch returned no browser');
       browser.on('disconnected', () => void removeProfile());
       this.removeProfiles.set(browser, removeProfile);
-      await sleep(CRLSET_SETTLE_MS);
-      // Minimized only now, like the windows of sessions: macOS ignores --start-minimized for it.
+      // Minimized at once, like the windows of sessions: macOS ignores --start-minimized for it.
+      // A minimized window still runs the after-startup tasks; only a closed one doesn't.
       if (this.opts.startHidden && !options.headless) {
         for (const page of context.pages()) {
           await this.setWindowState(page, 'minimized').catch((err) =>
@@ -942,6 +942,7 @@ export class PlaywrightBrowserService implements BrowserService {
           );
         }
       }
+      await sleep(CRLSET_SETTLE_MS);
       this.log.info('browser enforces a CRLSet', { version: crlSet.version });
       return browser;
     } catch (err) {

@@ -13,7 +13,8 @@ import { blockKeysInNodeTls } from './tls';
  * site): a host whose certificate comes from eMudhra's compromised "EM DV TLS CA - G3B",
  * published by the researcher who reported it, must be refused by the agent's browser and by
  * Node. Run on a desktop with
- * `SA_TEST_LIVE_CRLSET=1 corepack pnpm --filter @sa/desktop exec vitest run src/main/crlset/live.test.ts`.
+ * `SA_TEST_LIVE_CRLSET=1 corepack pnpm --filter @sa/desktop exec vitest run src/main/crlset/live.test.ts`,
+ * and with `SA_TEST_HEADED=1` headed with its windows minimized at launch, as the app runs it.
  */
 const REVOKED_SITE = 'https://dv-g3b-emudhra.we-have-a-problem.com/';
 
@@ -24,8 +25,10 @@ it.skipIf(process.env.SA_TEST_LIVE_CRLSET !== '1')(
     const logger = createLogger({ level: 'error', console: false });
     const store = new CrlSetStore({ dir, fetch, logger });
     const downloads = await mkdtemp(join(tmpdir(), 'sa-crlset-live-downloads-'));
+    const headed = process.env.SA_TEST_HEADED === '1';
     const browser = createBrowserService({
-      headless: true,
+      headless: !headed,
+      startHidden: headed,
       downloadsDir: downloads,
       crlSet: () => store.component(),
       onDownload: async () => {
