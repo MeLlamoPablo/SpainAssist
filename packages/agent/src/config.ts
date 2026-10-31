@@ -84,6 +84,11 @@ export const AgentHostConfigSchema = z.object({
    * browser_use_certificate offer it. Off by default.
    */
   dniePhone: z.boolean().default(false),
+  /**
+   * The app replaces FNMT's Configurador (certificate requests and downloads on FNMT's sede):
+   * the system prompt says so. Off by default.
+   */
+  certificateRequests: z.boolean().default(false),
   /** Dev/e2e only: extra hosts allowed for credentials (same as the app's SA_EXTRA_TRUSTED_HOSTS). */
   extraTrustedHosts: z.array(z.string()).optional(),
   /**

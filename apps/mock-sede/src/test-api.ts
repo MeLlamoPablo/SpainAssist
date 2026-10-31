@@ -51,6 +51,16 @@ export interface StateSnapshot {
   appointments: number;
 }
 
+export interface FnmtRequestInfo {
+  code: string;
+  dni: string;
+  email: string;
+  publicKeyHash: string;
+  createdAt: string;
+  accredited: boolean;
+  downloads: number;
+}
+
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export class MockSedeTestApi {
@@ -168,6 +178,32 @@ export class MockSedeTestApi {
     return structuredClone(this.state.appointments);
   }
 
+  /** FNMT-like certificate requests, oldest first (`routes/fnmt.ts`). */
+  fnmtRequests(): FnmtRequestInfo[] {
+    return [...this.state.fnmtRequests.values()].map((r) => ({
+      code: r.code,
+      dni: r.dni,
+      email: r.email,
+      publicKeyHash: r.publicKeyHash,
+      createdAt: iso(r.createdAt),
+      accredited: r.accredited,
+      downloads: r.downloads,
+    }));
+  }
+
+  /**
+   * Plays the registration office: accredits the FNMT-like request with `code` (default: the
+   * newest), so its certificate can be downloaded. Returns undefined if there is none.
+   */
+  accreditFnmt(code?: string): FnmtRequestInfo | undefined {
+    const record = code
+      ? this.state.fnmtRequests.get(code)
+      : [...this.state.fnmtRequests.values()].at(-1);
+    if (!record) return undefined;
+    record.accredited = true;
+    return this.fnmtRequests().find((r) => r.code === record.code);
+  }
+
   /** Clears sessions, codes, submissions... and restores the initial users and clock. */
   reset(): void {
     this.state.reset();
@@ -202,6 +238,12 @@ const approveBody = z.object({
 });
 const captchaBody = z.object({ id: z.string().max(64).optional() });
 const timeBody = z.object({ seconds: z.number().finite() });
+const accreditBody = z.object({
+  code: z
+    .string()
+    .regex(/^\d{9}$/)
+    .optional(),
+});
 const userBody = z.object({
   dni: z.string().min(1).max(20),
   password: z.string().min(1).max(200),
@@ -265,4 +307,13 @@ export function registerTestApi(app: Hono<AppEnv>, api: MockSedeTestApi): void {
   });
 
   app.post('/__test/expire-sessions', (c) => c.json({ expired: api.expireSessions() }));
+
+  app.get('/__test/fnmt', (c) => c.json(api.fnmtRequests()));
+
+  app.post('/__test/fnmt/accredit', async (c) => {
+    const parsed = accreditBody.safeParse(await body(c));
+    if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
+    const request = api.accreditFnmt(parsed.data.code);
+    return request ? c.json(request) : c.json({ error: 'No FNMT certificate request' }, 404);
+  });
 }

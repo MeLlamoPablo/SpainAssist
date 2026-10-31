@@ -27,6 +27,7 @@ export const CERTIFICATE_ORIGINS: readonly string[] = Object.freeze([
   'https://ipce.seg-social.es', // Seguridad Social certificate login
   'https://idp.seg-social.es', // Seguridad Social login (Importass, seen live on 2026-10-12)
   'https://ws235.juntadeandalucia.es', // Junta de Andalucía certificate login (ClicSalud+, 2026-10-20)
+  'https://apuc20.sede.fnmt.gob.es', // FNMT certificate requests with the DNIe (2026-10-31)
 ]);
 
 /**

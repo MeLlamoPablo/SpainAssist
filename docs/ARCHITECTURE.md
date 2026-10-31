@@ -11,7 +11,7 @@ flowchart TB
     Renderer["Renderer (React)<br/>chat, procedure cards, Mis datos"]
     Main["Main process<br/>state, vault, secrets"]
     Agents["Agent processes (pi)<br/>assistant + one per procedure"]
-    Browser["Chromium<br/>+ AutoFirma shim"]
+    Browser["Chromium<br/>+ AutoFirma and FNMT shims"]
     Sidecar["sa-sidecar<br/>client certificates"]
   end
 
@@ -136,6 +136,16 @@ AutoFirma to sign, the user approves in the app, `@sa/signer` signs with the `.p
 or PAdES), and the site gets the result as if AutoFirma had produced it. Some sedes log in this way
 too.
 
+### FNMT certificates (Configurador replacement)
+Development builds and e2e only for now. FNMT's request page asks its Configurador for a key and a
+PKCS#10 through `FnmtCertRequest`; a shim (`@sa/signer`) answers instead. After the user approves,
+main (`fnmt/broker.ts`) makes the key, keeps it in the vault as a pending certificate request
+(it must outlive the procedure and restarts: the identity check can take days) and gives the page
+the request, which the page sends to FNMT. At download, the page hands over the certificate: main
+finds the pending key by its public key, builds the path from the FNMT CAs it ships, and after the
+user approves stores an ordinary certificate credential. Only FNMT's sedes may ask
+(`certificateRequestAllowedOn`). Research and design: `docs/research/fnmt.md`.
+
 ### DNIe with the phone
 Behind the `dnie-phone` flag, whose variant sets the stage (`DniePhoneStage`): `prerelease`
 shows an "Acceso anticipado" card in Mis datos instead of "Lo tengo", and offers the DNIe once the
@@ -230,4 +240,6 @@ or rating learnings (searching still works).
   for irreversible actions. Model-written scripts run in a sandboxed QuickJS with network access
   only through `fetch_url`'s checks.
 - **Known gaps.** Procedure metadata, transcripts, screenshots, pi session files and development
-  captures are private local files but not encrypted.
+  captures are private local files but not encrypted. While FNMT certificate requests are new,
+  development builds also keep a TEMPORARY debug log of them in `<userData>/fnmt-debug/`, private
+  keys in clear and outside "Borrar todo" (`fnmt/debug-log.ts`).

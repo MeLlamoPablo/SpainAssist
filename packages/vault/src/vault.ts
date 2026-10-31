@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createPrivateKey, randomBytes, randomUUID, X509Certificate } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -10,6 +10,7 @@ import {
   type DocumentMeta,
   DocumentSource,
   maskValue,
+  type PendingCertificateRequest,
   type PersonalDataInput,
   type PersonalDataItem,
   PersonalDataSource,
@@ -17,7 +18,7 @@ import {
   type StorageInfo,
   type VaultOverview,
 } from '@sa/shared';
-import { importCertificate } from './certificate';
+import { type ImportedCertificate, importCertificate } from './certificate';
 import {
   DATA_KEY_LENGTH,
   type DerivedKeys,
@@ -47,11 +48,13 @@ import {
   normalizePersonalInput,
   personalItems,
 } from './personal';
+import { writePkcs12 } from './pkcs12';
 import { sensitiveValues } from './sensitive';
 import {
   cloneState,
   emptyState,
   parseState,
+  type StoredCertificateRequest,
   type StoredCredential,
   serializeState,
   type VaultState,
@@ -153,6 +156,11 @@ function summarize(credential: StoredCredential): CredentialSummary {
     if (credential.certificate) summary.certificate = { ...credential.certificate };
     summary.hasPin = !!credential.pin;
   }
+  return summary;
+}
+
+function summarizeRequest(request: StoredCertificateRequest): PendingCertificateRequest {
+  const { privateKey: _key, ...summary } = request;
   return summary;
 }
 
@@ -590,30 +598,132 @@ export class Vault {
         input.passphrase,
         this.now(),
       );
-      const existing = this.state.credentials.find(
-        (c) => c.kind === 'certificate' && c.certificate.fingerprint === imported.info.fingerprint,
-      );
-      if (existing) return summarize(existing);
-      const holder = imported.info.holderName;
-      const credential: StoredCredential = {
+      return this.storeCertificate(imported, fileName, input.label);
+    });
+  }
+
+  /**
+   * A certificate whose key the app holds (an FNMT request's pending key, `certificateRequests`),
+   * stored like an imported `.p12`: the same checks, normalization and deduplication.
+   * `certificates`: DER, leaf first, then its chain. Errors: `invalid_certificate` (including a
+   * key that doesn't match), `expired_certificate`.
+   */
+  async addCertificateFromKey(input: {
+    privateKey: Uint8Array;
+    certificates: Uint8Array[];
+    fileName: string;
+    label?: string;
+  }): Promise<CredentialSummary> {
+    return this.lock.run(async () => {
+      const [leaf, ...chain] = input.certificates;
+      if (!leaf) throw invalid('A certificate is required');
+      let p12: Buffer;
+      const passphrase = randomBytes(24).toString('base64url');
+      try {
+        p12 = await writePkcs12({
+          privateKey: createPrivateKey({
+            key: toBuffer(input.privateKey, 'The key'),
+            format: 'der',
+            type: 'pkcs8',
+          }),
+          certificate: new X509Certificate(toBuffer(leaf, 'The certificate')),
+          chain: chain.map((c) => new X509Certificate(toBuffer(c, 'The certificate'))),
+          passphrase,
+        });
+      } catch (e) {
+        throw new VaultError('invalid_certificate', 'Could not read the certificate or its key', {
+          cause: e,
+        });
+      }
+      const imported = await importCertificate(p12, passphrase, this.now());
+      return this.storeCertificate(imported, input.fileName, input.label);
+    });
+  }
+
+  /** Under the lock: stores an imported certificate, or returns the one already stored. */
+  private async storeCertificate(
+    imported: ImportedCertificate,
+    fileName: string,
+    label: string | undefined,
+  ): Promise<CredentialSummary> {
+    const existing = this.state.credentials.find(
+      (c) => c.kind === 'certificate' && c.certificate.fingerprint === imported.info.fingerprint,
+    );
+    if (existing) return summarize(existing);
+    const holder = imported.info.holderName;
+    const credential: StoredCredential = {
+      id: randomUUID(),
+      kind: 'certificate',
+      label: cleanLabel(label, holder ? `Certificado de ${holder}` : DEFAULT_LABELS.certificate),
+      policy: DEFAULT_CREDENTIAL_POLICY.certificate,
+      createdAt: this.now().toISOString(),
+      fileName,
+      p12: imported.p12.toString('base64'),
+      passphrase: imported.passphrase,
+      keyDescription: imported.keyDescription,
+      certificate: imported.info,
+    };
+    await this.commit((draft) => {
+      draft.credentials.push(credential);
+    });
+    return summarize(credential);
+  }
+
+  // --- FNMT certificate requests: keys waiting for their certificate ---------------------------
+
+  listCertificateRequests(): PendingCertificateRequest[] {
+    return this.state.certificateRequests.map(summarizeRequest);
+  }
+
+  /** The pending request whose key has this public key hash (base64url SHA-256 of the SPKI). */
+  findCertificateRequest(publicKeyHash: string): PendingCertificateRequest | undefined {
+    const found = this.state.certificateRequests.find((r) => r.publicKeyHash === publicKeyHash);
+    return found && summarizeRequest(found);
+  }
+
+  /** Keeps a new request's private key (PKCS#8 DER) until its certificate arrives. */
+  async addCertificateRequest(input: {
+    publicKeyHash: string;
+    privateKey: Uint8Array;
+    keyDescription: string;
+    origin: string;
+    procedureId?: string;
+  }): Promise<PendingCertificateRequest> {
+    return this.lock.run(async () => {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(input.publicKeyHash)) throw invalid('Invalid key hash');
+      const privateKey = toBuffer(input.privateKey, 'The key');
+      const request = {
         id: randomUUID(),
-        kind: 'certificate',
-        label: cleanLabel(
-          input.label,
-          holder ? `Certificado de ${holder}` : DEFAULT_LABELS.certificate,
-        ),
-        policy: DEFAULT_CREDENTIAL_POLICY.certificate,
+        publicKeyHash: input.publicKeyHash,
+        privateKey: privateKey.toString('base64'),
+        keyDescription: String(input.keyDescription).slice(0, 40),
+        origin: String(input.origin).slice(0, 200),
+        ...(input.procedureId ? { procedureId: input.procedureId } : {}),
         createdAt: this.now().toISOString(),
-        fileName,
-        p12: imported.p12.toString('base64'),
-        passphrase: imported.passphrase,
-        keyDescription: imported.keyDescription,
-        certificate: imported.info,
       };
       await this.commit((draft) => {
-        draft.credentials.push(credential);
+        draft.certificateRequests.push(request);
       });
-      return summarize(credential);
+      return summarizeRequest(request);
+    });
+  }
+
+  /** The request's private key (PKCS#8 DER). Callers MUST have the user's consent first. */
+  async getCertificateRequestKey(id: string): Promise<Buffer> {
+    const request = this.state.certificateRequests.find((r) => r.id === id);
+    if (!request) throw notFound('Certificate request');
+    return Buffer.from(request.privateKey, 'base64');
+  }
+
+  /** Deletes a pending request and its key (after its certificate is stored, or on request). */
+  async deleteCertificateRequest(id: string): Promise<void> {
+    return this.lock.run(async () => {
+      if (!this.state.certificateRequests.some((r) => r.id === id)) {
+        throw notFound('Certificate request');
+      }
+      await this.commit((draft) => {
+        draft.certificateRequests = draft.certificateRequests.filter((r) => r.id !== id);
+      });
     });
   }
 

@@ -3,6 +3,8 @@ import type {
   AfirmaHandlerContext,
   BrowserObservation,
   BrowserTab,
+  FnmtCall,
+  FnmtReply,
 } from '@sa/shared';
 import type { Sidecar, SidecarIdentity } from '@sa/sidecar';
 import type { CaptureOptions } from './capture';
@@ -51,6 +53,16 @@ export interface BrowserServiceOptions {
     handler: AfirmaHandler;
     /** Per-call context factory (user approval, certificate retrieval). */
     context(procedureId: string): Omit<AfirmaHandlerContext, 'procedureId' | 'report'>;
+  };
+  /**
+   * Stand-in for FNMT's Configurador: certificate requests and installs from FNMT's pages
+   * (docs/research/fnmt.md). When omitted, pages get no shim.
+   */
+  fnmt?: {
+    /** In-page script (string) from @sa/signer (`FNMT_SHIM_SOURCE`), injected with addInitScript. */
+    shimSource: string;
+    /** Answers the page's requestCert / installCert: the user's consent, the key, the vault. */
+    handler(call: FnmtCall, procedureId: string): Promise<FnmtReply>;
   };
   /** Max snapshot size in characters (default 24000). */
   snapshotBudget?: number;

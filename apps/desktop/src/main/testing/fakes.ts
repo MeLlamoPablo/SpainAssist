@@ -27,6 +27,7 @@ import {
   DEFAULT_CREDENTIAL_POLICY,
   type DocumentMeta,
   maskValue,
+  type PendingCertificateRequest,
   type PersonalDataInput,
   type PersonalDataItem,
   type PersonalDataSource,
@@ -261,6 +262,74 @@ export class MemoryVault implements VaultPort {
     return summary;
   }
 
+  async addCertificateFromKey(input: {
+    privateKey: Uint8Array;
+    certificates: Uint8Array[];
+    fileName: string;
+    label?: string;
+  }): Promise<CredentialSummary> {
+    const leaf = input.certificates[0];
+    if (!leaf || input.privateKey.byteLength === 0) {
+      throw new VaultError('invalid_certificate', 'No certificate or key');
+    }
+    const fingerprint = createHash('sha256').update(leaf).digest('hex');
+    const existing = [...this.credentials.values()].find(
+      (c) => c.summary.certificate?.fingerprint === fingerprint,
+    );
+    if (existing) return existing.summary;
+    const summary = await this.addCertificate({
+      fileName: input.fileName,
+      p12: Buffer.from(leaf),
+      passphrase: 'from-key',
+      ...(input.label ? { label: input.label } : {}),
+    });
+    return summary;
+  }
+
+  readonly certificateRequests = new Map<
+    string,
+    { summary: PendingCertificateRequest; key: Buffer }
+  >();
+
+  listCertificateRequests(): PendingCertificateRequest[] {
+    return [...this.certificateRequests.values()].map((r) => r.summary);
+  }
+
+  findCertificateRequest(publicKeyHash: string): PendingCertificateRequest | undefined {
+    return this.listCertificateRequests().find((r) => r.publicKeyHash === publicKeyHash);
+  }
+
+  async addCertificateRequest(input: {
+    publicKeyHash: string;
+    privateKey: Uint8Array;
+    keyDescription: string;
+    origin: string;
+    procedureId?: string;
+  }): Promise<PendingCertificateRequest> {
+    const summary: PendingCertificateRequest = {
+      id: `r_${hex()}`,
+      publicKeyHash: input.publicKeyHash,
+      keyDescription: input.keyDescription,
+      origin: input.origin,
+      ...(input.procedureId ? { procedureId: input.procedureId } : {}),
+      createdAt: now(),
+    };
+    this.certificateRequests.set(summary.id, { summary, key: Buffer.from(input.privateKey) });
+    return summary;
+  }
+
+  async getCertificateRequestKey(id: string): Promise<Buffer> {
+    const r = this.certificateRequests.get(id);
+    if (!r) throw new VaultError('not_found', 'Certificate request not found');
+    return r.key;
+  }
+
+  async deleteCertificateRequest(id: string): Promise<void> {
+    if (!this.certificateRequests.delete(id)) {
+      throw new VaultError('not_found', 'Certificate request not found');
+    }
+  }
+
   async setCredentialPolicy(id: string, policy: CredentialPolicy): Promise<CredentialSummary> {
     const c = this.credentials.get(id);
     if (!c) throw new VaultError('not_found', 'Credential not found');
@@ -316,6 +385,7 @@ export class MemoryVault implements VaultPort {
     this.documents.clear();
     this.credentials.clear();
     this.secrets.clear();
+    this.certificateRequests.clear();
   }
 }
 

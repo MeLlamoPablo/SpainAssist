@@ -14,6 +14,11 @@ import {
   type AfirmaReply,
   type BrowserObservation,
   type BrowserTab,
+  FNMT_BINDING,
+  FNMT_ERROR,
+  FNMT_NOTICE,
+  type FnmtCall,
+  type FnmtReply,
   safeFileName,
 } from '@sa/shared';
 import {
@@ -57,6 +62,7 @@ import {
   certificateFailedNote,
   certificateRequestedNote,
   detectPageNotes,
+  fnmtPageNote,
 } from './notes';
 import { type RefMeta, renderSnapshot } from './snapshot';
 import type {
@@ -163,10 +169,12 @@ interface Session {
   loggedPageErrors: Set<string>;
   /** Origins whose AutoFirma note the agent already got. */
   afirmaOrigins: Set<string>;
+  /** Origins whose FNMT certificate request note the agent already got. */
+  fnmtOrigins: Set<string>;
   notes: string[];
   /** Downloads / inline PDF captures / certificate checks in progress. */
   pending: Set<Promise<unknown>>;
-  /** AutoFirma calls in progress (usually waiting for the user's approval). */
+  /** AutoFirma and FNMT calls in progress (usually waiting for the user's approval). */
   afirmaInFlight: Set<Promise<unknown>>;
   pdfHashes: Set<string>;
   pdfPages: WeakMap<Page, string>;
@@ -1072,6 +1080,7 @@ export class PlaywrightBrowserService implements BrowserService {
       }
     }
     await this.installAfirma(s, context);
+    await this.installFnmt(s, context);
     return context;
   }
 
@@ -1577,7 +1586,7 @@ export class PlaywrightBrowserService implements BrowserService {
       const done = await settleAll(s.afirmaInFlight, this.signatureWait);
       if (!done) {
         s.notes.push(
-          'A signature request is waiting for the user to approve it in the app. Wait (browser_wait) before continuing.',
+          'A signature or certificate request is waiting for the user to approve it in the app. Wait (browser_wait) before continuing.',
         );
         return;
       }
@@ -1935,6 +1944,97 @@ export class PlaywrightBrowserService implements BrowserService {
     return work;
   }
 
+  // =============================================================================================
+  // FNMT Configurador replacement (certificate requests)
+  // =============================================================================================
+
+  private async installFnmt(s: Session, context: BrowserContext): Promise<void> {
+    const fnmt = this.opts.fnmt;
+    if (!fnmt) return;
+    await context.exposeBinding(FNMT_BINDING, (source: { frame: Frame }, call: unknown) =>
+      this.onFnmtCall(s, source.frame, call),
+    );
+    await context.addInitScript({ content: fnmt.shimSource });
+  }
+
+  private onFnmtCall(s: Session, frame: Frame, raw: unknown): Promise<FnmtReply> {
+    const fnmt = this.opts.fnmt;
+    // origin/url come from the calling frame as seen by the browser, never from the page.
+    const url = effectiveFrameUrl(frame);
+    const origin = originOf(url);
+    const host = hostOf(url);
+    const parsed = parseAfirmaArgs(raw);
+    if (parsed?.method === FNMT_NOTICE) {
+      this.onFnmtNotice(s, url, parsed.args);
+      return Promise.resolve({ ok: true });
+    }
+    if (!fnmt || !parsed || (parsed.method !== 'requestCert' && parsed.method !== 'installCert')) {
+      return Promise.resolve({
+        ok: false,
+        errorType: 'java.lang.IllegalArgumentException',
+        errorMessage: 'Llamada no válida',
+      });
+    }
+    const call: FnmtCall = { method: parsed.method, args: parsed.args, origin, url };
+    const work = (async (): Promise<FnmtReply> => {
+      try {
+        const reply = await fnmt.handler(call, s.id);
+        if (reply.ok) {
+          this.log.info('FNMT call', { procedureId: s.id, method: call.method, host });
+          s.notes.push(
+            call.method === 'requestCert'
+              ? `The app generated the certificate request's key (kept in the user's vault) and gave the request to ${host || 'the page'}, which now sends it to FNMT. Continue with the page; FNMT emails the request code that the download needs.`
+              : `The certificate from ${host || 'the page'} is now in the user's vault as a digital certificate (Mis datos → Credenciales). The app can use it for certificate logins and signatures.`,
+          );
+        } else {
+          this.log.info('FNMT call failed', {
+            procedureId: s.id,
+            method: call.method,
+            host,
+            errorType: reply.errorType,
+            error: maskSecrets(reply.errorMessage.slice(0, 300), s.secretVariants),
+          });
+          s.notes.push(
+            reply.errorType === FNMT_ERROR.cancelled
+              ? `The user did not approve the certificate ${call.method === 'requestCert' ? 'request' : 'download'}. Ask whether they want to try again.`
+              : `The page's certificate ${call.method === 'requestCert' ? 'request' : 'download'} failed in the app: ${reply.errorMessage.slice(0, 200) || reply.errorType}.`,
+          );
+        }
+        return reply;
+      } catch (err) {
+        this.log.error('FNMT handler failed', {
+          procedureId: s.id,
+          method: call.method,
+          error: errorMessage(err),
+        });
+        s.notes.push(`The page's certificate ${call.method} failed in the app (internal error).`);
+        return { ok: false, errorType: FNMT_ERROR.generic, errorMessage: 'Error interno' };
+      }
+    })();
+    s.afirmaInFlight.add(work);
+    void work.finally(() => s.afirmaInFlight.delete(work)).catch(noop);
+    return work;
+  }
+
+  /** The FNMT shim's diagnostics (`FNMT_NOTICE`): never generates, never waits. */
+  private onFnmtNotice(s: Session, url: string, args: unknown[]): void {
+    const kind = args[0];
+    const detail = typeof args[1] === 'string' ? args[1].slice(0, 64) : '';
+    const origin = originOf(url);
+    const host = hostOf(url);
+    if (kind === 'loaded') {
+      this.log.info('FNMT certificate request page', { procedureId: s.id, host, version: detail });
+      if (s.fnmtOrigins.has(origin) || s.fnmtOrigins.size >= 50) return;
+      s.fnmtOrigins.add(origin);
+      s.notes.push(fnmtPageNote(host));
+    } else if (kind === 'ignored' && /^[A-Za-z_$][\w$]*$/.test(detail)) {
+      this.log.warn('FNMT method not implemented', { procedureId: s.id, host, method: detail });
+      s.notes.push(
+        `The page called FnmtCertRequest.${detail}, which the app's replacement for FNMT's Configurador does not implement; the call was ignored. If the page then gets stuck, tell the user this step is not supported yet.`,
+      );
+    }
+  }
+
   /** The shim's diagnostics (`AFIRMA_NOTICE`): never signs, never waits. */
   private onAfirmaNotice(s: Session, url: string, args: unknown[]): void {
     const kind = args[0];
@@ -2015,6 +2115,7 @@ function newSession(id: string): Session {
     pageErrors: [],
     loggedPageErrors: new Set(),
     afirmaOrigins: new Set(),
+    fnmtOrigins: new Set(),
     notes: [],
     pending: new Set(),
     afirmaInFlight: new Set(),

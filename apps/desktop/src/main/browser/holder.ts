@@ -10,6 +10,8 @@ import type {
   AfirmaSignatureSummary,
   CredentialSummary,
   DocumentMeta,
+  FnmtCall,
+  FnmtReply,
   Language,
   SigningKey,
 } from '@sa/shared';
@@ -49,6 +51,11 @@ export interface BrowserHolderDeps {
   events: EventBus;
   /** AutoFirma replacement; omitted (or empty shim) = no shim injected. */
   signer?: SignerLib;
+  /**
+   * FNMT certificate requests (`fnmt/broker.ts`), with the signer's `fnmtShimSource`; omitted =
+   * FNMT's pages get no shim.
+   */
+  certificateRequests?: (call: FnmtCall, procedureId: string) => Promise<FnmtReply>;
   /** DNI signatures and logins with the paired phone; absent without the feature flag. */
   companion?: CompanionService;
   /** fetch for triphase signing (Electron's net.fetch uses the OS trust store). */
@@ -76,8 +83,9 @@ function describeCertificate(c: CredentialSummary, lang: Language): string {
 /**
  * Owns the single BrowserService (created lazily, windows minimized until help is requested)
  * and its app-side hooks: downloads go to temporary downloads (until the agent saves them to
- * the vault with `saveDownload`), screenshots to the media store, and
- * AutoFirma signature requests to an approval prompt in the procedure's chat.
+ * the vault with `saveDownload`), screenshots to the media store,
+ * AutoFirma signature requests to an approval prompt in the procedure's chat, and FNMT
+ * certificate requests to `FnmtBroker`.
  */
 export class BrowserHolder {
   private service?: BrowserPort;
@@ -195,6 +203,14 @@ export class BrowserHolder {
                   this.approveSignature(procedureId, summary),
                 ...(deps.fetch ? { fetch: deps.fetch } : {}),
               }),
+            },
+          }
+        : {}),
+      ...(deps.signer?.fnmtShimSource && deps.certificateRequests
+        ? {
+            fnmt: {
+              shimSource: deps.signer.fnmtShimSource,
+              handler: deps.certificateRequests,
             },
           }
         : {}),

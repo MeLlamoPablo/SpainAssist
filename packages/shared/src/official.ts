@@ -289,3 +289,22 @@ export function credentialAllowedOn(kind: CredentialKind, url: string): boolean 
   if (extraTrustedSuffixes.some((s) => hostMatchesSuffix(parsed.hostname, s))) return true;
   return CREDENTIAL_ALLOWED_SUFFIXES[kind].some((s) => hostMatchesSuffix(parsed.hostname, s));
 }
+
+/** FNMT's sedes, the only sites that may ask the app for a certificate request (`fnmt.ts`). */
+export const FNMT_REQUEST_SUFFIXES: readonly string[] = ['fnmt.gob.es', 'fnmt.es'];
+
+/**
+ * True if the page at `url` may have the app make a key and certificate request, and install
+ * the certificate (https only; plus SA_EXTRA_TRUSTED_HOSTS in development and e2e tests).
+ */
+export function certificateRequestAllowedOn(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  if (extraTrustedSuffixes.some((s) => hostMatchesSuffix(parsed.hostname, s))) return true;
+  return FNMT_REQUEST_SUFFIXES.some((s) => hostMatchesSuffix(parsed.hostname, s));
+}

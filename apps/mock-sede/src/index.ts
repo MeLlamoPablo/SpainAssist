@@ -1,8 +1,8 @@
 /**
  * @sa/mock-sede — a fake Spanish "sede electrónica" for development, demos and e2e tests:
  * Cl@ve-like gateway (Permanente + SMS, Móvil, certificate), client-certificate login, a
- * procedure signed with an imitation of AutoFirma's autoscript.js (CAdES verified server-side)
- * and a cita previa flow. See README.md.
+ * procedure signed with an imitation of AutoFirma's autoscript.js (CAdES verified server-side),
+ * a cita previa flow and an FNMT-like certificate request and download. See README.md.
  */
 export {
   type CadesCheck,
@@ -12,6 +12,7 @@ export {
 } from './cades';
 export { type CertificateHolder, describeCertificate } from './certinfo';
 export type { MockSedeConfig } from './context';
+export { checkCertificateRequest, installCertData, issueFromRequest } from './fnmt-issuer';
 export {
   type ClientCa,
   createTestIdentity,
@@ -32,4 +33,10 @@ export {
   type SignatureReport,
   type SubmissionRecord,
 } from './state';
-export type { MockSedeTestApi, MovilInfo, SmsInfo, StateSnapshot } from './test-api';
+export type {
+  FnmtRequestInfo,
+  MockSedeTestApi,
+  MovilInfo,
+  SmsInfo,
+  StateSnapshot,
+} from './test-api';

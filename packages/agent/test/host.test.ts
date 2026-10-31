@@ -226,6 +226,13 @@ describe('DNI prompt', () => {
     expect(prompt).toContain('Signatures and AutoFirma logins are the app');
     expect(prompt).toContain('browser asks for a client certificate (TLS)');
   });
+
+  it("explains FNMT certificate requests only when the app replaces FNMT's Configurador", () => {
+    const on = buildSystemPrompt({ language: 'es', certificateRequests: true });
+    expect(on).toContain("the app replaces FNMT's Configurador");
+    expect(on).toContain('never in another browser or computer');
+    expect(buildSystemPrompt({ language: 'es' })).not.toContain('Configurador');
+  });
 });
 
 describe('identity prompt', () => {

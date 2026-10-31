@@ -53,6 +53,22 @@ interface StoredDnie extends CredentialBase {
 
 export type StoredCredential = StoredClave | StoredClaveMovil | StoredCertificate | StoredDnie;
 
+/**
+ * A key the app generated for an FNMT certificate request, kept until FNMT issues its
+ * certificate (days, after the identity check). Its only copy: losing it means a new request.
+ */
+export interface StoredCertificateRequest {
+  id: string;
+  /** base64url(SHA-256(DER SubjectPublicKeyInfo)): how the issued certificate finds it. */
+  publicKeyHash: string;
+  /** Unencrypted PKCS#8 DER (base64); the vault file is what encrypts it. */
+  privateKey: string;
+  keyDescription: string;
+  origin: string;
+  procedureId?: string;
+  createdAt: string;
+}
+
 interface StoredSecret {
   label: string;
   value: string;
@@ -67,6 +83,7 @@ export interface VaultState {
   documents: Map<string, DocumentMeta>;
   credentials: StoredCredential[];
   secrets: Map<string, StoredSecret>;
+  certificateRequests: StoredCertificateRequest[];
 }
 
 const credentialBase = {
@@ -125,6 +142,20 @@ const StateFile = z.object({
       updatedAt: z.string(),
     }),
   ),
+  /** Absent in files written before FNMT certificate requests. */
+  certificateRequests: z
+    .array(
+      z.object({
+        id: z.string(),
+        publicKeyHash: z.string(),
+        privateKey: z.string(),
+        keyDescription: z.string(),
+        origin: z.string(),
+        procedureId: z.string().optional(),
+        createdAt: z.string(),
+      }),
+    )
+    .default([]),
 });
 
 export function emptyState(now: string): VaultState {
@@ -134,6 +165,7 @@ export function emptyState(now: string): VaultState {
     documents: new Map(),
     credentials: [],
     secrets: new Map(),
+    certificateRequests: [],
   };
 }
 
@@ -144,6 +176,7 @@ export function cloneState(state: VaultState): VaultState {
     documents: new Map(state.documents),
     credentials: [...state.credentials],
     secrets: new Map(state.secrets),
+    certificateRequests: [...state.certificateRequests],
   };
 }
 
@@ -156,6 +189,7 @@ export function serializeState(state: VaultState): Buffer {
       documents: Object.fromEntries(state.documents),
       credentials: state.credentials,
       secrets: Object.fromEntries(state.secrets),
+      certificateRequests: state.certificateRequests,
     }),
     'utf8',
   );
@@ -174,5 +208,6 @@ export function parseState(json: Buffer): VaultState {
     documents: new Map(Object.entries(data.documents)),
     credentials: data.credentials,
     secrets: new Map(Object.entries(data.secrets)),
+    certificateRequests: data.certificateRequests,
   };
 }

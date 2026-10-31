@@ -4,12 +4,45 @@
 software certificate (`Certificado de Persona Física`), and what SpainAssist needs to do the same with
 the key kept in our vault.*
 
+## Status (2026-10-31)
+
+A first version of §7's design is built, in development builds and e2e only (packaged builds give
+FNMT's pages no shim yet). It has passed tests against the mock sede, but no real certificate has
+been issued with it yet (step 6 of §10, Appendix B).
+
+- **Built:**
+  - the shim (`packages/signer/src/shim/fnmt.ts`, binding `__saFnmt`);
+  - the PKCS#10 and certificate parsing (`packages/signer/src/certificate-request.ts`);
+  - the broker with its two consent prompts (`apps/desktop/src/main/fnmt/broker.ts`);
+  - pending keys as a vault record type (`certificateRequests`, `addCertificateFromKey`);
+  - the FNMT CAs (`apps/desktop/src/main/fnmt/fnmt-ca/`);
+  - the browser's notes for the agent and a line in the system prompt;
+  - the mock sede's FNMT-like flow (`/fnmt`) and an end-to-end test
+    (`apps/desktop/src/main/fnmt/fnmt.test.ts`).
+- **Different from §7:**
+  - the prompts reuse the `credential` confirmation card;
+  - the pending key is deleted once its credential is stored;
+  - a second install of an already stored certificate succeeds (a reload of the download page);
+  - `apuc20.sede.fnmt.gob.es` (the DNIe route) is a known certificate origin, since it asks for a
+    client certificate in the handshake.
+- **TEMPORARY:** a debug log of every call, key, request, certificate and reply, private keys in
+  clear, in `<userData>/fnmt-debug/` and outside "Borrar todo" (`fnmt/debug-log.ts`), so a run
+  that goes wrong can be repaired. Remove it, and lift the development-only gate, once real runs
+  have proven the flow.
+- **Not built yet:**
+  - the `.p12` backup (`exportCertificate`, §6.6);
+  - the warnings before "Borrar todo" or deleting a procedure destroys a pending key (§6.1);
+  - listing and discarding pending requests in Mis datos;
+  - `ping` (page 1.6.4 never sends it).
+- **Legal (§8):** deferred by decision on 2026-10-31. The app is open source and makes the user's
+  path easier. The DPC question is to be answered if it ever comes up, not before shipping.
+
 ## TL;DR
 
-- **Today SpainAssist can't get an FNMT certificate issued.** The agent could fill in FNMT's form,
-  but FNMT's page hands key generation to a local app, the *Configurador FNMT-RCM*, which we can't
-  drive. The user would have to finish the request in their normal browser, then import the `.p12`
-  in Mis datos → Credenciales.
+- **Before the stand-in, SpainAssist couldn't get an FNMT certificate issued.** The agent could
+  fill in FNMT's form, but FNMT's page hands key generation to a local app, the *Configurador
+  FNMT-RCM*, which we can't drive. The user had to finish the request in their normal browser,
+  then import the `.p12` in Mis datos → Credenciales.
 - **The Configurador is a small Java app with a narrow job** (§3). It:
   - makes an RSA 2048 key, or EC P-256 when the page asks for EC;
   - builds a PKCS#10 request whose subject is always the placeholder `CN=foo.bar.com`;
@@ -561,14 +594,14 @@ traffic.
 ## 10. Plan
 
 1. Decision record: page shim plus main-process broker; pending keys in the vault; chain from
-   bundled FNMT CAs; vault export.
-2. Mock-sede FNMT flow and e2e test (§6.13).
-3. Vault: pending-key record, `addCertificateFromKey`, `exportCertificate`, and wipe and delete
-   warnings.
-4. Broker and shim, with consent prompts.
-5. Agent guide.
+   bundled FNMT CAs; vault export. *Done: this memo's Status section.*
+2. Mock-sede FNMT flow and e2e test (§6.13). *Done.*
+3. Vault: pending-key record and `addCertificateFromKey` (*done*); `exportCertificate`, and wipe
+   and delete warnings (*to do*).
+4. Broker and shim, with consent prompts. *Done.*
+5. Agent guide. *Done: a line in the system prompt, plus the browser's notes.*
 6. One real end-to-end run by a person, with their own NIF, to close Appendix B. This must never be
-   automated.
+   automated. *Next: with the DNIe, in a development build with `SA_BROWSER_CAPTURE=1`.*
 
 ---
 

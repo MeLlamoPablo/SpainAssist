@@ -6,6 +6,7 @@ import { html } from './html';
 import { registerAfirmaRoutes } from './routes/afirma';
 import { registerCaptchaRoutes } from './routes/captcha';
 import { registerCitaRoutes } from './routes/cita';
+import { registerFnmtRoutes } from './routes/fnmt';
 import { registerGatewayRoutes } from './routes/gateway';
 import { registerGsedeRoutes } from './routes/gsede';
 import { registerResidenciaRoutes } from './routes/residencia';
@@ -28,6 +29,7 @@ export function createMainApp(
   registerCaptchaRoutes(app, ctx);
   registerAfirmaRoutes(app, ctx);
   registerGsedeRoutes(app, ctx);
+  registerFnmtRoutes(app, ctx);
 
   app.notFound((c) =>
     renderSede(

@@ -5,6 +5,7 @@ export * from './chat';
 export * from './companion';
 export * from './countries';
 export * from './file-name';
+export * from './fnmt';
 export * from './ipc';
 export * from './official';
 export * from './procedure';

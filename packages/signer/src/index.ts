@@ -11,6 +11,9 @@
  *    RSA or EC keys, through a `KeySigner`: a .p12 key in memory, or an external key (the DNIe
  *    in the paired phone).
  *  - readP12 / openP12: PKCS#12 reading (RSA + EC, legacy RC2/3DES).
+ *  - FNMT_SHIM_SOURCE / buildFnmtShimSource(): in-page stand-in for FNMT's Configurador
+ *    (`FnmtCertRequest`), forwarding certificate requests and installs to FNMT_BINDING; with
+ *    createCertificateRequest / parseIssuedCertificates / issuedCertificatePath for the broker.
  *
  * Plain Node library; no Electron imports.
  */
@@ -24,6 +27,15 @@ export {
   createCades,
 } from './cades';
 export { certificateInfo, parseHolder } from './certificate';
+export {
+  type CertificateRequest,
+  createCertificateRequest,
+  issuedCertificatePath,
+  parseIssuedCertificates,
+  publicKeyHash,
+  type RequestKeySpec,
+  requestKeySpec,
+} from './certificate-request';
 export { type CompleteChainOptions, completeChain } from './chain';
 export { AfirmaError, CANCELLED_TYPE, GENERIC_TYPE } from './errors';
 export { type ExtraParams, parseExtraParams, storeExtraParams } from './extra-params';
@@ -62,8 +74,15 @@ export {
   type AutoscriptShimHandle,
   type AutoscriptShimOptions,
   buildAutoscriptShimSource,
+  buildFnmtShimSource,
   DEFAULT_AUTOSCRIPT_VERSION,
+  DEFAULT_FNMT_VERSION,
+  FNMT_SHIM_SOURCE,
+  type FnmtShimConfig,
+  type FnmtShimHandle,
+  type FnmtShimOptions,
   installAutoscriptShim,
+  installFnmtShim,
 } from './shim';
 export { batchSign, type TriphaseOptions, triphaseSign } from './triphase';
 export { createXades, type XadesSignOptions, xadesVariant } from './xades';

@@ -1,7 +1,12 @@
 import * as agent from '@sa/agent';
 import { CERTIFICATE_ORIGINS, createBrowserService } from '@sa/browser';
 import * as pii from '@sa/pii';
-import { AUTOSCRIPT_SHIM_SOURCE, certificateInfo, createAfirmaHandler } from '@sa/signer';
+import {
+  AUTOSCRIPT_SHIM_SOURCE,
+  certificateInfo,
+  createAfirmaHandler,
+  FNMT_SHIM_SOURCE,
+} from '@sa/signer';
 import { createTestKeyProvider, type KeyProvider, Vault } from '@sa/vault';
 import type { Logger } from '../core/logger';
 import type {
@@ -50,6 +55,7 @@ export function signerLib(logger: Logger): SignerLib {
   return {
     shimSource: AUTOSCRIPT_SHIM_SOURCE,
     handler: createAfirmaHandler({ logger }),
+    fnmtShimSource: FNMT_SHIM_SOURCE,
     certificateInfo,
   };
 }

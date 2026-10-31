@@ -29,6 +29,8 @@ import type { Logger } from '../core/logger';
 import { type Clock, errorMessage, type IdFactory, newId, systemClock } from '../core/util';
 import type { CrlSetStore } from '../crlset/store';
 import { exportTranscripts } from '../export/transcripts';
+import { FnmtBroker } from '../fnmt/broker';
+import { createFnmtDebugLog } from '../fnmt/debug-log';
 import { registerIpcHandlers } from '../ipc/handlers';
 import { type IpcCallContext, IpcRouter } from '../ipc/router';
 import { MediaStore } from '../media/store';
@@ -157,6 +159,9 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const ids = deps.ids ?? newId;
   // In prerelease the DNIe's plumbing (pairing, relay, a saved DNIe) is there from launch, so the
   // user can save their DNIe without a restart; agents only offer it once it is saved.
+  // FNMT certificate requests: development builds and e2e only while the flow is new (its
+  // TEMPORARY debug log keeps private keys in clear, fnmt/debug-log.ts).
+  const certificateRequestsOn = deps.appInfo.isDev || env.e2e;
   const dnieStage = deps.appInfo.features.dniePhone;
   const dniePhone = dnieStage !== 'off';
   const dnieOffered = () =>
@@ -272,6 +277,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
             }
           : {}),
         dniePhone: dnieOffered(),
+        certificateRequests: certificateRequestsOn,
       };
     },
     hostScript: deps.hostScript,
@@ -374,6 +380,17 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         }
       : undefined;
   const crlSets = deps.crlSets;
+  const certificateRequests = certificateRequestsOn
+    ? new FnmtBroker({
+        vault: vaultFn,
+        prompts,
+        procedures,
+        events,
+        logger: logger.child('fnmt'),
+        lang,
+        debug: createFnmtDebugLog(join(paths.userData, 'fnmt-debug'), logger.child('fnmt')),
+      })
+    : undefined;
   const browser = new BrowserHolder({
     certificates,
     certificateLoginsAvailable: !deps.startSidecar || !!certificates,
@@ -391,6 +408,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     biometric: deps.biometric,
     events,
     ...(deps.signer ? { signer: deps.signer } : {}),
+    ...(certificateRequests ? { certificateRequests: certificateRequests.handle } : {}),
     ...(companion ? { companion } : {}),
     ...(deps.signerFetch ? { fetch: deps.signerFetch } : {}),
     logger: logger.child('browser'),

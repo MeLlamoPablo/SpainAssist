@@ -1,7 +1,8 @@
 # @sa/signer
 
-AutoFirma replacement for a Playwright browser and a Node signing broker. No Electron imports.
-RSA and ECDSA certificates work throughout PKCS#12 import and all local signing formats.
+AutoFirma replacement for a Playwright browser and a Node signing broker, plus a stand-in for
+FNMT's Configurador (certificate requests). No Electron imports. RSA and ECDSA certificates work
+throughout PKCS#12 import and all local signing formats.
 
 ## Formats
 
@@ -87,6 +88,24 @@ gives Node KeyObjects and the DER chain. Modern AES and legacy RC2/3DES containe
 normalization emits AES-256 PBES2 usable by Node TLS and Playwright. node-forge handles legacy
 primitives while Node crypto handles EC keys. `parseExtraParams` follows Java Properties
 comments, continuation lines and character escapes.
+
+## FNMT certificate requests
+
+FNMT's sede hands key generation to its Configurador through `FnmtCertRequest`
+(docs/research/fnmt.md). `FNMT_SHIM_SOURCE` traps that global the same way as AutoScript and
+forwards `requestCert` and `installCert` to `FNMT_BINDING` (`__saFnmt`) as an `FnmtCall`; a
+smart-card request (`forceCard`) fails in the page. The rest is plain Node, for the app's broker:
+
+- `requestKeySpec(keyType, keyLength)` reads the page's arguments as the Configurador does;
+  `createCertificateRequest(spec)` makes the key pair and its PKCS#10 (subject `CN=foo.bar.com`,
+  no attributes, SHA-256, no parameters in the signature algorithm) and the public key hash that
+  pairs it with its certificate later (`publicKeyHash`).
+- `parseIssuedCertificates(data)` reads what the download page passes to `installCert`
+  (base64 or base64url, maybe gzipped, PKCS#7 or a bare certificate);
+  `issuedCertificatePath(leaf, bundle, authorities)` builds the leaf's path from shipped CAs
+  first.
+
+`@sa/browser` installs the shim when its `fnmt` option is set.
 
 ## Consent and secrets
 

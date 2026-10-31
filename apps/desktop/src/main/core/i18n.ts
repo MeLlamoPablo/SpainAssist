@@ -142,6 +142,40 @@ const STRINGS = {
   touchIdCertificate: { es: 'usar tu certificado digital', en: 'use your digital certificate' },
   touchIdSignature: { es: 'firmar un documento', en: 'sign a document' },
 
+  // --- FNMT certificate requests (the app replaces FNMT's Configurador) -----------------------
+  certificateRequestTitle: {
+    es: '¿Solicitar tu certificado digital?',
+    en: 'Request your digital certificate?',
+  },
+  certificateRequestMessage: {
+    es: '{host} va a pedir a la FNMT un certificado digital a tu nombre. La app crea ahora tu clave y la guarda en Mis datos hasta que descargues el certificado. No hace falta instalar el Configurador FNMT ni crear una contraseña.',
+    en: "{host} will ask FNMT for a digital certificate in your name. The app creates your key now and keeps it in My data until you download the certificate. You don't need FNMT's Configurador or a password.",
+  },
+  detailKey: { es: 'Clave', en: 'Key' },
+  requestLabel: { es: 'Solicitar', en: 'Request' },
+  dontRequestLabel: { es: 'No solicitar', en: "Don't request" },
+  certificateRequested: {
+    es: 'Clave creada y guardada en Mis datos. La FNMT te enviará por correo el código de solicitud, que hace falta para descargar el certificado.',
+    en: 'Key created and kept in My data. FNMT will email you the request code, which you need to download the certificate.',
+  },
+  certificateInstallTitle: {
+    es: '¿Guardar tu certificado digital?',
+    en: 'Save your digital certificate?',
+  },
+  certificateInstallMessage: {
+    es: '{host} te entrega tu certificado digital. La app lo guardará en Mis datos, junto a la clave que creó al solicitarlo, para identificarte y firmar.',
+    en: '{host} is giving you your digital certificate. The app will save it in My data, with the key it created when you requested it, to identify you and sign.',
+  },
+  detailHolder: { es: 'Titular', en: 'Holder' },
+  detailIssuer: { es: 'Emisor', en: 'Issuer' },
+  detailValidTo: { es: 'Válido hasta', en: 'Valid until' },
+  saveLabel: { es: 'Guardar', en: 'Save' },
+  dontSaveLabel: { es: 'No guardar', en: "Don't save" },
+  certificateInstalled: {
+    es: 'Certificado digital guardado en Mis datos: {label}.',
+    en: 'Digital certificate saved in My data: {label}.',
+  },
+
   // --- DNI in the phone ---------------------------------------------------------------------
   dnieOption: { es: 'DNI con el móvil', en: 'DNI with your phone' },
   dnieOptionHolder: {

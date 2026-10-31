@@ -530,8 +530,12 @@ validation.
 - `ws235.juntadeandalucia.es`: Junta de Andalucía's certificate login (ClicSalud+'s "Certificado
   digital o DNIe" goes to `/authenticationFacade?action=validateCert`), TLS 1.2, seen live on
   2026-10-20. The request is optional: the handshake completes without a certificate.
+- `apuc20.sede.fnmt.gob.es`: FNMT's certificate-authenticated sede, where a DNIe holder requests
+  an FNMT certificate (its accepted CAs include AC RAIZ DNIE and AC RAIZ FNMT-RCM), seen live on
+  2026-10-31. The request and download pages without a certificate are on `apus20`, which doesn't
+  ask.
 
-**No certificate request during the handshake** on: `pasarela.clave.gob.es`, `se-pasarela.clave.gob.es`, `clave-dninbrt.seg-social.gob.es`, `sede.agenciatributaria.gob.es`, AEAT `www2/www3/www6/www9/www11/www12`, `sede.seg-social.gob.es`, `portal.seg-social.gob.es`, `sede-tu.seg-social.gob.es`, `w6/w7.seg-social.es`, `sede.dgt.gob.es`, `sedeapl.dgt.gob.es`, `sedeclave.dgt.gob.es`, `sede.sepe.gob.es`, `citaprevia-sede.sepe.gob.es`, `www1.sedecatastro.gob.es`, `www.sedecatastro.gob.es`, `carpetaciudadana.gob.es`, `rec.redsara.es`, `dehu.redsara.es`, `valide.redsara.es`, `sede.administracion.gob.es`, `sede.administracionespublicas.gob.es`, `sede.mjusticia.gob.es`, `sede.policia.gob.es`, `www.sede.fnmt.gob.es`, `www.cert.fnmt.es`, `sede.madrid.es`, `servpub.madrid.es`, `valid.aoc.cat`, `sede.registradores.org`.
+**No certificate request during the handshake** on: `pasarela.clave.gob.es`, `se-pasarela.clave.gob.es`, `clave-dninbrt.seg-social.gob.es`, `sede.agenciatributaria.gob.es`, AEAT `www2/www3/www6/www9/www11/www12`, `sede.seg-social.gob.es`, `portal.seg-social.gob.es`, `sede-tu.seg-social.gob.es`, `w6/w7.seg-social.es`, `sede.dgt.gob.es`, `sedeapl.dgt.gob.es`, `sedeclave.dgt.gob.es`, `sede.sepe.gob.es`, `citaprevia-sede.sepe.gob.es`, `www1.sedecatastro.gob.es`, `www.sedecatastro.gob.es`, `carpetaciudadana.gob.es`, `rec.redsara.es`, `dehu.redsara.es`, `valide.redsara.es`, `sede.administracion.gob.es`, `sede.administracionespublicas.gob.es`, `sede.mjusticia.gob.es`, `sede.policia.gob.es`, `www.sede.fnmt.gob.es`, `apus20.sede.fnmt.gob.es` (2026-10-31), `www.cert.fnmt.es`, `sede.madrid.es`, `servpub.madrid.es`, `valid.aoc.cat`, `sede.registradores.org`.
 
 Caveats:
 - A handshake probe **cannot see renegotiation-based requests**. TLS-1.2-only hosts such as `www1.sedecatastro.gob.es` or `sede.registradores.org` may ask on specific paths (UNVERIFIED).

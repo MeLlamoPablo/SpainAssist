@@ -1,4 +1,4 @@
-/** Static files under public/ (CSS, page scripts and the imitation autoscript.js). */
+/** Static files under public/ (CSS, page scripts, the imitation autoscript.js and fnmtcertrq.js). */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { MockSedeConfig } from './context';
@@ -15,6 +15,9 @@ const FILES: Record<string, string> = {
   '/js/sede.js': 'text/javascript; charset=utf-8',
   '/js/tramite-firma.js': 'text/javascript; charset=utf-8',
   '/js/autoscript.js': 'text/javascript; charset=utf-8',
+  '/js/fnmtcertrq.js': 'text/javascript; charset=utf-8',
+  '/js/fnmt-solicitud.js': 'text/javascript; charset=utf-8',
+  '/js/fnmt-descarga.js': 'text/javascript; charset=utf-8',
 };
 
 /**

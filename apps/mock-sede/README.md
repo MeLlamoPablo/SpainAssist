@@ -36,6 +36,14 @@ All committed certificates and CA private keys are disposable test material.
   `/service/<JSESSIONID>` servlets). Its BatchPresigner/BatchPostsigner build a real CAdES; the
   login verifies it against the mock client CA and opens a certificate session
   (`/gsede/carpeta`).
+- **FNMT-like certificate** (`/fnmt`): the request form (`/fnmt/solicitud`) calls
+  `FnmtCertRequest.requestCert` from an imitation of FNMT's `fnmtcertrq.js` and posts the
+  PKCS#10, which the sede verifies and registers under a 9-digit request code (shown, and
+  "emailed"). After the identity check (`POST /__test/fnmt/accredit`, or `sede.test.accreditFnmt`),
+  the download (`/fnmt/descarga`: document, first surname, code) issues a certificate for the
+  request's key from the mock client CA and hands it to `FnmtCertRequest.installCert` as a
+  gzipped base64url PKCS#7. Without the app's FNMT shim, the imitation fails after 3 s as FNMT's
+  page does without the Configurador.
 - **The gateway**: Cl@ve Permanente with a substantial-level SMS, Cl@ve Móvil QR approval and
   certificate login, including a realistic missing-certificate error. No physical phone or
   AutoFirma is needed.
@@ -54,8 +62,9 @@ before navigation for a successful signature. Sessions and submissions live in m
 - Configure the sidecar for exactly `certUrl` with `roots: [caCertPem]`. Pin the mock server's
   SPKI for tunnelled requests in the test browser; do not disable upstream HTTPS verification.
 - `createTestIdentity` creates FNMT-style identities, including legacy PKCS#12 variants.
-- Test controls: `GET /__test/state`, `/sms`, `/submissions`; `POST /__test/approve-movil`,
-  `/solve-captcha`, `/reset`, `/advance-time`, `/users`, `/expire-sessions`. The same methods
+- Test controls: `GET /__test/state`, `/sms`, `/submissions`, `/fnmt`; `POST
+  /__test/approve-movil`, `/solve-captcha`, `/reset`, `/advance-time`, `/users`,
+  `/expire-sessions`, `/fnmt/accredit`. The same methods
   are on `sede.test`. Turn the HTTP controls off with `MOCK_SEDE_TEST_API=0` or
   `testApi: false`.
 

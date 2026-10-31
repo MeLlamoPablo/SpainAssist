@@ -236,6 +236,24 @@ export interface AppointmentRecord {
   createdAt: string;
 }
 
+/** An FNMT-like certificate request (`routes/fnmt.ts`), by request code. */
+export interface FnmtRequestRecord {
+  /** 9 digits, "emailed" to the requester. */
+  code: string;
+  dni: string;
+  surname1: string;
+  email: string;
+  /** DER SubjectPublicKeyInfo of the request's key. */
+  spki: Buffer;
+  publicKeyHash: string;
+  createdAt: number;
+  /** The identity check (an office, video or DNIe) passed: the certificate can be downloaded. */
+  accredited: boolean;
+  /** Issued at the first download, then handed out again on later ones. */
+  certificate?: Buffer;
+  downloads: number;
+}
+
 export function randomId(bytes = 12): string {
   return randomBytes(bytes).toString('base64url');
 }
@@ -271,6 +289,7 @@ export class MockSedeState {
   gsedePresigns = new Map<string, GsedePresign>();
   submissions: SubmissionRecord[] = [];
   appointments: AppointmentRecord[] = [];
+  fnmtRequests = new Map<string, FnmtRequestRecord>();
   private registrationSeq = 0;
 
   constructor(private readonly initialUsers: ClaveUser[]) {
@@ -296,6 +315,7 @@ export class MockSedeState {
     this.gsedePresigns.clear();
     this.submissions = [];
     this.appointments = [];
+    this.fnmtRequests.clear();
     this.registrationSeq = 0;
   }
 

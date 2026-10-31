@@ -149,6 +149,7 @@ export async function runHost(
           research: promptResearch(research),
           feedback: config.feedback,
           dniePhone: config.dniePhone,
+          certificateRequests: config.certificateRequests,
         });
   // Voucher keys: LiteLLM reports the key's spend on every call; the app shows it live.
   const onProviderResponse =

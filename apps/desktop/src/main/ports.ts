@@ -48,6 +48,12 @@ export type VaultPort = Pick<
   | 'setDnieCertificate'
   | 'setDniePin'
   | 'addCertificate'
+  | 'addCertificateFromKey'
+  | 'listCertificateRequests'
+  | 'findCertificateRequest'
+  | 'addCertificateRequest'
+  | 'getCertificateRequestKey'
+  | 'deleteCertificateRequest'
   | 'setCredentialPolicy'
   | 'getCredentialSecret'
   | 'markCredentialUsed'
@@ -136,6 +142,8 @@ export interface PiiLib {
 export interface SignerLib {
   shimSource: string;
   handler: AfirmaHandler;
+  /** The in-page stand-in for FNMT's Configurador (`FNMT_SHIM_SOURCE`). */
+  fnmtShimSource?: string;
   /** Details of a DER certificate (the DNIe's, read by the phone). */
   certificateInfo(der: Uint8Array): CertificateInfo;
 }

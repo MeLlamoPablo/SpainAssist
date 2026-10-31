@@ -18,8 +18,8 @@ See `src/types.ts` for the complete API and options.
 
 ## Observations and actions
 
-- Observations include tabs, downloads, dialogs, page script errors, signatures, AutoFirma and
-  certificate/CAPTCHA hints, and budgeted accessibility snapshots.
+- Observations include tabs, downloads, dialogs, page script errors, signatures, AutoFirma, FNMT
+  and certificate/CAPTCHA hints, and budgeted accessibility snapshots.
 - Actions settle with a bounded network heuristic; stale refs require a fresh snapshot. Popups
   become the active page automatically.
 - `onDownload` must copy the staged file before returning its document descriptor: the staging
@@ -55,7 +55,10 @@ connect directly and certificate logins fail clearly. `ignoreHTTPSErrors` is for
 sedes only.
 
 `afirma` injects the `@sa/signer` shim into every frame and binds calls to a trusted handler;
-origin and URL come from the invoking frame rather than page arguments.
+origin and URL come from the invoking frame rather than page arguments. `fnmt` does the same for
+FNMT's certificate requests (`FNMT_SHIM_SOURCE`, `FNMT_BINDING`): the agent gets a note on
+FNMT's pages and after each request or download, and actions wait for the user's approval as
+they do for signatures.
 
 ## Revoked certificates
 

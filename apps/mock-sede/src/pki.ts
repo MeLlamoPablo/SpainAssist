@@ -145,6 +145,19 @@ export interface LeafOptions {
 /** Issues an end-entity certificate signed by `issuer`. */
 export function issueLeaf(opts: LeafOptions): CertAndKey {
   const { key, publicKey, keyPem } = newRsaKey();
+  return finish(buildLeaf(opts, publicKey), key, keyPem);
+}
+
+/** Issues an end-entity certificate for someone else's RSA key (an FNMT-like request). */
+export function issueLeafForKey(opts: LeafOptions & { publicKeyPem: string }): {
+  certPem: string;
+  certDer: Buffer;
+} {
+  const cert = buildLeaf(opts, pki.publicKeyFromPem(opts.publicKeyPem) as forge.pki.rsa.PublicKey);
+  return { certPem: certToPem(cert), certDer: certToDer(cert) };
+}
+
+function buildLeaf(opts: LeafOptions, publicKey: forge.pki.rsa.PublicKey): forge.pki.Certificate {
   const cert = pki.createCertificate();
   cert.publicKey = publicKey;
   cert.serialNumber = randomSerialHex();
@@ -193,7 +206,7 @@ export function issueLeaf(opts: LeafOptions): CertAndKey {
   }
   cert.setExtensions(extensions as forge.pki.CertificateField[]);
   cert.sign(opts.issuer.key, forge.md.sha256.create());
-  return finish(cert, key, keyPem);
+  return cert;
 }
 
 /** TLS server PKI for the sede: a throwaway root plus a leaf for localhost / 127.0.0.1 / ::1. */
