@@ -254,6 +254,13 @@ describe('saved data and physical-place prompts', () => {
     expect(assistant).toContain('do not prescribe redundant location forms');
   });
 
+  it('has the assistant speak as one assistant, never of agents', () => {
+    const assistant = buildAssistantPrompt({ language: 'es' });
+    expect(assistant).toContain('To the user there is only you');
+    expect(assistant).toContain('Never mention agents');
+    expect(assistant).toContain('Starting a procedure is you getting to work, not a fallback');
+  });
+
   it('teaches the assistant only app links the app opens', () => {
     const assistant = buildAssistantPrompt({ language: 'es' });
     const links = [...assistant.matchAll(/\((sa:[^)\s]+)\)/g)].map((m) => m[1]);
