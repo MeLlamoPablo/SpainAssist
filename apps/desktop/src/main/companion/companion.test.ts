@@ -31,7 +31,7 @@ const summary: AfirmaSignatureSummary = {
   format: 'CAdES',
   algorithm: 'SHA256withRSA',
   origin: 'https://sede.example.gob.es',
-  description: 'Firmar un texto (19 bytes) en formato CAdES.',
+  description: 'Firmar un texto (19 bytes).',
   dataSize: DOCUMENT.length,
   documents: [{ mimeType: 'text/plain', data: DOCUMENT }],
   verifiable: true,

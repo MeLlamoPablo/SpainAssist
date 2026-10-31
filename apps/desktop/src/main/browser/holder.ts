@@ -331,10 +331,6 @@ export class BrowserHolder {
     const details: { label: string; value: string }[] = [
       { label: t(lang, 'detailWhat'), value: summary.description.slice(0, 500) },
       { label: t(lang, 'detailFor'), value: host },
-      {
-        label: t(lang, 'detailFormat'),
-        value: `${summary.format} · ${summary.algorithm}`.slice(0, 500),
-      },
     ];
     if (summary.dataSize !== undefined)
       details.push({ label: t(lang, 'detailSize'), value: formatBytes(summary.dataSize) });

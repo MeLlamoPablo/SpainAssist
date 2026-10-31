@@ -548,18 +548,17 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
 
     // Summary for the human
     const subjectBytes = (cop === 'sign' ? data : signature) as Buffer;
-    const formatLabel = triphase ? `${family} (trifásica)` : xadesVariantLabel(family, effective);
     const lines: string[] = [];
     if (cop === 'sign') {
       lines.push(
-        `Firmar ${fileName ? `el fichero «${fileName}»` : whatIsIt(subjectBytes)} (${humanSize(subjectBytes.length)}) en formato ${formatLabel}.`,
+        `Firmar ${fileName ? `el fichero «${fileName}»` : whatIsIt(subjectBytes)} (${humanSize(subjectBytes.length)}).`,
       );
       const preview = textPreview(subjectBytes);
       if (preview) lines.push(`Contenido: «${preview}»`);
     } else if (cop === 'cosign') {
-      lines.push(`Añadir tu firma a un documento ya firmado (cofirma ${formatLabel}).`);
+      lines.push('Añadir tu firma a un documento ya firmado.');
     } else {
-      lines.push(`Refrendar con tu firma las firmas existentes (contrafirma ${formatLabel}).`);
+      lines.push('Refrendar con tu firma las firmas existentes.');
     }
     if (effective.policyIdentifier || params.expPolicy) {
       lines.push('Con la política de firma de la Administración General del Estado.');
@@ -804,7 +803,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       algorithm: batchAlgorithm,
       origin: call.origin,
       description: [
-        `Firmar un lote de ${n} ${n === 1 ? 'documento' : 'documentos'} en formato ${batch.format}.`,
+        `Firmar un lote de ${n} ${n === 1 ? 'documento' : 'documentos'}.`,
         local
           ? 'Cada documento se firma en este equipo.'
           : 'El servidor del sitio prepara las firmas y tu certificado firma un resumen de cada documento.',
@@ -854,7 +853,6 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     checkAlgorithm(batch.algorithm);
     const n = batch.signs.length;
     const formats = [...new Set(batch.signs.map((s) => s.format).filter(Boolean))].join(', ');
-    const inFormat = formats ? ` en formato ${formats}` : '';
     const { identity } = await approve(ctx, {
       method: call.method,
       format: formats,
@@ -862,10 +860,10 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       origin: call.origin,
       description: [
         n > 1
-          ? `Firmar un lote de ${n} documentos${inFormat}.`
+          ? `Firmar un lote de ${n} documentos.`
           : (batch.signs[0]?.dataSize ?? Number.POSITIVE_INFINITY) <= 128
-            ? `Firmar un código corto del sitio${inFormat} (normalmente, para identificarte).`
-            : `Firmar un documento${inFormat}.`,
+            ? 'Firmar un código corto del sitio (normalmente, para identificarte).'
+            : 'Firmar un documento.',
         'El servidor del sitio prepara las firmas y tu certificado firma un resumen de cada documento. No se puede mostrar el contenido exacto.',
         `Lo pide ${call.origin}.`,
       ].join('\n'),
@@ -1138,14 +1136,6 @@ const SIGNATURE_METHODS = new Set([
 
 function isSignatureMethod(method: string): boolean {
   return SIGNATURE_METHODS.has(method);
-}
-
-function xadesVariantLabel(family: FormatFamily, params: ExtraParams): string {
-  if (family !== 'XAdES') return family;
-  return params.format &&
-    /^XAdES (Detached|Enveloped|Enveloping|Externally Detached)$/.test(params.format)
-    ? params.format
-    : 'XAdES Enveloping';
 }
 
 /** Default handler (no file chooser or save hooks). */

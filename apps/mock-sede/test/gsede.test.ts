@@ -111,7 +111,7 @@ describe('gsede AutoFirma login (XML signBatch)', () => {
         signatures: 1,
         verifiable: false,
         description: expect.stringContaining(
-          'Firmar un código corto del sitio en formato CAdES (normalmente, para identificarte).',
+          'Firmar un código corto del sitio (normalmente, para identificarte).',
         ),
       }),
     ]);

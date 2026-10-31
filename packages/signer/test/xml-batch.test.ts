@@ -229,7 +229,7 @@ describe('XML batch (signBatch) in the handler', () => {
         signatures: 2,
         verifiable: false,
         documents: [],
-        description: expect.stringContaining('Firmar un lote de 2 documentos en formato CAdES.'),
+        description: expect.stringContaining('Firmar un lote de 2 documentos.'),
       }),
     );
     expect(ctx.report).toHaveBeenCalledWith({

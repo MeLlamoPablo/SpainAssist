@@ -319,11 +319,6 @@ export class CompanionService {
         : []),
       { label: t(lang, 'detailFor'), value: login?.site ?? host },
     ];
-    if (summary.format)
-      details.push({
-        label: t(lang, 'detailFormat'),
-        value: `${summary.format} · ${summary.algorithm}`.slice(0, 500),
-      });
     if (summary.dataSize !== undefined && purpose === 'document' && !summary.signatures)
       details.push({ label: t(lang, 'detailSize'), value: formatBytes(summary.dataSize) });
     // Reading the certificate needs no PIN.

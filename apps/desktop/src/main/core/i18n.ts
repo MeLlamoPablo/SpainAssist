@@ -116,7 +116,6 @@ const STRINGS = {
   },
   detailWhat: { es: 'Qué', en: 'What' },
   detailFor: { es: 'Para', en: 'For' },
-  detailFormat: { es: 'Formato', en: 'Format' },
   detailSize: { es: 'Tamaño', en: 'Size' },
   detailHash: { es: 'Huella (SHA-256)', en: 'Fingerprint (SHA-256)' },
   signLabel: { es: 'Firmar', en: 'Sign' },
