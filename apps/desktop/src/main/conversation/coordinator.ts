@@ -41,7 +41,7 @@ export interface CoordinatorDeps {
  *   - down: the assistant's `procedures.start` / `procedures.message` / `procedures.cancel`;
  *   - up: when a procedure's agent finishes a run, a short report (card status + its last
  *     message, clipped) is queued to the assistant, and shown in the chat as a compact row.
- * Procedure agents ask the user directly; the coordinator can abort obsolete requests on resume.
+ * Procedure agents ask the user directly; an urgent message cancels the requests it made obsolete.
  */
 export class Coordinator {
   private readonly deliveries = new Set<Promise<void>>();
@@ -55,16 +55,14 @@ export class Coordinator {
     return procedure;
   }
 
-  /** Passes a message to a procedure's agent. Queued if it is busy. */
-  message(procedureId: string, text: string): Promise<'started' | 'queued'> {
+  /**
+   * Passes a message to a procedure's agent. Queued until its current run finishes; `urgent`
+   * (a correction) reaches the run after its current tool calls and cancels its pending prompts.
+   * Never aborts: the run keeps what it has done.
+   */
+  message(procedureId: string, text: string, urgent = false): Promise<'started' | 'queued'> {
     this.deps.procedures.require(procedureId);
-    return this.dispatch(procedureId, text);
-  }
-
-  /** Abort the old run and pending requests, then start with the user's change of plan. */
-  resume(procedureId: string, text: string): Promise<'started' | 'queued'> {
-    this.deps.procedures.require(procedureId);
-    return this.dispatch(procedureId, text, { restart: true });
+    return this.dispatch(procedureId, text, urgent ? { cancelPrompts: true } : undefined);
   }
 
   /** Stops a procedure's agent and marks it cancelled. False if it was already over. */

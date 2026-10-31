@@ -69,14 +69,14 @@ export function resumedAfterLogin(fixtureId: string): ScenarioInput {
       when: {
         ...ORCHESTRATOR,
         lastUser: '^Sigue donde lo dejaste',
-        toolCalled: [started, { name: 'procedure_resume', atMost: 0 }],
+        toolCalled: [started, { name: 'procedure_message', atMost: 0 }],
       },
       reply: {
         toolCalls: [
           { id: 'read', name: 'procedure_read', arguments: { procedureId: '{{pid}}' } },
           {
             id: 'resume',
-            name: 'procedure_resume',
+            name: 'procedure_message',
             arguments: {
               procedureId: '{{pid}}',
               message: 'El usuario quiere que sigas con la descarga de su vida laboral.',
@@ -87,7 +87,7 @@ export function resumedAfterLogin(fixtureId: string): ScenarioInput {
     },
     {
       id: 'assistant-says-resumed',
-      when: { ...ORCHESTRATOR, lastTool: 'procedure_resume' },
+      when: { ...ORCHESTRATOR, lastTool: 'procedure_message' },
       reply: { text: 'Retomo la descarga. Te aviso en cuanto esté.' },
     },
   ];

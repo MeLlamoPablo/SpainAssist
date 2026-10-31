@@ -163,8 +163,6 @@ export function activityLabel(
         text: es ? 'Repasando tus trámites' : 'Reviewing your procedures',
         icon: ClipboardList,
       };
-    case 'procedure_resume':
-      return { text: es ? 'Retomando el trámite' : 'Resuming the procedure', icon: Rocket };
     case 'procedure_respond':
       return {
         text: es ? 'Pasando tu respuesta al trámite' : 'Passing your answer to the procedure',

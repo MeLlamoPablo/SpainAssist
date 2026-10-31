@@ -271,6 +271,11 @@ export class PromptManager {
     }
   }
 
+  /** Cancels these prompts if still pending (a correction made them obsolete). */
+  cancel(itemIds: readonly string[]): void {
+    for (const id of itemIds) this.finishCancelled(id);
+  }
+
   cancelEverything(): void {
     for (const id of [...this.pending.keys()]) this.finishCancelled(id);
   }

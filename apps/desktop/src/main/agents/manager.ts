@@ -38,8 +38,12 @@ export interface AgentManagerDeps {
 }
 
 export interface SendOptions {
-  /** Abort the old run and its pending prompts before starting with the coordinator's update. */
-  restart?: boolean;
+  /**
+   * Cancel the agent's pending prompts once the message is delivered (a correction makes them
+   * obsolete). Delivered first, so the blocked tool's run reads it before its next model call;
+   * prompts asked after it are kept.
+   */
+  cancelPrompts?: boolean;
   /**
    * While the agent is running, queue the message until it finishes what it is doing instead of
    * steering it right away (reports to the assistant, news for a procedure's agent).
@@ -92,7 +96,8 @@ export class AgentManager {
   /**
    * Delivers a message: `prompt` when idle; while a run is in progress, `steer` (or `followUp`
    * with `opts.followUp`). The client's own state decides (pi answers "already processing" if a
-   * run started meanwhile: then steer / follow up). Resolves with what happened.
+   * run started meanwhile: then steer / follow up). With `opts.cancelPrompts`, then cancels the
+   * prompts that were pending before it. Resolves with what happened.
    */
   send(
     agentId: string,
@@ -101,27 +106,43 @@ export class AgentManager {
     opts: SendOptions = {},
   ): Promise<'started' | 'queued'> {
     return this.queue.run(agentId, async () => {
-      if (opts.restart) await this.abort(agentId);
-      const agent = await this.ensure(agentId);
-      this.clearIdle(agent);
-      const queue = () => (opts.followUp ? agent.client.followUp(text) : agent.client.steer(text));
-      if (agent.client.running) {
+      const obsolete = opts.cancelPrompts
+        ? this.deps.prompts
+            .pendingItems()
+            .filter((p) => p.owner === agentId)
+            .map((p) => p.item.id)
+        : [];
+      const delivered = await this.deliver(agentId, text, images, opts);
+      this.deps.prompts.cancel(obsolete);
+      return delivered;
+    });
+  }
+
+  private async deliver(
+    agentId: string,
+    text: string,
+    images: PromptImage[] | undefined,
+    opts: SendOptions,
+  ): Promise<'started' | 'queued'> {
+    const agent = await this.ensure(agentId);
+    this.clearIdle(agent);
+    const queue = () => (opts.followUp ? agent.client.followUp(text) : agent.client.steer(text));
+    if (agent.client.running) {
+      return (await queue()) === 'queued' ? 'queued' : 'started';
+    }
+    agent.busy = true;
+    agent.sink.setRunning(true);
+    try {
+      return (await agent.client.prompt(text, images)) === 'queued' ? 'queued' : 'started';
+    } catch (err) {
+      if (/already processing|streamingBehavior/i.test(errorMessage(err))) {
         return (await queue()) === 'queued' ? 'queued' : 'started';
       }
-      agent.busy = true;
-      agent.sink.setRunning(true);
-      try {
-        return (await agent.client.prompt(text, images)) === 'queued' ? 'queued' : 'started';
-      } catch (err) {
-        if (/already processing|streamingBehavior/i.test(errorMessage(err))) {
-          return (await queue()) === 'queued' ? 'queued' : 'started';
-        }
-        agent.busy = false;
-        agent.sink.setRunning(false);
-        this.scheduleIdle(agent);
-        throw err;
-      }
-    });
+      agent.busy = false;
+      agent.sink.setRunning(false);
+      this.scheduleIdle(agent);
+      throw err;
+    }
   }
 
   private async ensure(agentId: string): Promise<AgentRecord> {

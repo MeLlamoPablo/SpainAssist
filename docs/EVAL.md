@@ -138,7 +138,7 @@ refused.
 Only quiet end states can be checkpointed: the app has no way to export a state while an agent runs.
 Any other point is reached by replaying the recorded prefix from the cache, which costs nothing as
 long as the world and the prompts stay identical. As in the real app, nothing resumes by itself: the
-run sends a follow-up message and the orchestrator calls `procedure_resume`.
+run sends a follow-up message and the orchestrator calls `procedure_message`.
 
 ## Models and budget
 

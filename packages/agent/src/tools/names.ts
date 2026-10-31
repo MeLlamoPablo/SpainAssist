@@ -49,7 +49,6 @@ export const ASSISTANT_TOOL_NAMES = [
   'procedure_start',
   'procedure_message',
   'procedure_respond',
-  'procedure_resume',
   'procedure_stop',
   'procedure_cancel',
   'ask_user',

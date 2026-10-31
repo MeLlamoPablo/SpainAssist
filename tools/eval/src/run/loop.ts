@@ -185,7 +185,7 @@ const JUDGED_AFTER_CUT = new Set([...CUT_SHORT_ENDINGS, 'decided']);
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /**
  * What the user says after a restore: the real app resumes no agent by itself, so a resumed run
- * asks the orchestrator to carry on (it continues the unfinished procedure with `procedure_resume`).
+ * asks the orchestrator to carry on (it continues the procedure with `procedure_message`).
  */
 const DEFAULT_RESUME_PROMPT = 'Sigue donde lo dejaste, por favor.';
 const DEFAULT_SETTLE_TIMEOUT_MS = 120_000;

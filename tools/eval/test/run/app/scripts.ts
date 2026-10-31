@@ -259,7 +259,7 @@ export function resumeScenario(procedureId: string): ScenarioInput {
             { id: 'call_vault', name: 'vault_read', arguments: {} },
             {
               id: 'call_resume',
-              name: 'procedure_resume',
+              name: 'procedure_message',
               arguments: { procedureId, message: 'Continúa donde lo dejaste.' },
             },
           ],
@@ -267,7 +267,7 @@ export function resumeScenario(procedureId: string): ScenarioInput {
       },
       {
         id: 'assistant-after',
-        when: { ...assistant, lastTool: 'procedure_resume' },
+        when: { ...assistant, lastTool: 'procedure_message' },
         reply: { text: 'Retomado.' },
       },
       step(

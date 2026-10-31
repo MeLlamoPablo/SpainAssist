@@ -131,7 +131,7 @@ e2eSuite('checkpoint and resume on the real SpainBench', () => {
     const later = after.events.filter((event) => event.seq > manifest.atSeq);
     expect(toolNames(later).slice(0, 2)).toEqual([
       'assistant:procedure_read',
-      'assistant:procedure_resume',
+      'assistant:procedure_message',
     ]);
     const reopened = observations(later, 'tool_end').find((event) => event.tool === 'browser_open');
     expect(reopened?.text).toContain(`URL: https://portal.seg-social.gob.es/wps/myportal/`);

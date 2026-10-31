@@ -54,7 +54,7 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 ## Tools
 
 The names are in `src/tools/names.ts`. The assistant has `procedure_list`, `procedure_read`,
-`procedure_start`, `procedure_message`, `procedure_respond`, `procedure_resume`,
+`procedure_start`, `procedure_message`, `procedure_respond`,
 `procedure_stop` and `procedure_cancel` (bridge `procedures.*`: it delegates every online step),
 plus `ask_user`, `vault_read` and `vault_save`. Procedure agents have the rest:
 

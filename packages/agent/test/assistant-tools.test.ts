@@ -174,12 +174,12 @@ describe('assistant tools', () => {
     expect(text).toContain('Call EMASESA at 900 822 010: Cambiar el número de personas.');
   });
 
-  it('answers, dismisses and resumes with sequential tools', async () => {
+  it('answers, dismisses and corrects with sequential tools', async () => {
     bridge.setHandler('procedures.respond', (params) => ({
       answered: !!params.values,
       dismissed: !params.values,
     }));
-    bridge.setHandler('procedures.resume', () => ({ delivered: 'queued' }));
+    bridge.setHandler('procedures.message', () => ({ delivered: 'queued' }));
     await run('procedure_respond', {
       procedureId: 'p_1',
       promptId: 'q_1',
@@ -189,10 +189,21 @@ describe('assistant tools', () => {
     expect(
       textOf(await run('procedure_respond', { procedureId: 'p_1', promptId: 'q_1' })),
     ).toContain('dismissed');
-    expect(
-      textOf(await run('procedure_resume', { procedureId: 'p_1', message: 'Relee Mis datos' })),
-    ).toContain('Completion will be reported separately');
-    for (const name of ['procedure_respond', 'procedure_resume']) {
+    const corrected = textOf(
+      await run('procedure_message', {
+        procedureId: 'p_1',
+        message: 'Relee Mis datos',
+        urgent: true,
+      }),
+    );
+    expect(corrected).toContain('reads it after its current step');
+    expect(corrected).toContain('pending questions were cancelled');
+    expect(bridge.callsTo('procedures.message')[0]?.params).toEqual({
+      procedureId: 'p_1',
+      message: 'Relee Mis datos',
+      urgent: true,
+    });
+    for (const name of ['procedure_respond', 'procedure_message']) {
       expect(tools.find((tool) => tool.name === name)?.executionMode).toBe('sequential');
     }
   });
@@ -211,19 +222,20 @@ describe('assistant tools', () => {
     expect(result.isError).toBe(true);
   });
 
-  it.each(['procedure_message', 'procedure_resume'])(
-    '%s distinguishes a queued instruction from a started run',
-    async (name) => {
-      const method = name === 'procedure_message' ? 'procedures.message' : 'procedures.resume';
-      bridge.setHandler(method, () => ({ delivered: 'queued' }));
-      const queued = textOf(await run(name, { procedureId: 'p_1', message: 'Cambia de método' }));
-      expect(queued.toLowerCase()).toContain('queued');
-      expect(queued).not.toContain('Delivered');
-      expect(queued).toMatch(/not (read or |been )?acted on/);
-      bridge.setHandler(method, () => ({ delivered: 'started' }));
-      const started = textOf(await run(name, { procedureId: 'p_1', message: 'Cambia de método' }));
-      expect(started).toMatch(/new run (started|accepted)/);
-      expect(started).toMatch(/not yet confirmed|no action has been confirmed/);
-    },
-  );
+  it('distinguishes a queued instruction from a started run', async () => {
+    bridge.setHandler('procedures.message', () => ({ delivered: 'queued' }));
+    const queued = textOf(
+      await run('procedure_message', { procedureId: 'p_1', message: 'Cambia de método' }),
+    );
+    expect(queued.toLowerCase()).toContain('queued');
+    expect(queued).not.toContain('Delivered');
+    expect(queued).toMatch(/not read or acted on/);
+    expect(bridge.callsTo('procedures.message')[0]?.params).not.toHaveProperty('urgent');
+    bridge.setHandler('procedures.message', () => ({ delivered: 'started' }));
+    const started = textOf(
+      await run('procedure_message', { procedureId: 'p_1', message: 'Cambia de método' }),
+    );
+    expect(started).toMatch(/new run started/);
+    expect(started).toMatch(/not yet confirmed/);
+  });
 });

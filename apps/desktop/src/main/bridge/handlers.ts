@@ -45,7 +45,7 @@ const MAX_READ_DOCUMENT_BYTES = 25 * 1024 * 1024;
 export interface BridgeHandlerDeps {
   procedures: ProcedureService;
   conversation: ConversationService;
-  coordinator: Pick<Coordinator, 'start' | 'message' | 'resume' | 'stop' | 'cancel'>;
+  coordinator: Pick<Coordinator, 'start' | 'message' | 'stop' | 'cancel'>;
   prompts: PromptManager;
   vault: () => VaultPort;
   browser: BrowserHolder;
@@ -469,16 +469,19 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     },
     'procedures.message': async (params) => {
       requireProcedure(params.procedureId);
-      return { delivered: await deps.coordinator.message(params.procedureId, params.message) };
+      return {
+        delivered: await deps.coordinator.message(
+          params.procedureId,
+          params.message,
+          params.urgent,
+        ),
+      };
     },
     'procedures.respond': async (params) => {
       requireProcedure(params.procedureId);
       await deps.prompts.respondForProcedure(params.procedureId, params.promptId, params.values);
       return { answered: params.values !== undefined, dismissed: params.values === undefined };
     },
-    'procedures.resume': async (params) => ({
-      delivered: await deps.coordinator.resume(params.procedureId, params.message),
-    }),
     'procedures.stop': async (params) => {
       requireProcedure(params.procedureId);
       await deps.coordinator.stop(params.procedureId);

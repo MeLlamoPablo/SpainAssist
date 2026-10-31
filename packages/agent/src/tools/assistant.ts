@@ -44,6 +44,12 @@ const ProcedureMessageParams = Type.Object({
     maxLength: 4000,
     description: 'New information, a decision or a request from the user, in a few sentences',
   }),
+  urgent: Type.Optional(
+    Type.Boolean({
+      description:
+        'True only when the user corrects or changes something the agent may act on now (wrong data, a different plan or method, new credentials). Default false: added requests and news wait for the current run.',
+    }),
+  ),
 });
 
 const ProcedureCancelParams = Type.Object({
@@ -90,7 +96,7 @@ function renderCard(p: ProcedureListItem): string {
       }
     } else
       lines.push(
-        'Only the user can approve or complete this in the native UI. procedure_resume can cancel it when the user changes plans.',
+        'Only the user can approve or complete this in the native UI. An urgent procedure_message cancels it when the user changes plans.',
       );
   }
   return `Procedure ${p.id}\n${lines.join('\n')}`;
@@ -154,14 +160,16 @@ export function assistantTools(bridge: BridgeTransport) {
       name: 'procedure_message',
       label: 'Tell a procedure',
       description:
-        "Pass an update that can wait to a procedure's agent. While busy it is queued until the current run finishes and does not release a pending question. Use procedure_resume for corrections or changes of plan that must affect the next decision. Acceptance is not proof the agent read or acted on it.",
+        "Pass the user's news, a request or a correction to a procedure's agent. It never interrupts or discards the agent's work. By default it waits until the current run finishes: use this for added requests (\"also download X\") and news. With urgent, the agent reads it right after its current step and its pending questions are cancelled: only for corrections or changes of plan it must not act against. Acceptance is not proof the agent read or acted on it.",
       parameters: ProcedureMessageParams,
       async execute(_id, params, signal) {
-        return callBridge(bridge, 'procedures.message', params, signal, (result) =>
+        return callBridge(bridge, 'procedures.message', compact({ ...params }), signal, (result) =>
           textResult(
             result.delivered === 'started'
-              ? 'Accepted: a new run started. The agent has not yet confirmed acting on this instruction.'
-              : 'Queued for after the current run finishes. The agent has not read or acted on this instruction yet; any pending question still needs a response.',
+              ? `Accepted: a new run started${params.urgent ? ' and pending questions were cancelled' : ''}. The agent has not yet confirmed acting on this instruction.`
+              : params.urgent
+                ? 'Delivered to the running agent: it reads it after its current step. Its pending questions were cancelled. It has not acted on it yet.'
+                : 'Queued for after the current run finishes. The agent has not read or acted on this instruction yet; any pending question still needs a response.',
             result,
           ),
         );
@@ -196,28 +204,10 @@ export function assistantTools(bridge: BridgeTransport) {
     }),
 
     defineSaTool({
-      name: 'procedure_resume',
-      label: 'Resume a procedure',
-      description:
-        "Abort the current run and cancel its pending requests, then start the procedure agent with the user's new instructions. Use for user corrections, changed plans or newly available credentials. Read procedure_read first. Cancels obsolete forms, confirmations and manual actions without approving or completing them. Only the coordinator can do this; ordinary procedure_message queues an update for later.",
-      parameters: ProcedureMessageParams,
-      async execute(_id, params, signal) {
-        return callBridge(bridge, 'procedures.resume', params, signal, (result) =>
-          textResult(
-            result.delivered === 'started'
-              ? 'The previous run and pending requests were cancelled. A new run accepted the instructions; no action has been confirmed yet. Completion will be reported separately.'
-              : 'The previous run and pending requests were cancelled. The instructions are queued and have not been acted on yet. Completion will be reported separately.',
-            result,
-          ),
-        );
-      },
-    }),
-
-    defineSaTool({
       name: 'procedure_stop',
       label: 'Stop a procedure agent',
       description:
-        "Interrupt a procedure's agent and cancel its pending questions without cancelling the procedure. Use only when the user explicitly asks to stop or pause its work. It can resume later with procedure_message.",
+        "Interrupt a procedure's agent and cancel its pending questions without cancelling the procedure. Use only when the user explicitly asks to stop or pause its work. It can continue later with procedure_message.",
       parameters: ProcedureReadParams,
       async execute(_id, params, signal) {
         return callBridge(bridge, 'procedures.stop', params, signal, (result) =>
