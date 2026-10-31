@@ -18,7 +18,7 @@ import {
   Smartphone,
   TriangleAlert,
 } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Field, Input, PasswordInput } from '../../../components/ui/field';
 import { useT } from '../../../i18n';
@@ -164,15 +164,14 @@ export function DnieSignaturePromptCard({
       </div>
 
       {prompt.details?.length ? (
-        <dl className="mt-4 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface-2/60">
+        <dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-[13.5px]">
           {prompt.details.map((d) => (
-            <div
-              key={d.label}
-              className="grid grid-cols-[minmax(110px,34%)_1fr] gap-3 px-3.5 py-2.5 text-[13.5px]"
-            >
+            <Fragment key={d.label}>
               <dt className="text-fg-subtle">{d.label}</dt>
-              <dd className="selectable font-medium whitespace-pre-line text-fg">{d.value}</dd>
-            </div>
+              <dd className="selectable min-w-0 font-medium break-words whitespace-pre-line text-fg">
+                {d.value}
+              </dd>
+            </Fragment>
           ))}
         </dl>
       ) : null}
