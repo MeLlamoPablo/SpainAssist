@@ -63,10 +63,11 @@ describe('PairingPanel', () => {
     );
   });
 
-  it('spins while connecting, then says the server is out of reach and offers to retry', () => {
+  it('shows only the code while connecting, then says the server is out of reach and offers to retry', () => {
     const link = 'https://relay.example.invalid/p#demo';
     const connecting = render({ state: 'connecting', link });
-    expect(connecting).toContain('Conectando…');
+    expect(connecting).toContain('companion-qr');
+    expect(connecting).not.toContain('Conectando');
     expect(connecting).not.toContain('companion-stalled');
     const stalled = render({ state: 'connecting', link, stalled: true });
     expect(stalled).toContain('data-testid="companion-stalled"');
@@ -75,7 +76,6 @@ describe('PairingPanel', () => {
     );
     expect(stalled).toContain('Reintentar');
     expect(stalled).not.toContain('companion-qr');
-    expect(stalled).not.toContain('Conectando…');
     // A paired phone: the same words, under its own state (it reconnects by itself).
     const paired = render({ state: 'connecting', device: 'Pixel 8', stalled: true });
     expect(paired).toContain('data-testid="companion-stalled"');

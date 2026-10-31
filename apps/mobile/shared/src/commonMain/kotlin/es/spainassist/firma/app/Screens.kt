@@ -18,7 +18,6 @@ sealed interface Screen {
     data class ConfirmPairing(
         override val nfc: NfcAvailability,
         val link: PairingLink,
-        val replacing: Boolean,
     ) : Screen
 
     /** Paired, nothing to sign. */

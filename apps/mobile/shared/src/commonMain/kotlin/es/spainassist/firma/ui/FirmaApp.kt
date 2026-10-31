@@ -470,7 +470,6 @@ private fun ConfirmPairingScreen(s: Screen.ConfirmPairing, actions: FirmaActions
             Body(stringResource(Res.string.pair_body))
         }
         Actions {
-            if (s.replacing) Banner(stringResource(Res.string.pair_replacing), Tone.Attention)
             Primary(stringResource(Res.string.pair_confirm), onClick = actions::confirmPairing)
             Secondary(stringResource(Res.string.pair_cancel), actions::cancelPairing)
         }

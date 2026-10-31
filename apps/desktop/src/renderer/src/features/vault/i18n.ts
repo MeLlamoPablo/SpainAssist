@@ -148,7 +148,7 @@ export const vaultDict = defineDict({
         pinSave: 'Guardar',
         pinStored: 'PIN guardado',
         pinDeleteTitle: '¿Borrar el PIN del DNI?',
-        pinDeleteBody: 'Te lo pediré la próxima vez que firmes o entres con el DNI.',
+        pinDeleteBody: 'Se te pedirá la próxima vez que firmes o entres con el DNI.',
         pinDeleted: 'PIN borrado',
       },
       cert: {
@@ -339,7 +339,7 @@ export const vaultDict = defineDict({
         pinSave: 'Save',
         pinStored: 'PIN saved',
         pinDeleteTitle: 'Delete the DNI PIN?',
-        pinDeleteBody: 'I’ll ask for it the next time you sign or log in with your DNI.',
+        pinDeleteBody: 'You’ll be asked for it the next time you sign or log in with your DNI.',
         pinDeleted: 'PIN deleted',
       },
       cert: {

@@ -856,7 +856,7 @@ class FirmaController(
         val current = active
         val candidate = proposed
         _screen.value = when {
-            candidate != null -> Screen.ConfirmPairing(nfc, candidate, replacing = link != null)
+            candidate != null -> Screen.ConfirmPairing(nfc, candidate)
             current != null -> Screen.Signing(nfc, current.review, current.step, link?.connected == true)
             link != null -> Screen.Home(nfc, linkStatus)
             else -> Screen.Start(nfc, notice)

@@ -23,7 +23,6 @@
     <!-- Pairing -->
     <string name="pair_title">Pair with your computer?</string>
     <string name="pair_body">You’ll pair this device with Spain Assist on your computer for 72 hours.\n\nYou’ll sign your DNI operations here.</string>
-    <string name="pair_replacing">You’re already paired with a computer. If you go on, it will be unpaired.</string>
     <string name="pair_confirm">Pair</string>
     <string name="pair_cancel">Cancel</string>
 

@@ -68,7 +68,7 @@ class PreviewActivity : ComponentActivity() {
             "vinculacion-terminada" to Preview(Screen.Start(ready, StartNotice.PairingEnded)),
             "escanear" to Preview(Screen.Start(ready), Overlay.Scanner),
             "licencias" to Preview(Screen.Start(ready), Overlay.Licenses),
-            "vincular" to Preview(Screen.ConfirmPairing(ready, PAIRING, replacing = false)),
+            "vincular" to Preview(Screen.ConfirmPairing(ready, PAIRING)),
             "conectado" to Preview(Screen.Home(ready, LinkStatus.Connected(Welcome("welcome", 1, "desktop", "2026-10-15T09:41:00Z")))),
             "ordenador-desconectado" to Preview(Screen.Home(ready, LinkStatus.DesktopAway)),
             "revisar" to signing(document, Step.Review),

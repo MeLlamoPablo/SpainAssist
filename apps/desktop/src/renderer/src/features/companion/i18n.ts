@@ -6,7 +6,6 @@ export const companionDict = defineDict({
     app: 'Spain Assist',
     scanTitle: 'Escanea este código con el móvil',
     qrLabel: 'Código para vincular el móvil',
-    connecting: 'Conectando…',
     unavailable: 'Ahora mismo no se puede usar el móvil para firmar. Inténtalo más tarde.',
     away: (device: string) => `${device} no está conectado. Abre la app Spain Assist en el móvil.`,
     /** A request waits for the paired phone, which gets it only while the app is open. */
@@ -101,7 +100,6 @@ export const companionDict = defineDict({
     app: 'Spain Assist',
     scanTitle: 'Scan this code with your phone',
     qrLabel: 'Code to pair your phone',
-    connecting: 'Connecting…',
     unavailable: "Signing with your phone isn't available right now. Try again later.",
     away: (device: string) => `${device} isn't connected. Open the Spain Assist app on your phone.`,
     openApp: 'Open Spain Assist on your phone to continue',

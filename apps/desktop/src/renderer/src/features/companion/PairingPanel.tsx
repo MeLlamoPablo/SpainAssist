@@ -231,11 +231,6 @@ export function PairingPanel({
             <WifiOff size={13} aria-hidden />
             {t.stalled}
           </p>
-        ) : status.state === 'connecting' && !stalled ? (
-          <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-fg-subtle">
-            <Loader2 size={13} className="animate-spin" aria-hidden />
-            {t.connecting}
-          </p>
         ) : null}
       </div>
     </div>

@@ -23,7 +23,6 @@
     <!-- Pairing -->
     <string name="pair_title">¿Vincular con tu ordenador?</string>
     <string name="pair_body">Vincularás este dispositivo con Spain Assist en tu ordenador durante 72 horas.\n\nPodrás firmar aquí tus operaciones con DNI.</string>
-    <string name="pair_replacing">Ya estás vinculado con un ordenador. Si sigues, se desvincula.</string>
     <string name="pair_confirm">Vincular</string>
     <string name="pair_cancel">Cancelar</string>
 
