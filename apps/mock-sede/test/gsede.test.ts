@@ -110,9 +110,7 @@ describe('gsede AutoFirma login (XML signBatch)', () => {
         origin: sede.url,
         signatures: 1,
         verifiable: false,
-        description: expect.stringContaining(
-          'Firmar un código corto del sitio (normalmente, para identificarte).',
-        ),
+        description: 'Identificarte',
       }),
     ]);
     const all = {

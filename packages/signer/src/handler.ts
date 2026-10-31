@@ -853,20 +853,20 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     checkAlgorithm(batch.algorithm);
     const n = batch.signs.length;
     const formats = [...new Set(batch.signs.map((s) => s.format).filter(Boolean))].join(', ');
+    // One short code from the site is a login challenge.
+    const login = n === 1 && (batch.signs[0]?.dataSize ?? Number.POSITIVE_INFINITY) <= 128;
     const { identity } = await approve(ctx, {
       method: call.method,
       format: formats,
       algorithm: batch.algorithm,
       origin: call.origin,
-      description: [
-        n > 1
-          ? `Firmar un lote de ${n} documentos.`
-          : (batch.signs[0]?.dataSize ?? Number.POSITIVE_INFINITY) <= 128
-            ? 'Firmar un código corto del sitio (normalmente, para identificarte).'
-            : 'Firmar un documento.',
-        'El servidor del sitio prepara las firmas y tu certificado firma un resumen de cada documento. No se puede mostrar el contenido exacto.',
-        `Lo pide ${call.origin}.`,
-      ].join('\n'),
+      description: login
+        ? 'Identificarte'
+        : [
+            n > 1 ? `Firmar un lote de ${n} documentos.` : 'Firmar un documento.',
+            'El servidor del sitio prepara las firmas y tu certificado firma un resumen de cada documento. No se puede mostrar el contenido exacto.',
+            `Lo pide ${call.origin}.`,
+          ].join('\n'),
       documents: [],
       verifiable: false,
       signatures: n,
