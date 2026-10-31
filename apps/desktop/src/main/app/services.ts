@@ -159,9 +159,9 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const ids = deps.ids ?? newId;
   // In prerelease the DNIe's plumbing (pairing, relay, a saved DNIe) is there from launch, so the
   // user can save their DNIe without a restart; agents only offer it once it is saved.
-  // FNMT certificate requests: development builds and e2e only while the flow is new (its
-  // TEMPORARY debug log keeps private keys in clear, fnmt/debug-log.ts).
-  const certificateRequestsOn = deps.appInfo.isDev || env.e2e;
+  // FNMT certificate requests (`fnmt-certificates` flag), with their TEMPORARY debug log, which
+  // keeps private keys in clear (fnmt/debug-log.ts).
+  const certificateRequestsOn = deps.appInfo.features.fnmtCertificates;
   const dnieStage = deps.appInfo.features.dniePhone;
   const dniePhone = dnieStage !== 'off';
   const dnieOffered = () =>

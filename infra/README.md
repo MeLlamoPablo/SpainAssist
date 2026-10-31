@@ -237,8 +237,10 @@ Unleash's UI and added to the state by hand). The flags themselves are created b
 Unleash's UI (project `default`): `dnie-phone` (type experiment; its strategy's variant
 `prerelease` or `release` sets the DNIe's stage, and on without a variant means `release`, which is
 also all that versions up to 0.3.0 understand), `must-update` (constrained on the `appVersion` context field,
-e.g. `SEMVER_LT 0.3.0`: without a constraint it blocks every version) and `error-reports` (type
-kill switch, on in production). The desktop reads them at start-up, and every flag is off when
+e.g. `SEMVER_LT 0.3.0`: without a constraint it blocks every version), `error-reports` (type
+kill switch, on in production) and `fnmt-certificates` (type release: FNMT certificate requests
+in the app; while it also turns on a debug log with private keys in clear, enable it only for
+whoever agreed to that). The desktop reads them at start-up, and every flag is off when
 Unleash can't be reached (`FEATURE_FLAG_NAMES` in `@sa/shared`).
 
 ### Coolify's dashboard (tailnet)

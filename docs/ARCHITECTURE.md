@@ -137,7 +137,7 @@ or PAdES), and the site gets the result as if AutoFirma had produced it. Some se
 too.
 
 ### FNMT certificates (Configurador replacement)
-Development builds and e2e only for now. FNMT's request page asks its Configurador for a key and a
+Behind the `fnmt-certificates` flag. FNMT's request page asks its Configurador for a key and a
 PKCS#10 through `FnmtCertRequest`; a shim (`@sa/signer`) answers instead. After the user approves,
 main (`fnmt/broker.ts`) makes the key, keeps it in the vault as a pending certificate request
 (it must outlive the procedure and restarts: the identity check can take days) and gives the page
@@ -241,5 +241,6 @@ or rating learnings (searching still works).
   only through `fetch_url`'s checks.
 - **Known gaps.** Procedure metadata, transcripts, screenshots, pi session files and development
   captures are private local files but not encrypted. While FNMT certificate requests are new,
-  development builds also keep a TEMPORARY debug log of them in `<userData>/fnmt-debug/`, private
-  keys in clear and outside "Borrar todo" (`fnmt/debug-log.ts`).
+  the `fnmt-certificates` flag also turns on a TEMPORARY debug log of them in
+  `<userData>/fnmt-debug/`, private keys in clear and outside "Borrar todo" (`fnmt/debug-log.ts`):
+  keep the flag off for anyone who hasn't agreed to that.

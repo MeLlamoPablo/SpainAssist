@@ -6,8 +6,8 @@ the key kept in our vault.*
 
 ## Status (2026-10-31)
 
-A first version of §7's design is built, in development builds and e2e only (packaged builds give
-FNMT's pages no shim yet). It has passed tests against the mock sede, but no real certificate has
+A first version of §7's design is built, behind the `fnmt-certificates` feature flag (off: FNMT's
+pages get no shim). It has passed tests against the mock sede, but no real certificate has
 been issued with it yet (step 6 of §10, Appendix B).
 
 - **Built:**
@@ -27,8 +27,8 @@ been issued with it yet (step 6 of §10, Appendix B).
     client certificate in the handshake.
 - **TEMPORARY:** a debug log of every call, key, request, certificate and reply, private keys in
   clear, in `<userData>/fnmt-debug/` and outside "Borrar todo" (`fnmt/debug-log.ts`), so a run
-  that goes wrong can be repaired. Remove it, and lift the development-only gate, once real runs
-  have proven the flow.
+  that goes wrong can be repaired. It is on whenever the flag is. Remove it once real runs have
+  proven the flow, before the flag goes to anyone else.
 - **Not built yet:**
   - the `.p12` backup (`exportCertificate`, §6.6);
   - the warnings before "Borrar todo" or deleting a procedure destroys a pending key (§6.1);

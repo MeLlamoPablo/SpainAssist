@@ -907,6 +907,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         dniePhone: dnieStage,
         mustUpdate,
         errorReports: params.get('errors') === '1',
+        fnmtCertificates: false,
       },
       errorReports: false,
     }),

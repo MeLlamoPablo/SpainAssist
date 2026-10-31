@@ -90,7 +90,12 @@ describe('defaults', () => {
       installChannel: 'dev',
       isDev: false,
       isE2E: true,
-      features: { dniePhone: 'off', mustUpdate: false, errorReports: false },
+      features: {
+        dniePhone: 'off',
+        mustUpdate: false,
+        errorReports: false,
+        fnmtCertificates: false,
+      },
       errorReports: false,
     });
     expect((await app.invoke('settings.get')).language).toBe('es');
@@ -142,6 +147,7 @@ describe('defaults', () => {
       dniePhone: 'off',
       mustUpdate: false,
       errorReports: false,
+      fnmtCertificates: false,
     });
     expect(credentialAllowedOn('clave_permanente', 'https://localhost/')).toBe(false);
     expect(existsSync(join(root, 'elsewhere'))).toBe(false);

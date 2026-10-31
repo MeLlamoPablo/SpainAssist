@@ -8,7 +8,8 @@
  * Unlike main.log, nothing here is redacted: **the files hold private keys in clear**. They live
  * in `<userData>/fnmt-debug/` (0700 folder, 0600 files, one JSON line per event, one file per
  * day), outside the vault and outside "Borrar todo", so a key survives a bug that loses the
- * vault's copy. Delete the folder by hand once it is no longer needed. Remove this module (and
+ * vault's copy. It is written whenever the `fnmt-certificates` feature flag is on. Delete the
+ * folder by hand once it is no longer needed. Remove this module (and
  * `FnmtBroker`'s `debug` calls) once the flow has been proven with real certificates.
  */
 import { appendFile } from 'node:fs/promises';

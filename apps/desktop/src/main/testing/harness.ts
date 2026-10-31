@@ -6,6 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChatGPTLoginPages } from '@sa/agent';
+import type { BrowserServiceOptions } from '@sa/browser';
 import {
   ASSISTANT_AGENT_ID,
   type BridgeMethod,
@@ -21,7 +22,7 @@ import { createAppPaths } from '../app/paths';
 import { createMainServices, type MainDeps, type MainServices } from '../app/services';
 import { createLogger } from '../core/logger';
 import type { Clock } from '../core/util';
-import { type Biometric, noBiometric, type ProviderLib } from '../ports';
+import { type Biometric, noBiometric, type ProviderLib, type SignerLib } from '../ports';
 import type { FetchFn } from '../remote/http';
 import {
   basicPii,
@@ -56,6 +57,8 @@ export interface TestAppOptions {
   relaySocket?: typeof WebSocket;
   /** The app's clock. Default: the system clock. */
   clock?: Clock;
+  /** AutoFirma and FNMT shims and handler. Default: none, so pages get no shim. */
+  signer?: SignerLib;
 }
 
 export type TestApp = Awaited<ReturnType<typeof createTestApp>>;
@@ -119,6 +122,8 @@ export async function createTestApp(opts: TestAppOptions = {}) {
   const logger = createLogger({ level: 'debug', sinks: [(line) => logLines.push(line)] });
   const vault = new MemoryVault({ backend: 'test', secure: false });
   const browser = new FakeBrowser();
+  /** What each BrowserService the app created was given. */
+  const browserOptions: BrowserServiceOptions[] = [];
   const agentLib = createFakeAgentLib();
   const backendFetch = opts.fetch ?? offlineFetch;
   const providerLib = opts.providerLib ?? createFakeProviderLib();
@@ -150,6 +155,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
         dniePhone: 'release',
         mustUpdate: false,
         errorReports: false,
+        fnmtCertificates: true,
         ...opts.features,
       },
       errorReports: false,
@@ -159,7 +165,11 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     openVault: async () => vault,
     agentLib,
     providerLib,
-    browserFactory: () => browser,
+    ...(opts.signer ? { signer: opts.signer } : {}),
+    browserFactory: (options) => {
+      browserOptions.push(options);
+      return browser;
+    },
     startSidecar: opts.startSidecar,
     certificateOrigins: opts.certificateOrigins ?? ['https://pasarela-ident.clave.gob.es'],
     pii: basicPii,
@@ -300,6 +310,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     },
     vault,
     browser,
+    browserOptions,
     agentLib,
     providerLib,
     events,
