@@ -40,7 +40,7 @@ Compose Multiplatform. There is only an Android app. The shared module also comp
 - **Blocked PIN, no FIRMA certificate, expired certificate, not a DNIe 3.0/4.0, no NFC:** the
   request ends, and the desktop shows why.
 - Reader mode is on only while the app waits for a card and is in front. The screen stays on
-  meanwhile. Release builds set `FLAG_SECURE` (no screenshots or recents preview of documents).
+  meanwhile.
 
 ## Build and test
 

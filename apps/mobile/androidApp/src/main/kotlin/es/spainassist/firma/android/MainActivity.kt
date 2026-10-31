@@ -9,7 +9,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import es.spainassist.firma.BuildConfig
 import es.spainassist.firma.ui.FirmaApp
 import kotlinx.coroutines.launch
 
@@ -19,9 +18,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Documents to sign must not show in the recents screen or in screenshots (debug builds
-        // allow screenshots, for development).
-        if (!BuildConfig.DEBUG) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent { FirmaApp(app.controller, app.platform) }
         if (savedInstanceState == null) handle(intent)
         lifecycleScope.launch {
