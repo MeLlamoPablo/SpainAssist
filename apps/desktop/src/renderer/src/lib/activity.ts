@@ -52,7 +52,7 @@ export interface ActivityLabel {
 
 export interface ActivityContext {
   lang: Lang;
-  /** Used to name the credential used by browser_fill_from_vault. */
+  /** Names the credential used by browser_fill_from_vault and browser_use_certificate. */
   credentialKind?: (credentialId: string) => CredentialKind | undefined;
 }
 
@@ -383,11 +383,15 @@ export function activityLabel(
         icon: FileUp,
       };
     }
-    case 'browser_use_certificate':
+    case 'browser_use_certificate': {
+      const id = str(args.credentialId);
+      if (id && ctx.credentialKind?.(id) === 'dnie')
+        return { text: es ? 'Preparando tu DNI' : 'Getting your DNI ready', icon: ShieldCheck };
       return {
         text: es ? 'Preparando tu certificado digital' : 'Getting your digital certificate ready',
         icon: ShieldCheck,
       };
+    }
     case 'browser_close':
       return { text: es ? 'Cerrando el navegador' : 'Closing the browser', icon: X };
     default: {

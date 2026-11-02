@@ -1,6 +1,7 @@
 import {
   type ActivityItem,
   type AssistantItem,
+  CERTIFICATE_EXPORT_PASSWORD_MIN,
   type ChatItem,
   COMPANION_PROTOCOL,
   type CompanionStatus,
@@ -820,6 +821,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     documents: state.documents,
     // Like main: without the feature flag, a saved DNI stays hidden.
     credentials: dniePhone ? state.credentials : state.credentials.filter((c) => c.kind !== 'dnie'),
+    certificateRequests: state.certificateRequests,
     storage: state.storage,
   });
   const requireDniePhone = () => {
@@ -907,7 +909,6 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         dniePhone: dnieStage,
         mustUpdate,
         errorReports: params.get('errors') === '1',
-        fnmtCertificates: false,
       },
       errorReports: false,
     }),
@@ -1403,7 +1404,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         createdAt: now(),
         certificate: {
           subject: `CN=${holder.toUpperCase() || 'TITULAR'} - 12345678Z`,
-          issuer: 'AC FNMT Usuarios',
+          issuer: 'CN=AC FNMT Usuarios, OU=Ceres, O=FNMT-RCM, C=ES',
           serialNumber: '7C2B91AF00D3',
           validFrom: now(),
           validTo: new Date(Date.now() + 4 * 365 * 86_400_000).toISOString(),
@@ -1416,6 +1417,18 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       emit({ type: 'vault.changed' });
       return cred;
     },
+    // No save dialog in a browser: the mock returns the name the app would suggest.
+    'vault.exportCertificate': async (id, password) => {
+      await sleep(700);
+      const cred = state.credentials.find((c) => c.id === id && c.kind === 'certificate');
+      if (!cred) throw new Error(tr('No lo encuentro.', 'Not found.'));
+      if (password.length < CERTIFICATE_EXPORT_PASSWORD_MIN)
+        throw new Error(tr('La petición no es válida.', 'Invalid request.'));
+      const holder = cred.certificate?.holderName;
+      return holder
+        ? tr(`Certificado ${holder}.p12`, `Certificate ${holder}.p12`)
+        : tr('Certificado digital.p12', 'Digital certificate.p12');
+    },
     'vault.setCredentialPolicy': (id, policy) => {
       const cred = state.credentials.find((c) => c.id === id);
       if (!cred) throw new Error('Credencial no encontrada.');
@@ -1425,6 +1438,10 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     },
     'vault.deleteCredential': (id) => {
       state.credentials = state.credentials.filter((c) => c.id !== id);
+      return vaultChanged();
+    },
+    'vault.deleteCertificateRequest': (id) => {
+      state.certificateRequests = state.certificateRequests.filter((r) => r.id !== id);
       return vaultChanged();
     },
     'vault.wipeAll': async () => {

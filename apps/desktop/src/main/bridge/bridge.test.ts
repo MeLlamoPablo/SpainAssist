@@ -1181,6 +1181,82 @@ describe('bridge: client certificates', () => {
     );
     expect(res.body.error?.code).toBe('policy_denied');
   });
+
+  /** Asks browser.useCertificate for `credentialId`, declines its card and returns the card. */
+  async function certificateCard(credentialId: string) {
+    const call = app.rpc(
+      'browser.useCertificate',
+      { credentialId, origins: ['https://sede.seg-social.gob.es'] },
+      token,
+    );
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const prompt = app.pendingPrompt(procedureId)!;
+    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: false });
+    expect((await call).body.error?.code).toBe('user_rejected');
+    if (prompt.prompt.kind !== 'confirm') throw new Error('expected a confirm prompt');
+    return prompt.prompt;
+  }
+
+  it('says DNI on the consent card of the DNI, and certificate on a certificate’s', async () => {
+    const dnie = await app.vault.addDnie();
+    const unread = await certificateCard(dnie.id);
+    expect(unread).toMatchObject({
+      confirmKind: 'credential',
+      title: '¿Usar tu DNI?',
+      details: [{ label: 'Webs', value: 'sede.seg-social.gob.es' }],
+      biometric: false,
+    });
+    expect(unread.message).toContain('con tu DNI');
+    expect(JSON.stringify(unread)).not.toContain('ertificado');
+
+    await app.vault.setDnieCertificate(dnie.id, {
+      subject: 'CN=MARTIN ORTEGA LUCIA (AUTENTICACIÓN)',
+      issuer: 'AC DNIE 004',
+      serialNumber: '01',
+      validFrom: '2025-01-01T00:00:00.000Z',
+      validTo: '2030-01-01T00:00:00.000Z',
+      holderName: 'LUCÍA MARTÍN ORTEGA',
+      fingerprint: 'ab',
+    });
+    expect((await certificateCard(dnie.id)).details).toEqual([
+      { label: 'DNI', value: 'LUCÍA MARTÍN ORTEGA' },
+      { label: 'Webs', value: 'sede.seg-social.gob.es' },
+    ]);
+
+    const certificate = await certificateCard(certId);
+    expect(certificate).toMatchObject({ title: '¿Usar tu certificado digital?' });
+    expect(certificate.message).toContain('con tu certificado digital');
+    expect(certificate.details?.map((d) => d.label)).toEqual(['Certificado', 'Webs']);
+  });
+
+  it('says DNI when it asks to allow an unlisted site for the DNI', async () => {
+    const allowSite = async () => {
+      const ask = app.rpc(
+        'prompt.confirm',
+        { confirmKind: 'certificate_site', title: 't', message: 'm', site: SEDE, sources: SOURCES },
+        token,
+      );
+      await app.waitFor(() => !!app.pendingPrompt(procedureId));
+      const prompt = app.pendingPrompt(procedureId)!;
+      await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: false });
+      await ask;
+      if (prompt.prompt.kind !== 'confirm') throw new Error('expected a confirm prompt');
+      return prompt.prompt;
+    };
+    expect((await allowSite()).title).toBe(
+      '¿Permitir tu certificado en rocafort.sede.dival.example?',
+    );
+    const dnie = await app.vault.addDnie();
+    const denied = await app.rpc(
+      'browser.useCertificate',
+      { credentialId: dnie.id, origins: [SEDE] },
+      token,
+    );
+    expect(denied.body.error?.code).toBe('policy_denied');
+    const card = await allowSite();
+    expect(card.title).toBe('¿Permitir tu DNI en rocafort.sede.dival.example?');
+    expect(card.message).toContain('con tu DNI');
+  });
 });
 
 describe('bridge: Touch ID', () => {

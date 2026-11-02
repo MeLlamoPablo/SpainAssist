@@ -19,6 +19,12 @@ vi.mock('../../store/app', () => ({
     { getState: () => store.state, setState: (patch: object) => Object.assign(store.state, patch) },
   ),
 }));
+const procedures = vi.hoisted(() => ({
+  byId: {} as Record<string, { id: string; title: string }>,
+}));
+vi.mock('../../store/procedures', () => ({
+  useProcedureStore: (selector: (state: typeof procedures) => unknown) => selector(procedures),
+}));
 
 /** `true` and `false` stand for `release` and `off`. */
 type Stage = DniePhoneStage | boolean;
@@ -49,6 +55,7 @@ function render(
   stage: Stage,
   credentials: VaultOverview['credentials'] = [],
   companion: CompanionStatus = { state: 'off' },
+  certificateRequests: VaultOverview['certificateRequests'] = [],
 ): string {
   store.state = {
     info: info(stage),
@@ -59,6 +66,7 @@ function render(
     personal: [],
     documents: [],
     credentials,
+    certificateRequests,
     storage: { backend: 'test', secure: true, biometricAvailable: false },
   };
   return renderToStaticMarkup(
@@ -146,5 +154,42 @@ describe('Mis datos: DNI with the phone', () => {
     expect(unpaired).toContain('Vincular el móvil');
     expect(unpaired).not.toContain('Desvincular');
     expect(unpaired).not.toContain('No se puede conectar');
+  });
+});
+
+describe('Mis datos: FNMT certificate requests', () => {
+  const REQUEST = {
+    id: 'req-1',
+    publicKeyHash: 'WrpR88SZuLkhNxKKnk0ShWhX7Za2FK0W0h581OBeCdc',
+    keyDescription: 'rsa 2048',
+    origin: 'https://apus20.sede.fnmt.gob.es',
+    procedureId: 'p-fnmt',
+    createdAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+  };
+
+  it('shows no request without one', () => {
+    expect(render(false)).not.toContain('En proceso');
+  });
+
+  it('shows each pending request "En proceso", with its site, procedure and key line', () => {
+    procedures.byId = { 'p-fnmt': { id: 'p-fnmt', title: 'Certificado digital (FNMT)' } };
+    // Requests only exist if the feature flag was on: they show whatever the flags say now.
+    const html = render(false, [], { state: 'off' }, [REQUEST, { ...REQUEST, id: 'req-2' }]);
+    expect(html.match(/data-testid="certificate-request"/g)).toHaveLength(2);
+    expect(html).toContain('En proceso');
+    expect(html).toContain('Solicitado hace 3 horas');
+    expect(html).toContain('apus20.sede.fnmt.gob.es');
+    expect(html).toContain('Certificado digital (FNMT)');
+    expect(html).toContain('Tu clave está guardada en este dispositivo');
+    expect(html).toContain('aria-label="Descartar la solicitud"');
+    // Not a saved certificate: the section still offers to add one.
+    expect(html).toContain('Añadir certificado');
+  });
+
+  it('leaves out the procedure once it is deleted', () => {
+    procedures.byId = {};
+    const html = render(false, [], { state: 'off' }, [REQUEST]);
+    expect(html).toContain('En proceso');
+    expect(html).not.toContain('Trámite');
   });
 });

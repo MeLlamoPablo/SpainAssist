@@ -2,10 +2,11 @@
  * An FNMT certificate, end to end, against the mock sede's FNMT-like pages: the real browser
  * service and FnmtCertRequest shim, the broker and the real vault. Request (the key goes to the
  * vault, the PKCS#10 to the sede), the identity check (the test API), the download (the
- * certificate becomes a vault credential with its path), and the TEMPORARY debug log.
+ * certificate becomes a vault credential with its path, without asking), and a log that keeps
+ * the key and the certificate out.
  */
 import { createHash, X509Certificate } from 'node:crypto';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type BrowserService, createBrowserService } from '@sa/browser';
@@ -18,7 +19,9 @@ import {
   startMockSede,
 } from '@sa/mock-sede';
 import {
+  type BrowserObservation,
   FNMT_ERROR,
+  FNMT_INSTALLED,
   type FnmtCall,
   type Prompt,
   type PromptResponse,
@@ -31,7 +34,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { EventBus } from '../core/events';
 import { createLogger } from '../core/logger';
 import { FnmtBroker } from './broker';
-import { createFnmtDebugLog, type FnmtDebugLog } from './debug-log';
 
 const DNI = '99999999R';
 const FNMT_URL = 'https://apus20.sede.fnmt.gob.es/SolicitudWebCert/presolicitar.do';
@@ -40,7 +42,8 @@ let sede: MockSede;
 let dir: string;
 let vault: Vault;
 let broker: FnmtBroker;
-let debug: FnmtDebugLog;
+/** What the broker writes to main.log. */
+const logLines: string[] = [];
 const asked: Prompt[] = [];
 const notices: string[] = [];
 let approve = true;
@@ -54,25 +57,12 @@ function refOf(snapshot: string, pattern: string): string {
   return ref;
 }
 
-async function debugLines(): Promise<{ event: string; [key: string]: unknown }[]> {
-  // Writes are queued: this one lands after every earlier one.
-  await debug.write('test.flush', {});
-  const logDir = join(dir, 'fnmt-debug');
-  const files = await readdir(logDir);
-  const text = (await Promise.all(files.map((f) => readFile(join(logDir, f), 'utf8')))).join('');
-  return text
-    .trim()
-    .split('\n')
-    .map((l) => JSON.parse(l));
-}
-
 beforeAll(async () => {
   sede = await startMockSede({ publicHost: '127.0.0.1' });
   setExtraTrustedHosts(['127.0.0.1']);
   dir = await mkdtemp(join(tmpdir(), 'sa-fnmt-'));
   vault = await Vault.open(join(dir, 'vault'), createTestKeyProvider('fnmt'));
-  const logger = createLogger({ level: 'debug', sinks: [() => {}] });
-  debug = createFnmtDebugLog(join(dir, 'fnmt-debug'), logger);
+  const logger = createLogger({ level: 'debug', sinks: [(line) => logLines.push(line)] });
   broker = new FnmtBroker({
     vault: () => vault,
     prompts: {
@@ -92,13 +82,11 @@ beforeAll(async () => {
     events: new EventBus(),
     logger,
     lang: () => 'es',
-    debug,
   });
 });
 
 afterAll(async () => {
   setExtraTrustedHosts([]);
-  await debug?.write('test.end', {});
   await sede?.close();
   if (dir) await rm(dir, { recursive: true, force: true });
 });
@@ -111,7 +99,7 @@ beforeEach(() => {
 });
 
 describe('FNMT certificate request and download through the app', () => {
-  it('requests, downloads and stores the certificate, logging everything for repair', async () => {
+  it('requests, downloads and stores the certificate, keeping it and its key out of the log', async () => {
     const browser: BrowserService = createBrowserService({
       headless: true,
       ignoreHTTPSErrors: true,
@@ -161,12 +149,22 @@ describe('FNMT certificate request and download through the app', () => {
 
       // Downloading before the identity check: the sede refuses, nothing changes.
       obs = await browser.open(id, `${sede.url}/fnmt/descarga`);
+      // The download page's dialogs, script errors and notes, from the click on.
+      const seen = { dialogs: [] as string[], pageErrors: [] as string[], notes: [] as string[] };
+      const collect = (o: BrowserObservation) => {
+        seen.dialogs.push(...o.dialogs);
+        seen.pageErrors.push(...o.pageErrors);
+        seen.notes.push(...o.notes);
+        return o;
+      };
       const fill = async () => {
         obs = await browser.type(id, refOf(obs.snapshot, 'textbox "Nº del documento'), DNI);
         obs = await browser.type(id, refOf(obs.snapshot, 'textbox "Primer apellido'), 'ESPAÑOLA');
         obs = await browser.type(id, refOf(obs.snapshot, 'textbox "Código de solicitud'), code!);
         obs = await browser.check(id, refOf(obs.snapshot, 'checkbox'), true);
-        obs = await browser.click(id, refOf(obs.snapshot, 'button "Descargar certificado"'));
+        obs = collect(
+          await browser.click(id, refOf(obs.snapshot, 'button "Descargar certificado"')),
+        );
       };
       await fill();
       expect(obs.snapshot).toContain('todavía no está acreditada');
@@ -175,11 +173,23 @@ describe('FNMT certificate request and download through the app', () => {
       obs = await browser.open(id, `${sede.url}/fnmt/descarga`);
       await fill();
       if (!obs.snapshot.includes('instalado correctamente')) {
-        obs = await browser.wait(id, { text: 'instalado correctamente', seconds: 20 });
+        obs = collect(await browser.wait(id, { text: 'instalado correctamente', seconds: 20 }));
       }
-      expect(obs.dialogs).toEqual([]);
-      expect(obs.notes.some((n) => n.includes("is now in the user's vault"))).toBe(true);
-      expect(asked.at(-1)?.title).toBe('¿Guardar tu certificado digital?');
+      // installCert answered base64 of "OK", as FNMT's Configurador does: the page decodes it
+      // (atob throws on no answer) and says so in an alert.
+      await expect
+        .poll(async () => {
+          collect(await browser.snapshot(id));
+          return seen.dialogs.length + seen.pageErrors.length;
+        })
+        .toBeGreaterThan(0);
+      expect(seen.pageErrors).toEqual([]);
+      expect(seen.dialogs).toEqual([
+        'alert "Tu certificado ha sido instalado con éxito" → accepted',
+      ]);
+      expect(seen.notes.some((n) => n.includes("is now in the user's vault"))).toBe(true);
+      // The download saves the certificate without asking: the only prompt was the request's.
+      expect(asked.map((p) => p.title)).toEqual(['¿Solicitar tu certificado digital?']);
 
       // A certificate credential with its key and path; the pending key is gone.
       expect(vault.listCertificateRequests()).toEqual([]);
@@ -200,40 +210,24 @@ describe('FNMT certificate request and download through the app', () => {
       expect(identity.chainDer[1]!.equals(ca.intermediate.certDer)).toBe(true);
       expect(notices).toEqual([
         expect.stringContaining('Clave creada y guardada'),
-        'Certificado digital guardado en Mis datos: Certificado de CARMEN ESPAÑOLA ESPAÑOLA.',
+        'Certificado digital de CARMEN ESPAÑOLA ESPAÑOLA guardado en Mis datos. Ya puedes usarlo para identificarte y firmar.',
       ]);
 
-      // TEMPORARY debug log: the key in clear, the request, the certificate data, the replies.
-      const lines = await debugLines();
-      const events = lines.map((l) => l.event);
-      for (const event of [
-        'call',
-        'consent',
-        'key',
-        'pending',
-        'reply',
-        'certificates',
-        'path',
-        'credential',
-      ]) {
-        expect(events).toContain(event);
+      // main.log says what happened, never the key or the certificate.
+      const log = logLines.join('\n');
+      expect(log).toContain('FNMT certificate request created');
+      expect(log).toContain('FNMT certificate installed');
+      const key = identity.privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
+      const leaf = identity.chainDer[0]!.toString('base64');
+      for (const secret of ['PRIVATE KEY', key.slice(100, 164), leaf.slice(200, 264)]) {
+        expect(log).not.toContain(secret);
       }
-      const key = lines.find((l) => l.event === 'key') as
-        | { privateKeyPem: string; pkcs10: string }
-        | undefined;
-      if (!key) throw new Error('no key event');
-      expect(key.privateKeyPem).toContain('-----BEGIN PRIVATE KEY-----');
-      expect(checkCertificateRequest(key.pkcs10).publicKeyHash).toBe(request?.publicKeyHash);
-      const install = lines.find(
-        (l) => l.event === 'call' && (l.call as FnmtCall).method === 'installCert',
-      );
-      expect(typeof (install?.call as FnmtCall | undefined)?.args[0]).toBe('string');
     } finally {
       await browser.closeAll();
     }
   }, 90_000);
 
-  it('keeps nothing when the user declines the request, and keeps the key when they decline the download', async () => {
+  it('keeps nothing when the user declines the request, and saves the download without asking', async () => {
     approve = false;
     const call = (method: FnmtCall['method'], args: unknown[]): FnmtCall => ({
       method,
@@ -265,18 +259,24 @@ describe('FNMT certificate request and download through the app', () => {
       surname: 'Española Española',
       now: new Date(),
     });
-    approve = false;
-    const declined = await broker.handle(call('installCert', [installCertData(leaf)]), 'proc-2');
-    expect(declined).toMatchObject({ ok: false, errorType: FNMT_ERROR.cancelled });
     expect(vault.findCertificateRequest(checked.publicKeyHash)).toBeDefined();
 
-    approve = true;
+    // No prompt for the download, even when the user would have said no to one.
+    approve = false;
+    asked.length = 0;
     expect(await broker.handle(call('installCert', [installCertData(leaf)]), 'proc-2')).toEqual({
       ok: true,
+      result: FNMT_INSTALLED,
     });
+    expect(asked).toEqual([]);
+    expect(vault.findCertificateRequest(checked.publicKeyHash)).toBeUndefined();
+    expect(notices.at(-1)).toBe(
+      'Certificado digital de CARMEN ESPAÑOLA ESPAÑOLA guardado en Mis datos. Ya puedes usarlo para identificarte y firmar.',
+    );
     // The page installs the same certificate again (a reload): already stored, fine.
     expect(await broker.handle(call('installCert', [installCertData(leaf)]), 'proc-2')).toEqual({
       ok: true,
+      result: FNMT_INSTALLED,
     });
     const fingerprint = createHash('sha256').update(leaf).digest('hex');
     expect(

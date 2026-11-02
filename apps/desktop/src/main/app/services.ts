@@ -30,7 +30,6 @@ import { type Clock, errorMessage, type IdFactory, newId, systemClock } from '..
 import type { CrlSetStore } from '../crlset/store';
 import { exportTranscripts } from '../export/transcripts';
 import { FnmtBroker } from '../fnmt/broker';
-import { createFnmtDebugLog } from '../fnmt/debug-log';
 import { registerIpcHandlers } from '../ipc/handlers';
 import { type IpcCallContext, IpcRouter } from '../ipc/router';
 import { MediaStore } from '../media/store';
@@ -55,6 +54,7 @@ import { FeedbackService } from '../remote/feedback';
 import type { FetchFn } from '../remote/http';
 import { AppStateStore, SettingsStore } from '../settings/store';
 import { createUpdates, type Updates } from '../updates/updater';
+import type { ChooseSavePath } from '../vault/certificate-export';
 import { VaultService } from '../vault/service';
 import type { SaEnv } from './env';
 import { type AppPaths, assistantPaths } from './paths';
@@ -106,6 +106,8 @@ export interface MainDeps {
   /** Style the window controls (`app.windowControls`); none without a window. */
   windowControls?(style: WindowControlsStyle): void;
   openPath(path: string): Promise<string>;
+  /** The OS save dialog (certificate exports); none without a window. */
+  chooseSavePath?: ChooseSavePath;
   /** User exports, separate from browser download staging. */
   documentDownloadsDir: string;
   /** Language for a profile that has none stored yet (from the OS); Spanish when absent. */
@@ -159,9 +161,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const ids = deps.ids ?? newId;
   // In prerelease the DNIe's plumbing (pairing, relay, a saved DNIe) is there from launch, so the
   // user can save their DNIe without a restart; agents only offer it once it is saved.
-  // FNMT certificate requests (`fnmt-certificates` flag), with their TEMPORARY debug log, which
-  // keeps private keys in clear (fnmt/debug-log.ts).
-  const certificateRequestsOn = deps.appInfo.features.fnmtCertificates;
   const dnieStage = deps.appInfo.features.dniePhone;
   const dniePhone = dnieStage !== 'off';
   const dnieOffered = () =>
@@ -277,7 +276,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
             }
           : {}),
         dniePhone: dnieOffered(),
-        certificateRequests: certificateRequestsOn,
+        certificateRequests: true,
       };
     },
     hostScript: deps.hostScript,
@@ -330,6 +329,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     lang,
     dniePhone,
     onCredentialDeleted: () => browser.closeAll(),
+    chooseSavePath: deps.chooseSavePath,
   });
   // Remove plaintext copies left by versions that used userData/tmp.
   await rm(join(paths.userData, 'tmp'), { recursive: true, force: true }).catch((err) =>
@@ -380,17 +380,15 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         }
       : undefined;
   const crlSets = deps.crlSets;
-  const certificateRequests = certificateRequestsOn
-    ? new FnmtBroker({
-        vault: vaultFn,
-        prompts,
-        procedures,
-        events,
-        logger: logger.child('fnmt'),
-        lang,
-        debug: createFnmtDebugLog(join(paths.userData, 'fnmt-debug'), logger.child('fnmt')),
-      })
-    : undefined;
+  // FNMT certificate requests.
+  const certificateRequests = new FnmtBroker({
+    vault: vaultFn,
+    prompts,
+    procedures,
+    events,
+    logger: logger.child('fnmt'),
+    lang,
+  });
   const browser = new BrowserHolder({
     certificates,
     certificateLoginsAvailable: !deps.startSidecar || !!certificates,
@@ -408,7 +406,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     biometric: deps.biometric,
     events,
     ...(deps.signer ? { signer: deps.signer } : {}),
-    ...(certificateRequests ? { certificateRequests: certificateRequests.handle } : {}),
+    certificateRequests: certificateRequests.handle,
     ...(companion ? { companion } : {}),
     ...(deps.signerFetch ? { fetch: deps.signerFetch } : {}),
     logger: logger.child('browser'),

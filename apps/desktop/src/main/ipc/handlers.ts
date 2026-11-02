@@ -195,11 +195,17 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('vault.addCertificate', S['vault.addCertificate'], (input) =>
     s.vault.addCertificate(input),
   );
+  router.register('vault.exportCertificate', S['vault.exportCertificate'], (id, password) =>
+    s.vault.exportCertificate(id, password),
+  );
   router.register('vault.setCredentialPolicy', S['vault.setCredentialPolicy'], (id, policy) =>
     s.vault.setCredentialPolicy(id, policy),
   );
   router.register('vault.deleteCredential', S['vault.deleteCredential'], (id) =>
     s.vault.deleteCredential(id),
+  );
+  router.register('vault.deleteCertificateRequest', S['vault.deleteCertificateRequest'], (id) =>
+    s.vault.deleteCertificateRequest(id),
   );
   router.register('vault.wipeAll', S['vault.wipeAll'], () => s.wipeAll());
 

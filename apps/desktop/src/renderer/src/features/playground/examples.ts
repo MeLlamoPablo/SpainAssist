@@ -341,6 +341,45 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       ],
       biometric: confirmKind === 'credential' || confirmKind === 'signature',
     });
+  // What main asks before the agent presents a certificate or the DNI (browser_use_certificate).
+  const certificateUse = (dnie: boolean): Prompt => ({
+    kind: 'confirm',
+    confirmKind: 'credential',
+    title: dnie
+      ? t('¿Usar tu DNI?', 'Use your DNI?')
+      : t('¿Usar tu certificado digital?', 'Use your digital certificate?'),
+    message: dnie
+      ? t(
+          'El asistente quiere identificarte con tu DNI en las webs oficiales de este trámite. Cuando la web lo pida, el móvil leerá tu DNI.',
+          'The assistant wants to identify you with your DNI on the official websites for this procedure. When the site asks for it, your phone will read your DNI.',
+        )
+      : t(
+          'El asistente quiere identificarte con tu certificado digital en las webs oficiales de este trámite.',
+          'The assistant wants to identify you with your digital certificate on the official websites for this procedure.',
+        ),
+    details: [
+      { label: dnie ? 'DNI' : t('Certificado', 'Certificate'), value: 'LUCÍA MARTÍN ORTEGA' },
+      { label: t('Webs', 'Websites'), value: 'sede.example.gob.es' },
+    ],
+    confirmLabel: t('Usar', 'Use'),
+    rejectLabel: t('No usar', "Don't use"),
+    // The DNI has no Touch ID: the phone and the card are the second factor.
+    biometric: !dnie,
+  });
+  addPrompt(
+    'confirm-certificate',
+    'confirmations',
+    t('Usar el certificado', 'Use the certificate'),
+    'credential',
+    certificateUse(false),
+  );
+  addPrompt(
+    'confirm-certificate-dnie',
+    'confirmations',
+    t('Usar el DNI', 'Use the DNI'),
+    'credential',
+    certificateUse(true),
+  );
   addPrompt(
     'confirm-certificate_site',
     'confirmations',

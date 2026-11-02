@@ -91,6 +91,13 @@ const STRINGS = {
     es: 'El asistente quiere identificarte con tu certificado digital en las webs oficiales de este trámite.',
     en: 'The assistant wants to identify you with your digital certificate on the official websites for this procedure.',
   },
+  /** The same consent for the DNI, which the phone reads when the site asks for it. */
+  dnieUseTitle: { es: '¿Usar tu DNI?', en: 'Use your DNI?' },
+  dnieUseMessage: {
+    es: 'El asistente quiere identificarte con tu DNI en las webs oficiales de este trámite. Cuando la web lo pida, el móvil leerá tu DNI.',
+    en: 'The assistant wants to identify you with your DNI on the official websites for this procedure. When the site asks for it, your phone will read your DNI.',
+  },
+  detailDnie: { es: 'DNI', en: 'DNI' },
   detailCredential: { es: 'Credencial', en: 'Credential' },
   detailWebsite: { es: 'Web', en: 'Website' },
   detailWebsites: { es: 'Webs', en: 'Websites' },
@@ -102,6 +109,12 @@ const STRINGS = {
   certificateSiteMessage: {
     es: '{host} no está en la lista de webs oficiales de la app. El asistente cree que es la sede de la administración de este trámite y quiere poder identificarte ahí con tu certificado. Permítelo solo si reconoces la web. Vale para este trámite.',
     en: "{host} is not on the app's list of official websites. The assistant thinks it is the official site of the administration for this procedure and wants to identify you there with your certificate. Only allow it if you recognise the website. It applies to this procedure.",
+  },
+  /** The same, when the agent wants to log in there with the DNI. */
+  dnieSiteTitle: { es: '¿Permitir tu DNI en {host}?', en: 'Allow your DNI on {host}?' },
+  dnieSiteMessage: {
+    es: '{host} no está en la lista de webs oficiales de la app. El asistente cree que es la sede de la administración de este trámite y quiere poder identificarte ahí con tu DNI. Permítelo solo si reconoces la web. Vale para este trámite.',
+    en: "{host} is not on the app's list of official websites. The assistant thinks it is the official site of the administration for this procedure and wants to identify you there with your DNI. Only allow it if you recognise the website. It applies to this procedure.",
   },
   certificateSiteChecked: { es: 'Lo que ha comprobado:', en: 'What it checked:' },
   detailSource: { es: 'Fuente', en: 'Source' },
@@ -158,22 +171,13 @@ const STRINGS = {
     es: 'Clave creada y guardada en Mis datos. La FNMT te enviará por correo el código de solicitud, que hace falta para descargar el certificado.',
     en: 'Key created and kept in My data. FNMT will email you the request code, which you need to download the certificate.',
   },
-  certificateInstallTitle: {
-    es: '¿Guardar tu certificado digital?',
-    en: 'Save your digital certificate?',
-  },
-  certificateInstallMessage: {
-    es: '{host} te entrega tu certificado digital. La app lo guardará en Mis datos, junto a la clave que creó al solicitarlo, para identificarte y firmar.',
-    en: '{host} is giving you your digital certificate. The app will save it in My data, with the key it created when you requested it, to identify you and sign.',
-  },
-  detailHolder: { es: 'Titular', en: 'Holder' },
-  detailIssuer: { es: 'Emisor', en: 'Issuer' },
-  detailValidTo: { es: 'Válido hasta', en: 'Valid until' },
-  saveLabel: { es: 'Guardar', en: 'Save' },
-  dontSaveLabel: { es: 'No guardar', en: "Don't save" },
   certificateInstalled: {
-    es: 'Certificado digital guardado en Mis datos: {label}.',
-    en: 'Digital certificate saved in My data: {label}.',
+    es: 'Certificado digital de {holder} guardado en Mis datos. Ya puedes usarlo para identificarte y firmar.',
+    en: "{holder}'s digital certificate saved in My data. You can now use it to identify yourself and sign.",
+  },
+  certificateInstalledNoHolder: {
+    es: 'Certificado digital guardado en Mis datos. Ya puedes usarlo para identificarte y firmar.',
+    en: 'Digital certificate saved in My data. You can now use it to identify yourself and sign.',
   },
 
   // --- DNI in the phone ---------------------------------------------------------------------

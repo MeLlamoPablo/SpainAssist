@@ -21,6 +21,7 @@ import {
   nativeTheme,
   net,
   protocol,
+  type SaveDialogOptions,
   type Session,
   safeStorage,
   session,
@@ -525,6 +526,18 @@ async function main(): Promise<void> {
     revealWindow: () => revealWindow(mainWindow),
     windowControls: (style) => setWindowControls(mainWindow, style),
     openPath: (path) => shell.openPath(path),
+    chooseSavePath: async (request) => {
+      const options: SaveDialogOptions = {
+        ...request,
+        // Windows: a private key's file stays out of the recent documents.
+        properties: ['createDirectory', 'showOverwriteConfirmation', 'dontAddToRecent'],
+      };
+      const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+      const result = win
+        ? await dialog.showSaveDialog(win, options)
+        : await dialog.showSaveDialog(options);
+      return result.canceled || !result.filePath ? undefined : result.filePath;
+    },
     relaunch: () => {
       app.relaunch();
       app.exit(0);

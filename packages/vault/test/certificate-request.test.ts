@@ -42,6 +42,8 @@ describe('FNMT certificate requests', () => {
     expect(JSON.stringify(vault.listCertificateRequests())).not.toContain(
       issued.privateKey.toString('base64').slice(0, 40),
     );
+    // Mis datos lists it ("En proceso"), without its key.
+    expect(vault.overview().certificateRequests).toEqual([pending]);
 
     // The identity check takes days: the key must survive the app closing.
     vault = await Vault.open(dir, keys, { now: () => NOW });

@@ -93,8 +93,10 @@ comments, continuation lines and character escapes.
 
 FNMT's sede hands key generation to its Configurador through `FnmtCertRequest`
 (docs/research/fnmt.md). `FNMT_SHIM_SOURCE` traps that global the same way as AutoScript and
-forwards `requestCert` and `installCert` to `FNMT_BINDING` (`__saFnmt`) as an `FnmtCall`; a
-smart-card request (`forceCard`) fails in the page. The rest is plain Node, for the app's broker:
+forwards `requestCert` and `installCert` to `FNMT_BINDING` (`__saFnmt`) as an `FnmtCall`; the
+page's `ok` gets the reply's result (the PKCS#10, or `FNMT_INSTALLED`, base64 of `OK`, which the
+download page checks). A smart-card request (`forceCard`) fails in the page. The rest is plain
+Node, for the app's broker:
 
 - `requestKeySpec(keyType, keyLength)` reads the page's arguments as the Configurador does;
   `createCertificateRequest(spec)` makes the key pair and its PKCS#10 (subject `CN=foo.bar.com`,

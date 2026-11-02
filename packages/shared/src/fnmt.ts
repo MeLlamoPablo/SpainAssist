@@ -6,9 +6,11 @@
  * Flow: FNMT's page calls FnmtCertRequest.requestCert(ok, ko, keyType, keyLength, csrType,
  * forceCard) or FnmtCertRequest.installCert(ok, ko, cert)
  *   -> the shim sends an FnmtCall through window[FNMT_BINDING](call)
- *   -> main: asks the user, generates the key / turns the certificate into a vault credential
+ *   -> main: generates the key once the user approves / turns the certificate into a vault
+ *      credential
  *   -> FnmtReply; the shim calls the page's ok or ko callback.
  */
+import { z } from 'zod';
 
 /** Name of the Playwright binding exposed to pages. */
 export const FNMT_BINDING = '__saFnmt';
@@ -39,7 +41,7 @@ export interface FnmtCall {
 export type FnmtReply =
   | {
       ok: true;
-      /** requestCert: the PKCS#10 in standard base64. installCert: nothing. */
+      /** requestCert: the PKCS#10 in standard base64. installCert: FNMT_INSTALLED. */
       result?: string;
     }
   | {
@@ -48,6 +50,13 @@ export type FnmtReply =
       errorType: string;
       errorMessage: string;
     };
+
+/**
+ * installCert's result: base64 of `OK`, what the Configurador's answer decrypts to. FNMT's
+ * download page (`descarga.js`) decodes it with `atob` and shows its success panel only if it
+ * trims to `OK`; with no result `atob` throws (docs/research/fnmt.md §2.1).
+ */
+export const FNMT_INSTALLED = 'T0s=';
 
 /** Error types the shim and the main process answer with. */
 export const FNMT_ERROR = {
@@ -61,18 +70,19 @@ export const FNMT_ERROR = {
 } as const;
 
 /**
- * A key the app generated for an FNMT certificate request, waiting for its certificate. The
- * private key itself never leaves the vault and the main process.
+ * A key the app generated for an FNMT certificate request, waiting for its certificate (Mis datos
+ * shows it as "En proceso"). The private key itself never leaves the vault and the main process.
  */
-export interface PendingCertificateRequest {
-  id: string;
+export const PendingCertificateRequest = z.object({
+  id: z.string(),
   /** base64url(SHA-256(DER SubjectPublicKeyInfo)), as the Configurador indexes it. */
-  publicKeyHash: string;
+  publicKeyHash: z.string(),
   /** e.g. "rsa 2048", "ec prime256v1". */
-  keyDescription: string;
+  keyDescription: z.string(),
   /** Origin of the page that asked for the request. */
-  origin: string;
+  origin: z.string(),
   /** The procedure that made the request, when there was one. */
-  procedureId?: string;
-  createdAt: string;
-}
+  procedureId: z.string().optional(),
+  createdAt: z.string(),
+});
+export type PendingCertificateRequest = z.infer<typeof PendingCertificateRequest>;

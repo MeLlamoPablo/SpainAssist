@@ -75,6 +75,7 @@ export class MemoryVault implements VaultPort {
       personal: this.listPersonal(),
       documents: this.listDocuments(),
       credentials: this.listCredentials(),
+      certificateRequests: this.listCertificateRequests(),
       storage: { ...this.storageInfo(), biometricAvailable: !!opts?.biometricAvailable },
     };
   }
@@ -284,6 +285,15 @@ export class MemoryVault implements VaultPort {
       ...(input.label ? { label: input.label } : {}),
     });
     return summary;
+  }
+
+  /** As the vault, but the "file" is the stored bytes after a marker and the password. */
+  async exportCertificate(id: string, passphrase: string): Promise<Buffer> {
+    const entry = this.credentials.get(id);
+    if (!entry) throw new VaultError('not_found', 'Credential not found');
+    if (entry.secret.kind !== 'certificate')
+      throw new VaultError('invalid_input', 'Only certificates can be exported');
+    return Buffer.concat([Buffer.from(`exported:${passphrase}:`), entry.secret.p12]);
   }
 
   readonly certificateRequests = new Map<

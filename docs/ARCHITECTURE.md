@@ -129,6 +129,10 @@ corrects it in the app's own form (the DNI/NIE prefilled when known). No tool as
 password alone. One-time codes and passwords of other sites are typed once from a native prompt
 and never saved. Client-certificate logins go through the sidecar after consent. Sites outside
 `OFFICIAL_DOMAINS` need independent official sources and the user's explicit approval.
+Mis datos can export a certificate, key and chain included, as a `.p12` under a password the user
+types twice and the app never keeps (Touch ID first when available, then the OS save dialog). The
+file uses 3DES and a SHA-1 MAC, since older macOS, Windows and Java (AutoFirma) reject AES ones
+(`exportPkcs12` in `@sa/vault`).
 
 ### Signing (AutoFirma replacement)
 Every page gets an AutoScript shim (`@sa/signer`) before its own scripts. When a site asks
@@ -137,14 +141,17 @@ or PAdES), and the site gets the result as if AutoFirma had produced it. Some se
 too.
 
 ### FNMT certificates (Configurador replacement)
-Behind the `fnmt-certificates` flag. FNMT's request page asks its Configurador for a key and a
+FNMT's request page asks its Configurador for a key and a
 PKCS#10 through `FnmtCertRequest`; a shim (`@sa/signer`) answers instead. After the user approves,
 main (`fnmt/broker.ts`) makes the key, keeps it in the vault as a pending certificate request
 (it must outlive the procedure and restarts: the identity check can take days) and gives the page
 the request, which the page sends to FNMT. At download, the page hands over the certificate: main
-finds the pending key by its public key, builds the path from the FNMT CAs it ships, and after the
-user approves stores an ordinary certificate credential. Only FNMT's sedes may ask
-(`certificateRequestAllowedOn`). Research and design: `docs/research/fnmt.md`.
+finds the pending key by its public key, builds the path from the FNMT CAs it ships, and stores
+an ordinary certificate credential without asking (the request was the consent; a notice says
+it's saved). It answers base64 of `OK`, as the Configurador does, which the page checks. Only
+FNMT's sedes may ask (`certificateRequestAllowedOn`). Research and design: `docs/research/fnmt.md`.
+Until its certificate arrives, Mis datos → Credenciales shows a request as "En proceso", and the
+user can discard it with its key.
 
 ### DNIe with the phone
 Behind the `dnie-phone` flag, whose variant sets the stage (`DniePhoneStage`): `prerelease`
@@ -240,7 +247,4 @@ or rating learnings (searching still works).
   for irreversible actions. Model-written scripts run in a sandboxed QuickJS with network access
   only through `fetch_url`'s checks.
 - **Known gaps.** Procedure metadata, transcripts, screenshots, pi session files and development
-  captures are private local files but not encrypted. While FNMT certificate requests are new,
-  the `fnmt-certificates` flag also turns on a TEMPORARY debug log of them in
-  `<userData>/fnmt-debug/`, private keys in clear and outside "Borrar todo" (`fnmt/debug-log.ts`):
-  keep the flag off for anyone who hasn't agreed to that.
+  captures are private local files but not encrypted.

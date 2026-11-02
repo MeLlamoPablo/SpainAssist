@@ -2,6 +2,7 @@
  * Certificate import: passphrase check, parsing (RSA and ECDSA keys), expiry check,
  * `CertificateInfo` extraction (with FNMT holder name/ID parsing) and normalization to a
  * modern PKCS#12 (PBES2/AES-256-CBC + SHA-256 MAC) that Node, Playwright and Electron accept.
+ * Export re-encodes it under the user's passphrase for other programs (`exportPkcs12`).
  */
 import { createHash, randomBytes, type X509Certificate } from 'node:crypto';
 import { createSecureContext } from 'node:tls';
@@ -255,6 +256,48 @@ export async function pkcs12ToPem(
     cert: contents.certificate.toString(),
     ca: contents.chain.map((c) => c.toString()),
   };
+}
+
+/**
+ * A stored (normalized) PKCS#12 re-encoded under the user's own passphrase, for use outside the
+ * app: the same key, certificate, chain and friendly name. Compatibility over strength, since the
+ * file must import in macOS Keychain, Windows, Firefox, AutoFirma (Java) and OpenSSL:
+ * pbeWithSHAAnd3-KeyTripleDES-CBC for the key and the certificates and a SHA-1 MAC (2048
+ * iterations), as `openssl pkcs12 -export -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg
+ * sha1` writes. Older macOS, Windows and Java releases reject PBES2/AES files (our normalized
+ * copies), and RC2-40 certificates need OpenSSL 3's legacy provider. The passphrase is what
+ * protects the file.
+ */
+export async function exportPkcs12(
+  p12: Uint8Array,
+  storedPassphrase: string,
+  passphrase: string,
+): Promise<Buffer> {
+  try {
+    const contents = await readPkcs12(p12, storedPassphrase);
+    const exported = await writePkcs12({
+      privateKey: contents.privateKey,
+      certificate: contents.certificate,
+      chain: contents.chain,
+      passphrase,
+      ...(contents.friendlyName ? { friendlyName: contents.friendlyName } : {}),
+      keyEncryption: 'pbe-sha1-3des',
+      certEncryption: 'pbe-sha1-3des',
+      mac: 'sha1',
+    });
+    // Read it back: the user may have no other copy of this key.
+    const check = await readPkcs12(exported, passphrase);
+    if (
+      !check.certificate.raw.equals(contents.certificate.raw) ||
+      check.chain.length !== contents.chain.length ||
+      !check.certificate.checkPrivateKey(check.privateKey)
+    ) {
+      throw new Error('The exported file does not match the certificate');
+    }
+    return exported;
+  } catch (e) {
+    throw new VaultError('corrupted', 'Could not export the certificate', { cause: e });
+  }
 }
 
 /** The normalized copy must load in Node's TLS stack (OpenSSL in Node, BoringSSL in Electron). */

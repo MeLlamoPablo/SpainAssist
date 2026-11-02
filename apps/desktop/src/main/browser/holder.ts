@@ -6,14 +6,15 @@ import type {
   CrlSetComponent,
   DownloadedFile,
 } from '@sa/browser';
-import type {
-  AfirmaSignatureSummary,
-  CredentialSummary,
-  DocumentMeta,
-  FnmtCall,
-  FnmtReply,
-  Language,
-  SigningKey,
+import {
+  type AfirmaSignatureSummary,
+  type CredentialSummary,
+  type DocumentMeta,
+  type FnmtCall,
+  type FnmtReply,
+  issuerName,
+  type Language,
+  type SigningKey,
 } from '@sa/shared';
 import { openP12 } from '@sa/signer';
 import type { PromptManager } from '../chat/prompts';
@@ -70,7 +71,7 @@ function describeCertificate(c: CredentialSummary, lang: Language): string {
     return holder ? t(lang, 'dnieOptionHolder', { holder }) : t(lang, 'dnieOption');
   }
   const holder = c.certificate?.holderName ?? c.label;
-  const issuer = c.certificate?.issuer;
+  const issuer = c.certificate && issuerName(c.certificate.issuer);
   const until = c.certificate?.validTo?.slice(0, 10);
   const parts = [
     holder,

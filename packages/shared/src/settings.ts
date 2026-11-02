@@ -268,12 +268,6 @@ export interface FeatureFlags {
    * data sharing is on.
    */
   errorReports: boolean;
-  /**
-   * The app replaces FNMT's Configurador: FNMT's pages get the certificate request shim, the
-   * main process makes keys and installs certificates (docs/research/fnmt.md). While the flow is
-   * new it also turns on a TEMPORARY debug log with private keys in clear (`fnmt/debug-log.ts`).
-   */
-  fnmtCertificates: boolean;
 }
 
 /** Unleash flag name of each feature flag. */
@@ -281,14 +275,12 @@ export const FEATURE_FLAG_NAMES: Record<keyof FeatureFlags, string> = {
   dniePhone: 'dnie-phone',
   mustUpdate: 'must-update',
   errorReports: 'error-reports',
-  fnmtCertificates: 'fnmt-certificates',
 };
 
 export const FEATURES_OFF: FeatureFlags = {
   dniePhone: 'off',
   mustUpdate: false,
   errorReports: false,
-  fnmtCertificates: false,
 };
 
 export const DEFAULT_SETTINGS: Settings = {

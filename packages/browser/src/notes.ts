@@ -47,7 +47,7 @@ export function afirmaPageNote(host: string): string {
 
 /** A page that loaded FNMT's certificate request script (the app's shim answers it). */
 export function fnmtPageNote(host: string): string {
-  return `${host || 'This page'} requests or downloads an FNMT certificate. The app replaces FNMT's Configurador: no installation is needed and there is no password to create. When the page's button sends the request ("Enviar petición") or downloads the certificate, the app asks the user to approve, makes and keeps the key in the vault, and saves the downloaded certificate there. Just fill in the form, click the button and wait.`;
+  return `${host || 'This page'} requests or downloads an FNMT certificate. The app replaces FNMT's Configurador: no installation is needed and there is no password to create. When the page's button sends the request ("Enviar petición"), the app asks the user to approve, then makes and keeps the key in the vault; when the download page hands over the certificate, the app saves it there without asking. Just fill in the form, click the button and wait.`;
 }
 
 const CLAVE_NO_CERT =

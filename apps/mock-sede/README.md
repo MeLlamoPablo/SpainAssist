@@ -42,8 +42,9 @@ All committed certificates and CA private keys are disposable test material.
   "emailed"). After the identity check (`POST /__test/fnmt/accredit`, or `sede.test.accreditFnmt`),
   the download (`/fnmt/descarga`: document, first surname, code) issues a certificate for the
   request's key from the mock client CA and hands it to `FnmtCertRequest.installCert` as a
-  gzipped base64url PKCS#7. Without the app's FNMT shim, the imitation fails after 3 s as FNMT's
-  page does without the Configurador.
+  gzipped base64url PKCS#7. Like FNMT's page, it counts the install as done only when `ok` gets
+  base64 of `OK`, and then shows an `alert()`. Without the app's FNMT shim, the imitation fails
+  after 3 s as FNMT's page does without the Configurador.
 - **The gateway**: Cl@ve Permanente with a substantial-level SMS, Cl@ve Móvil QR approval and
   certificate login, including a realistic missing-certificate error. No physical phone or
   AutoFirma is needed.

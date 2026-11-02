@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { FNMT_ERROR, FNMT_NOTICE, type FnmtCall, type FnmtReply } from '@sa/shared';
+import { FNMT_ERROR, FNMT_INSTALLED, FNMT_NOTICE, type FnmtCall, type FnmtReply } from '@sa/shared';
 import { chromium } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { FNMT_SHIM_SOURCE } from '../src/shim';
@@ -92,6 +92,15 @@ describe.skipIf(!installed)('real Chromium FnmtCertRequest interception', () => 
           'Y2VydA==');`),
       ).toEqual({ ko: [FNMT_ERROR.cancelled, 'Cancelado', FNMT_ERROR.cancelled] });
       expect(calls.find((c) => c.method === 'installCert')?.args).toEqual(['Y2VydA==']);
+
+      // A done install → ok(base64 of "OK"), which FNMT's download page decodes and checks.
+      next = { ok: true, result: FNMT_INSTALLED };
+      expect(
+        await run(`FnmtCertRequest.installCert(
+          function (answer) { window.__done({ ok: atob(answer) }); },
+          function (t, m) { window.__done({ ko: [t, m] }); },
+          'Y2VydA==');`),
+      ).toEqual({ ok: 'OK' });
 
       // forceCard: refused in the page, never sent to the app.
       const before = calls.length;

@@ -4,35 +4,34 @@
 software certificate (`Certificado de Persona Física`), and what SpainAssist needs to do the same with
 the key kept in our vault.*
 
-## Status (2026-10-31)
+## Status (2026-11-02)
 
-A first version of §7's design is built, behind the `fnmt-certificates` feature flag (off: FNMT's
-pages get no shim). It has passed tests against the mock sede, but no real certificate has
-been issued with it yet (step 6 of §10, Appendix B).
+A first version of §7's design is built and on in every build. It passed tests against the mock
+sede, and on 2026-11-02 it got a real certificate through the DNIe route (step 6 of §10, Appendix
+B). The `fnmt-certificates` feature flag it shipped behind on 2026-10-31 was removed after that.
 
 - **Built:**
   - the shim (`packages/signer/src/shim/fnmt.ts`, binding `__saFnmt`);
   - the PKCS#10 and certificate parsing (`packages/signer/src/certificate-request.ts`);
-  - the broker with its two consent prompts (`apps/desktop/src/main/fnmt/broker.ts`);
+  - the broker, with a consent prompt for the request (`apps/desktop/src/main/fnmt/broker.ts`);
   - pending keys as a vault record type (`certificateRequests`, `addCertificateFromKey`);
+  - Mis datos → Credenciales lists pending requests as "En proceso" (`vault.overview`) and lets
+    the user discard one (`vault.deleteCertificateRequest`, `CertificateRequestCard.tsx`);
   - the FNMT CAs (`apps/desktop/src/main/fnmt/fnmt-ca/`);
   - the browser's notes for the agent and a line in the system prompt;
   - the mock sede's FNMT-like flow (`/fnmt`) and an end-to-end test
     (`apps/desktop/src/main/fnmt/fnmt.test.ts`).
 - **Different from §7:**
-  - the prompts reuse the `credential` confirmation card;
+  - the request's prompt reuses the `credential` confirmation card, and the download is saved
+    without one (§6.12);
   - the pending key is deleted once its credential is stored;
   - a second install of an already stored certificate succeeds (a reload of the download page);
   - `apuc20.sede.fnmt.gob.es` (the DNIe route) is a known certificate origin, since it asks for a
     client certificate in the handshake.
-- **TEMPORARY:** a debug log of every call, key, request, certificate and reply, private keys in
-  clear, in `<userData>/fnmt-debug/` and outside "Borrar todo" (`fnmt/debug-log.ts`), so a run
-  that goes wrong can be repaired. It is on whenever the flag is. Remove it once real runs have
-  proven the flow, before the flag goes to anyone else.
 - **Not built yet:**
-  - the `.p12` backup (`exportCertificate`, §6.6);
+  - offering the `.p12` backup right after the download (§6.6). Mis datos exports any
+    certificate already (`Vault.exportCertificate`, "Descargar copia (.p12)");
   - the warnings before "Borrar todo" or deleting a procedure destroys a pending key (§6.1);
-  - listing and discarding pending requests in Mis datos;
   - `ping` (page 1.6.4 never sends it).
 - **Legal (§8):** deferred by decision on 2026-10-31. The app is open source and makes the user's
   path easier. The DPC question is to be answered if it ever comes up, not before shipping.
@@ -76,11 +75,10 @@ been issued with it yet (step 6 of §10, Appendix B).
   - relay payloads under single DES with an 8-digit key.
 - **Legal** (§8): the Configurador is proprietary and its licence bans reverse engineering. EU and
   Spanish law allow decompiling for interoperability whatever the licence says, within limits. This
-  memo describes behaviour only, and no FNMT code is in the repo. Get legal review before shipping,
-  including FNMT's *Declaración de Prácticas de Certificación* (DPC).
-- **Unverified until one real request runs** (Appendix B): whether FNMT's server accepts a request
-  not made by the Configurador (it should, since the subject is a placeholder), and what exactly the
-  download page puts in `installCert`.
+  memo describes behaviour only, and no FNMT code is in the repo. The question of FNMT's
+  *Declaración de Prácticas de Certificación* (DPC) is deferred by decision of 2026-10-31.
+- **Settled by the real run of 2026-11-02** (Appendix B): FNMT's server accepts a request not made
+  by the Configurador, and the download page puts a base64 PKCS#7 in `installCert` (§2.1).
 
 ---
 
@@ -160,9 +158,25 @@ How `gestionPeticiones.js` uses it on the request page:
 
 The download form (`preDescarga.do`) posts `NIF_SG`, `COD_SOLICITUD` (request code), `FechaOp` and
 `CodigoHmac` to `validarDescarga.do`. In some cases the page computes `CodigoHmac` with CryptoJS
-HMAC-SHA256 keyed with the request code. We haven't seen the page that follows, because reaching it
-needs a real request (Appendix B). From `installCert`'s signature, it calls
-`FnmtCertRequest.installCert(ok, ko, certB64)`.
+HMAC-SHA256 keyed with the request code.
+
+The page that follows (`validarDescarga.do`, seen in the real run of 2026-11-02) loads `pako.js`,
+its own copy of `fnmtcertrq.js` and `descarga.js`, and has the certificate inline as `b64Data`: a
+base64 PKCS#7 with the leaf and *AC FNMT Usuarios*. On load, `descarga.js`:
+
+- `descargar_app()` gzips `b64Data`, encodes it base64url, calls `setServlets` with `apus20`'s
+  StorageService and RetrieveService, then `installCert(successCallback, errorCallback, data)`.
+- `successCallback(a)` runs `atob(a)` and checks that it trims to `OK`. If so it shows its success
+  panel and `alert("Tu certificado ha sido instalado con éxito")`. Anything else shows the error
+  panel and an alert that the installation "ha terminado irregularmente". An `ok()` with no
+  argument makes `atob` throw (`InvalidCharacterError`), and the page stays on its spinner: the
+  shim's first build did that. So `installCert` must answer `ok(base64("OK"))`, i.e. `ok("T0s=")`
+  (`FNMT_INSTALLED`).
+- `errorCallback(type, msg)` shows the error panel and alerts `msg` (`msg.substr(9)` for `ERR-`
+  messages).
+- Browsers that still have `<keygen>` (Firefox before 69) and Internet Explorer get older paths:
+  a `data:application/x-x509-user-cert` link with the bare certificate (`userCertAsB64`), and
+  `xenroll`.
 
 ### 2.2 Launching the app
 
@@ -199,7 +213,8 @@ The app posts its result to StorageService, and the page polls RetrieveService:
   - `err-06…`: not there yet, keep polling;
   - `ERR-nn:=message`, or base64 of `ERR-`/`err-` (prefix `RVJSL`/`ZXJyL`): error, reported
     through `ko`;
-  - `OK`: success with no data (install);
+  - `OK`: success with no data, `ok()` (the download page can't take that, §2.1, so the
+    Configurador's own `OK` must arrive encrypted, as below);
   - anything else: the encrypted result (request).
 - **Payload encryption:**
   - `DES/ECB/NoPadding`, keyed with the 8 ASCII digits of `key`.
@@ -401,8 +416,8 @@ already encrypts secrets.
   base64url.
 - The fallback is a single DER X.509 certificate.
 - The leaf may come with or without intermediates.
-- The issuer for a 2026 citizen certificate is expected to be *AC FNMT Usuarios* (G1) or *AC
-  Usuarios G2*. Which one is current is unverified (Appendix B).
+- The citizen certificate of the real run (2026-11-02) was issued by *AC FNMT Usuarios* (G1), and
+  the PKCS#7 held the leaf and that CA.
 
 ### 4.4 Backup `.p12`
 
@@ -455,15 +470,18 @@ traffic.
    - Get the CA files from FNMT's public CA page, not from the Configurador package.
 5. **Turning it into a credential.** The vault adds certificates today only through renderer IPC,
    from a `.p12` file plus passphrase (`vault.addCertificate`). The stand-in needs a main-process
-   path that takes key + chain and creates the same normalized PKCS#12 credential, with the user's
-   consent. It must keep the existing rules: reject expired certificates, deduplicate.
+   path that takes key + chain and creates the same normalized PKCS#12 credential (the user's
+   consent is the request's, item 12). It must keep the existing rules: reject expired
+   certificates, deduplicate.
 6. **Backup.** FNMT's flow nudges hard for a `.p12` backup, and users will expect one; without it,
    losing the vault or the computer means a new request and a new identity check. Offer "Guardar
    copia de seguridad" (export as a passphrase-protected `.p12`) right after the download, and from
-   Mis datos → Credenciales. This is a new vault feature: credentials can't be exported today.
+   Mis datos → Credenciales. Mis datos has it ("Descargar copia (.p12)"); the offer right after the
+   download isn't built.
 7. **Installing in the OS or Firefox.** The Configurador does it, and some users may want the
    certificate in their own browser too. That is a product choice, not an interoperability need.
    Default to vault-only, plus the backup from item 6. The user can import that file anywhere.
+   Installing straight into the OS store: [os-certificate-store.md](os-certificate-store.md).
 8. **Errors.** Answer `ko(type, message)` with our own Spanish text. Don't send `ERR-` strings that
    make the page call `alert()`. If we must use an `ERR-` string, keep the format
    `ERR-nnn: message`, because the page shows `substr(9)`.
@@ -475,7 +493,10 @@ traffic.
     are indexed by SPKI hash. No lock is needed.
 12. **Consent and wording.**
     - The user must approve generating the key, as with signatures and certificate logins.
-    - Downloading a certificate into the vault is also a consent moment.
+    - Downloading a certificate into the vault needs no second prompt. The first build asked
+      ("¿Guardar tu certificado digital?"). After the first real run (2026-11-02) the user asked
+      for no confirmation: the request was the consent. The app now saves the certificate at
+      once and says so in a notice in the procedure.
     - The password FNMT asks for has no equivalent in our flow, because the vault replaces it. Say
       so in the guide, because FNMT's help pages talk about it.
 13. **Tests.** Automated tests must never contact FNMT. `apps/mock-sede` needs a fake FNMT flow:
@@ -504,8 +525,8 @@ traffic.
      (`node:crypto`) → build the PKCS#10 (`pkijs`/`asn1js`, already dependencies of `@sa/signer`) → store the
      pending key in the vault → return base64 DER.
    - `install({origin, certData, procedureId})`: parse (§6.3) → find the pending key by SPKI hash →
-     build the chain (§6.4) → get consent → create the vault credential → delete the pending key →
-     offer the backup → return.
+     build the chain (§6.4) → create the vault credential (no prompt, §6.12) → delete the pending
+     key → offer the backup → return base64 of `OK` (§2.1).
    - The private key never leaves the main process. The renderer and the model see only "pending
      request for <NIF masked>, created <date>" and the resulting `CredentialSummary`.
 3. **Vault** (`@sa/vault`):
@@ -539,7 +560,7 @@ traffic.
 | --- | --- |
 | `cargarAppFnmt`, `setServlets` | Record, no-op |
 | `requestCert(ok, ko, keyType, keyLength, csrType, forceCard)` | If `forceCard === true`: `ko('es.gob.fnmt.cert.certrequest.CardNotSupported', '…')`. Otherwise call the broker; on success `ok(b64Der)`, on refusal or error `ko(type, message)`. |
-| `installCert(ok, ko, cert)` | Call the broker with `cert`; on success `ok()`, otherwise `ko(type, message)` |
+| `installCert(ok, ko, cert)` | Call the broker with `cert`; on success `ok('T0s=')` (base64 of `OK`, which the download page checks, §2.1), otherwise `ko(type, message)` |
 | `getErrorMessage`, `getErrorType` | Last error |
 | Helpers (`getBase64FromText`, …) | Pass through to the page's own implementation |
 | `VERSION` | Keep the page's value; pages may check it |
@@ -571,7 +592,7 @@ traffic.
   - Our implementation will be written from this description in TypeScript with different
     architecture. It doesn't use or redistribute FNMT's binaries, and it talks only to FNMT's public
     web pages.
-- **Still to check before shipping:**
+- **Deferred** (decision of 2026-10-31: answer these if they ever come up, not before shipping):
   1. FNMT's *Declaración de Prácticas de Certificación* (DPC) and the policies for the citizen
      certificate: does any clause require keys to be generated with FNMT's software, or on a
      specific kind of device? If it requires "software proporcionado por la FNMT-RCM", a
@@ -596,12 +617,13 @@ traffic.
 1. Decision record: page shim plus main-process broker; pending keys in the vault; chain from
    bundled FNMT CAs; vault export. *Done: this memo's Status section.*
 2. Mock-sede FNMT flow and e2e test (§6.13). *Done.*
-3. Vault: pending-key record and `addCertificateFromKey` (*done*); `exportCertificate`, and wipe
-   and delete warnings (*to do*).
-4. Broker and shim, with consent prompts. *Done.*
+3. Vault: pending-key record, `addCertificateFromKey` and `exportCertificate` (*done*); wipe and
+   delete warnings (*to do*).
+4. Broker and shim, with a consent prompt for the request. *Done.*
 5. Agent guide. *Done: a line in the system prompt, plus the browser's notes.*
 6. One real end-to-end run by a person, with their own NIF, to close Appendix B. This must never be
-   automated. *Next: with the DNIe, in a development build with `SA_BROWSER_CAPTURE=1`.*
+   automated. *Done on 2026-11-02, with the DNIe, in a development build with
+   `SA_BROWSER_CAPTURE=1`.*
 
 ---
 
@@ -621,16 +643,19 @@ PKCS#10        : subject CN=foo.bar.com, SPKI, no attributes, SHA256withRSA | SH
 Keys           : RSA 2048 (default) | EC secp256r1
 Pending key    : ~/.fnmt/ConfiguradorFnmt/FnmtKeysV2 (Derby), row keyed by b64url(SHA-256(SPKI))
 Page callback  : ok(b64) → forms[0].PKCS10 = b64 → submit guardarpresolicitud.do
+Install answer : ok(b64("OK")) = ok("T0s=") → atob(…).trim() == "OK" → success panel + alert()
 ```
 
 ## Appendix B — Unverified
 
 | Item | How to settle it |
 | --- | --- |
-| The server accepts a PKCS#10 not made by the Configurador (expected, since it's a plain PKCS#10 with a placeholder subject) | One real request |
-| Exact `installCert` argument on the post-download page (gzip? whole chain?) | One real download, or read the page with the user's consent |
-| Which CA issues 2026 citizen certificates (G1 *AC FNMT Usuarios* or *AC Usuarios G2*) | Real certificate, or FNMT's CA page |
-| Whether the server checks the PKCS#10 signature algorithm parameters (§4.1) | Real request |
-| Whether the DPC requires FNMT's own key-generation software | Read the DPC (§8) |
+| Whether the server would also accept a `NULL` in the PKCS#10 signature algorithm parameters (§4.1); ours has none, like the Configurador's, and was accepted | Only matters if the encoding changes |
+| Whether the DPC requires FNMT's own key-generation software | Read the DPC (§8); deferred |
 | Format of the mobile app's backup | Try the app |
 | macOS `.pkg` and Windows installer behaviour (protocol registration, extra steps) | Inspect the installers; not needed for the shim |
+
+Settled by the real run of 2026-11-02 (DNIe route): FNMT's server accepts our PKCS#10 (made by the
+app, placeholder subject, no signature algorithm parameters); the certificate came from *AC FNMT
+Usuarios* (G1) as a base64 PKCS#7 with the leaf and that CA (§2.1, §4.3); the download page wants
+`installCert` to answer base64 of `OK` (Appendix A).

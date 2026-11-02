@@ -38,7 +38,7 @@ vault.overview({ biometricAvailable: systemPreferences.canPromptTouchID() }); //
 | Open/inspect | `Vault.open(dir, keys, { now? })`, `Vault.destroy(dir)`, `overview({ biometricAvailable })`, `storageInfo()` |
 | Personal data | `listPersonal()`, `getPersonal(key)`, `setPersonal(items, source)`, `deletePersonal(keys)` |
 | Documents | `listDocuments({ procedureId? })`, `getDocument(id)`, `addDocument(opts)`, `readDocument(id)`, `deleteDocument(id)` |
-| Credentials | `listCredentials()`, `getCredential(id)`, `addClave()`, `addClaveMovil()`, `addCertificate()`, `addDnie()`, `setDnieCertificate()`, `setDniePin()`, `setCredentialPolicy()`, `getCredentialSecret()`, `markCredentialUsed()`, `deleteCredential()` |
+| Credentials | `listCredentials()`, `getCredential(id)`, `addClave()`, `addClaveMovil()`, `addCertificate()`, `exportCertificate()`, `addDnie()`, `setDnieCertificate()`, `setDniePin()`, `setCredentialPolicy()`, `getCredentialSecret()`, `markCredentialUsed()`, `deleteCredential()` |
 | App secrets | `listSecrets()` (labels only), `setSecret(id, label, value)`, `getSecret(id)`, `deleteSecret(id)` |
 | PII | `knownSensitiveValues()` (for `@sa/pii` `knownValues`) |
 | Reset | `wipe()` |
@@ -66,6 +66,10 @@ Behaviour worth knowing:
   `tls.createSecureContext({ pfx, passphrase })`, Playwright `clientCertificates` and
   Electron. `pkcs12ToPem()` gives `{ key, cert, ca }` PEM if a consumer prefers that.
   Importing the same certificate again returns the existing credential.
+  `exportCertificate(id, passphrase)` gives the key and chain back as a new `.p12` under the
+  user's passphrase (`CertificateExportPassword`), in 3DES with a SHA-1 MAC so that macOS
+  Keychain, Windows, Firefox, Java (AutoFirma) and OpenSSL all import it. The caller gets the
+  user's consent first.
 - **DNIe** (`addDnie`): one credential for "I sign with my DNIe and my phone" (adding it again
   returns the existing one). It holds the signing certificate's details after the first read and,
   if the user saves it, the PIN (8 to 16 characters, `setDniePin`).

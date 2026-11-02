@@ -26,7 +26,8 @@ export function VaultView({ initialTab }: { initialTab?: VaultTab }) {
     ? {
         personal: overview.personal.length,
         documents: overview.documents.length,
-        credentials: overview.credentials.length,
+        // Pending FNMT certificate requests are entries of that list too.
+        credentials: overview.credentials.length + overview.certificateRequests.length,
       }
     : {};
 

@@ -31,7 +31,6 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
-      fnmtCertificates: false,
     });
     const request = fetch.requests[0];
     expect(request?.url.pathname).toBe('/api/frontend');
@@ -82,7 +81,6 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
-      fnmtCertificates: false,
     });
     await vi.waitFor(() => expect(fetch.requests).toHaveLength(2));
   });
@@ -95,7 +93,6 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
-      fnmtCertificates: false,
     });
     const off = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: false }] }),
@@ -131,18 +128,6 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'off',
       mustUpdate: true,
       errorReports: false,
-      fnmtCertificates: false,
-    });
-  });
-
-  it('reads fnmt-certificates as fnmtCertificates', async () => {
-    const on = load(() =>
-      jsonResponse(200, { toggles: [{ name: 'fnmt-certificates', enabled: true }] }),
-    ).flags;
-    expect(await on).toEqual({ ...FEATURES_OFF, fnmtCertificates: true });
-    expect(featuresFromNames(['fnmt-certificates'])).toEqual({
-      ...FEATURES_OFF,
-      fnmtCertificates: true,
     });
   });
 

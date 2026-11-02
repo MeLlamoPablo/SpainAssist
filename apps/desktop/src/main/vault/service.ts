@@ -21,6 +21,7 @@ import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import { errorMessage } from '../core/util';
 import type { Biometric, VaultPort } from '../ports';
+import { type ChooseSavePath, exportCertificate } from './certificate-export';
 import { logPersonalSaveFailure, setPersonalPartial } from './partial';
 
 const PREVIEW_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
@@ -46,6 +47,8 @@ export interface VaultServiceDeps {
   dniePhone: boolean;
   /** Drops active browser contexts that may retain a deleted client certificate. */
   onCredentialDeleted?(id: string): Promise<void>;
+  /** The OS save dialog, for certificate exports; none without a window. */
+  chooseSavePath?: ChooseSavePath;
 }
 
 /** "Mis datos" for the renderer (`vault.*`): every mutation emits `vault.changed`. */
@@ -273,6 +276,11 @@ export class VaultService {
     });
   }
 
+  /** A certificate as a password-protected `.p12`, where the user picks (`certificate-export`). */
+  exportCertificate(id: string, password: string): Promise<string | null> {
+    return this.guard(() => exportCertificate(this.deps, id, password));
+  }
+
   setCredentialPolicy(id: string, policy: CredentialPolicy): Promise<CredentialSummary> {
     return this.guard(async () => {
       this.requireVisible(id);
@@ -287,6 +295,19 @@ export class VaultService {
       this.requireVisible(id);
       await this.deps.vault.deleteCredential(id);
       await this.deps.onCredentialDeleted?.(id);
+      this.changed();
+      return this.overview();
+    });
+  }
+
+  /**
+   * Mis datos: discards a pending FNMT certificate request. Its key goes with it, so that
+   * certificate can no longer be downloaded: the user has to request a new one.
+   */
+  deleteCertificateRequest(id: string): Promise<VaultOverview> {
+    return this.guard(async () => {
+      await this.deps.vault.deleteCertificateRequest(id);
+      this.deps.logger.info('FNMT certificate request discarded', { requestId: id });
       this.changed();
       return this.overview();
     });

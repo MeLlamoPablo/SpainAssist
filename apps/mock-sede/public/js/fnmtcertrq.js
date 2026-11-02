@@ -2,7 +2,9 @@
  * public members as the real script: a top-level `var FnmtCertRequest` assigned from an IIFE.
  * The real one launches the Configurador through `fnmtcr://` and polls a relay for its answer;
  * there is no Configurador here, so requestCert and installCert fail after a short wait, as the
- * real page does once it gives up. The app's shim replaces this object before the page uses it. */
+ * real page does once it gives up. The app's shim replaces this object before the page uses it.
+ * In the real script ok gets base64 of the Configurador's decrypted answer: the PKCS#10 for
+ * requestCert, "OK" for installCert (which fnmt-descarga.js checks, as FNMT's descarga.js does). */
 // biome-ignore-all lint/suspicious/noVar: classic-script globals, like the original.
 // biome-ignore-all lint/correctness/noUnusedVariables: these globals are the script's public API.
 // biome-ignore-all lint/complexity/useArrowFunction: written like the original ES5 script.

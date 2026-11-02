@@ -49,6 +49,7 @@ export type VaultPort = Pick<
   | 'setDniePin'
   | 'addCertificate'
   | 'addCertificateFromKey'
+  | 'exportCertificate'
   | 'listCertificateRequests'
   | 'findCertificateRequest'
   | 'addCertificateRequest'

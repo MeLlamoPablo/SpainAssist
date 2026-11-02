@@ -247,8 +247,19 @@ export interface SaMethods {
   'vault.setDniePin': [[id: string, pin: string | null], CredentialSummary];
   /** Validates the passphrase and extracts certificate metadata. */
   'vault.addCertificate': [[input: AddCertificateInput], CredentialSummary];
+  /**
+   * Saves a certificate, with its private key and chain, as a `.p12` protected by `password`
+   * (`CertificateExportPassword`), where the user picks in the OS save dialog. Touch ID first,
+   * when available. Returns the file name, or null when the user cancelled.
+   */
+  'vault.exportCertificate': [[id: string, password: string], string | null];
   'vault.setCredentialPolicy': [[id: string, policy: CredentialPolicy], CredentialSummary];
   'vault.deleteCredential': [[id: string], VaultOverview];
+  /**
+   * Discards a pending FNMT certificate request (`VaultOverview.certificateRequests`) and its
+   * key: its certificate can then no longer be downloaded.
+   */
+  'vault.deleteCertificateRequest': [[id: string], VaultOverview];
   /** Deletes ALL local data: vault, procedures, sessions, settings. */
   'vault.wipeAll': [[], void];
 

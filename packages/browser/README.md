@@ -57,8 +57,8 @@ sedes only.
 `afirma` injects the `@sa/signer` shim into every frame and binds calls to a trusted handler;
 origin and URL come from the invoking frame rather than page arguments. `fnmt` does the same for
 FNMT's certificate requests (`FNMT_SHIM_SOURCE`, `FNMT_BINDING`): the agent gets a note on
-FNMT's pages and after each request or download, and actions wait for the user's approval as
-they do for signatures.
+FNMT's pages and after each request or download, and actions wait for the user's approval of a
+request as they do for signatures.
 
 ## Revoked certificates
 

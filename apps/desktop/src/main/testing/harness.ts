@@ -59,6 +59,8 @@ export interface TestAppOptions {
   clock?: Clock;
   /** AutoFirma and FNMT shims and handler. Default: none, so pages get no shim. */
   signer?: SignerLib;
+  /** The OS save dialog. Default: none, so certificate exports are unavailable. */
+  chooseSavePath?: MainDeps['chooseSavePath'];
 }
 
 export type TestApp = Awaited<ReturnType<typeof createTestApp>>;
@@ -155,7 +157,6 @@ export async function createTestApp(opts: TestAppOptions = {}) {
         dniePhone: 'release',
         mustUpdate: false,
         errorReports: false,
-        fnmtCertificates: true,
         ...opts.features,
       },
       errorReports: false,
@@ -183,6 +184,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
       openedPaths.push(path);
       return '';
     },
+    chooseSavePath: opts.chooseSavePath,
     relaunch: () => {
       relaunched++;
     },

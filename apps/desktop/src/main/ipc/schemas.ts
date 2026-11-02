@@ -1,6 +1,7 @@
 import {
   Attachment,
   ByokInput,
+  CertificateExportPassword,
   CredentialPolicy,
   CustomProbeInput,
   CustomProviderInput,
@@ -120,8 +121,10 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
       label: z.string().trim().max(160).optional(),
     }),
   ]),
+  'vault.exportCertificate': z.tuple([id, CertificateExportPassword]),
   'vault.setCredentialPolicy': z.tuple([id, CredentialPolicy]),
   'vault.deleteCredential': z.tuple([id]),
+  'vault.deleteCertificateRequest': z.tuple([id]),
   'vault.wipeAll': none,
 
   'phoneCall.transcriptionAvailable': none,

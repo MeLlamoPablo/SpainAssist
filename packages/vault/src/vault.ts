@@ -2,6 +2,7 @@ import { createPrivateKey, randomBytes, randomUUID, X509Certificate } from 'node
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  CertificateExportPassword,
   CertificateInfo,
   CredentialPolicy,
   type CredentialSummary,
@@ -18,7 +19,7 @@ import {
   type StorageInfo,
   type VaultOverview,
 } from '@sa/shared';
-import { type ImportedCertificate, importCertificate } from './certificate';
+import { exportPkcs12, type ImportedCertificate, importCertificate } from './certificate';
 import {
   DATA_KEY_LENGTH,
   type DerivedKeys,
@@ -298,6 +299,7 @@ export class Vault {
       personal: this.listPersonal(),
       documents: this.listDocuments(),
       credentials: this.listCredentials(),
+      certificateRequests: this.listCertificateRequests(),
       storage: { ...this.storageInfo(), biometricAvailable: options.biometricAvailable ?? false },
     };
   }
@@ -638,6 +640,22 @@ export class Vault {
       const imported = await importCertificate(p12, passphrase, this.now());
       return this.storeCertificate(imported, input.fileName, input.label);
     });
+  }
+
+  /**
+   * A certificate credential as a new `.p12` protected by `passphrase`, with its private key and
+   * chain, for the user to install elsewhere. Callers MUST have the user's consent first.
+   * See `exportPkcs12` for the encoding. Errors: `not_found`, `invalid_input` (not a
+   * certificate, or a passphrase `CertificateExportPassword` rejects).
+   */
+  async exportCertificate(id: string, passphrase: string): Promise<Buffer> {
+    const credential = this.state.credentials.find((c) => c.id === id);
+    if (!credential) throw notFound('Credential');
+    if (credential.kind !== 'certificate') throw invalid('Only certificates can be exported');
+    if (!CertificateExportPassword.safeParse(passphrase).success) {
+      throw invalid('The export password is not valid');
+    }
+    return exportPkcs12(Buffer.from(credential.p12, 'base64'), credential.passphrase, passphrase);
   }
 
   /** Under the lock: stores an imported certificate, or returns the one already stored. */

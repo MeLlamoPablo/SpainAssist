@@ -224,6 +224,8 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
   const approvals = new Map<string, number>();
   /** Per procedure: origins outside the official list where the user allowed certificate logins. */
   const certificateSites = new Map<string, Set<string>>();
+  /** "procedureId origin" of unlisted sites the agent tried the DNI on: allowing one says DNI. */
+  const dnieSiteRequests = new Set<string>();
   /**
    * Lookup results of each procedure's last map form that was not shown (an address not found,
    * the service down), so the retry only looks up the addresses that changed. Memory only, and
@@ -338,14 +340,17 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
       certificateSites.get(pid)?.has(url.origin)
     )
       return { kind: 'confirm', approved: true };
+    const dnie = dnieSiteRequests.has(`${pid} ${url.origin}`);
     const response = await deps.prompts.ask(
       pid,
       {
         kind: 'confirm',
         confirmKind: 'certificate_site',
-        title: t(lang(), 'certificateSiteTitle', { host: url.host }).slice(0, 160),
+        title: t(lang(), dnie ? 'dnieSiteTitle' : 'certificateSiteTitle', {
+          host: url.host,
+        }).slice(0, 160),
         message: [
-          t(lang(), 'certificateSiteMessage', { host: url.host }),
+          t(lang(), dnie ? 'dnieSiteMessage' : 'certificateSiteMessage', { host: url.host }),
           `**${t(lang(), 'certificateSiteChecked')}** ${params.message}`,
         ]
           .join('\n\n')
@@ -866,6 +871,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
           certificateSites.get(pid)?.has(url.origin);
         if (!allowed) {
           const block = certificateSiteBlock(url);
+          if (!block && credential.kind === 'dnie') dnieSiteRequests.add(`${pid} ${url.origin}`);
           throw new BridgeError(
             'policy_denied',
             block
@@ -885,21 +891,28 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         const websites = requested.length
           ? requested.map(hostOf).join(', ')
           : origins.map(hostOf).join(', ');
+        const dnie = credential.kind === 'dnie';
+        // Before its first read the app doesn't know whose DNI it is: the title says DNI.
+        const holder = credential.certificate?.holderName ?? (dnie ? undefined : credential.label);
         await approveCredentialUse(
           ctx,
           `${pid}:${credential.id}:${origins.join(',')}`,
           {
-            title: t(lang(), 'certificateTitle'),
-            message: t(lang(), 'certificateMessage'),
+            title: t(lang(), dnie ? 'dnieUseTitle' : 'certificateTitle'),
+            message: t(lang(), dnie ? 'dnieUseMessage' : 'certificateMessage'),
             details: [
-              {
-                label: t(lang(), 'detailCertificate'),
-                value: (credential.certificate?.holderName ?? credential.label).slice(0, 500),
-              },
+              ...(holder
+                ? [
+                    {
+                      label: t(lang(), dnie ? 'detailDnie' : 'detailCertificate'),
+                      value: holder.slice(0, 500),
+                    },
+                  ]
+                : []),
               { label: t(lang(), 'detailWebsites'), value: websites.slice(0, 500) },
             ],
           },
-          credential.kind === 'dnie' ? undefined : t(lang(), 'touchIdCertificate'),
+          dnie ? undefined : t(lang(), 'touchIdCertificate'),
         );
       }
       await browserCall(async (b) => {

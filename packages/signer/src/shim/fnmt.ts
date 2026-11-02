@@ -16,7 +16,9 @@
  *  - `requestCert(ok, ko, keyType, keyLength, csrType, forceCard)` and `installCert(ok, ko,
  *    cert)` are sent to the binding `window[config.binding]` as an `FnmtCall`; the reply
  *    (`FnmtReply`) calls `ok(result)` or `ko(errorType, message)` asynchronously, as the real
- *    object does after its relay round trip. No `fnmtcr://` link, relay or polling.
+ *    object does after its relay round trip. No `fnmtcr://` link, relay or polling. The result
+ *    is what the real `ok` gets: the PKCS#10, or `FNMT_INSTALLED` (base64 of `OK`), which FNMT's
+ *    download page decodes and checks.
  *  - `forceCard === true` (a smart card is required) fails at once: the app has no card support.
  *  - `cargarAppFnmt` and `setServlets` are accepted and ignored: there is no relay.
  *  - Any other method of the page's object gets a no-op, and the app a notice (`'ignored'`).

@@ -6,6 +6,7 @@ import {
   DEFAULT_SETTINGS,
   type DocumentMeta,
   type FormPrompt,
+  type PendingCertificateRequest,
   type PersonalDataItem,
   type Procedure,
   type ProcedureListItem,
@@ -48,6 +49,7 @@ export interface MockState {
   documents: DocumentMeta[];
   documentPreviews: Map<string, string>;
   credentials: CredentialSummary[];
+  certificateRequests: PendingCertificateRequest[];
   storage: StorageInfo;
   media: Map<string, string>;
 }
@@ -239,7 +241,7 @@ function demoCredentials(now: number): CredentialSummary[] {
       createdAt: at(now, 9),
       certificate: {
         subject: 'CN=MARTIN ORTEGA LUCIA - 12345678Z, SN=MARTIN ORTEGA, G=LUCIA, C=ES',
-        issuer: 'AC FNMT Usuarios',
+        issuer: 'CN=AC FNMT Usuarios, OU=Ceres, O=FNMT-RCM, C=ES',
         serialNumber: '5A1C93E2B07D4F11',
         validFrom: at(now, 1 * 1440),
         validTo: inDays(now, 4 * 365 - 1),
@@ -247,6 +249,20 @@ function demoCredentials(now: number): CredentialSummary[] {
         holderId: '12345678Z',
         fingerprint: '9f2c4b7a1e0d3c58b6a4e2f1d0c9b8a7f6e5d4c3b2a1908f7e6d5c4b3a291807',
       },
+    },
+  ];
+}
+
+/** An FNMT certificate request waiting for its download (Mis datos: "En proceso"). */
+function demoCertificateRequests(now: number): PendingCertificateRequest[] {
+  return [
+    {
+      id: 'req-fnmt',
+      publicKeyHash: 'WrpR88SZuLkhNxKKnk0ShWhX7Za2FK0W0h581OBeCdc',
+      keyDescription: 'rsa 2048',
+      origin: 'https://apus20.sede.fnmt.gob.es',
+      procedureId: DEMO_IDS.fnmt,
+      createdAt: at(now, 150),
     },
   ];
 }
@@ -1574,6 +1590,7 @@ export function createDemoState(
       documents: [],
       documentPreviews: new Map(),
       credentials: [],
+      certificateRequests: [],
       storage,
       media,
     };
@@ -1591,6 +1608,7 @@ export function createDemoState(
     documents: docs,
     documentPreviews: previews,
     credentials: demoCredentials(now),
+    certificateRequests: demoCertificateRequests(now),
     storage,
     media,
   };

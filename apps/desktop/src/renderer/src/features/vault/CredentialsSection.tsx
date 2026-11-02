@@ -2,6 +2,7 @@ import {
   type CredentialPolicy,
   type CredentialSummary,
   DniePin,
+  issuerName,
   type VaultOverview,
 } from '@sa/shared';
 import {
@@ -38,6 +39,8 @@ import { chatDict } from '../chat/i18n';
 import { DnieHelp } from '../companion/DnieHelp';
 import { companionDict } from '../companion/i18n';
 import { PairingPanel } from '../companion/PairingPanel';
+import { CertificateExportButton } from './CertificateExport';
+import { CertificateRequestCard } from './CertificateRequestCard';
 import { vaultDict } from './i18n';
 import { SectionIntro } from './VaultView';
 
@@ -180,6 +183,10 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
         {certs.map((cert) => (
           <CertificateCard key={cert.id} credential={cert} biometric={biometric} />
         ))}
+        {/* FNMT certificates on their way: their keys wait here for the download. */}
+        {overview.certificateRequests.map((request) => (
+          <CertificateRequestCard key={request.id} request={request} />
+        ))}
         {certs.length === 0 ? (
           <AddCard
             icon={FileKey}
@@ -261,6 +268,7 @@ function CredentialCard({
   children,
   warning,
   below,
+  actions,
 }: {
   credential: CredentialSummary;
   icon: LucideIcon;
@@ -270,6 +278,8 @@ function CredentialCard({
   warning?: ReactNode;
   /** Shown under the details (e.g. the DNIe's phone pairing). */
   below?: ReactNode;
+  /** Icon buttons before the bin (e.g. a certificate's download). */
+  actions?: ReactNode;
 }) {
   const t = useT(vaultDict);
   const tc = useT(common);
@@ -324,14 +334,17 @@ function CredentialCard({
           {warning}
           {below}
         </div>
-        <IconButton
-          icon={Trash}
-          label={`${t.credentials.remove} ${title}`}
-          onClick={() => {
-            if (c.kind === 'dnie') void remove();
-            else setConfirm(true);
-          }}
-        />
+        <div className="flex shrink-0 items-center gap-1">
+          {actions}
+          <IconButton
+            icon={Trash}
+            label={`${t.credentials.remove} ${title}`}
+            onClick={() => {
+              if (c.kind === 'dnie') void remove();
+              else setConfirm(true);
+            }}
+          />
+        </div>
       </div>
       {/* Cl@ve Móvil and the DNIe are always approved on the phone. */}
       {c.kind !== 'clave_movil' && c.kind !== 'dnie' ? (
@@ -391,6 +404,7 @@ function CertificateCard({
       icon={FileKey}
       title={t.credentials.cert.title}
       biometric={biometric}
+      actions={<CertificateExportButton credential={c} biometric={biometric} />}
       warning={
         soon && days !== null ? (
           <div
@@ -410,7 +424,10 @@ function CertificateCard({
       {info ? (
         <>
           <Meta label={t.credentials.cert.holder} value={info.holderName ?? info.subject} />
-          <Meta label={t.credentials.cert.issuer} value={info.issuer} />
+          <Meta
+            label={t.credentials.cert.issuer}
+            value={<span title={info.issuer}>{issuerName(info.issuer)}</span>}
+          />
           <Meta
             label={t.credentials.cert.validTo}
             value={

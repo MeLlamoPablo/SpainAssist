@@ -28,6 +28,7 @@ describe('opening', () => {
       personal: [],
       documents: [],
       credentials: [],
+      certificateRequests: [],
       storage: { backend: 'test', secure: false, biometricAvailable: false },
     });
     expect(vault.overview({ biometricAvailable: true }).storage.biometricAvailable).toBe(true);

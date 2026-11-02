@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { COUNTRIES } from './countries';
+import { PendingCertificateRequest } from './fnmt';
 import { SPANISH_PROVINCES } from './provinces';
 
 /**
@@ -472,6 +473,15 @@ export type CredentialKind = z.infer<typeof CredentialKind>;
  */
 export const DniePin = z.string().min(8).max(16);
 
+/** The shortest password Mis datos accepts for an exported certificate (`.p12`). */
+export const CERTIFICATE_EXPORT_PASSWORD_MIN = 8;
+
+/**
+ * The password that protects an exported certificate (`vault.exportCertificate`). The user
+ * chooses it and types it twice. It is never stored, so nobody can recover it.
+ */
+export const CertificateExportPassword = z.string().min(CERTIFICATE_EXPORT_PASSWORD_MIN).max(256);
+
 export const CredentialPolicy = z.enum(['auto', 'ask']);
 export type CredentialPolicy = z.infer<typeof CredentialPolicy>;
 
@@ -537,6 +547,8 @@ export const VaultOverview = z.object({
   personal: z.array(PersonalDataItem),
   documents: z.array(DocumentMeta),
   credentials: z.array(CredentialSummary),
+  /** FNMT certificate requests whose key waits for its certificate (`fnmt.ts`). */
+  certificateRequests: z.array(PendingCertificateRequest),
   storage: StorageInfo,
 });
 export type VaultOverview = z.infer<typeof VaultOverview>;
