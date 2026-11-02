@@ -33,9 +33,12 @@ const Step = Type.Object({
 
 const Requirement = Type.Object({
   id: Type.String({ minLength: 1, maxLength: 64 }),
-  label: Type.String({ minLength: 1, maxLength: 160, description: 'What the user needs' }),
-  detail: Type.Optional(Type.String({ maxLength: 1000 })),
-  status: StringEnum(['missing', 'have', 'not_needed']),
+  label: Type.String({ minLength: 1, maxLength: 60, description: 'What the user needs' }),
+  detail: Type.Optional(Type.String({ maxLength: 160 })),
+  status: StringEnum(['have', 'missing', 'not_needed'], {
+    description:
+      'have: the user has it (a saved document, their answer). missing: they still have to get or prepare it. not_needed: only for something they would expect to need that their case skips',
+  }),
 });
 
 const Fact = Type.Object({
