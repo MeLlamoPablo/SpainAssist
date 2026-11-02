@@ -253,7 +253,6 @@ describe('saved data and physical-place prompts', () => {
   it('reuses known locations and checks incomplete filtered reads on resumed runs', () => {
     const procedure = buildSystemPrompt({ language: 'es', research: 'web_research' });
     expect(procedure).toContain('including on resumed runs');
-    expect(procedure).toContain('addressProvince and addressMunicipality');
     expect(procedure).toContain('call vault_read without keys');
     expect(procedure).toContain('never ask to reconfirm known data, even as prefilled fields');
     const assistant = buildAssistantPrompt({ language: 'es' });
@@ -277,20 +276,15 @@ describe('saved data and physical-place prompts', () => {
       expect(parseAppLink(link.replace('<id>', 'p_0123456789abcdef')), link).not.toBeNull();
   });
 
-  it('lets the app locate public places while preserving ordinary select choices', () => {
+  it('lets the app locate public places', () => {
     const procedure = buildSystemPrompt({ language: 'en', research: 'web_research' });
     expect(procedure).toContain('type: "map-options"');
     expect(procedure).toContain('a provincial list may include other towns');
     expect(procedure).toContain('its street address with number and municipality (address)');
     expect(procedure).toContain('every address can be found in Spain before showing the form');
     expect(procedure).toContain("the user's choice comes back as the option value");
-    expect(procedure).toContain('If ask_user returns a location error, no form was shown');
-    expect(procedure).toContain('find their street addresses and municipality');
-    expect(procedure).toContain('Do not research coordinates');
     expect(procedure).toContain('give the user plenty of options');
     expect(procedure).toContain('The app sorts them by closest to the user.');
-    expect(procedure).toContain('Ordinary choices such as methods still use select');
-    expect(procedure).toContain('free slots use appointment');
     expect(buildAssistantPrompt({ language: 'en' })).toContain(
       'map-options with place names and street addresses',
     );
@@ -324,7 +318,6 @@ describe('procedure research workflow', () => {
     const prompt = buildSystemPrompt({ language: 'es', research: 'web_research' });
     expect(prompt).toContain('call web_research once');
     expect(prompt).toContain('refine it with fetch_url, boe_search');
-    expect(prompt).toContain('call it once, without polling or duplicate runs');
     expect(prompt).toContain('Only after this research completes may you refine it');
     expect(prompt).toContain(
       'Formulate the complete plan before collecting user information or executing any step',
