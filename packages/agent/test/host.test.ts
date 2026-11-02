@@ -158,6 +158,7 @@ describe('system prompt', () => {
     expect(assistant).toContain('Answer in Spanish');
     for (const tool of ['procedure_start', 'procedure_message', 'procedure_read', REPORT_PREFIX])
       expect(assistant).toContain(tool);
+    expect(assistant).toContain("# Acting in the user's name");
     expect(formatToday(now, 'Not/AZone')).toContain('Europe/Madrid');
     for (const rule of [
       'procedure_update',
