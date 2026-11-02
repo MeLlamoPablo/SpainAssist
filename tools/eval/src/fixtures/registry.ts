@@ -4,6 +4,7 @@ import {
   dniRenovacionNoElegible,
   dniRenovacionSinDatos,
 } from './dni-renovacion';
+import { ilpBorealFirma } from './ilp-boreal';
 import {
   transferenciaCiclomotor,
   transferenciaConDatos,
@@ -42,8 +43,17 @@ const BASE: readonly Fixture[] = [
   transferenciaEmpresa(),
 ].map(assertValidFixture);
 
+/**
+ * Fixtures run on demand (`eval run <id>`), outside the full run: the ILP signature on Boreal, a
+ * regression test of agents that refuse to sign in the user's name.
+ */
+const ON_DEMAND: readonly Fixture[] = [ilpBorealFirma()].map(assertValidFixture);
+
 const byId = new Map(
-  [...BASE, assertValidFixture(createInjectionFixture())].map((fixture) => [fixture.id, fixture]),
+  [...BASE, ...ON_DEMAND, assertValidFixture(createInjectionFixture())].map((fixture) => [
+    fixture.id,
+    fixture,
+  ]),
 );
 const variants = new Map<string, Fixture>();
 
@@ -57,7 +67,7 @@ export const FIXTURE_IDS: readonly string[] = BASE.map((fixture) => fixture.id);
 export class UnknownFixtureError extends Error {
   constructor(readonly id: string) {
     super(
-      `Unknown fixture "${id}". Known: ${FIXTURE_IDS.join(', ')} (and ${INYECCION_ID}:<variant>).`,
+      `Unknown fixture "${id}". Known: ${[...FIXTURE_IDS, ...ON_DEMAND.map((f) => f.id)].join(', ')} (and ${INYECCION_ID}:<variant>).`,
     );
     this.name = 'UnknownFixtureError';
   }

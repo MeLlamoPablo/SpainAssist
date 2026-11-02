@@ -18,6 +18,7 @@
 
 import type { AgentErrorKind } from '@sa/agent';
 import type { PromptResponse } from '@sa/shared';
+import type { CertificateSpec } from './documents/certificate';
 import type { FixtureDocument } from './documents/spec';
 import type { CredentialSource, MeterRun } from './llm';
 
@@ -385,6 +386,11 @@ export interface FixtureSeed {
    * for them (`src/run/simulator.ts`). Specs, not bytes: `src/documents` draws them.
    */
   documents?: FixtureDocument[];
+  /**
+   * The persona's digital certificates, in the vault before the run (imported as a `.p12` the
+   * way the UI does). Specs, not bytes: `src/documents/certificate.ts` draws them.
+   */
+  certificates?: CertificateSpec[];
 }
 
 /**
