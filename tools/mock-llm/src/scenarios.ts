@@ -94,17 +94,11 @@ const demo: ScenarioInput = {
                 },
               ],
               requirements: [
-                { id: 'dni-actual', label: 'Tu DNI actual', status: 'unknown' },
+                { id: 'dni-actual', label: 'Tu DNI actual', status: 'have' },
                 {
                   id: 'foto',
                   label: 'Una foto reciente en color (fondo blanco)',
-                  status: 'unknown',
-                },
-                {
-                  id: 'empadronamiento',
-                  label: 'Certificado de empadronamiento',
-                  detail: 'Solo si cambias de domicilio.',
-                  status: 'unknown',
+                  status: 'missing',
                 },
               ],
               facts: [

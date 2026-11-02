@@ -35,9 +35,7 @@ const Requirement = Type.Object({
   id: Type.String({ minLength: 1, maxLength: 64 }),
   label: Type.String({ minLength: 1, maxLength: 160, description: 'What the user needs' }),
   detail: Type.Optional(Type.String({ maxLength: 1000 })),
-  status: Type.Optional(
-    StringEnum(['missing', 'have', 'unknown', 'not_needed'], { description: 'Default unknown' }),
-  ),
+  status: StringEnum(['missing', 'have', 'not_needed']),
 });
 
 const Fact = Type.Object({
@@ -180,7 +178,6 @@ export function procedureTools(bridge: BridgeTransport) {
         const { clearNextAction, nextAction, ...rest } = params;
         const update: ProcedureUpdate = compact({
           ...rest,
-          requirements: rest.requirements?.map((r) => ({ ...r, status: r.status ?? 'unknown' })),
           nextAction: clearNextAction ? null : nextAction,
         }) as ProcedureUpdate;
         if (Object.keys(update).length === 0) {

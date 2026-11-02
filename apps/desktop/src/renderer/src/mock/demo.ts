@@ -834,15 +834,6 @@ function demoProcedures(now: number, t: Tr): ProcedureListItem[] {
           ),
         },
         { id: 'tasa', label: t('Tasa de 12 € pagada', '€12 fee paid'), status: 'have' },
-        {
-          id: 'padron',
-          label: t('Certificado de empadronamiento', 'Padrón certificate'),
-          status: 'unknown',
-          detail: t(
-            'Solo si quieres cambiar la dirección que sale en el DNI.',
-            'Only if you want to change the address on your DNI.',
-          ),
-        },
       ],
       facts: [
         {

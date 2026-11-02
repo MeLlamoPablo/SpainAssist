@@ -3,7 +3,6 @@ import {
   CircleAlert,
   CircleCheck,
   CircleMinus,
-  CircleQuestionMark,
   ExternalLink,
   FileText,
   Globe,
@@ -107,10 +106,6 @@ const REQ_STYLE: Record<RequirementStatus, { icon: LucideIcon; icls: string }> =
   missing: {
     icon: CircleAlert,
     icls: 'text-st-attention-dot',
-  },
-  unknown: {
-    icon: CircleQuestionMark,
-    icls: 'text-fg-faint',
   },
   not_needed: {
     icon: CircleMinus,

@@ -202,6 +202,21 @@ describe('ProcedureService', () => {
     expect(reloaded.list()).toEqual([]);
   });
 
+  it('loads cards saved with the dropped "unknown" requirement status as missing', async () => {
+    const { service, store } = makeService();
+    const p = await service.create('Renovar el DNI');
+    await store.flush();
+    const file = store.paths(p.id).procedureFile;
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    saved.requirements = [{ id: 'foto', label: 'Foto reciente', status: 'unknown' }];
+    await writeFile(file, JSON.stringify(saved));
+    const { service: reloaded } = makeService();
+    await reloaded.init();
+    expect(reloaded.require(p.id).requirements).toEqual([
+      { id: 'foto', label: 'Foto reciente', status: 'missing' },
+    ]);
+  });
+
   it('lists the most recently updated first', async () => {
     const { service } = makeService();
     const a = await service.create('a');

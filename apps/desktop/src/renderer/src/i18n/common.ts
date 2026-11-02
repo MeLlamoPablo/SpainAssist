@@ -54,7 +54,6 @@ export const common = defineDict({
     requirement: {
       have: 'Lo tienes',
       missing: 'Te falta',
-      unknown: 'Por confirmar',
       not_needed: 'No hace falta',
     } satisfies Record<RequirementStatus, string>,
     dataSource: {
@@ -110,7 +109,6 @@ export const common = defineDict({
     requirement: {
       have: 'You have it',
       missing: 'Missing',
-      unknown: 'To confirm',
       not_needed: 'Not needed',
     },
     dataSource: {

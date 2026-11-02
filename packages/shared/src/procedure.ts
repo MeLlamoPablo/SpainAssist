@@ -38,7 +38,7 @@ export const ProcedureStep = z.object({
 });
 export type ProcedureStep = z.infer<typeof ProcedureStep>;
 
-export const RequirementStatus = z.enum(['missing', 'have', 'unknown', 'not_needed']);
+export const RequirementStatus = z.enum(['missing', 'have', 'not_needed']);
 export type RequirementStatus = z.infer<typeof RequirementStatus>;
 
 /** Something the user needs (a document, a photo, a fee payment, a credential...). */
@@ -46,7 +46,8 @@ export const Requirement = z.object({
   id: z.string().min(1).max(64),
   label: z.string().min(1).max(160),
   detail: z.string().max(1000).optional(),
-  status: RequirementStatus.default('unknown'),
+  /** Legacy: cards saved with the dropped "unknown" status still parse, as missing. */
+  status: z.preprocess((s) => (s === 'unknown' ? 'missing' : s), RequirementStatus),
 });
 export type Requirement = z.infer<typeof Requirement>;
 

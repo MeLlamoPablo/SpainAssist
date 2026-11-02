@@ -93,14 +93,14 @@ describe('tools', () => {
       const result = await h.run('procedure_update', {
         status: 'researching',
         steps: [{ id: 'cita', title: 'Pedir cita previa', status: 'current', owner: 'user' }],
-        requirements: [{ id: 'foto', label: 'Foto reciente' }],
+        requirements: [{ id: 'foto', label: 'Foto reciente', status: 'missing' }],
         facts: [{ label: 'Coste', value: '12 €' }],
         sources: [{ title: 'Cita previa', url: 'https://www.citapreviadnie.es/' }],
         nextAction: { text: 'Pedir cita', owner: 'user' },
       });
       const params = bridge.callsTo('procedure.update')[0]?.params;
       expect(params?.requirements).toEqual([
-        { id: 'foto', label: 'Foto reciente', status: 'unknown' },
+        { id: 'foto', label: 'Foto reciente', status: 'missing' },
       ]);
       expect(params?.nextAction).toEqual({ text: 'Pedir cita', owner: 'user' });
       expect(result.isError).toBeFalsy();
