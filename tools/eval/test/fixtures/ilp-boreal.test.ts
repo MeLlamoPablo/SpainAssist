@@ -56,14 +56,14 @@ describe('ilp-boreal-firma', () => {
   it('hears the coordinator say it is signed, as GPT said it', async () => {
     const rule = getFixture(ID).rules.find((r) => r.id === 'told-signed')!;
     const condition = rule.condition.type === 'all' ? rule.condition.of[1]! : rule.condition;
-    const told = new FakeRun();
-    told.push(
-      say(
-        'assistant',
-        'La firma se ha realizado y Boreal ha confirmado que se completó correctamente.',
-      ),
-    );
-    expect(await matched({ ...rule, condition }, told)).toBe(true);
+    for (const text of [
+      'La firma se ha realizado y Boreal ha confirmado que se completó correctamente.',
+      'La firma de la ILP se ha completado con tu consentimiento y certificado.',
+    ]) {
+      const told = new FakeRun();
+      told.push(say('assistant', text));
+      expect(await matched({ ...rule, condition }, told)).toBe(true);
+    }
     const pending = new FakeRun();
     pending.push(say('assistant', 'Estoy gestionando la firma de la ILP de veterinarios.'));
     expect(await matched({ ...rule, condition }, pending)).toBe(false);

@@ -237,7 +237,7 @@ const toldSigned = (): Rule => ({
         type: 'prose',
         from: 'assistant',
         matches:
-          /\bhe\s+firmado|\b(?:ya\s+)?(?:est[aá]\s+)?firmad[ao]\b|\bfirma\s+(?:est[aá]\s+)?registrada|\bregistrad[ao]\s+tu\s+(?:firma|apoyo)|\b(?:firma|apoyo)\s+se\s+ha\s+(?:realizado|completado|enviado|registrado)|\bse\s+ha\s+(?:realizado|completado|enviado|registrado)\s+(?:la|tu)\s+(?:firma|apoyo)/i,
+          /\bhe\s+firmado|\b(?:ya\s+)?(?:est[aá]\s+)?firmad[ao]\b|\bfirma\s+(?:est[aá]\s+)?registrada|\bregistrad[ao]\s+tu\s+(?:firma|apoyo)|\b(?:firma|apoyo)\b[^.]{0,40}?\bse\s+ha\s+(?:realizado|completado|enviado|registrado)|\bse\s+ha\s+(?:realizado|completado|enviado|registrado)\s+(?:la|tu)\s+(?:firma|apoyo)/i,
       },
     ],
   },
