@@ -8,7 +8,10 @@ listing up to date.
 
 Rules for every text here and in the graphics (`play-policy.md`): never call the app "official"
 or "la app del DNI", no government logos or coats of arms, the non-affiliation disclaimer stays
-visible near the top of the description, and the official sources stay listed.
+visible near the top of the description, and the official sources stay listed in every
+language. On 2026-11-03 Play rejected the first submission under Misleading Claims ("Missing
+Source Link for Government Information") because only the en-US description had them; Play
+flagged the es-ES one.
 
 ## Store listing
 
@@ -55,7 +58,12 @@ PRIVACIDAD Y SEGURIDAD
 • Sin anuncios y sin cuentas.
 • Software libre: la app se distribuye con licencia EUPL 1.2 y puedes descargar todo su código fuente.
 
-Spain Assist es una app privada; no está afiliada a ninguna administración pública.
+FUENTES OFICIALES
+Para informarte sobre el DNI electrónico y la firma electrónica, consulta las fuentes oficiales:
+• Portal del DNI electrónico: https://www.dnielectronico.es
+• Portal de Firma Electrónica: https://firmaelectronica.gob.es
+
+Spain Assist es una app privada; no está afiliada a la Policía Nacional, la FNMT ni a ninguna administración pública, y no sustituye a ningún servicio oficial.
 
 Política de privacidad: https://spainassist.es/legal/politica-de-privacidad
 Contacto: hola@spainassist.es
