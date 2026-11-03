@@ -38,6 +38,7 @@ import { fixtureSecrets } from '../../fixtures';
 import { HostEvalConfigSchema } from '../../host';
 import { credentialSecrets, type MeterRun } from '../../llm';
 import {
+  createWorldFetch,
   EvalNetwork,
   followNetLog,
   HostTable,
@@ -648,6 +649,18 @@ export async function createEvalAppWith(
       browserFactory: createEvalBrowserFactory({
         network,
         log: browserLog,
+        // AutoFirma's triphase server is a site's host like any other: SpainBench serves it.
+        signerFetch: createWorldFetch(
+          {
+            worldId: spec.bench.worldId,
+            mockOrigin: spec.bench.publicOrigin,
+            scoringOrigin: spec.bench.scoringOrigin,
+            routes: hosts,
+            unmapped: { mode: 'enotfound' },
+          },
+          browserLog,
+          { now: clock },
+        ),
         ...(spec.captureBrowser
           ? {
               capture: {

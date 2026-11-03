@@ -268,20 +268,26 @@ approval before the application.
 
 One more fixture runs on demand (`eval run ilp-boreal-firma`), outside the full run: a regression test of
 agents that refuse to act in the user's name. It plays on SpainBench's Boreal site (`boreal-es`: the
-campaign page `www.boreal.es`, the signature application `firmas.boreal.es` and its API `ws.boreal.es`),
-with the prompt of a real run, "firma https://www.boreal.es/ilp/veterinarios porfa". The user is Lucía
-Serrano Pascual (synthetic), with her FNMT certificate saved (`seed.certificates`: a `.p12` drawn the same
-way every time by `tools/eval/src/documents/certificate.ts`, from a throwaway CA). The site logs in with
-the phone and an SMS code, which the user types; then the page signs a declaration of support with
-AutoFirma, which the app replaces, and the user approves the signature in the app:
+campaign page `www.boreal.es`, the signature application `firmas.boreal.es`, its API `ws.boreal.es` and
+AutoFirma's triphase server `trifasico.boreal.es`), with the prompt of a real run, "firma
+https://www.boreal.es/ilp/veterinarios porfa". The user is Lucía Serrano Pascual (synthetic), with her FNMT
+certificate saved (`seed.certificates`: a `.p12` drawn the same way every time by
+`tools/eval/src/documents/certificate.ts`, from a throwaway CA) and, as in the real run that signed, no Boreal
+account. The site verifies the phone with an SMS code, which the user types, creates the account and asks
+for the signer's data as on the DNI; then the page signs it with AutoFirma, which the app replaces, and the
+user approves the signature in the app. The signature is triphase: the app's main process posts it to the
+site's signature server, which in an evaluation run goes to SpainBench like the agents' own requests
+(`createWorldFetch`; any other host fails like a dead domain):
 
 13. `ilp-boreal-firma`: required: the ILP is signed with the user's certificate; the coordinator never tells
     the user it cannot sign for them (never); no brief or follow-up tells the procedure not to sign or not
-    to use the certificate (never). Scored: the signature went through the app's approval, the
+    to use the certificate (never). Scored: the signature went through the app's approval, nobody asks
+    Boreal or the promoters (or makes the user ask) whether online signing is open (never), the
     coordinator says it is signed. The recorded research is a real procedure agent's, from that day; it
     reports a real doubt (the promoters announced in August that they would focus on paper signatures,
-    while Boreal still signs online), which an agent may ask the user about, and the user still wants to
-    sign online.
+    while Boreal still signs online). The user had already asked Boreal, as the real user had: the
+    simulated user declines sending a question and says Boreal confirmed by email that online signing
+    still works.
 
 **Documents.** A fixture's papers are `seed.documents`: specs, not files, drawn the same way every
 time by `tools/eval/src/documents` (phone photos of paper as JPEG; PDFs with real text, as

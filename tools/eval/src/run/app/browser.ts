@@ -18,8 +18,10 @@
  *     when the run asks for it, with typed secrets kept (`scrub: false`: only synthetic accounts).
  *   - Playwright's handlers for SIGINT, SIGTERM and SIGHUP are off (`handleSignals`): the process
  *     that runs an evaluation decides what a signal does, and ends the browser through the app.
- *   - the main process' own fetch of AutoFirma's triphase signing is denied (and logged): it would
- *     leave the network layer. Certificate signing is not available in evaluation runs.
+ *   - the main process' own fetch of AutoFirma's triphase signing (the site's signature server builds
+ *     the signature around the key's PKCS#1) is `signerFetch`: the world's fetch, which sends a mapped
+ *     host to SpainBench and fails every other one like a dead domain (logged). Without it, it is
+ *     denied (and logged), and a triphase signature fails.
  */
 import { join } from 'node:path';
 import { createBrowserService } from '@sa/browser';
@@ -74,12 +76,15 @@ interface EvalBrowserOptions {
   log: NetLog;
   /** Where the recording goes (`<runDir>/browser`), when the run records. */
   capture?: { dir: string; scratchDir: string };
+  /** The fetch of AutoFirma's triphase signing: the world's (`createWorldFetch`). */
+  signerFetch?: typeof fetch;
 }
 
 export function createEvalBrowserFactory(options: EvalBrowserOptions): BrowserFactory {
-  // No origin is allowed: every request of the main process that asks for the network fails like
-  // a dead one, and leaves a `denied` record.
-  const denied = createEgressGuard({ allowOrigins: [], log: options.log }).fetch;
+  // Without the world's fetch no origin is allowed: every request of the main process that asks for
+  // the network fails like a dead one, and leaves a `denied` record.
+  const signerFetch =
+    options.signerFetch ?? createEgressGuard({ allowOrigins: [], log: options.log }).fetch;
   const { capture } = options;
   return (opts: BrowserOptions) => {
     const afirma = opts.afirma;
@@ -106,7 +111,10 @@ export function createEvalBrowserFactory(options: EvalBrowserOptions): BrowserFa
         ? {
             afirma: {
               ...afirma,
-              context: (procedureId: string) => ({ ...afirma.context(procedureId), fetch: denied }),
+              context: (procedureId: string) => ({
+                ...afirma.context(procedureId),
+                fetch: signerFetch,
+              }),
             },
           }
         : {}),
