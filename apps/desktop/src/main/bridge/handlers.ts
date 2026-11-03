@@ -474,13 +474,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     },
     'procedures.message': async (params) => {
       requireProcedure(params.procedureId);
-      return {
-        delivered: await deps.coordinator.message(
-          params.procedureId,
-          params.message,
-          params.urgent,
-        ),
-      };
+      return deps.coordinator.message(params.procedureId, params.message, params.urgent);
     },
     'procedures.respond': async (params) => {
       requireProcedure(params.procedureId);

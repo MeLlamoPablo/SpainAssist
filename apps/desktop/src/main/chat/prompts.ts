@@ -271,9 +271,14 @@ export class PromptManager {
     }
   }
 
-  /** Cancels these prompts if still pending (a correction made them obsolete). */
-  cancel(itemIds: readonly string[]): void {
-    for (const id of itemIds) this.finishCancelled(id);
+  /**
+   * Cancels these prompts if still pending (a message made them obsolete); the agent that asked
+   * gets `reason`. Returns how many were still pending.
+   */
+  cancel(itemIds: readonly string[], reason?: string): number {
+    let n = 0;
+    for (const id of itemIds) if (this.finishCancelled(id, reason)) n++;
+    return n;
   }
 
   cancelEverything(): void {
@@ -304,14 +309,15 @@ export class PromptManager {
     return n;
   }
 
-  private finishCancelled(itemId: string): void {
+  private finishCancelled(itemId: string, reason?: string): boolean {
     const entry = this.pending.get(itemId);
-    if (!entry) return;
+    if (!entry) return false;
     this.pending.delete(itemId);
     entry.cleanup();
     this.store(entry.owner, { ...entry.item, status: 'cancelled' });
     this.sync(entry.owner);
-    entry.reject(new PromptCancelledError());
+    entry.reject(new PromptCancelledError(reason));
+    return true;
   }
 
   /** The assistant's questions go to the conversation, a procedure's to its activity log. */

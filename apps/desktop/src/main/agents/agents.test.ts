@@ -213,7 +213,7 @@ describe('procedure agents', () => {
       assistant.token,
     );
     await app.services.coordinator.settled();
-    expect(queued.body.result).toEqual({ delivered: 'queued' });
+    expect(queued.body.result).toEqual({ delivered: 'queued', cancelledPrompts: 0 });
     expect(agent!.client.followUps).toEqual(['Prefiere por la tarde.']);
     agent!.client.emit({ type: 'run_end' });
     const started = await app.rpc(
@@ -222,7 +222,7 @@ describe('procedure agents', () => {
       assistant.token,
     );
     await app.services.coordinator.settled();
-    expect(started.body.result).toEqual({ delivered: 'started' });
+    expect(started.body.result).toEqual({ delivered: 'started', cancelledPrompts: 0 });
     expect(agent!.client.prompts.at(-1)).toEqual({ text: 'Ya tiene el certificado.' });
     const missing = await app.rpc(
       'procedures.message',
@@ -341,6 +341,64 @@ describe('procedure agents', () => {
     expect((await call).body.result.values).toEqual({ method: 'mobile', remember: false });
   });
 
+  it('passes a message in place of the answer to a blocked form, without aborting', async () => {
+    await withProvider();
+    const { procedureId, agent, assistant } = await app.startProcedure();
+    agent!.client.emit({ type: 'run_start' });
+    const call = app.rpc(
+      'prompt.form',
+      {
+        title: 'Faltan los datos del viaje',
+        fields: [{ key: 'reason', label: '¿Por qué necesitas viajar?', type: 'textarea' }],
+      },
+      agent!.token,
+    );
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const prompt = app.pendingPrompt(procedureId)!;
+    // The run waits on the user's answer, so even news steers it: queued in the run before the
+    // blocked tool is released.
+    const steersWhenReleased = call.then(() => agent!.client.steers.length);
+    const result = await app.rpc(
+      'procedures.message',
+      { procedureId, message: 'El usuario rellenará el EX-13 a mano: quita esa tarea.' },
+      assistant.token,
+    );
+    expect(result.body.result).toEqual({ delivered: 'queued', cancelledPrompts: 1 });
+    expect((await call).body.error).toMatchObject({
+      code: 'user_rejected',
+      message: expect.stringContaining('the user sent a new message instead'),
+    });
+    expect(await steersWhenReleased).toBe(1);
+    await app.services.coordinator.settled();
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
+    expect(agent!.client.aborts).toBe(0);
+    expect(agent!.client.followUps).toEqual([]);
+    expect(agent!.client.steers).toEqual([
+      'El usuario rellenará el EX-13 a mano: quita esa tarea.',
+    ]);
+    expect(agent!.client.prompts).toHaveLength(1);
+    expect(app.services.procedures.findItem(procedureId, prompt.id)).toMatchObject({
+      status: 'cancelled',
+    });
+    expect(app.services.procedures.get(procedureId)?.status).not.toBe('cancelled');
+
+    // A confirmation is the user's to resolve: news waits for the run and leaves it pending.
+    void app.rpc(
+      'prompt.confirm',
+      { title: 'Pagar', message: 'Pagar tasa', confirmKind: 'payment' },
+      agent!.token,
+    );
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const news = await app.rpc(
+      'procedures.message',
+      { procedureId, message: 'Prefiere por la tarde.' },
+      assistant.token,
+    );
+    expect(news.body.result).toEqual({ delivered: 'queued', cancelledPrompts: 0 });
+    expect(agent!.client.followUps).toEqual(['Prefiere por la tarde.']);
+    expect(app.pendingPrompt(procedureId)?.prompt.kind).toBe('confirm');
+  });
+
   it('steers the running agent with a correction and cancels its blocked form, without aborting', async () => {
     await withProvider();
     const { procedureId, agent, assistant } = await app.startProcedure();
@@ -355,15 +413,6 @@ describe('procedure agents', () => {
     );
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
     const prompt = app.pendingPrompt(procedureId)!;
-    // News waits for the run to finish and leaves the question pending.
-    await app.rpc(
-      'procedures.message',
-      { procedureId, message: 'Ya he añadido Cl@ve' },
-      assistant.token,
-    );
-    await app.services.coordinator.settled();
-    expect(agent!.client.followUps).toEqual(['Ya he añadido Cl@ve']);
-    expect(app.pendingPrompt(procedureId)).toBeDefined();
     // The correction is queued in the run before the blocked tool is released.
     const steersWhenReleased = call.then(() => agent!.client.steers.length);
     const result = await app.rpc(
@@ -371,7 +420,7 @@ describe('procedure agents', () => {
       { procedureId, message: 'Relee Mis datos y continúa con Cl@ve.', urgent: true },
       assistant.token,
     );
-    expect(result.body.result.delivered).toBe('queued');
+    expect(result.body.result).toEqual({ delivered: 'queued', cancelledPrompts: 1 });
     expect((await call).body.error?.code).toBe('user_rejected');
     expect(await steersWhenReleased).toBe(1);
     await app.services.coordinator.settled();
@@ -429,7 +478,7 @@ describe('procedure agents', () => {
         { procedureId, message: 'Cambia de vía', urgent: true },
         assistant.token,
       );
-      expect(corrected.body.result).toEqual({ delivered: 'queued' });
+      expect(corrected.body.result).toEqual({ delivered: 'queued', cancelledPrompts: 1 });
       expect((await call).body.error?.code).toBe('user_rejected');
       expect(app.pendingPrompt(procedureId)).toBeUndefined();
       expect(app.services.procedures.findItem(procedureId, prompt.id)).toMatchObject({
@@ -470,7 +519,7 @@ describe('procedure agents', () => {
     void app.rpc('prompt.form', form, agent!.token);
     await app.waitFor(() => app.services.prompts.pendingCount(procedureId) === 2);
     deliver();
-    expect((await correction).body.result).toEqual({ delivered: 'queued' });
+    expect((await correction).body.result).toEqual({ delivered: 'queued', cancelledPrompts: 1 });
     expect((await before).body.error?.code).toBe('user_rejected');
     expect(app.services.procedures.findItem(procedureId, obsolete.id)).toMatchObject({
       status: 'cancelled',
@@ -498,7 +547,7 @@ describe('procedure agents', () => {
     await app.waitFor(() => prompt.mock.calls.length > 0);
     expect(acknowledged).toBe(false);
     accept('queued');
-    expect((await delivery).body.result).toEqual({ delivered: 'queued' });
+    expect((await delivery).body.result).toEqual({ delivered: 'queued', cancelledPrompts: 0 });
     prompt.mockRejectedValue(new Error('delivery rejected'));
     for (const urgent of [false, true]) {
       const failed = await app.rpc(
@@ -813,7 +862,7 @@ describe('procedure agents', () => {
       { procedureId, message: 'Continúa' },
       assistant.token,
     );
-    expect(resumed.body.result).toEqual({ delivered: 'started' });
+    expect(resumed.body.result).toEqual({ delivered: 'started', cancelledPrompts: 0 });
     await app.services.coordinator.settled();
     expect(agent!.client.prompts.at(-1)?.text).toBe('Continúa');
   });

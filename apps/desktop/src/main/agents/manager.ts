@@ -37,18 +37,30 @@ export interface AgentManagerDeps {
   stopTimeoutMs?: number;
 }
 
+/** What the agent's model reads in place of the answer to a prompt that a message cancelled. */
+const SUPERSEDED =
+  'The question was withdrawn: the user sent a new message instead, which follows.';
+
 export interface SendOptions {
   /**
    * Cancel the agent's pending prompts once the message is delivered (a correction makes them
    * obsolete). Delivered first, so the blocked tool's run reads it before its next model call;
-   * prompts asked after it are kept.
+   * prompts asked after it are kept. `'forms'`: only its data forms, since the message takes the
+   * place of their answers; when there are any, it steers instead of following up, or the run
+   * blocked on them would only read it once the user answered.
    */
-  cancelPrompts?: boolean;
+  cancelPrompts?: boolean | 'forms';
   /**
    * While the agent is running, queue the message until it finishes what it is doing instead of
    * steering it right away (reports to the assistant, news for a procedure's agent).
    */
   followUp?: boolean;
+}
+
+export interface Delivery {
+  delivered: 'started' | 'queued';
+  /** Pending prompts the message cancelled (`cancelPrompts`). */
+  cancelledPrompts: number;
 }
 
 interface AgentRecord {
@@ -104,17 +116,25 @@ export class AgentManager {
     text: string,
     images?: PromptImage[],
     opts: SendOptions = {},
-  ): Promise<'started' | 'queued'> {
+  ): Promise<Delivery> {
     return this.queue.run(agentId, async () => {
       const obsolete = opts.cancelPrompts
         ? this.deps.prompts
             .pendingItems()
-            .filter((p) => p.owner === agentId)
+            .filter(
+              (p) =>
+                p.owner === agentId &&
+                (opts.cancelPrompts === true || p.item.prompt.kind === 'form'),
+            )
             .map((p) => p.item.id)
         : [];
-      const delivered = await this.deliver(agentId, text, images, opts);
-      this.deps.prompts.cancel(obsolete);
-      return delivered;
+      const delivered = await this.deliver(
+        agentId,
+        text,
+        images,
+        obsolete.length ? { ...opts, followUp: false } : opts,
+      );
+      return { delivered, cancelledPrompts: this.deps.prompts.cancel(obsolete, SUPERSEDED) };
     });
   }
 

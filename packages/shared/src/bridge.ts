@@ -125,8 +125,9 @@ export const BridgeParams = {
   }),
   /**
    * Pass a message (new information, a decision, a request) to a procedure's agent: after its
-   * current run, or `urgent` (a correction) right after its current tool calls, cancelling its
-   * pending requests. Never aborts the run.
+   * current run, or right after its current tool calls when it answers a pending data form
+   * (cancelled) or is `urgent` (a correction, cancelling all its pending requests). Never aborts
+   * the run.
    */
   'procedures.message': z.object({
     procedureId: ProcedureRef,
@@ -336,7 +337,7 @@ export interface BridgeResults {
   'procedures.list': { procedures: ProcedureBrief[] };
   'procedures.read': import('./procedure').ProcedureListItem;
   'procedures.start': { procedureId: string; title: string };
-  'procedures.message': { delivered: 'started' | 'queued' };
+  'procedures.message': { delivered: 'started' | 'queued'; cancelledPrompts: number };
   'procedures.respond': { answered: boolean; dismissed: boolean };
   'procedures.stop': { stopped: boolean };
   'procedures.cancel': { cancelled: boolean };

@@ -160,18 +160,27 @@ export function assistantTools(bridge: BridgeTransport) {
       name: 'procedure_message',
       label: 'Tell a procedure',
       description:
-        "Pass the user's news, a request or a correction to a procedure's agent. It never interrupts or discards the agent's work. By default it waits until the current run finishes: use this for added requests (\"also download X\") and news. With urgent, the agent reads it right after its current step and its pending questions are cancelled: only for corrections or changes of plan it must not act against. Acceptance is not proof the agent read or acted on it.",
+        "Pass the user's news, a request or a correction to a procedure's agent. It never interrupts or discards the agent's work. By default it waits until the current run finishes: use this for added requests (\"also download X\") and news. If the agent is waiting on a data form, the message takes the place of the user's answer: the form is cancelled and the agent reads it right away. With urgent, the agent reads it right after its current step and its pending questions are cancelled: only for corrections or changes of plan it must not act against. Acceptance is not proof the agent read or acted on it.",
       parameters: ProcedureMessageParams,
       async execute(_id, params, signal) {
-        return callBridge(bridge, 'procedures.message', compact({ ...params }), signal, (result) =>
-          textResult(
-            result.delivered === 'started'
-              ? `Accepted: a new run started${params.urgent ? ' and pending questions were cancelled' : ''}. The agent has not yet confirmed acting on this instruction.`
-              : params.urgent
-                ? 'Delivered to the running agent: it reads it after its current step. Its pending questions were cancelled. It has not acted on it yet.'
-                : 'Queued for after the current run finishes. The agent has not read or acted on this instruction yet; any pending question still needs a response.',
-            result,
-          ),
+        return callBridge(
+          bridge,
+          'procedures.message',
+          compact({ ...params }),
+          signal,
+          (result) => {
+            const cancelled = result.cancelledPrompts
+              ? ' Its pending questions were cancelled: it may ask again for what it still needs.'
+              : '';
+            return textResult(
+              result.delivered === 'started'
+                ? `Accepted: a new run started.${cancelled} The agent has not yet confirmed acting on this instruction.`
+                : params.urgent || result.cancelledPrompts
+                  ? `Delivered to the running agent: it reads it after its current step.${cancelled} It has not acted on it yet.`
+                  : 'Queued for after the current run finishes. The agent has not read or acted on this instruction yet; any pending question still needs a response.',
+              result,
+            );
+          },
         );
       },
     }),

@@ -7,7 +7,7 @@ import {
   type Procedure,
   REPORT_TOOL,
 } from '@sa/shared';
-import type { AgentManager, SendOptions } from '../agents/manager';
+import type { AgentManager, Delivery, SendOptions } from '../agents/manager';
 import type { RunResult } from '../chat/mapper';
 import type { PromptManager } from '../chat/prompts';
 import { friendlyAgentError, NoProviderError } from '../core/errors';
@@ -41,7 +41,7 @@ export interface CoordinatorDeps {
  *   - down: the assistant's `procedures.start` / `procedures.message` / `procedures.cancel`;
  *   - up: when a procedure's agent finishes a run, a short report (card status + its last
  *     message, clipped) is queued to the assistant, and shown in the chat as a compact row.
- * Procedure agents ask the user directly; an urgent message cancels the requests it made obsolete.
+ * Procedure agents ask the user directly; a message cancels the requests it made obsolete.
  */
 export class Coordinator {
   private readonly deliveries = new Set<Promise<void>>();
@@ -56,13 +56,19 @@ export class Coordinator {
   }
 
   /**
-   * Passes a message to a procedure's agent. Queued until its current run finishes; `urgent`
-   * (a correction) reaches the run after its current tool calls and cancels its pending prompts.
-   * Never aborts: the run keeps what it has done.
+   * Passes a message to a procedure's agent. Queued until its current run finishes, unless the
+   * agent is waiting on a data form: the message takes the place of the user's answer, so the form
+   * is cancelled and the run reads the message at once. `urgent` (a correction) reaches the run
+   * after its current tool calls and cancels all its pending prompts. Never aborts: the run keeps
+   * what it has done.
    */
-  message(procedureId: string, text: string, urgent = false): Promise<'started' | 'queued'> {
+  message(procedureId: string, text: string, urgent = false): Promise<Delivery> {
     this.deps.procedures.require(procedureId);
-    return this.dispatch(procedureId, text, urgent ? { cancelPrompts: true } : undefined);
+    return this.dispatch(
+      procedureId,
+      text,
+      urgent ? { cancelPrompts: true } : { followUp: true, cancelPrompts: 'forms' },
+    );
   }
 
   /** Stops a procedure's agent and marks it cancelled. False if it was already over. */
@@ -109,7 +115,7 @@ export class Coordinator {
     procedureId: string,
     text: string,
     options: SendOptions = { followUp: true },
-  ): Promise<'started' | 'queued'> {
+  ): Promise<Delivery> {
     const { procedures, agents } = this.deps;
     // The procedure's log shows what it was asked to do (the brief, or the assistant's message).
     procedures.upsertItem(procedureId, {

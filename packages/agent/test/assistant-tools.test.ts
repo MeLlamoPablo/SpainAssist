@@ -90,7 +90,7 @@ describe('assistant tools', () => {
     );
     expect(started).toContain('Started p_2 "Empadronarme"');
 
-    bridge.setHandler('procedures.message', () => ({ delivered: 'queued' }));
+    bridge.setHandler('procedures.message', () => ({ delivered: 'queued', cancelledPrompts: 0 }));
     expect(
       textOf(await run('procedure_message', { procedureId: 'p_2', message: 'Tardes' })),
     ).toContain('Queued for after the current run finishes');
@@ -179,7 +179,7 @@ describe('assistant tools', () => {
       answered: !!params.values,
       dismissed: !params.values,
     }));
-    bridge.setHandler('procedures.message', () => ({ delivered: 'queued' }));
+    bridge.setHandler('procedures.message', () => ({ delivered: 'queued', cancelledPrompts: 1 }));
     await run('procedure_respond', {
       procedureId: 'p_1',
       promptId: 'q_1',
@@ -223,7 +223,7 @@ describe('assistant tools', () => {
   });
 
   it('distinguishes a queued instruction from a started run', async () => {
-    bridge.setHandler('procedures.message', () => ({ delivered: 'queued' }));
+    bridge.setHandler('procedures.message', () => ({ delivered: 'queued', cancelledPrompts: 0 }));
     const queued = textOf(
       await run('procedure_message', { procedureId: 'p_1', message: 'Cambia de método' }),
     );
@@ -231,11 +231,21 @@ describe('assistant tools', () => {
     expect(queued).not.toContain('Delivered');
     expect(queued).toMatch(/not read or acted on/);
     expect(bridge.callsTo('procedures.message')[0]?.params).not.toHaveProperty('urgent');
-    bridge.setHandler('procedures.message', () => ({ delivered: 'started' }));
+    bridge.setHandler('procedures.message', () => ({ delivered: 'started', cancelledPrompts: 0 }));
     const started = textOf(
       await run('procedure_message', { procedureId: 'p_1', message: 'Cambia de método' }),
     );
     expect(started).toMatch(/new run started/);
     expect(started).toMatch(/not yet confirmed/);
+  });
+
+  it('says when a message took the place of a pending form', async () => {
+    bridge.setHandler('procedures.message', () => ({ delivered: 'queued', cancelledPrompts: 1 }));
+    const result = textOf(
+      await run('procedure_message', { procedureId: 'p_1', message: 'Quita esa tarea' }),
+    );
+    expect(result).toContain('reads it after its current step');
+    expect(result).toContain('pending questions were cancelled');
+    expect(result).not.toMatch(/queued|still needs a response/i);
   });
 });
