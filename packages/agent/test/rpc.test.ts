@@ -3,6 +3,7 @@ import {
   type AgentEvent,
   classifyAgentError,
   EventNormalizer,
+  REWRITE_MESSAGE_TYPE,
   summarizeToolResult,
 } from '../src/rpc/events';
 import { JsonlSplitter } from '../src/rpc/jsonl';
@@ -184,6 +185,38 @@ describe('EventNormalizer', () => {
     expect(events).toContainEqual({ type: 'assistant_end', messageId: 'r-2', text: 'Hola' });
     expect(events.at(-1)).toEqual({ type: 'run_end' });
     expect(events.some((e) => e.type === 'log' && e.level === 'warn')).toBe(true);
+  });
+
+  it('marks a finished message the host has the model write again', () => {
+    const n = new EventNormalizer('w');
+    const rewrite = {
+      type: 'entry_appended',
+      entry: { type: 'custom_message', customType: REWRITE_MESSAGE_TYPE, display: false },
+    };
+    const events = feed(n, [
+      { type: 'agent_start' },
+      { type: 'message_start', message: { role: 'assistant', content: [] } },
+      { type: 'message_end', message: assistant([{ type: 'text', text: 'Mal' }]) },
+      { type: 'entry_appended', entry: { type: 'custom_message', customType: 'other' } },
+      rewrite,
+      // Once per message.
+      rewrite,
+      { type: 'turn_end' },
+      { type: 'message_start', message: { role: 'assistant', content: [] } },
+      { type: 'message_end', message: assistant([{ type: 'text', text: 'Bien' }]) },
+      { type: 'turn_end' },
+      { type: 'agent_end', willRetry: false },
+      { type: 'agent_settled' },
+    ]);
+    expect(events.filter((e) => e.type !== 'usage')).toEqual([
+      { type: 'run_start' },
+      { type: 'assistant_start', messageId: 'w-1' },
+      { type: 'assistant_end', messageId: 'w-1', text: 'Mal' },
+      { type: 'assistant_rewrite', messageId: 'w-1' },
+      { type: 'assistant_start', messageId: 'w-2' },
+      { type: 'assistant_end', messageId: 'w-2', text: 'Bien' },
+      { type: 'run_end' },
+    ]);
   });
 
   it('reports aborts requested by the client even when no message was streaming', () => {

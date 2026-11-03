@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { BridgeClient } from '../src/bridge/client';
 import { parseHostConfig } from '../src/config';
 import { BridgeCredentialStore, normalizeCredential } from '../src/host/credentials';
+import { linkedDocumentIds, unknownDocumentsMessage } from '../src/host/document-links';
 import { templateFor } from '../src/host/model';
 import { prepareSessionFile } from '../src/host/session';
 import { agentHostPath, buildAgentLaunch } from '../src/launch';
@@ -289,6 +290,24 @@ describe('saved data and physical-place prompts', () => {
     expect(buildAssistantPrompt({ language: 'en' })).toContain(
       'map-options with place names and street addresses',
     );
+  });
+});
+
+describe('document links', () => {
+  it('finds each linked document once, cards and inline links alike', () => {
+    expect(
+      linkedDocumentIds(
+        'Mira [el impreso](sa:document/doc-1) y [la tasa](sa:document/doc-2).\n\n[Impreso](sa:document/doc-1)\n[Trámites](sa:procedures)',
+      ),
+    ).toEqual(['doc-1', 'doc-2']);
+    expect(linkedDocumentIds('Sin enlaces.')).toEqual([]);
+  });
+
+  it('names the unknown ids and lists the saved documents', () => {
+    const message = unknownDocumentsMessage(['doc-x'], [{ id: 'doc-1', name: 'Impreso.pdf' }]);
+    expect(message).toContain('links sa:document/doc-x, but no saved document has that id');
+    expect(message).toContain('\n- doc-1: Impreso.pdf\n');
+    expect(unknownDocumentsMessage(['a', 'b'], [])).toContain('There are no saved documents.');
   });
 });
 

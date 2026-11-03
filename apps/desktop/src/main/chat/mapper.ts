@@ -83,6 +83,10 @@ export class TranscriptMapper {
   private readonly assistant = new Map<string, AssistantState>();
   private readonly tools = new Map<string, string>();
   private lastError?: string;
+  /** The item of the last finished assistant message. */
+  private lastMessage?: { messageId: string; itemId: string };
+  /** The item the next assistant message replaces (`assistant_rewrite`). */
+  private replacing?: string;
   private runText = '';
   private runStartedAt: string | undefined;
   /** Set when a run ends (read by AgentManager to route reports). */
@@ -102,6 +106,7 @@ export class TranscriptMapper {
     switch (event.type) {
       case 'run_start':
         this.lastError = undefined;
+        this.replacing = undefined;
         this.runText = '';
         this.runStartedAt = this.now();
         this.lastRun = undefined;
@@ -115,6 +120,7 @@ export class TranscriptMapper {
         sink.setNow?.(undefined);
         sink.setRunning(false);
         this.lastError = undefined;
+        this.replacing = undefined;
         this.lastRun = {
           aborted: Boolean(event.aborted),
           text: this.runText,
@@ -132,6 +138,10 @@ export class TranscriptMapper {
         return;
       case 'assistant_end':
         this.onAssistantEnd(event.messageId, event.text, event.error);
+        return;
+      case 'assistant_rewrite':
+        if (this.lastMessage?.messageId === event.messageId)
+          this.replacing = this.lastMessage.itemId;
         return;
       case 'tool_start': {
         const args = sanitizeArgs(event.args);
@@ -209,7 +219,7 @@ export class TranscriptMapper {
     }
     if (!state.text.trim()) return;
     const item: AssistantItem = {
-      id: sink.newItemId('m'),
+      id: this.newMessageItemId(),
       createdAt: state.createdAt,
       type: 'assistant',
       text: state.text,
@@ -228,26 +238,24 @@ export class TranscriptMapper {
     const finalText = text || state.text;
     const status: AssistantItem['status'] = aborted ? 'aborted' : error ? 'error' : 'complete';
     if (status === 'complete' && finalText.trim()) this.runText = finalText.trim();
-    if (state.itemId) {
-      sink.upsertItem({
-        id: state.itemId,
-        createdAt: state.createdAt,
-        type: 'assistant',
-        text: finalText,
-        status,
-      });
-    } else if (finalText.trim()) {
-      sink.upsertItem({
-        id: sink.newItemId('m'),
-        createdAt: state.createdAt,
-        type: 'assistant',
-        text: finalText,
-        status,
-      });
-    } else {
-      return;
-    }
+    const itemId = state.itemId ?? (finalText.trim() ? this.newMessageItemId() : undefined);
+    if (!itemId) return;
+    sink.upsertItem({
+      id: itemId,
+      createdAt: state.createdAt,
+      type: 'assistant',
+      text: finalText,
+      status,
+    });
+    this.lastMessage = { messageId, itemId };
     if (status === 'complete') sink.setUnread();
+  }
+
+  /** The item id of a new message: that of the message it rewrites, if any. */
+  private newMessageItemId(): string {
+    const id = this.replacing ?? this.deps.sink.newItemId('m');
+    this.replacing = undefined;
+    return id;
   }
 
   /** Shows a provider/agent error as a notice and as the agent's runtime error. */

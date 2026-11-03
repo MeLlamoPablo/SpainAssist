@@ -119,6 +119,52 @@ describe('TranscriptMapper', () => {
     ]);
   });
 
+  it('shows a rewritten message in place of the one it rewrites, within its run', () => {
+    const m = new TranscriptMapper('assistant', {
+      sink: conversation,
+      clock: () => new Date(),
+      lang: () => 'es',
+      logger: silentLogger,
+    });
+    const say = (messageId: string, text: string) => {
+      m.handle({ type: 'assistant_start', messageId });
+      m.handle({ type: 'assistant_delta', messageId, delta: text });
+      m.handle({ type: 'assistant_end', messageId, text });
+    };
+    m.handle({ type: 'run_start' });
+    say('a', 'Listo.\n\n[Tasa](sa:document/doc-mal)');
+    m.handle({ type: 'assistant_rewrite', messageId: 'a' });
+    say('b', 'Listo.\n\n[Tasa](sa:document/doc-1)');
+    m.handle({ type: 'run_end' });
+    expect(conversation.transcript()).toEqual([
+      expect.objectContaining({
+        type: 'assistant',
+        text: 'Listo.\n\n[Tasa](sa:document/doc-1)',
+        status: 'complete',
+      }),
+    ]);
+    expect(m.lastRun?.text).toBe('Listo.\n\n[Tasa](sa:document/doc-1)');
+
+    // A rewrite that never came: the next run's message is a new one.
+    m.handle({ type: 'run_start' });
+    say('c', 'Mira [esto](sa:document/doc-mal).');
+    m.handle({ type: 'assistant_rewrite', messageId: 'c' });
+    m.handle({ type: 'run_end', error: 'boom' });
+    m.handle({ type: 'run_start' });
+    say('d', 'Hola.');
+    m.handle({ type: 'run_end' });
+    expect(
+      conversation
+        .transcript()
+        .filter((item) => item.type === 'assistant')
+        .map((item) => item.type === 'assistant' && item.text),
+    ).toEqual([
+      'Listo.\n\n[Tasa](sa:document/doc-1)',
+      'Mira [esto](sa:document/doc-mal).',
+      'Hola.',
+    ]);
+  });
+
   it('creates no item for tool-only assistant messages', () => {
     const m = mapper();
     m.handle({ type: 'assistant_start', messageId: 'msg1' });

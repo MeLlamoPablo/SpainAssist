@@ -35,7 +35,9 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
   `before_agent_start` (no `<cwd>` leak), blocks pi's `bash` RPC command and any unknown tool.
   Then `runRpcMode`.
 - Roles (`config.role`): `assistant` gets `createAssistantTools()` (delegation, `ask_user`,
-  vault) and `buildAssistantPrompt()`; `procedure` gets `createTools()` (everything else, plus
+  vault) and `buildAssistantPrompt()`, and its final messages are checked: one that links a
+  document the vault does not have gets an error and is written again, once per prompt
+  (`host/document-links.ts`); `procedure` gets `createTools()` (everything else, plus
   `web_research` for voucher users and ChatGPT plans, or `exa_search`/`exa_fetch` for BYOK and
   custom endpoints, see `host/research.ts`) and `buildSystemPrompt()`, whose final message per
   run is a short report for the assistant.
@@ -113,7 +115,8 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 
 - **Events.** `run_start` / `run_end {error?, errorKind?, aborted?}` wrap one run (pi retries
   stay inside it). `assistant_start|delta|end` stream a message (`retrying: true` marks a failed
-  attempt pi retries: drop it). `tool_start` / `tool_end {summary, details}` map to activity rows.
+  attempt pi retries: drop it); `assistant_rewrite {messageId}` follows a finished message the
+  host rejected: the next message replaces it. `tool_start` / `tool_end {summary, details}` map to activity rows.
   `usage {inputTokens, outputTokens, costUsd}` per model response. `log` (host stderr, pi
   notices) and `process_exit {code, signal, stderrTail}`. `errorKind`: auth, quota (402,
   LiteLLM "budget has been exceeded", ChatGPT usage limit), rate_limit, context, network,

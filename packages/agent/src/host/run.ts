@@ -171,6 +171,16 @@ export async function runHost(
     promptCacheKey: needsPromptCacheKey(model),
     redactPages,
     ...(onProviderResponse ? { onProviderResponse } : {}),
+    // Only the assistant's messages reach the chat, where document links show as cards.
+    ...(assistant
+      ? {
+          savedDocuments: async () =>
+            (await bridge.call('vault.read', { keys: [] })).documents.map(({ id, name }) => ({
+              id,
+              name,
+            })),
+        }
+      : {}),
     idleCompaction: {
       requests,
       minTokens: config.idleCompaction?.minTokens ?? IDLE_COMPACTION_MIN_TOKENS,

@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionFactory } from '@earendil-works/pi-coding-agent';
 import type { AnyToolDefinition } from '../tools/common';
+import { registerDocumentLinkCheck, type SavedDocument } from './document-links';
 import { type IdleCompactionOptions, registerIdleCompaction } from './idle-compaction';
 import { redactOldPages } from './redaction';
 
@@ -15,6 +16,8 @@ export interface SpainAssistExtensionOptions {
   redactPages?: boolean;
   /** Compact while idle, before the prompt cache expires, with a summary read from the cache. */
   idleCompaction?: IdleCompactionOptions;
+  /** The saved documents: final messages that link others are written again (document-links.ts). */
+  savedDocuments?: () => Promise<SavedDocument[]>;
 }
 
 /**
@@ -40,6 +43,8 @@ export function createSpainAssistExtension(options: SpainAssistExtensionOptions)
     }
 
     if (options.idleCompaction) registerIdleCompaction(pi, options.idleCompaction);
+
+    if (options.savedDocuments) registerDocumentLinkCheck(pi, options.savedDocuments);
 
     const { onProviderResponse } = options;
     if (onProviderResponse)

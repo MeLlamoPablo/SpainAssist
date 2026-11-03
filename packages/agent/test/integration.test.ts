@@ -323,6 +323,75 @@ describe('agent host over RPC (integration)', () => {
     expect(JSON.stringify(toolResult.messages)).toContain('Started p_0123456789abcdef');
   });
 
+  it('has the assistant write again, once per prompt, a message linking an unsaved document', async () => {
+    bridge.setHandler('vault.read', () => ({
+      personal: [],
+      documents: [
+        {
+          id: '31fd58e9-8e9f-4436-81b6-496c5a011435',
+          name: 'Modelo 790-012.pdf',
+          mimeType: 'application/pdf',
+          createdAt: '2026-11-03T11:47:00Z',
+        },
+      ],
+      credentials: [],
+    }));
+    const miscopied = '[Modelo 790-012](sa:document/31fd58e9-8e9f-4436-81b6-4965c0101135)';
+    llm.setScenario({
+      rules: [
+        {
+          when: {
+            lastUser: '^Your last message links [\\s\\S]*\\n- (?<id>[\\w-]+): Modelo 790-012',
+          },
+          reply: { text: 'Aquí tienes el impreso.\n\n[Modelo 790-012](sa:document/{{id}})' },
+        },
+        {
+          when: { lastUser: 'impreso' },
+          reply: { text: `Aquí tienes el impreso.\n\n${miscopied}` },
+        },
+      ],
+    });
+    const { client, events } = await start(undefined, undefined, { role: 'assistant' });
+    await client.prompt('Dame el impreso');
+    await waitFor(events, isRunEnd);
+    expect(bridge.callsTo('vault.read').map((call) => call.params)).toEqual([{ keys: [] }]);
+    const rewrite = llm.requests().at(-1)?.body as ChatRequest;
+    expect(rewrite.messages?.at(-1)).toMatchObject({ role: 'user' });
+    expect(JSON.stringify(rewrite.messages?.at(-1))).toContain(
+      'sa:document/31fd58e9-8e9f-4436-81b6-4965c0101135',
+    );
+    const flow = events.filter((e) => e.type !== 'log' && e.type !== 'usage');
+    const first = flow.find((e) => e.type === 'assistant_start');
+    expect(flow.filter((e) => e.type !== 'assistant_delta').map((e) => e.type)).toEqual([
+      'run_start',
+      'assistant_start',
+      'assistant_end',
+      'assistant_rewrite',
+      'assistant_start',
+      'assistant_end',
+      'run_end',
+    ]);
+    expect(flow).toContainEqual({
+      type: 'assistant_rewrite',
+      messageId: first?.type === 'assistant_start' ? first.messageId : '',
+    });
+    expect(flow.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
+      text: 'Aquí tienes el impreso.\n\n[Modelo 790-012](sa:document/31fd58e9-8e9f-4436-81b6-496c5a011435)',
+    });
+
+    // A model that gets it wrong again is not asked twice.
+    llm.setScenario({ rules: [], fallback: { text: `Sigue mal.\n\n${miscopied}` } });
+    const from = events.length;
+    const requests = llm.requests().length;
+    await client.prompt('Dámelo otra vez');
+    await waitFor(events, isRunEnd, { from });
+    expect(llm.requests().length - requests).toBe(2);
+    expect(events.slice(from).filter((e) => e.type === 'assistant_rewrite')).toHaveLength(1);
+    expect(events.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
+      text: `Sigue mal.\n\n${miscopied}`,
+    });
+  });
+
   it('has no web research without a voucher', async () => {
     const { client, events } = await start();
     await client.prompt('¿Sigues ahí?');

@@ -28,6 +28,8 @@ export type AgentEvent =
       /** The response failed and pi retries it: the app can drop this message. */
       retrying?: boolean;
     }
+  /** The host rejected this finished message and the model writes it again: show that one instead. */
+  | { type: 'assistant_rewrite'; messageId: string }
   | { type: 'tool_start'; toolCallId: string; tool: string; args: Record<string, unknown> }
   | { type: 'tool_update'; toolCallId: string; tool: string; summary?: string }
   | {
@@ -49,6 +51,12 @@ export type AgentEvent =
     }
   | { type: 'process_exit'; code: number | null; signal: string | null; stderrTail: string }
   | { type: 'log'; level: 'debug' | 'info' | 'warn' | 'error'; message: string };
+
+/**
+ * `customType` of the hidden message the host adds when it rejects the assistant's finished
+ * message (see host/document-links.ts): the model writes that message again (`assistant_rewrite`).
+ */
+export const REWRITE_MESSAGE_TYPE = 'sa-rewrite';
 
 export function classifyAgentError(message: string): AgentErrorKind {
   const m = message.toLowerCase();
@@ -139,6 +147,8 @@ export class EventNormalizer {
   private runAborted = false;
   private abortRequested = false;
   private current?: { id: string; text: string };
+  /** The id of the last message that ended without an error. */
+  private lastEnded?: string;
   private pendingErrorEnd?: Extract<AgentEvent, { type: 'assistant_end' }>;
   private seq = 0;
   private readonly prefix: string;
@@ -217,7 +227,22 @@ export class EventNormalizer {
           });
         }
         if (end.error) this.pendingErrorEnd = end;
-        else out.push(end);
+        else {
+          out.push(end);
+          this.lastEnded = end.messageId;
+        }
+        break;
+      }
+      case 'entry_appended': {
+        const entry = raw.entry as { type?: string; customType?: string } | undefined;
+        if (
+          entry?.type === 'custom_message' &&
+          entry.customType === REWRITE_MESSAGE_TYPE &&
+          this.lastEnded
+        ) {
+          out.push({ type: 'assistant_rewrite', messageId: this.lastEnded });
+          this.lastEnded = undefined;
+        }
         break;
       }
       case 'agent_end':
