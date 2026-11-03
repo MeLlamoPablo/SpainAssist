@@ -317,12 +317,7 @@ function CredentialCard({
           <Icon size={19} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[14.5px] font-semibold text-fg">{title}</p>
-            {c.label !== title ? (
-              <span className="text-[13px] text-fg-subtle">· {c.label}</span>
-            ) : null}
-          </div>
+          <p className="text-[14.5px] font-semibold text-fg">{title}</p>
           <p className="mt-0.5 text-[12.5px] text-fg-subtle">
             {c.lastUsedAt
               ? t.credentials.lastUsed(formatRelative(c.lastUsedAt, lang))
