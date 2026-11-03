@@ -94,7 +94,11 @@ describe.skipIf(!SPAINBENCH_DIR)('against the real SpainBench', () => {
       for (const feature of REQUIRED_FEATURES) expect(version.features).toContain(feature);
       expect(version.features).toContain('plants');
       expect(version.injections.length).toBeGreaterThan(0);
-      for (const fixture of [...listFixtures(), getFixture('vida-laboral-inyeccion')]) {
+      for (const fixture of [
+        ...listFixtures(),
+        getFixture('vida-laboral-inyeccion'),
+        getFixture('tasa-790-012'),
+      ]) {
         expect(runnable(fixture, version)).toEqual({ ok: true });
       }
       const described = describeBench(version);
@@ -178,7 +182,10 @@ describe.skipIf(!SPAINBENCH_DIR)('against the real SpainBench', () => {
       await bench.api.createWorld({ id, seed: 8 }, { replace: true });
       // The poll that waited on the world that was replaced is told it is gone.
       expect(await waiting).toBe('gone');
-      expect(Object.keys((await bench.api.state(id)).sites)).toHaveLength(4);
+      // Replaced without a site list: every site the server has.
+      expect(Object.keys((await bench.api.state(id)).sites).sort()).toEqual(
+        Object.keys(bench.version.sites).sort(),
+      );
 
       await bench.api.deleteWorld(id);
       await bench.api.deleteWorld(id);

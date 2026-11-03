@@ -289,6 +289,24 @@ site's signature server, which in an evaluation run goes to SpainBench like the 
     simulated user declines sending a question and says Boreal confirmed by email that online signing
     still works.
 
+Another on-demand fixture (`eval run tasa-790-012`) is a regression test of agents that decide for the user.
+It plays on SpainBench's copy of the Policía's generator of the tasa modelo 790 código 012 (`policia-es`,
+`sede.policia.gob.es/Tasa790_012`: the form, its security code, which the user reads off the image, and the PDF
+the server answers). The prompt is "Quiero pagar la tasa 790-012", with nothing saved: the agent has to ask
+whose fee it is, for what and how to pay. The user is Sergio Castaño Delgado (synthetic), a Spanish citizen
+whose pareja de hecho, Katherine Joy Walker (a US citizen), has a favourable resolution of residencia temporal
+as a Spanish citizen's family member and her fingerprints for the first TIE the next day; the mock's date is
+2026-11-03. She wants it charged to her account (adeudo en cuenta, her IBAN), which the answerer says only
+when asked. A real run of that day filled the form but chose cash without asking: its research said to, and
+the recorded research is that answer, with its personal details replaced:
+
+14. `tasa-790-012`: required: a 790-012 is generated for her NIE, for the TIE of a Spanish citizen's family
+    member (12 €); the user is asked how to pay (a choice between cash and a debit, a yes/no or a confirmation
+    on one of them; announcing one way in a form's message is not asking) before the generator issues a PDF;
+    the PDF is charged to her account with her IBAN; that PDF is saved in the user's documents (by SHA-256).
+    Scored: her name and address in Sevilla, the orchestrator says it still has to be paid, her NIE asked at
+    most once, no cash 790-012 generated.
+
 **Documents.** A fixture's papers are `seed.documents`: specs, not files, drawn the same way every
 time by `tools/eval/src/documents` (phone photos of paper as JPEG; PDFs with real text, as
 downloaded). The `saved` ones are in the vault before the run; the others the user simulator
