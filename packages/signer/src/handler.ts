@@ -173,10 +173,6 @@ function looseParams(args: unknown[], i: number): ExtraParams {
 // Helpers
 // ---------------------------------------------------------------------------------------------
 
-function sha256(data: Uint8Array): string {
-  return crypto.createHash('sha256').update(data).digest('hex');
-}
-
 function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} bytes`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -186,7 +182,7 @@ function humanSize(bytes: number): string {
 function whatIsIt(data: Uint8Array): string {
   const mime = sniffMime(data).mimeType;
   if (mime === 'application/pdf') return 'un documento PDF';
-  if (mime === 'text/xml') return 'un documento XML (normalmente, el formulario de la solicitud)';
+  if (mime === 'text/xml') return 'un documento XML';
   if (mime === 'text/plain') return 'un texto';
   if (mime.startsWith('image/')) return 'una imagen';
   return 'unos datos';
@@ -563,15 +559,9 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
     if (effective.policyIdentifier || params.expPolicy) {
       lines.push('Con la política de firma de la Administración General del Estado.');
     }
-    if (triphase) {
-      lines.push(
-        'El servidor del sitio prepara la firma y tu certificado firma un resumen. No se puede mostrar el contenido exacto.',
-      );
-    }
     if (params.precalculatedHashAlgorithm) {
       lines.push('Solo se firma la huella del documento: no se puede mostrar su contenido.');
     }
-    lines.push(`Lo pide ${call.origin}.`);
     const document: AfirmaDocument = {
       ...(fileName ? { name: fileName } : {}),
       mimeType: sniffMime(subjectBytes).mimeType,
@@ -596,7 +586,6 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       origin: call.origin,
       description: lines.join('\n'),
       dataSize: subjectBytes.length,
-      dataSha256: sha256(subjectBytes),
       documents: [document],
       verifiable,
     });
@@ -804,10 +793,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       origin: call.origin,
       description: [
         `Firmar un lote de ${n} ${n === 1 ? 'documento' : 'documentos'}.`,
-        local
-          ? 'Cada documento se firma en este equipo.'
-          : 'El servidor del sitio prepara las firmas y tu certificado firma un resumen de cada documento.',
-        `Lo pide ${call.origin}.`,
+        ...(local ? ['Cada documento se firma en este equipo.'] : []),
       ].join('\n'),
       dataSize: n,
       documents: [],
@@ -862,11 +848,9 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       origin: call.origin,
       description: login
         ? 'Identificarte'
-        : [
-            n > 1 ? `Firmar un lote de ${n} documentos.` : 'Firmar un documento.',
-            'El servidor del sitio prepara las firmas y tu certificado firma un resumen de cada documento. No se puede mostrar el contenido exacto.',
-            `Lo pide ${call.origin}.`,
-          ].join('\n'),
+        : n > 1
+          ? `Firmar un lote de ${n} documentos.`
+          : 'Firmar un documento.',
       documents: [],
       verifiable: false,
       signatures: n,

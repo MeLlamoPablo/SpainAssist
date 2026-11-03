@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, sign as cryptoSign, verify } from 'node:crypto';
+import { createPublicKey, sign as cryptoSign, verify } from 'node:crypto';
 import type {
   AfirmaCall,
   AfirmaHandlerContext,
@@ -47,7 +47,7 @@ describe('AutoFirma handler', () => {
       expect(ctx.approveSignature).toHaveBeenCalledWith(
         expect.objectContaining({
           dataSize: DATA.length,
-          dataSha256: createHash('sha256').update(DATA).digest('hex'),
+          documents: [expect.objectContaining({ data: DATA })],
         }),
       );
       expect(ctx.report).toHaveBeenCalledWith(expect.objectContaining({ status: 'signed' }));

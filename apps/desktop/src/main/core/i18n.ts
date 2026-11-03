@@ -134,7 +134,6 @@ const STRINGS = {
   detailWhat: { es: 'Qué', en: 'What' },
   detailFor: { es: 'Para', en: 'For' },
   detailSize: { es: 'Tamaño', en: 'Size' },
-  detailHash: { es: 'Huella (SHA-256)', en: 'Fingerprint (SHA-256)' },
   signLabel: { es: 'Firmar', en: 'Sign' },
   dontSignLabel: { es: 'No firmar', en: "Don't sign" },
   pickCertificateTitle: {

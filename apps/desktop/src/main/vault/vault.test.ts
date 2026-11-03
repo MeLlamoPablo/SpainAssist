@@ -205,7 +205,6 @@ describe('browser wiring', () => {
       origin: 'https://sede.example.gob.es',
       description: 'solicitud.pdf',
       dataSize: 2048,
-      dataSha256: 'ab'.repeat(32),
       documents: [],
       verifiable: false,
     };

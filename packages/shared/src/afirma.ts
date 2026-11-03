@@ -112,10 +112,9 @@ export interface AfirmaSignatureSummary {
   format: string;
   algorithm: string;
   origin: string;
-  /** Human readable description of what is being signed (file name, size, hash...). */
+  /** Human readable description of what is being signed (file name, size...). */
   description: string;
   dataSize?: number;
-  dataSha256?: string;
   /** What is signed, in the order `SignatureBinding.document` refers to (empty: unknown). */
   documents: AfirmaDocument[];
   /** Every signature of the operation will carry a `SignatureBinding`. */

@@ -351,8 +351,6 @@ export class BrowserHolder {
     ];
     if (summary.dataSize !== undefined)
       details.push({ label: t(lang, 'detailSize'), value: formatBytes(summary.dataSize) });
-    if (summary.dataSha256)
-      details.push({ label: t(lang, 'detailHash'), value: summary.dataSha256 });
     details.push({
       label: t(lang, 'detailCertificate'),
       value: describeCertificate(chosen, lang),
