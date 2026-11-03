@@ -1,6 +1,12 @@
 import type { ChatGPTLoginCallbacks, ModelLists } from '@sa/agent';
 import { agentAuthor, type ThinkingLevel } from '@sa/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  classifyAgentError,
+  friendlyAgentError,
+  SIGN_IN_ENDED_MESSAGE,
+  SignInEndedError,
+} from '../core/errors';
 import { t } from '../core/i18n';
 import { SECRET_IDS } from '../core/secrets';
 import { createFakeProviderLib, FAKE_ID_TOKEN, FAKE_MODEL_LISTS } from '../testing/fakes';
@@ -500,6 +506,116 @@ describe('ProviderManager', () => {
     expect(persisted.credential.access).toBe('acc-token-2');
     expect(persisted.account).toBe('user@example.com');
     expect(await providers.refreshCredential('anthropic')).toBeNull();
+  });
+
+  /** Makes the stored ChatGPT credential due for a refresh. */
+  async function expireAccessToken(): Promise<void> {
+    const stored = JSON.parse((await app.vault.getSecret(SECRET_IDS.chatgpt))!);
+    stored.credential.expires = Date.now() + 60_000;
+    await app.vault.setSecret(SECRET_IDS.chatgpt, 'x', JSON.stringify(stored));
+  }
+
+  it('asks to sign in again once OpenAI ends the ChatGPT session (invalid_grant)', async () => {
+    let refreshes = 0;
+    let rejectRefresh = true;
+    let logins = 0;
+    const lib = createFakeProviderLib();
+    const login = lib.loginChatGPT;
+    lib.loginChatGPT = async (callbacks) => {
+      const result = await login(callbacks);
+      logins++;
+      return { ...result, credential: { ...result.credential, refresh: `ref-token-${logins}` } };
+    };
+    const refresh = lib.refreshOAuthCredential;
+    lib.refreshOAuthCredential = async (providerId, credential, onRotated) => {
+      if (!rejectRefresh) return refresh(providerId, credential, onRotated);
+      refreshes++;
+      throw Object.assign(
+        new Error(
+          'Token request failed (400): invalid_grant: The refresh token has been invalidated. A fresh sign-in is required.',
+        ),
+        { code: 'token_exchange', oauthError: 'invalid_grant' },
+      );
+    };
+    app = await createTestApp({ providerLib: lib });
+    await app.invoke('providers.loginChatGPT');
+    await expireAccessToken();
+    const providers = app.services.providers;
+
+    await expect(providers.refreshCredential('openai')).rejects.toThrow(SignInEndedError);
+    const ended = {
+      configured: true,
+      kind: 'chatgpt',
+      account: 'user@example.com',
+      sessionEnded: true,
+      error: t('es', 'providerSessionEnded'),
+    };
+    expect(await app.invoke('providers.status')).toMatchObject(ended);
+    expect(app.events.filter((e) => e.type === 'providers.status').at(-1)).toMatchObject({
+      status: ended,
+    });
+    // The refresh token is dead: no more requests to OpenAI with it.
+    await expect(providers.refreshCredential('openai')).rejects.toThrow(SignInEndedError);
+    expect(refreshes).toBe(1);
+    // Agents are told to have the user sign in again; the chat notice says so.
+    const { token } = await app.procedureWithToken();
+    const res = await app.rpc('agent.refreshCredential', { providerId: 'openai' }, token);
+    expect(res.body.error?.message).toBe(SIGN_IN_ENDED_MESSAGE);
+    expect(
+      friendlyAgentError(
+        `Credential store modify failed for openai: ${res.body.error?.message}`,
+        'es',
+      ),
+    ).toBe(t('es', 'agentErrorSignedOut'));
+
+    // Still ended after a restart, before any agent asks.
+    await app.restart();
+    expect(await app.invoke('providers.status')).toMatchObject(ended);
+
+    // Signing in again starts a new session. OpenAI already ended the old one: nothing to revoke.
+    rejectRefresh = false;
+    await app.invoke('providers.loginChatGPT');
+    const status = await app.invoke('providers.status');
+    expect(status).toMatchObject({ kind: 'chatgpt', account: 'user@example.com' });
+    expect(status.sessionEnded).toBeUndefined();
+    expect(status.error).toBeUndefined();
+    expect(JSON.parse((await app.vault.getSecret(SECRET_IDS.chatgpt))!).ended).toBeUndefined();
+    await expireAccessToken();
+    expect(await app.services.providers.refreshCredential('openai')).toMatchObject({
+      type: 'oauth',
+    });
+    expect(lib.revoked).toEqual([]);
+
+    // Signing out of an ended session doesn't ask OpenAI either, nor warn that it is still on.
+    rejectRefresh = true;
+    await expireAccessToken();
+    await expect(app.services.providers.refreshCredential('openai')).rejects.toThrow(
+      SignInEndedError,
+    );
+    expect(await app.invoke('providers.logout')).toEqual({ status: { configured: false } });
+    expect(lib.revoked).toEqual([]);
+  });
+
+  it('keeps the ChatGPT session when a refresh fails for another reason', async () => {
+    const lib = createFakeProviderLib({
+      refreshOAuthCredential: async () => {
+        throw Object.assign(new Error('Token request failed (504): Gateway Timeout'), {
+          code: 'token_exchange',
+        });
+      },
+    });
+    app = await createTestApp({ providerLib: lib });
+    await app.invoke('providers.loginChatGPT');
+    await expireAccessToken();
+    await expect(app.services.providers.refreshCredential('openai')).rejects.toThrow('504');
+    expect((await app.invoke('providers.status')).sessionEnded).toBeUndefined();
+    // Agents get the reason, which tells the user to try again rather than to sign in again.
+    const { token } = await app.procedureWithToken();
+    const res = await app.rpc('agent.refreshCredential', { providerId: 'openai' }, token);
+    expect(res.body.error?.message).toContain('Gateway Timeout');
+    expect(classifyAgentError(`Credential store modify failed: ${res.body.error?.message}`)).toBe(
+      'timeout',
+    );
   });
 
   it('refuses the Codex device-code login when the build does not include it', async () => {

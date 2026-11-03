@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { PRODUCTION_SERVICES } from '@sa/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseEnv } from '../app/env';
-import { classifyAgentError, friendlyAgentError } from './errors';
+import { classifyAgentError, friendlyAgentError, SIGN_IN_ENDED_MESSAGE } from './errors';
 import { DebouncedWriter, ensurePrivateDir, writeFileAtomic } from './fs';
 import { t } from './i18n';
 import { createLogger, redactForLog } from './logger';
@@ -140,6 +140,10 @@ describe('friendly agent errors', () => {
     expect(classifyAgentError('429 Too Many Requests')).toBe('rate_limit');
     expect(classifyAgentError('fetch failed: ECONNREFUSED 127.0.0.1:8789')).toBe('network');
     expect(classifyAgentError('No API key found for the selected model.')).toBe('no_provider');
+    // OpenAI ended the ChatGPT sign-in (agent.refreshCredential, through pi's credential store).
+    expect(
+      classifyAgentError(`Credential store modify failed for openai: ${SIGN_IN_ENDED_MESSAGE}`),
+    ).toBe('signed_out');
     expect(classifyAgentError('something odd')).toBe('other');
   });
 

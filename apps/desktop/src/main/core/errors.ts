@@ -40,7 +40,16 @@ export class NoProviderError extends Error {
   }
 }
 
+/** OpenAI ended the ChatGPT (or Codex) sign-in: only signing in again brings it back. */
+export class SignInEndedError extends Error {
+  constructor(message = 'OpenAI ended the sign-in') {
+    super(message);
+    this.name = 'SignInEndedError';
+  }
+}
+
 export type AgentErrorKind =
+  | 'signed_out'
   | 'auth'
   | 'credit'
   | 'rate_limit'
@@ -51,7 +60,12 @@ export type AgentErrorKind =
   | 'no_provider'
   | 'other';
 
+/** What `agent.refreshCredential` tells agents once the sign-in has ended (see SignInEndedError). */
+export const SIGN_IN_ENDED_MESSAGE =
+  'The ChatGPT sign-in has ended. Ask the user to sign in again in Settings.';
+
 export function classifyAgentError(raw: string): AgentErrorKind {
+  if (raw.includes(SIGN_IN_ENDED_MESSAGE)) return 'signed_out';
   if (/no api key found|no ai provider configured/i.test(raw)) return 'no_provider';
   if (
     /\b402\b|key limit exceeded|insufficient (credits|funds|balance)|payment required|budget has been exceeded|budget_exceeded|exceededbudget/i.test(
@@ -83,6 +97,8 @@ export function classifyAgentError(raw: string): AgentErrorKind {
 /** Turns a raw provider / agent error into a short, plain message for the user. */
 export function friendlyAgentError(raw: string, lang: Language): string {
   switch (classifyAgentError(raw)) {
+    case 'signed_out':
+      return t(lang, 'agentErrorSignedOut');
     case 'auth':
       return t(lang, 'agentErrorAuth');
     case 'credit':

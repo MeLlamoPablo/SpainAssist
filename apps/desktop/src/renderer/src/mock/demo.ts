@@ -146,7 +146,7 @@ export const BYOK_PROVIDERS: ProviderOption[] = [
   },
 ];
 
-function providerPreset(kind: string | null): ProviderStatus {
+function providerPreset(kind: string | null, lang: Lang): ProviderStatus {
   switch (kind) {
     case 'none':
       return { configured: false };
@@ -157,6 +157,16 @@ function providerPreset(kind: string | null): ProviderStatus {
         label: 'ChatGPT',
         model: 'gpt-6.1-sol',
         account: 'lucia@example.com · Plus',
+      };
+    // OpenAI ended the ChatGPT sign-in: the user must sign in again.
+    case 'expired':
+      return {
+        ...providerPreset('chatgpt', lang),
+        sessionEnded: true,
+        error:
+          lang === 'es'
+            ? 'Tu sesión de ChatGPT ha caducado. Vuelve a iniciar sesión.'
+            : 'Your ChatGPT sign-in has expired. Sign in again.',
       };
     case 'byok':
       return {
@@ -1553,7 +1563,10 @@ export function createDemoState(
     language: opts.lang,
     onboardingCompleted: !opts.onboarding,
   };
-  const provider = providerPreset(opts.onboarding && !opts.provider ? 'none' : opts.provider);
+  const provider = providerPreset(
+    opts.onboarding && !opts.provider ? 'none' : opts.provider,
+    opts.lang,
+  );
   if (provider.kind === 'voucher') {
     settings.provider = {
       kind: 'voucher',

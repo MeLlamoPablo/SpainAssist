@@ -25,6 +25,10 @@ const STRINGS = {
   cancelled: { es: 'Cancelado', en: 'Cancelled' },
 
   // --- agent errors -----------------------------------------------------------------------------
+  agentErrorSignedOut: {
+    es: 'Tu sesión de ChatGPT ha caducado. Vuelve a iniciar sesión en Ajustes para seguir.',
+    en: 'Your ChatGPT sign-in has expired. Sign in again in Settings to continue.',
+  },
   agentErrorAuth: {
     es: 'Tu proveedor de IA ha rechazado la clave. Revísala en Ajustes o vuelve a iniciar sesión.',
     en: 'Your AI provider rejected the key. Check it in Settings or sign in again.',
@@ -323,6 +327,10 @@ const STRINGS = {
   loginChatgptNotEligible: {
     es: 'Spain Assist solo puede conectar la IA de ChatGPT en los planes Go o superiores.',
     en: 'Spain Assist can only connect ChatGPT on Go plans or higher.',
+  },
+  providerSessionEnded: {
+    es: 'Tu sesión de ChatGPT ha caducado. Vuelve a iniciar sesión.',
+    en: 'Your ChatGPT sign-in has expired. Sign in again.',
   },
   voucherInvalid: {
     es: 'Ese código no es válido. Revisa que esté bien escrito.',

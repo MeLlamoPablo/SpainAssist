@@ -5,12 +5,21 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   MessageSquareText,
   MessagesSquare,
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { BrandLogo, BrandMark } from '../../components/brand';
 import { Button, IconButton } from '../../components/ui/button';
 import { EmptyState, Skeleton } from '../../components/ui/misc';
@@ -19,6 +28,8 @@ import { api } from '../../lib/api';
 import { useAppStore } from '../../store/app';
 import { useChatStore } from '../../store/chat';
 import { loadConversation } from '../../store/sync';
+import { settingsDict } from '../settings/i18n';
+import { useChatGptLogin } from '../settings/provider';
 import {
   ActivityFailure,
   AssistantMessage,
@@ -49,6 +60,8 @@ export function ChatPanel() {
   const conversation = useChatStore((s) => s.conversation);
   const state = useChatStore((s) => s.state);
   const configured = useAppStore((s) => Boolean(s.provider?.configured));
+  const sessionEnded = useAppStore((s) => Boolean(s.provider?.sessionEnded));
+  const chatgpt = useAppStore((s) => s.provider?.kind === 'chatgpt');
   const items = conversation.items;
   const rows = useMemo(() => buildRows(items, { days: true, skip: hidden }), [items]);
   const pending = useMemo(() => pendingPrompts(items), [items]);
@@ -168,7 +181,7 @@ export function ChatPanel() {
               {t.scrollDown}
             </button>
           ) : null}
-          {configured ? (
+          {configured && !sessionEnded ? (
             <Dock
               pending={pending}
               working={working}
@@ -177,8 +190,10 @@ export function ChatPanel() {
                 pinned.current = true;
               }}
             />
+          ) : sessionEnded && chatgpt ? (
+            <SignInAgainCard />
           ) : (
-            <ConnectCard />
+            <ConnectCard signInAgain={sessionEnded} />
           )}
         </div>
       </div>
@@ -313,31 +328,95 @@ function Welcome() {
   );
 }
 
-/** No AI connected: the composer is replaced by a way to connect one. */
-function ConnectCard() {
-  const t = useT(chatDict);
-  const navigate = useAppStore((s) => s.navigate);
+/** The card in place of the composer while no AI can answer. */
+function DockCard({
+  testId,
+  title,
+  body,
+  children,
+}: {
+  testId: string;
+  title: string;
+  body: string;
+  children: ReactNode;
+}) {
   return (
     <div
       className="flex items-start gap-3.5 rounded-2xl border border-st-attention-line bg-surface p-4 shadow-raised ring-4 ring-st-attention-bg"
-      data-testid="chat-connect"
+      data-testid={testId}
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-st-attention-bg text-st-attention-fg">
         <Sparkles size={18} aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-semibold text-fg">{t.panel.connect.title}</p>
-        <p className="mt-0.5 text-[13.5px] leading-snug text-fg-muted">{t.panel.connect.body}</p>
-        <Button
-          variant="primary"
-          iconRight={ArrowRight}
-          className="mt-3"
-          onClick={() => navigate({ kind: 'settings', section: 'provider' })}
-        >
-          {t.panel.connect.action}
-        </Button>
+        <p className="text-[15px] font-semibold text-fg">{title}</p>
+        <p className="mt-0.5 text-[13.5px] leading-snug text-fg-muted" aria-live="polite">
+          {body}
+        </p>
+        {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * No AI connected, or OpenAI ended a Codex sign-in (`signInAgain`, development builds): the
+ * composer is replaced by a way to connect one in Settings.
+ */
+function ConnectCard({ signInAgain = false }: { signInAgain?: boolean }) {
+  const t = useT(chatDict);
+  const navigate = useAppStore((s) => s.navigate);
+  const copy = signInAgain ? t.panel.signInAgain : t.panel.connect;
+  return (
+    <DockCard testId="chat-connect" title={copy.title} body={copy.body}>
+      <Button
+        variant="primary"
+        iconRight={ArrowRight}
+        className="mt-3"
+        onClick={() => navigate({ kind: 'settings', section: 'provider' })}
+      >
+        {copy.action}
+      </Button>
+    </DockCard>
+  );
+}
+
+/** OpenAI ended the ChatGPT sign-in: the card signs in again itself, like Settings does. */
+function SignInAgainCard() {
+  const t = useT(chatDict);
+  const ts = useT(settingsDict);
+  const login = useChatGptLogin();
+  const copy = t.panel.signInAgain;
+  const url = login.progress?.url;
+  return (
+    <DockCard
+      testId="chat-sign-in-again"
+      title={copy.title}
+      body={login.busy ? (login.progress?.message ?? ts.provider.chatgpt.waiting) : copy.body}
+    >
+      {login.error ? (
+        <p className="mt-1.5 text-[13px] font-medium text-danger">{login.error}</p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button variant="primary" iconRight={ArrowRight} loading={login.busy} onClick={login.start}>
+          {copy.action}
+        </Button>
+        {login.busy && url ? (
+          <Button
+            variant="ghost"
+            icon={ExternalLink}
+            onClick={() => void api.invoke('app.openExternal', url)}
+          >
+            {ts.provider.chatgpt.openLink}
+          </Button>
+        ) : null}
+        {login.busy ? (
+          <Button variant="ghost" onClick={login.cancel}>
+            {ts.provider.chatgpt.cancel}
+          </Button>
+        ) : null}
+      </div>
+    </DockCard>
   );
 }
 

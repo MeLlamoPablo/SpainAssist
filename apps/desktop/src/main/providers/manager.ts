@@ -22,7 +22,7 @@ import {
   litellmDeciderUrl,
   ResearchMode as ResearchModes,
 } from '@sa/shared';
-import { classifyAgentError, NoProviderError, UserError } from '../core/errors';
+import { classifyAgentError, NoProviderError, SignInEndedError, UserError } from '../core/errors';
 import type { EventBus } from '../core/events';
 import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
@@ -98,6 +98,8 @@ interface OAuthSecret {
   account?: string;
   /** ChatGPT only: the account's user key from our key server. */
   scanKey?: UserKey;
+  /** OpenAI rejected the refresh token (`invalid_grant`): the user must sign in again. */
+  ended?: true;
 }
 
 /** Don't ask the key server again for this long after a failed attempt. */
@@ -178,6 +180,8 @@ export class ProviderManager {
   private login?: AbortController;
   /** Account e-mail of the configured OAuth provider (ChatGPT / Codex). */
   private oauthAccount?: string;
+  /** OpenAI ended the configured OAuth provider's sign-in (OAuthSecret.ended). */
+  private sessionEnded = false;
   private credit?: { value: VoucherBalance; at: number };
   /** When the voucher key expires (ISO 8601), from the key server. */
   private voucherExpiresAt?: string;
@@ -207,7 +211,11 @@ export class ProviderManager {
       await this.deps.settings.setProvider(undefined);
       return;
     }
-    if (isOAuth(p)) this.oauthAccount = (await this.readOAuth(p.kind))?.account;
+    if (isOAuth(p)) {
+      const stored = await this.readOAuth(p.kind);
+      this.oauthAccount = stored?.account;
+      this.sessionEnded = stored?.ended === true;
+    }
   }
 
   private config(): ProviderConfig | undefined {
@@ -234,6 +242,10 @@ export class ProviderManager {
           : this.modelOf(p),
     };
     if (isOAuth(p) && this.oauthAccount) status.account = this.oauthAccount;
+    if (isOAuth(p) && this.sessionEnded) {
+      status.sessionEnded = true;
+      status.error = t(this.lang(), 'providerSessionEnded');
+    }
     if (p.kind === 'voucher' && this.credit) status.credit = creditOf(this.credit.value);
     if (p.kind === 'voucher' && this.voucherExpiresAt) status.expiresAt = this.voucherExpiresAt;
     if (researchesWithExa(p)) status.exaKey = this.hasExaKey();
@@ -406,6 +418,8 @@ export class ProviderManager {
     this.credit = undefined;
     this.voucherExpiresAt = undefined;
     if (!isOAuth(config)) this.oauthAccount = undefined;
+    // An OAuth provider is only applied right after signing in: its session is a new one.
+    this.sessionEnded = false;
     if (config?.kind !== 'chatgpt') this.chatgptIdToken = undefined;
     this.chatgptModels = undefined;
     this.chatgptModelsFetch = undefined;
@@ -449,7 +463,7 @@ export class ProviderManager {
       // Signing in again without signing out: end the old session, or ChatGPT keeps listing it.
       const previous = await this.readOAuth('chatgpt');
       await this.writeOAuth('chatgpt', { credential, ...(account ? { account } : {}) });
-      if (previous && previous.credential.refresh !== credential.refresh) {
+      if (previous && !previous.ended && previous.credential.refresh !== credential.refresh) {
         void this.revokeChatGPT(previous.credential);
       }
       this.oauthAccount = account;
@@ -794,7 +808,8 @@ export class ProviderManager {
       const vault = this.deps.vault();
       if (p.kind === 'chatgpt') {
         const stored = await this.readOAuth('chatgpt');
-        if (stored) revoked = await this.revokeChatGPT(stored.credential);
+        // OpenAI already ended a session whose refresh token it rejected.
+        if (stored && !stored.ended) revoked = await this.revokeChatGPT(stored.credential);
       }
       const secretId = secretIdOf(p);
       if (secretId) await vault.deleteSecret(secretId).catch(() => {});
@@ -1047,6 +1062,8 @@ export class ProviderManager {
       if (!isOAuth(p)) return this.credentialFor(providerId);
       const stored = await this.readOAuth(p.kind);
       if (!stored) return null;
+      // The refresh token is dead: asking OpenAI again would only fail again.
+      if (stored.ended) throw new SignInEndedError();
       const expires = Number(stored.credential.expires);
       if (Number.isFinite(expires) && expires - this.deps.clock().getTime() > 5 * 60_000)
         return stored.credential;
@@ -1058,14 +1075,41 @@ export class ProviderManager {
         this.deps.logger.addSecret(refresh);
         await this.writeOAuth(p.kind, { ...stored, credential: { ...stored.credential, refresh } });
       };
-      const fresh =
-        p.kind === 'codex'
-          ? await codex!.refresh(stored.credential, saveRotated)
-          : await this.deps.lib.refreshOAuthCredential(providerId, stored.credential, saveRotated);
+      let fresh: PiCredential;
+      try {
+        fresh =
+          p.kind === 'codex'
+            ? await codex!.refresh(stored.credential, saveRotated)
+            : await this.deps.lib.refreshOAuthCredential(
+                providerId,
+                stored.credential,
+                saveRotated,
+              );
+      } catch (err) {
+        // On refresh, `invalid_grant` means OpenAI ended the session (it expired, was revoked,
+        // or a refresh token was used twice): no retry brings it back.
+        if ((err as { oauthError?: unknown } | null)?.oauthError !== 'invalid_grant') throw err;
+        await this.endSession(p.kind, stored.credential);
+        throw new SignInEndedError(errorMessage(err));
+      }
       this.registerCredentialSecrets(fresh);
       await this.writeOAuth(p.kind, { ...stored, credential: fresh });
       return fresh;
     });
+  }
+
+  /**
+   * Marks the session as ended (in the vault, so it lasts across launches) until the user signs
+   * in again. Not when a sign-in replaced the rejected credential meanwhile.
+   */
+  private async endSession(kind: OAuthKind, rejected: PiCredential): Promise<void> {
+    const current = await this.readOAuth(kind);
+    if (!current || this.config()?.kind !== kind) return;
+    if (current.credential.refresh !== rejected.refresh) return;
+    await this.writeOAuth(kind, { ...current, ended: true });
+    this.sessionEnded = true;
+    this.deps.logger.warn('OpenAI ended the sign-in', { kind });
+    this.emitStatus();
   }
 
   private registerCredentialSecrets(credential: PiCredential): void {

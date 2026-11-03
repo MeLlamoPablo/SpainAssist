@@ -40,10 +40,13 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
   const settings = useAppStore((s) => s.settings);
   const info = useAppStore((s) => s.info);
   const kind = useAppStore((s) => s.provider?.kind);
+  const sessionEnded = useAppStore((s) => Boolean(s.provider?.sessionEnded));
   // With a voucher connected, more codes top up its balance; ChatGPT is not offered.
   const voucherConnected = kind === 'voucher';
   // A ChatGPT subscription needs nothing else: the card shows only its status.
   const chatGptConnected = kind === 'chatgpt' || kind === 'codex';
+  // Until OpenAI ends its sign-in: then the options are back, to sign in again or switch.
+  const chatGptSignedIn = chatGptConnected && !sessionEnded;
   // Without a gateway key, web research uses Exa, keyless or with the user's own key.
   const researchesWithExa = kind === 'byok' || kind === 'custom';
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -107,7 +110,7 @@ export function SettingsView({ section }: { section?: SettingsSection }) {
                   <ExaKeyForm />
                 </div>
               ) : null}
-              {chatGptConnected ? null : (
+              {chatGptSignedIn ? null : (
                 <>
                   <div
                     className={cn(

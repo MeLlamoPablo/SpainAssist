@@ -103,6 +103,11 @@ export const ProviderStatus = z.object({
    * web research's limits, is saved. The key itself never leaves the main process except to Exa.
    */
   exaKey: z.boolean().optional(),
+  /**
+   * ChatGPT (and Codex) only: OpenAI ended the sign-in (it rejected the refresh token), so agents
+   * can't run until the user signs in again. `error` then says so.
+   */
+  sessionEnded: z.boolean().optional(),
   error: z.string().optional(),
 });
 export type ProviderStatus = z.infer<typeof ProviderStatus>;

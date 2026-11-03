@@ -139,7 +139,7 @@ export function ProviderStatusCard() {
       {provider.error ? (
         <p className="mt-3 flex items-center gap-2 text-[13px] font-medium text-danger">
           <CircleAlert size={15} aria-hidden />
-          {t.provider.error}: {provider.error}
+          {provider.sessionEnded ? provider.error : `${t.provider.error}: ${provider.error}`}
         </p>
       ) : null}
     </div>

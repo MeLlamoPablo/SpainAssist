@@ -22,7 +22,7 @@ import type { BrowserHolder } from '../browser/holder';
 import { type PromptManager, redactResponse } from '../chat/prompts';
 import type { Coordinator } from '../conversation/coordinator';
 import type { ConversationService } from '../conversation/service';
-import { BridgeError } from '../core/errors';
+import { BridgeError, SIGN_IN_ENDED_MESSAGE, SignInEndedError } from '../core/errors';
 import type { EventBus } from '../core/events';
 import { t } from '../core/i18n';
 import { type Logger, truncate } from '../core/logger';
@@ -960,9 +960,14 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
         return { credential: await deps.providers.refreshCredential(params.providerId) };
       } catch (err) {
         deps.logger.warn('credential refresh failed', { error: errorMessage(err) });
+        if (err instanceof SignInEndedError) {
+          throw new BridgeError('unavailable', SIGN_IN_ENDED_MESSAGE);
+        }
+        // Most likely OpenAI didn't answer: the reason (a 504, no connection) is what tells the
+        // user what happened, and the next run asks again.
         throw new BridgeError(
           'unavailable',
-          'Could not refresh the sign-in. Ask the user to sign in again in Settings.',
+          `Could not renew the sign-in (${truncate(errorMessage(err), 300)}). Try again later.`,
         );
       }
     },

@@ -64,6 +64,11 @@ export const chatDict = defineDict({
         body: 'Solo se hace una vez. Puedes usar tu cuenta de ChatGPT o un código de bono.',
         action: 'Conectar',
       },
+      signInAgain: {
+        title: 'Tu sesión de ChatGPT ha caducado',
+        body: 'Vuelve a iniciar sesión para seguir.',
+        action: 'Iniciar sesión',
+      },
     },
     loading: 'Cargando la conversación…',
     loadError: 'No he podido cargar la conversación.',
@@ -205,6 +210,11 @@ export const chatDict = defineDict({
         title: 'Connect an AI to get started',
         body: 'You only do this once. Use your ChatGPT account or a voucher code.',
         action: 'Connect',
+      },
+      signInAgain: {
+        title: 'Your ChatGPT sign-in has expired',
+        body: 'Sign in again to continue.',
+        action: 'Sign in',
       },
     },
     loading: 'Loading the conversation…',

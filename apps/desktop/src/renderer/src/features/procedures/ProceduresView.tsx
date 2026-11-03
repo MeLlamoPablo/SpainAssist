@@ -57,11 +57,12 @@ const SUGGESTION_ICONS: LucideIcon[] = [IdCard, House, FileBadge];
 /** No procedures yet: a quiet preview and a few ways to start. */
 function EmptyProcedures() {
   const t = useT(procedureDict);
-  const configured = useAppStore((s) => Boolean(s.provider?.configured));
+  // Agents can't run without an AI, nor after OpenAI ended the ChatGPT sign-in.
+  const ready = useAppStore((s) => Boolean(s.provider?.configured && !s.provider.sessionEnded));
   const focusComposer = useAppStore((s) => s.focusComposer);
 
   const start = async (message: string) => {
-    if (!configured) {
+    if (!ready) {
       focusComposer(message);
       return;
     }
