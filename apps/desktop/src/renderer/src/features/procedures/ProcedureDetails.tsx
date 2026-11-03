@@ -1,21 +1,23 @@
-import type { ProcedureListItem, Requirement, RequirementStatus } from '@sa/shared';
+import type { DocumentMeta, ProcedureListItem, Requirement, RequirementStatus } from '@sa/shared';
 import {
   CircleAlert,
   CircleCheck,
   CircleMinus,
+  Download,
   ExternalLink,
   FileText,
   Globe,
   type LucideIcon,
 } from 'lucide-react';
 import { useMemo } from 'react';
+import { IconButton } from '../../components/ui/button';
 import { useT } from '../../i18n';
 import { common } from '../../i18n/common';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { hostOf } from '../../lib/format';
 import { useVaultStore } from '../../store/vault';
-import { openDocument } from '../vault/document-actions';
+import { openDocument, useDownloadDocument } from '../vault/document-actions';
 import { procedureDict } from './i18n';
 
 /**
@@ -41,20 +43,7 @@ export function ProcedureDetails({ procedure: p }: { procedure: ProcedureListIte
             <ul className="flex flex-col gap-1">
               {mine.map((d) => (
                 <li key={d.id}>
-                  <button
-                    type="button"
-                    onClick={() => openDocument(d.id)}
-                    title={t.openDocument}
-                    className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-surface px-3 py-2 text-left shadow-xs hover:bg-surface-2"
-                  >
-                    <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-text">
-                      <FileText size={15} aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
-                      {d.name}
-                    </span>
-                    <ExternalLink size={13} className="shrink-0 text-fg-faint" aria-hidden />
-                  </button>
+                  <DocumentRow doc={d} />
                 </li>
               ))}
             </ul>
@@ -88,6 +77,34 @@ export function ProcedureDetails({ procedure: p }: { procedure: ProcedureListIte
           </Section>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function DocumentRow({ doc }: { doc: DocumentMeta }) {
+  const t = useT(procedureDict);
+  const { download, downloading } = useDownloadDocument(doc.id);
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-line bg-surface pr-2 shadow-xs hover:bg-surface-2">
+      <button
+        type="button"
+        onClick={() => openDocument(doc.id)}
+        title={t.openDocument}
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-2 pl-3 text-left"
+      >
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-text">
+          <FileText size={15} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">{doc.name}</span>
+        <ExternalLink size={13} className="shrink-0 text-fg-faint" aria-hidden />
+      </button>
+      <IconButton
+        icon={Download}
+        label={t.downloadDocument}
+        size="sm"
+        disabled={downloading}
+        onClick={download}
+      />
     </div>
   );
 }

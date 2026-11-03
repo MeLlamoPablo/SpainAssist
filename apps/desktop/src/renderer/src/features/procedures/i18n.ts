@@ -29,6 +29,7 @@ export const procedureDict = defineDict({
     documents: 'Documentos',
     openSource: (host: string) => `Abrir ${host} en el navegador`,
     openDocument: 'Abrir documento',
+    downloadDocument: 'Descargar',
     showArchived: (n: number) => (n === 1 ? 'Ver 1 archivado' : `Ver ${n} archivados`),
     hideArchived: 'Ocultar archivados',
     stepStatus: {
@@ -75,6 +76,7 @@ export const procedureDict = defineDict({
     documents: 'Documents',
     openSource: (host: string) => `Open ${host} in your browser`,
     openDocument: 'Open document',
+    downloadDocument: 'Download',
     showArchived: (n: number) => (n === 1 ? 'Show 1 archived' : `Show ${n} archived`),
     hideArchived: 'Hide archived',
     stepStatus: {
