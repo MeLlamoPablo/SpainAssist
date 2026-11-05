@@ -7,11 +7,16 @@ Main store listing, and Policy and programs > App content). The last section say
 listing up to date.
 
 Rules for every text here and in the graphics (`play-policy.md`): never call the app "official"
-or "la app del DNI", no government logos or coats of arms, the non-affiliation disclaimer stays
-visible near the top of the description, and the official sources stay listed in every
-language. On 2026-11-03 Play rejected the first submission under Misleading Claims ("Missing
-Source Link for Government Information") because only the en-US description had them; Play
-flagged the es-ES one.
+or "la app del DNI", no government logos or coats of arms, and in every language the description
+opens with the disclaimer in Play's words ("no representa a ninguna entidad gubernamental") and
+the official sources, one for every government site or body the app or the graphics show. Every
+graphic carries the disclaimer too.
+
+Play rejected the listing twice under Misleading Claims ("Missing Source Link for Government
+Information"). On 2026-11-03 only the en-US description had sources; Play flagged the es-ES one.
+On 2026-11-05 the es-ES description listed them at the end, below the security notes, and Play
+flagged it again, quoting its first paragraph, together with screenshot 1, which shows
+sede.agenciatributaria.gob.es without a disclaimer or the Agencia Tributaria as a source.
 
 ## Store listing
 
@@ -34,9 +39,17 @@ Spanish (es-ES) is the default language; English (en-US) is a translation.
 ### Full description, es-ES
 
 ```text
-Spain Assist para Android te permite usar tu DNI electrónico para firmar documentos y entrar en sedes electrónicas mientras haces trámites con Spain Assist en tu ordenador. No necesitas lector de tarjetas, solo un móvil con NFC.
+Aviso: Spain Assist es una app privada y no representa a ninguna entidad gubernamental. No está afiliada a la Policía Nacional, la FNMT, la Agencia Tributaria ni a ninguna otra administración pública, y no sustituye a ningún servicio oficial.
 
-Aviso: Spain Assist es una app privada; no está afiliada a la Policía Nacional, la FNMT ni a ninguna administración pública.
+FUENTES OFICIALES
+La información sobre trámites que aparece en la app y en esta ficha procede de estas fuentes oficiales:
+• DNI electrónico: https://www.dnielectronico.es
+• Firma electrónica: https://firmaelectronica.gob.es
+• Sedes electrónicas de la Administración: https://administracion.gob.es
+• Cl@ve: https://clave.gob.es
+• Agencia Tributaria, cuya sede aparece en las capturas: https://sede.agenciatributaria.gob.es
+
+Spain Assist para Android te permite usar tu DNI electrónico para firmar documentos y entrar en sedes electrónicas mientras haces trámites con Spain Assist en tu ordenador. No necesitas lector de tarjetas, solo un móvil con NFC.
 
 CÓMO FUNCIONA
 1. Abre Spain Assist en tu ordenador y escanea con el móvil el código QR que te muestra.
@@ -58,12 +71,7 @@ PRIVACIDAD Y SEGURIDAD
 • Sin anuncios y sin cuentas.
 • Software libre: la app se distribuye con licencia EUPL 1.2 y puedes descargar todo su código fuente.
 
-FUENTES OFICIALES
-Para informarte sobre el DNI electrónico y la firma electrónica, consulta las fuentes oficiales:
-• Portal del DNI electrónico: https://www.dnielectronico.es
-• Portal de Firma Electrónica: https://firmaelectronica.gob.es
-
-Spain Assist es una app privada; no está afiliada a la Policía Nacional, la FNMT ni a ninguna administración pública, y no sustituye a ningún servicio oficial.
+Spain Assist es una app privada y no representa a ninguna entidad gubernamental.
 
 Política de privacidad: https://spainassist.es/legal/politica-de-privacidad
 Contacto: hola@spainassist.es
@@ -72,9 +80,17 @@ Contacto: hola@spainassist.es
 ### Full description, en-US
 
 ```text
-Spain Assist for Android lets you use your Spanish electronic ID card (DNIe 3.0 or 4.0) with your phone to sign documents and log in to Spanish e-government sites while you handle paperwork with Spain Assist on your computer. No card reader needed: your phone reads the DNIe over NFC.
+Notice: Spain Assist is a private app and does not represent any government entity. It is not affiliated with the Policía Nacional, the FNMT, the Agencia Tributaria or any other public administration, and it does not replace any official service.
 
-Notice: Spain Assist is a private app. It is not affiliated with the Policía Nacional, the FNMT or any public administration.
+OFFICIAL SOURCES
+The information about government procedures shown in the app and in this listing comes from these official sources:
+• Spanish electronic ID card (DNIe): https://www.dnielectronico.es
+• Electronic signature: https://firmaelectronica.gob.es
+• Spanish government e-services (sedes electrónicas): https://administracion.gob.es
+• Cl@ve: https://clave.gob.es
+• Agencia Tributaria, the tax agency whose site appears in the screenshots: https://sede.agenciatributaria.gob.es
+
+Spain Assist for Android lets you use your Spanish electronic ID card (DNIe 3.0 or 4.0) with your phone to sign documents and log in to Spanish e-government sites while you handle paperwork with Spain Assist on your computer. No card reader needed: your phone reads the DNIe over NFC.
 
 HOW IT WORKS
 1. Open Spain Assist on your computer and scan the QR code it shows with your phone. The phone stays paired for up to 72 hours, or until you close Spain Assist on the computer.
@@ -101,22 +117,18 @@ WHAT YOU NEED
 • A DNIe 3.0 or 4.0 with active certificates, and its PIN.
 • An Android phone with NFC.
 
-OFFICIAL SOURCES
-To learn about the Spanish electronic ID card and electronic signatures, see the official sources:
-• Electronic ID card portal: https://www.dnielectronico.es
-• Electronic Signature portal: https://firmaelectronica.gob.es
-
-Spain Assist is a private app. It is not affiliated with the Policía Nacional, the FNMT or any public administration, and it does not replace any official service.
+Spain Assist is a private app and does not represent any government entity.
 
 Privacy policy: https://spainassist.es/legal/politica-de-privacidad
 Contact: hola@spainassist.es
 ```
 
 The app is in Spanish and English (`composeResources/values-en`), so the English listing
-describes the same app. It has its own graphics with the English UI (Framer branch "Play Store ·
-English (en-US)"), exported to `~/Desktop/SpainAssist-play/listing/en/` and uploaded as `en-*.png`:
-`en-feature-graphic.png` and `en-01-sign.png` … `en-05-encrypted.png`, in the Spanish order. The
-Modelo 100 page stays in Spanish, since it is a Spanish tax form.
+describes the same app. It has its own graphics with the English UI (English frames next to the
+Spanish ones on the "Play Store" page, on Framer's main branch), exported to
+`~/Desktop/SpainAssist-play/listing/en/` and uploaded as `en-*.png`: `en-feature-graphic.png` and
+`en-01-sign.png` … `en-05-encrypted.png`, in the Spanish order. The Modelo 100 page stays in
+Spanish, since it is a Spanish tax form.
 
 ### Contact details and links
 
@@ -155,6 +167,16 @@ Screenshots, by headline (frame slug in brackets):
 
 Screens 1 and 2 are images rendered from `marketing/dni-video` (the Framer component takes one
 image per screen), not emulator captures.
+
+Every graphic, in both languages, carries the disclaimer: in a band at the bottom of the
+screenshots (two text props of the "Play Store Screenshot" component) and under the headline on
+the feature graphic. Screens 1 and 4 and the feature graphic show sede.agenciatributaria.gob.es, so the sources line names it:
+
+> Spain Assist es una app privada, no afiliada a ninguna administración pública.
+> Fuentes oficiales: dnielectronico.es · firmaelectronica.gob.es · sede.agenciatributaria.gob.es
+
+The blurred desktop behind screen 2's QR shows Cl@ve, which is why the description lists
+clave.gob.es.
 
 Play's limits: 2 to 8 phone screenshots, each side 320 to 3840 px and the long side at most twice
 the short one (so 1080×2400 raw captures don't qualify; 1080×1920 does).
