@@ -127,8 +127,8 @@ Contact: hola@spainassist.es
 The app is in Spanish and English (`composeResources/values-en`), so the English listing
 describes the same app. It has its own graphics with the English UI (English frames next to the
 Spanish ones on the "Play Store" page, on Framer's main branch), exported to
-`~/Desktop/SpainAssist-play/listing/en/` and uploaded as `en-*.png`: `en-feature-graphic.png` and
-`en-01-sign.png` … `en-05-encrypted.png`, in the Spanish order. The Modelo 100 page stays in
+`~/Desktop/SpainAssist-play/listing/en/` and uploaded as `en-*.png`: `en-feature-graphic-1105.png`
+and `en-01-sign-1105.png` … `en-05-encrypted-1105.png`, in the Spanish order. The Modelo 100 page stays in
 Spanish, since it is a Spanish tax form.
 
 ### Contact details and links
@@ -149,13 +149,16 @@ Spanish, since it is a Spanish tax form.
 
 Exported to `~/Desktop/SpainAssist-play/listing/` (outside the repo: binary, regenerated from
 Framer, and the repo is no place for 1 MB of marketing PNGs per release). Designed on the
-"Play Store" page of the Framer project "Spain Assistant".
+"Play Store" page of the Framer project "Spain Assistant". Each upload gets a new date suffix
+(`-1105` for the 2026-11-05 set): Console's asset library keeps every file ever uploaded, and
+reused names make the old and new ones hard to tell apart when picking. The library also
+deduplicates: a file identical to one already there is shown under the old name.
 
 | File | Size | Play slot |
 | --- | --- | --- |
 | `icon-512.png` | 512×512, 32-bit PNG | App icon (the launcher's flag on white) |
-| `feature-graphic-1024x500.png` | 1024×500, 24-bit PNG | Feature graphic |
-| `01-firma.png` … `05-cifrado.png` | 1080×1920, 24-bit PNG | Phone screenshots, in this order |
+| `feature-graphic-1024x500-1105.png` | 1024×500, 24-bit PNG | Feature graphic |
+| `01-firma-1105.png` … `05-cifrado-1105.png` | 1080×1920, 24-bit PNG | Phone screenshots, in this order |
 
 Screenshots, by headline (frame slug in brackets):
 
