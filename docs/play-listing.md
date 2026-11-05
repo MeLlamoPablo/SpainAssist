@@ -9,8 +9,9 @@ listing up to date.
 Rules for every text here and in the graphics (`play-policy.md`): never call the app "official"
 or "la app del DNI", no government logos or coats of arms, and in every language the description
 opens with the disclaimer in Play's words ("no representa a ninguna entidad gubernamental") and
-the official sources, one for every government site or body the app or the graphics show. Every
-graphic carries the disclaimer too.
+the official sources, one for every government site or body the app or the graphics show. A
+screenshot that shows a government document carries the disclaimer too, and graphics name a
+sede by a generic "Sede Oficial" rather than its domain where they can.
 
 Play rejected the listing twice under Misleading Claims ("Missing Source Link for Government
 Information"). On 2026-11-03 only the en-US description had sources; Play flagged the es-ES one.
@@ -168,15 +169,19 @@ Screenshots, by headline (frame slug in brackets):
 Screens 1 and 2 are images rendered from `marketing/dni-video` (the Framer component takes one
 image per screen), not emulator captures.
 
-Every graphic, in both languages, carries the disclaimer: in a band at the bottom of the
-screenshots (two text props of the "Play Store Screenshot" component) and under the headline on
-the feature graphic. Screens 1 and 4 and the feature graphic show sede.agenciatributaria.gob.es, so the sources line names it:
+Screen 1, the one Play flagged on 2026-11-05, shows a tax return, so it carries the disclaimer at
+the bottom (the "Phone Down · Disclaimer" variant of the "Play Store Screenshot" component, used by
+screen 1 alone), and its site chip reads "Sede Oficial" instead of sede.agenciatributaria.gob.es.
+The PDF keeps the made-up Agencia Tributaria header. The feature graphic shows the same screen,
+also with "Sede Oficial", and no disclaimer.
 
-> Spain Assist es una app privada, no afiliada a ninguna administración pública.
-> Fuentes oficiales: dnielectronico.es · firmaelectronica.gob.es · sede.agenciatributaria.gob.es
+> Spain Assist es una app privada,
+> no afiliada a ninguna administración pública.
 
-The blurred desktop behind screen 2's QR shows Cl@ve, which is why the description lists
-clave.gob.es.
+The DNI video itself still shows the domain: screen 1's image is `#screen` at t=10.5, captured
+at 3× with the punch-hole hidden and the chip's text replaced (in English, also the title and the
+two buttons). Screen 4 still shows sede.agenciatributaria.gob.es, and the blurred desktop behind
+screen 2's QR shows Cl@ve, which is why the description lists both.
 
 Play's limits: 2 to 8 phone screenshots, each side 320 to 3840 px and the long side at most twice
 the short one (so 1080×2400 raw captures don't qualify; 1080×1920 does).
