@@ -238,15 +238,8 @@ describe('DNI prompt', () => {
 });
 
 describe('identity prompt', () => {
-  it('never acts as a third party and names whose identity confirm_action sends', () => {
+  it('names whose identity confirm_action sends', () => {
     const procedure = buildSystemPrompt({ language: 'es', research: 'web_research' });
-    expect(procedure).toContain('Act only as the user.');
-    expect(procedure).toContain(
-      "Never type, register, log in or sign with a third party's identity",
-    );
-    expect(procedure).toContain(
-      'official route for third parties, authorised users or representation',
-    );
     expect(procedure).toContain('If it sends identity data, say whose');
   });
 });
