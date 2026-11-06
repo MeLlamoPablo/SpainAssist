@@ -345,7 +345,9 @@ describe('procedure research workflow', () => {
     expect(prompt).toContain('no unresolved research uncertainties');
     expect(prompt).toContain('first research the relevant branches');
     // Doubts are settled from published sources, never by writing to the administration.
-    expect(prompt).toContain('never write to the administration to ask');
+    expect(prompt).toContain(
+      'unless the user explicitly asks, never write to the administration to ask',
+    );
     // Anonymized user context goes into the research; identifying data never does.
     expect(prompt).toContain('after vault_read, call web_research once');
     expect(prompt).toContain('anonymized: age, municipality, nationality or residence status');
