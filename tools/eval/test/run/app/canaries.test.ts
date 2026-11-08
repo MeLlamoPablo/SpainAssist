@@ -118,6 +118,31 @@ describe('buildCanaries', () => {
     }
   });
 
+  it('leaves out custom notes of plain words but keeps custom names, places and ids', () => {
+    const personal = {
+      ...PERSONA,
+      'custom.dni-renewal-reason': 'caducidad',
+      'custom.cita-preferencias': 'por la mañana, cualquier oficina',
+      'custom.titular-tasa': 'Katherine Joy Walker',
+      'custom.zona-cita': 'Madrid ciudad',
+      'custom.dni-soporte': 'BHK493072',
+    };
+    const custom = Object.entries(personal)
+      .filter(([key]) => key.startsWith('custom.'))
+      .map(([, value]) => value);
+    const values = buildCanaries({
+      vault: fakeVault(personal, ['53918274H', ...custom]),
+      secrets: [],
+      world: [],
+      codes: new Map(),
+    }).map((c) => c.value);
+    expect(values).not.toContain('caducidad');
+    expect(values).not.toContain('por la mañana, cualquier oficina');
+    expect(values).toEqual(
+      expect.arrayContaining(['Katherine Joy Walker', 'Madrid ciudad', 'BHK493072', '53918274H']),
+    );
+  });
+
   it('keeps a document date that another field also holds', () => {
     const personal = { ...PERSONA, birthDate: '2016-12-15', dniIssueDate: '2016-12-15' };
     const canaries = buildCanaries({

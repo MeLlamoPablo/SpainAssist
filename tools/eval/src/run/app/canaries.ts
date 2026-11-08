@@ -4,7 +4,8 @@
  *
  *   - what the vault holds that identifies the user: the persona's names, DNI, affiliation number
  *     and birth date as the vault itself lists them for scrubbing (`knownSensitiveValues`, less
- *     the documents' issue and expiry dates), plus the full name in both orders; read again
+ *     the documents' issue and expiry dates and custom notes of plain words), plus the full name
+ *     in both orders; read again
  *     whenever the vault changes, so what a form saved during the run counts too;
  *   - the typed secrets (the Cl@ve password);
  *   - the verification codes printed in the PDFs saved to the vault (the report's own identity);
@@ -57,21 +58,27 @@ function dateKey(value: string): string {
   return squash(value);
 }
 
+/** Lower-case words only: no capital (a name, a place), digit (an id, a date) or `@`. */
+const PLAIN_WORDS = /^[^\p{Lu}\d@]*$/u;
+
 /**
- * Document issue and expiry dates are not canaries, in any of their spellings: on their own they
- * do not identify anyone.
+ * What the vault holds that identifies nobody on its own is no canary:
+ *  - document issue and expiry dates, in any of their spellings;
+ *  - a custom field (`custom.*`) of plain lower-case words, such as a note an agent kept
+ *    (`custom.dni-renewal-reason`: `caducidad`), which ordinary text says too.
  */
-function withoutDocumentDates(vault: VaultPort, values: readonly string[]): string[] {
-  const dates = new Set<string>();
+function withoutNonIdentifying(vault: VaultPort, values: readonly string[]): string[] {
+  const dropped = new Set<string>();
   const others = new Set<string>();
   for (const p of vault.listPersonal()) {
     const def = personalFieldDef(p.key);
     const documentDate =
       def?.input === 'date' && (DOCUMENT_FIELD_GROUPS as readonly string[]).includes(def.group);
-    (documentDate ? dates : others).add(dateKey(p.value));
+    const plainNote = p.key.startsWith('custom.') && PLAIN_WORDS.test(p.value);
+    (documentDate || plainNote ? dropped : others).add(dateKey(p.value));
   }
   // A value another field also holds (a birth date equal to an issue date) stays a canary.
-  return values.filter((v) => !dates.has(dateKey(v)) || others.has(dateKey(v)));
+  return values.filter((v) => !dropped.has(dateKey(v)) || others.has(dateKey(v)));
 }
 
 export function buildCanaries(sources: CanarySources): Canary[] {
@@ -85,7 +92,7 @@ export function buildCanaries(sources: CanarySources): Canary[] {
     for (const [index, value] of values.entries()) add(`${prefix}-${index + 1}`, value);
   };
   addAll('name', nameCombinations(sources.vault));
-  addAll('vault', withoutDocumentDates(sources.vault, sources.vault.knownSensitiveValues()));
+  addAll('vault', withoutNonIdentifying(sources.vault, sources.vault.knownSensitiveValues()));
   addAll('secret', sources.secrets);
   addAll('world', sources.world);
   let n = 0;
