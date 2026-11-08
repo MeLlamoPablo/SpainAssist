@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import type { AddressInfo, Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BridgeClient, BridgeError, defaultBridgeTimeoutMs } from '../src/bridge/client';
 import { createFakeBridge, type FakeBridge, FakeBridgeError, hang } from './helpers/fake-bridge';
@@ -68,6 +70,37 @@ describe('BridgeClient', () => {
     await expect(client.call('procedure.get', {}, { timeoutMs: 100 })).rejects.toMatchObject({
       code: 'timeout',
     });
+  });
+
+  it('sends a call again when the app reset the idle connection it reused', async () => {
+    // The app answers once per connection, then resets it when the next request arrives on it,
+    // as when its keep-alive timeout closes an idle socket just as the client reuses it.
+    const served = new WeakSet<Socket>();
+    let answered = 0;
+    let resets = 0;
+    const server = createServer((req, res) => {
+      if (served.has(req.socket)) {
+        resets++;
+        req.socket.resetAndDestroy();
+        return;
+      }
+      served.add(req.socket);
+      answered++;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, result: { n: answered } }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const client = new BridgeClient({ url, token: 't' });
+      expect(await client.call('procedure.get', {})).toEqual({ n: 1 });
+      expect(await client.call('procedure.get', {})).toEqual({ n: 2 });
+      expect(resets).toBe(1);
+      client.close();
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it('reports network errors when the app is unreachable', async () => {

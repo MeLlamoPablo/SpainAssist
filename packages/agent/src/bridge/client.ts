@@ -1,4 +1,4 @@
-import { Agent as HttpAgent, request as httpRequest } from 'node:http';
+import { type ClientRequest, Agent as HttpAgent, request as httpRequest } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import type { BridgeErrorCode, BridgeMethod, BridgeParamsOf, BridgeResults } from '@sa/shared';
 
@@ -104,16 +104,7 @@ export class BridgeClient implements BridgeTransport {
         return;
       }
       const send = url.protocol === 'https:' ? httpsRequest : httpRequest;
-      const req = send(url, {
-        method: 'POST',
-        agent: this.agent,
-        headers: {
-          authorization: `Bearer ${this.token}`,
-          'content-type': 'application/json',
-          'content-length': body.length,
-          accept: 'application/json',
-        },
-      });
+      let req: ClientRequest;
 
       let settled = false;
       const finish = (fn: () => void) => {
@@ -128,67 +119,87 @@ export class BridgeClient implements BridgeTransport {
       };
       signal?.addEventListener('abort', onAbort, { once: true });
 
-      req.on('error', (error) => {
-        finish(() =>
-          reject(new BridgeError('network', `Could not reach the app: ${error.message}`, method)),
-        );
-      });
-      req.on('response', (res) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        res.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > MAX_RESPONSE_BYTES) {
-            finish(() =>
-              reject(new BridgeError('bad_response', 'Bridge response too large', method)),
-            );
-            req.destroy();
+      const attempt = (first: boolean) => {
+        const sent = send(url, {
+          method: 'POST',
+          agent: this.agent,
+          headers: {
+            authorization: `Bearer ${this.token}`,
+            'content-type': 'application/json',
+            'content-length': body.length,
+            accept: 'application/json',
+          },
+        });
+        req = sent;
+        sent.on('error', (error: NodeJS.ErrnoException) => {
+          // The app closed an idle kept-alive connection just as this request reused it, so the
+          // request never reached it: it goes again, once, on a new connection (Node's advice).
+          if (first && !settled && sent.reusedSocket && error.code === 'ECONNRESET') {
+            attempt(false);
             return;
           }
-          chunks.push(chunk);
+          finish(() =>
+            reject(new BridgeError('network', `Could not reach the app: ${error.message}`, method)),
+          );
         });
-        res.on('error', (error) => {
-          finish(() => reject(new BridgeError('network', error.message, method)));
-        });
-        res.on('end', () => {
-          finish(() => {
-            const status = res.statusCode ?? 0;
-            const text = Buffer.concat(chunks).toString('utf8');
-            let parsed: unknown;
-            try {
-              parsed = text ? JSON.parse(text) : undefined;
-            } catch {
+        sent.on('response', (res) => {
+          const chunks: Buffer[] = [];
+          let size = 0;
+          res.on('data', (chunk: Buffer) => {
+            size += chunk.length;
+            if (size > MAX_RESPONSE_BYTES) {
+              finish(() =>
+                reject(new BridgeError('bad_response', 'Bridge response too large', method)),
+              );
+              req.destroy();
+              return;
+            }
+            chunks.push(chunk);
+          });
+          res.on('error', (error) => {
+            finish(() => reject(new BridgeError('network', error.message, method)));
+          });
+          res.on('end', () => {
+            finish(() => {
+              const status = res.statusCode ?? 0;
+              const text = Buffer.concat(chunks).toString('utf8');
+              let parsed: unknown;
+              try {
+                parsed = text ? JSON.parse(text) : undefined;
+              } catch {
+                reject(
+                  new BridgeError(
+                    status >= 400 ? httpStatusCode(status) : 'bad_response',
+                    `Bridge returned HTTP ${status} with a non-JSON body`,
+                    method,
+                    status,
+                  ),
+                );
+                return;
+              }
+              const envelope = parsed as
+                | { ok: true; result: unknown }
+                | { ok: false; error?: { code?: string; message?: string } }
+                | undefined;
+              if (envelope && envelope.ok === true) {
+                resolve(envelope.result as BridgeResults[M]);
+                return;
+              }
+              const error = envelope && envelope.ok === false ? envelope.error : undefined;
               reject(
                 new BridgeError(
-                  status >= 400 ? httpStatusCode(status) : 'bad_response',
-                  `Bridge returned HTTP ${status} with a non-JSON body`,
+                  (error?.code as BridgeErrorCode | undefined) ?? httpStatusCode(status),
+                  error?.message ?? `Bridge returned HTTP ${status}`,
                   method,
                   status,
                 ),
               );
-              return;
-            }
-            const envelope = parsed as
-              | { ok: true; result: unknown }
-              | { ok: false; error?: { code?: string; message?: string } }
-              | undefined;
-            if (envelope && envelope.ok === true) {
-              resolve(envelope.result as BridgeResults[M]);
-              return;
-            }
-            const error = envelope && envelope.ok === false ? envelope.error : undefined;
-            reject(
-              new BridgeError(
-                (error?.code as BridgeErrorCode | undefined) ?? httpStatusCode(status),
-                error?.message ?? `Bridge returned HTTP ${status}`,
-                method,
-                status,
-              ),
-            );
+            });
           });
         });
-      });
-      req.end(body);
+        sent.end(body);
+      };
+      attempt(true);
     });
   }
 
