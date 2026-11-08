@@ -263,6 +263,47 @@ describe('structured answers', () => {
       });
     });
 
+    it('picks the option that shows a field the answerer answered with its select left empty', async () => {
+      const answerer = fakeAnswerer([
+        () => ({
+          type: 'values',
+          values: { tramite: 'Primera TIE de mi pareja' },
+          skipped: ['modelo'],
+        }),
+      ]);
+      const t = setup({ answerGroups: [], unexpectedPrompt: 'answerer' }, { answerer });
+      t.show(
+        prompt({
+          itemId: 'form-gate',
+          title: '¿Qué tasa necesitas?',
+          fields: [
+            {
+              key: 'modelo',
+              type: 'select',
+              label: '¿Ya tienes el modelo rellenado?',
+              required: true,
+              options: [
+                { value: 'si', label: 'Sí' },
+                { value: 'no', label: 'No' },
+              ],
+            },
+            {
+              key: 'tramite',
+              type: 'textarea',
+              label: '¿Para qué trámite es?',
+              required: true,
+              visibleWhen: { field: 'modelo', values: ['no'] },
+            },
+          ],
+        }),
+      );
+      await t.sim.settled();
+      expect(t.app.responses[0]!.response).toMatchObject({
+        values: { modelo: 'no', tramite: 'Primera TIE de mi pareja' },
+        dismissed: false,
+      });
+    });
+
     it('prefills the default of a field and leaves out a field that its select hides', async () => {
       const form = prompt({
         itemId: 'form-visible',

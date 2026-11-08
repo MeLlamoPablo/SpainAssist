@@ -407,7 +407,7 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
       throw error;
     }
     if (stopped) return;
-    const checked = validateFormValues(prompt.fields ?? [], result.values);
+    const checked = validateFormValues(prompt.fields ?? [], withGatesOpen(prompt, result.values));
     if (checked.issues.length > 0) {
       note(`answerer values dropped for ${describePrompt(prompt)}: ${checked.issues.join('; ')}`);
     }
@@ -418,6 +418,32 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
     if (stopped) return;
     const response = Object.keys(values).length === 0 ? dismissal() : formResponse(prompt, values);
     await send(prompt, response, { by: 'answerer', ...(answerId ? { answerId } : {}) });
+  }
+
+  /**
+   * The answerer is not told which select shows a field. When it answers a field whose select it
+   * left empty, the select gets the option that shows the field, as a person who typed in that
+   * field would have picked it; otherwise the form would drop the answer as hidden.
+   */
+  function withGatesOpen<V>(
+    prompt: PendingPrompt,
+    values: Record<string, V | string>,
+  ): Record<string, V | string> {
+    const fields = prompt.fields ?? [];
+    const out = { ...values };
+    for (const field of fields) {
+      const gate = field.visibleWhen;
+      const answered = out[field.key] !== undefined && out[field.key] !== '';
+      if (!gate || !answered || out[gate.field] !== undefined) continue;
+      const shown = gate.values[0];
+      const select = fields.find((f) => f.key === gate.field);
+      if (shown === undefined || !select || select.defaultValue !== undefined) continue;
+      out[gate.field] = shown;
+      note(
+        `the answerer answered "${field.label}" and left "${select.label}" empty: picked "${shown}"`,
+      );
+    }
+    return out;
   }
 
   // -------------------------------------------------------------------------------------------
