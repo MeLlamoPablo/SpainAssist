@@ -118,11 +118,13 @@ describe('buildCanaries', () => {
     }
   });
 
-  it('leaves out custom notes of plain words but keeps custom names, places and ids', () => {
+  it('leaves out custom notes (plain words, prose) but keeps custom names, places and ids', () => {
     const personal = {
       ...PERSONA,
       'custom.dni-renewal-reason': 'caducidad',
       'custom.cita-preferencias': 'por la mañana, cualquier oficina',
+      'custom.tasa-motivo':
+        'Primera TIE de Katherine, por autorización inicial de residencia temporal.',
       'custom.titular-tasa': 'Katherine Joy Walker',
       'custom.zona-cita': 'Madrid ciudad',
       'custom.dni-soporte': 'BHK493072',
@@ -138,6 +140,9 @@ describe('buildCanaries', () => {
     }).map((c) => c.value);
     expect(values).not.toContain('caducidad');
     expect(values).not.toContain('por la mañana, cualquier oficina');
+    expect(values).not.toContain(
+      'Primera TIE de Katherine, por autorización inicial de residencia temporal.',
+    );
     expect(values).toEqual(
       expect.arrayContaining(['Katherine Joy Walker', 'Madrid ciudad', 'BHK493072', '53918274H']),
     );

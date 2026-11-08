@@ -4,7 +4,7 @@
  *
  *   - what the vault holds that identifies the user: the persona's names, DNI, affiliation number
  *     and birth date as the vault itself lists them for scrubbing (`knownSensitiveValues`, less
- *     the documents' issue and expiry dates and custom notes of plain words), plus the full name
+ *     the documents' issue and expiry dates and the custom notes agents keep), plus the full name
  *     in both orders; read again
  *     whenever the vault changes, so what a form saved during the run counts too;
  *   - the typed secrets (the Cl@ve password);
@@ -60,12 +60,21 @@ function dateKey(value: string): string {
 
 /** Lower-case words only: no capital (a name, a place), digit (an id, a date) or `@`. */
 const PLAIN_WORDS = /^[^\p{Lu}\d@]*$/u;
+/** More words than a name or a place has: a note in prose. */
+const PROSE_WORDS = 5;
+
+/** A custom field's value that is a note, not an identifier, a name or a place. */
+function isNote(value: string): boolean {
+  return PLAIN_WORDS.test(value) || value.trim().split(/\s+/).length >= PROSE_WORDS;
+}
 
 /**
  * What the vault holds that identifies nobody on its own is no canary:
  *  - document issue and expiry dates, in any of their spellings;
- *  - a custom field (`custom.*`) of plain lower-case words, such as a note an agent kept
- *    (`custom.dni-renewal-reason`: `caducidad`), which ordinary text says too.
+ *  - a custom field (`custom.*`) that is a note an agent kept: plain lower-case words
+ *    (`custom.dni-renewal-reason`: `caducidad`) or prose of five words or more ("Primera TIE de
+ *    Katherine, por autorización inicial de residencia…"), whose phrases ordinary text says too.
+ *    The names and numbers in it are canaries through their own fields.
  */
 function withoutNonIdentifying(vault: VaultPort, values: readonly string[]): string[] {
   const dropped = new Set<string>();
@@ -74,7 +83,7 @@ function withoutNonIdentifying(vault: VaultPort, values: readonly string[]): str
     const def = personalFieldDef(p.key);
     const documentDate =
       def?.input === 'date' && (DOCUMENT_FIELD_GROUPS as readonly string[]).includes(def.group);
-    const plainNote = p.key.startsWith('custom.') && PLAIN_WORDS.test(p.value);
+    const plainNote = p.key.startsWith('custom.') && isNote(p.value);
     (documentDate || plainNote ? dropped : others).add(dateKey(p.value));
   }
   // A value another field also holds (a birth date equal to an issue date) stays a canary.
