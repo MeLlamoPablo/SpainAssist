@@ -45,7 +45,22 @@ function nameCombinations(vault: VaultPort): string[] {
   return [[given, ...surnames].join(' '), [...surnames, given].join(' ')];
 }
 
-/** Document issue and expiry dates are not canaries: on their own they do not identify anyone. */
+/**
+ * A date as `YYYYMMDD` in whichever way the vault spells it for scrubbing (`2021-03-14`,
+ * `14/03/2021`, `14-03-2021`, `14.03.2021`, `14032021`), or the squashed value when it is no date.
+ */
+function dateKey(value: string): string {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (iso) return `${iso[1]}${iso[2]}${iso[3]}`;
+  const dmy = /^(\d{2})[/.-]?(\d{2})[/.-]?(\d{4})$/.exec(value.trim());
+  if (dmy) return `${dmy[3]}${dmy[2]}${dmy[1]}`;
+  return squash(value);
+}
+
+/**
+ * Document issue and expiry dates are not canaries, in any of their spellings: on their own they
+ * do not identify anyone.
+ */
 function withoutDocumentDates(vault: VaultPort, values: readonly string[]): string[] {
   const dates = new Set<string>();
   const others = new Set<string>();
@@ -53,10 +68,10 @@ function withoutDocumentDates(vault: VaultPort, values: readonly string[]): stri
     const def = personalFieldDef(p.key);
     const documentDate =
       def?.input === 'date' && (DOCUMENT_FIELD_GROUPS as readonly string[]).includes(def.group);
-    (documentDate ? dates : others).add(squash(p.value));
+    (documentDate ? dates : others).add(dateKey(p.value));
   }
   // A value another field also holds (a birth date equal to an issue date) stays a canary.
-  return values.filter((v) => !dates.has(squash(v)) || others.has(squash(v)));
+  return values.filter((v) => !dates.has(dateKey(v)) || others.has(dateKey(v)));
 }
 
 export function buildCanaries(sources: CanarySources): Canary[] {

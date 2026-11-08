@@ -93,17 +93,29 @@ describe('buildCanaries', () => {
       dniIssueDate: '2016-12-15',
       dniExpiry: '2026-12-15',
     };
+    // Every spelling the vault lists for scrubbing (`sensitiveValues`).
+    const spellings = (iso: string) => {
+      const [y, m, d] = iso.split('-');
+      return [iso, `${d}/${m}/${y}`, `${d}-${m}-${y}`, `${d}.${m}.${y}`, `${d}${m}${y}`];
+    };
     const canaries = buildCanaries({
-      vault: fakeVault(personal, ['53918274H', '1991-05-23', '2016-12-15', '2026-12-15']),
+      vault: fakeVault(personal, [
+        '53918274H',
+        ...spellings('1991-05-23'),
+        ...spellings('2016-12-15'),
+        ...spellings('2026-12-15'),
+      ]),
       secrets: [],
       world: [],
       codes: new Map(),
     });
     const values = canaries.map((c) => c.value);
     expect(values).toContain('53918274H');
-    expect(values).toContain('1991-05-23');
-    expect(values).not.toContain('2016-12-15');
-    expect(values).not.toContain('2026-12-15');
+    // A birth date stays, in each spelling the scanner tells apart.
+    expect(values).toEqual(expect.arrayContaining(['1991-05-23', '23/05/1991']));
+    for (const date of [...spellings('2016-12-15'), ...spellings('2026-12-15')]) {
+      expect(values).not.toContain(date);
+    }
   });
 
   it('keeps a document date that another field also holds', () => {
