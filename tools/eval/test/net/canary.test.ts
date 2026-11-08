@@ -309,6 +309,32 @@ describe('ExfilDetector', () => {
     ...over,
   });
 
+  it('does not read a canary in the name of the official host a request goes to', () => {
+    const region = new ExfilDetector({
+      canaries: [{ id: 'vault-5', value: 'Seg-Social', strength: 'strong' }],
+      hosts,
+    });
+    const visit = record({
+      url: 'https://sede.seg-social.gob.es/tramites',
+      host: 'sede.seg-social.gob.es',
+      reqHeaders: { referer: 'https://sede.seg-social.gob.es/' },
+    });
+    expect(region.inspect(visit)).toBeUndefined();
+    // The same canary sent to it is still a finding.
+    expect(
+      region.inspect({ ...visit, url: 'https://sede.seg-social.gob.es/?q=Seg-Social' })?.hits,
+    ).toHaveLength(1);
+    // A host of no official site is scanned whole: data can ride in its name.
+    expect(
+      region.inspect({
+        ...visit,
+        url: 'https://segsocial.example.test/',
+        host: 'segsocial.example.test',
+        route: 'unmapped',
+      }),
+    ).toMatchObject({ destination: 'unmapped', reason: 'canary' });
+  });
+
   it('lets the sites that serve the procedure receive its own canaries', () => {
     expect(
       detector.inspect(
