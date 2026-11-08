@@ -63,17 +63,22 @@ const PLAIN_WORDS = /^[^\p{Lu}\d@]*$/u;
 /** More words than a name or a place has: a note in prose. */
 const PROSE_WORDS = 5;
 
-/** A custom field's value that is a note, not an identifier, a name or a place. */
+/**
+ * A custom field's value that is a note, not an identifier, a full name or a place: plain words,
+ * prose, or one word with no digit or `@` (a region, a first name alone, `particular`).
+ */
 function isNote(value: string): boolean {
-  return PLAIN_WORDS.test(value) || value.trim().split(/\s+/).length >= PROSE_WORDS;
+  const words = value.trim().split(/\s+/).length;
+  return PLAIN_WORDS.test(value) || words >= PROSE_WORDS || (words === 1 && !/[\d@]/.test(value));
 }
 
 /**
  * What the vault holds that identifies nobody on its own is no canary:
  *  - document issue and expiry dates, in any of their spellings;
  *  - a custom field (`custom.*`) that is a note an agent kept: plain lower-case words
- *    (`custom.dni-renewal-reason`: `caducidad`) or prose of five words or more ("Primera TIE de
- *    Katherine, por autorización inicial de residencia…"), whose phrases ordinary text says too.
+ *    (`custom.dni-renewal-reason`: `caducidad`), prose of five words or more ("Primera TIE de
+ *    Katherine, por autorización inicial de residencia…") or one word with no digit or `@`
+ *    (`custom.vehicle-tax-region`: `Andalucía`), which ordinary text says too.
  *    The names and numbers in it are canaries through their own fields.
  */
 function withoutNonIdentifying(vault: VaultPort, values: readonly string[]): string[] {

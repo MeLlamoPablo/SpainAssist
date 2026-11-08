@@ -118,7 +118,7 @@ describe('buildCanaries', () => {
     }
   });
 
-  it('leaves out custom notes (plain words, prose) but keeps custom names, places and ids', () => {
+  it('leaves out custom notes (plain words, prose, one word) but keeps custom names, places and ids', () => {
     const personal = {
       ...PERSONA,
       'custom.dni-renewal-reason': 'caducidad',
@@ -127,6 +127,7 @@ describe('buildCanaries', () => {
         'Primera TIE de Katherine, por autorización inicial de residencia temporal.',
       'custom.titular-tasa': 'Katherine Joy Walker',
       'custom.zona-cita': 'Madrid ciudad',
+      'custom.vehicle-tax-region': 'Andalucía',
       'custom.dni-soporte': 'BHK493072',
     };
     const custom = Object.entries(personal)
@@ -139,6 +140,7 @@ describe('buildCanaries', () => {
       codes: new Map(),
     }).map((c) => c.value);
     expect(values).not.toContain('caducidad');
+    expect(values).not.toContain('Andalucía');
     expect(values).not.toContain('por la mañana, cualquier oficina');
     expect(values).not.toContain(
       'Primera TIE de Katherine, por autorización inicial de residencia temporal.',
