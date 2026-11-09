@@ -181,9 +181,21 @@ describe('Mis datos: FNMT certificate requests', () => {
     expect(html).toContain('apus20.sede.fnmt.gob.es');
     expect(html).toContain('Certificado digital (FNMT)');
     expect(html).toContain('Tu clave de solicitud está guardada aquí');
-    expect(html).toContain('aria-label="Descartar la solicitud"');
+    // Too recent to discard: its key is the only copy.
+    expect(html).not.toContain('aria-label="Descartar la solicitud"');
     // Not a saved certificate: the section still offers to add one.
     expect(html).toContain('Añadir certificado');
+  });
+
+  it('offers to discard a request only once it is 30 days old', () => {
+    const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+    const discard = (createdAt: string) =>
+      render(false, [], { state: 'off' }, [{ ...REQUEST, createdAt }]).includes(
+        'aria-label="Descartar la solicitud"',
+      );
+    expect(discard(daysAgo(29))).toBe(false);
+    expect(discard(daysAgo(30))).toBe(true);
+    expect(discard(daysAgo(90))).toBe(true);
   });
 
   it('leaves out the procedure once it is deleted', () => {

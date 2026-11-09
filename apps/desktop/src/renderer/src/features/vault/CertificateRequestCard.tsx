@@ -47,6 +47,12 @@ const dict = defineDict({
 });
 
 /**
+ * Discarding deletes the only copy of the key, and a lost key means requesting (and proving one's
+ * identity) again. So it is offered only once a request is this old and probably abandoned.
+ */
+const DISCARD_AFTER_MS = 30 * 86_400_000;
+
+/**
  * Mis datos → Credenciales: an FNMT certificate requested through the app, whose key waits in the
  * vault until the certificate is downloaded (then it becomes an ordinary certificate credential).
  */
@@ -58,6 +64,7 @@ export function CertificateRequestCard({ request: r }: { request: PendingCertifi
   // A deleted procedure leaves its request behind: then there is nothing to link to.
   const procedure = useProcedureStore((s) => (r.procedureId ? s.byId[r.procedureId] : undefined));
   const [confirm, setConfirm] = useState(false);
+  const canDiscard = Date.now() - Date.parse(r.createdAt) >= DISCARD_AFTER_MS;
 
   const discard = async () => {
     try {
@@ -116,7 +123,9 @@ export function CertificateRequestCard({ request: r }: { request: PendingCertifi
             {t.kept}
           </p>
         </div>
-        <IconButton icon={Trash} label={t.discard} onClick={() => setConfirm(true)} />
+        {canDiscard ? (
+          <IconButton icon={Trash} label={t.discard} onClick={() => setConfirm(true)} />
+        ) : null}
       </div>
       <ConfirmDialog
         open={confirm}

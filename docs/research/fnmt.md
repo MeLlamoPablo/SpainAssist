@@ -16,7 +16,8 @@ B). The `fnmt-certificates` feature flag it shipped behind on 2026-10-31 was rem
   - the broker, with a consent prompt for the request (`apps/desktop/src/main/fnmt/broker.ts`);
   - pending keys as a vault record type (`certificateRequests`, `addCertificateFromKey`);
   - Mis datos → Credenciales lists pending requests as "En proceso" (`vault.overview`) and lets
-    the user discard one (`vault.deleteCertificateRequest`, `CertificateRequestCard.tsx`);
+    the user discard one once it is 30 days old, since its key is the only copy
+    (`vault.deleteCertificateRequest`, `CertificateRequestCard.tsx`);
   - the FNMT CAs (`apps/desktop/src/main/fnmt/fnmt-ca/`);
   - the browser's notes for the agent and a line in the system prompt;
   - the mock sede's FNMT-like flow (`/fnmt`) and an end-to-end test
