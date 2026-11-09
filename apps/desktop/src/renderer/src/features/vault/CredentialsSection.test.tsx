@@ -180,7 +180,7 @@ describe('Mis datos: FNMT certificate requests', () => {
     expect(html).toContain('Solicitado hace 3 horas');
     expect(html).toContain('apus20.sede.fnmt.gob.es');
     expect(html).toContain('Certificado digital (FNMT)');
-    expect(html).toContain('Tu clave está guardada en este dispositivo');
+    expect(html).toContain('Tu clave de solicitud está guardada aquí');
     expect(html).toContain('aria-label="Descartar la solicitud"');
     // Not a saved certificate: the section still offers to add one.
     expect(html).toContain('Añadir certificado');

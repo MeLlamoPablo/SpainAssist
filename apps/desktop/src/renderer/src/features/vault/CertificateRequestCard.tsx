@@ -21,7 +21,7 @@ const dict = defineDict({
     requested: (when: string) => `Solicitado ${when}`,
     site: 'Web',
     procedure: 'Trámite',
-    kept: 'Tu clave está guardada en este dispositivo. Cuando descargues el certificado, se guardará aquí automáticamente.',
+    kept: 'Tu clave de solicitud está guardada aquí, por lo que debes completar la solicitud desde Spain Assist.',
     discard: 'Descartar la solicitud',
     discardTitle: '¿Descartar la solicitud del certificado?',
     discardBody:
@@ -36,7 +36,7 @@ const dict = defineDict({
     requested: (when: string) => `Requested ${when}`,
     site: 'Website',
     procedure: 'Procedure',
-    kept: 'Your key is kept on this device. Once you download the certificate, it’s saved here automatically.',
+    kept: 'Your request key is saved here, so you need to complete the request from Spain Assist.',
     discard: 'Discard the request',
     discardTitle: 'Discard the certificate request?',
     discardBody:
