@@ -20,7 +20,12 @@ es-ES one. On 2026-11-05 the es-ES description listed them at the end, below the
 and Play flagged it again, quoting its first paragraph, together with screenshot 1, which showed
 sede.agenciatributaria.gob.es without a disclaimer or the Agencia Tributaria as a source. Each
 time the reviewers pointed at the description and screenshot 1, which is why the 2026-11-10
-graphics drop every government name rather than adding sources for them.
+graphics drop every government name rather than adding sources for them. On 2026-11-09 Play
+rejected the 2026-11-06 submission quoting the 2026-10-31 description, and on 2026-11-10 it
+rejected the appeal attaching the 2026-10-31 screenshot 1: the reviewers judged old evidence, not
+the draft. So the resubmission also ships a new build, 0.3.5, whose start screen carries the
+disclaimer and a "Fuentes oficiales" page with the same sources as the descriptions
+(`SourcesScreen.kt`); change both together.
 
 ## Store listing
 
@@ -51,7 +56,7 @@ La información sobre trámites que aparece en la app y en esta ficha procede de
 • Firma electrónica: https://firmaelectronica.gob.es
 • Sedes electrónicas de la Administración: https://administracion.gob.es
 • Cl@ve: https://clave.gob.es
-• Agencia Tributaria, cuya sede aparece en las capturas: https://sede.agenciatributaria.gob.es
+• Agencia Tributaria: https://sede.agenciatributaria.gob.es
 
 Spain Assist para Android te permite usar tu DNI electrónico para firmar documentos y entrar en sedes electrónicas mientras haces trámites con Spain Assist en tu ordenador. No necesitas lector de tarjetas, solo un móvil con NFC.
 
@@ -92,7 +97,7 @@ The information about government procedures shown in the app and in this listing
 • Electronic signature: https://firmaelectronica.gob.es
 • Spanish government e-services (sedes electrónicas): https://administracion.gob.es
 • Cl@ve: https://clave.gob.es
-• Agencia Tributaria, the tax agency whose site appears in the screenshots: https://sede.agenciatributaria.gob.es
+• Agencia Tributaria (tax agency): https://sede.agenciatributaria.gob.es
 
 Spain Assist for Android lets you use your Spanish electronic ID card (DNIe 3.0 or 4.0) with your phone to sign documents and log in to Spanish e-government sites while you handle paperwork with Spain Assist on your computer. No card reader needed: your phone reads the DNIe over NFC.
 
