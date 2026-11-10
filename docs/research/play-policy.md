@@ -44,9 +44,10 @@ Nacional, the FNMT or other government bodies),
 
 ### What the app needs
 
-- In the store description and in the app (next to the licences), a disclaimer such as:
-  "Spain Assist es una app privada; no está afiliada a la Policía Nacional, la FNMT ni a ninguna
-  administración pública. Fuentes: dnielectronico.es, firmaelectronica.gob.es."
+- In the store description and in the app, the disclaimer in Play's words: "Spain Assist es una
+  app privada y no representa a ninguna entidad gubernamental." The app shows it on the start
+  screen, ending in a "Fuentes oficiales" link to a page with the same official sources as the
+  description (`SourcesScreen.kt`, also in the "⋯" menu); `docs/play-listing.md` has the texts.
 - A privacy policy link in the app: https://spainassist.es/legal/politica-de-privacidad.
 - Government apps declaration: not a government app.
 
