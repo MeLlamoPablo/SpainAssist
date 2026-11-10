@@ -20,6 +20,17 @@ class StringsTest {
         assertEquals(emptySet(), en - es, "missing in Spanish")
     }
 
+    private fun string(dir: String, key: String): String =
+        Regex("""<string name="$key">([^<]*)</string>""").find(File(resources, "$dir/strings.xml").readText())?.groupValues?.get(1)
+            ?: error("$key missing in $dir")
+
+    /** The start screen keeps Google Play's own wording (docs/research/play-policy.md). */
+    @Test
+    fun theDisclaimerSaysTheAppRepresentsNoGovernment() {
+        assertTrue("no representa a ninguna entidad gubernamental" in string("values", "start_disclaimer"))
+        assertTrue("does not represent any government entity" in string("values-en", "start_disclaimer"))
+    }
+
     @Test
     fun theScreenReaderLabelsExist() {
         val es = keys("values")

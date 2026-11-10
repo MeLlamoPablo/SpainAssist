@@ -73,6 +73,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -104,7 +105,7 @@ fun FirmaApp(controller: FirmaController, platform: Platform) {
 }
 
 /** What the app shows on top of the controller's [Screen] while the user has nothing to approve. */
-enum class Overlay { Scanner, Licenses }
+enum class Overlay { Scanner, Sources, Licenses }
 
 /** The app for a given [screen]; the debug build's screen preview renders it with mock screens. */
 @Composable
@@ -119,14 +120,16 @@ fun FirmaScreens(screen: Screen, actions: FirmaActions, platform: Platform, init
     FirmaTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(Modifier.safeDrawingPadding()) {
-                val openLicenses = { overlay = Overlay.Licenses }
+                val open: (Overlay) -> Unit = { overlay = it }
+                val close = { overlay = null }
                 when {
-                    overlay == Overlay.Licenses && idle -> LicensesScreen(platform) { overlay = null }
-                    overlay == Overlay.Scanner && screen is Screen.Start -> ScanScreen(platform, actions) { overlay = null }
+                    overlay == Overlay.Sources && idle -> SourcesScreen(platform, close)
+                    overlay == Overlay.Licenses && idle -> LicensesScreen(platform, close)
+                    overlay == Overlay.Scanner && screen is Screen.Start -> ScanScreen(platform, actions, close)
                     else -> when (screen) {
-                        is Screen.Start -> StartScreen(screen, actions, openLicenses) { overlay = Overlay.Scanner }
-                        is Screen.ConfirmPairing -> ConfirmPairingScreen(screen, actions, openLicenses)
-                        is Screen.Home -> HomeScreen(screen, actions, openLicenses)
+                        is Screen.Start -> StartScreen(screen, actions, open)
+                        is Screen.ConfirmPairing -> ConfirmPairingScreen(screen, actions, open)
+                        is Screen.Home -> HomeScreen(screen, actions, open)
                         is Screen.Signing -> SigningScreen(screen, actions, platform)
                     }
                 }
@@ -142,9 +145,9 @@ fun FirmaScreens(screen: Screen, actions: FirmaActions, platform: Platform, init
 internal val colors @Composable get() = LocalFirmaColors.current
 
 /**
- * Every screen but the licences: a picture up top ([hero]: the wordmark, the card, the result)
- * and the words and buttons at the bottom, within reach of the thumb. It scrolls when they don't
- * fit. [menu] adds the "⋯" menu in the corner.
+ * Every screen but the sources and the licences: a picture up top ([hero]: the wordmark, the card,
+ * the result) and the words and buttons at the bottom, within reach of the thumb. It scrolls when
+ * they don't fit. [menu] adds the "⋯" menu in the corner, which opens those two pages.
  *
  * [pane] names the screen for TalkBack, which reads it out when the screen appears or the name
  * changes (a new step of the signature, its result): the screen reader follows the steps without
@@ -155,7 +158,7 @@ private fun Layout(
     hero: @Composable () -> Unit,
     pane: String,
     top: Dp = 128.dp,
-    menu: (() -> Unit)? = null,
+    menu: ((Overlay) -> Unit)? = null,
     bottom: @Composable ColumnScope.() -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().semantics { paneTitle = pane }) {
@@ -186,7 +189,7 @@ private fun Actions(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(24.dp), content = content)
 }
 
-/** Top-aligned and scrolling: the licences. [pane] as in [Layout]. */
+/** Top-aligned and scrolling: the sources and the licences. [pane] as in [Layout]. */
 @Composable
 internal fun Page(pane: String, content: @Composable () -> Unit) {
     Column(
@@ -238,14 +241,14 @@ internal fun Wordmark(heading: Boolean = false) {
 /** Our privacy policy, which Google Play asks the app to link to (docs/research/play-policy.md). */
 private const val PRIVACY_URL = "https://spainassist.es/legal/politica-de-privacidad"
 
-/** The "⋯" button and its menu: the licences and the privacy policy. */
+/** The "⋯" button and its menu: the official sources, the licences and the privacy policy. */
 @Composable
-private fun MoreMenu(openLicenses: () -> Unit, modifier: Modifier) {
-    var open by remember { mutableStateOf(false) }
+private fun MoreMenu(open: (Overlay) -> Unit, modifier: Modifier) {
+    var expanded by remember { mutableStateOf(false) }
     val label = stringResource(Res.string.menu_more)
     val uri = LocalUriHandler.current
     Box(modifier) {
-        IconButton(onClick = { open = true }, modifier = Modifier.semantics { contentDescription = label }) {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.semantics { contentDescription = label }) {
             val fg = colors.fg
             Canvas(Modifier.size(24.dp)) {
                 val r = 2.dp.toPx()
@@ -254,19 +257,21 @@ private fun MoreMenu(openLicenses: () -> Unit, modifier: Modifier) {
         }
         // Raised and outlined: on the dark theme the menu's shadow doesn't show against the page.
         DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
             shape = RoundedCornerShape(12.dp),
             containerColor = colors.surface3,
             border = BorderStroke(1.dp, colors.lineStrong),
         ) {
-            DropdownMenuItem(
-                text = { Text(stringResource(Res.string.licenses_open), fontSize = 16.sp, color = colors.fg) },
-                onClick = {
-                    open = false
-                    openLicenses()
-                },
-            )
+            for ((item, page) in listOf(Res.string.sources_open to Overlay.Sources, Res.string.licenses_open to Overlay.Licenses)) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(item), fontSize = 16.sp, color = colors.fg) },
+                    onClick = {
+                        expanded = false
+                        open(page)
+                    },
+                )
+            }
             // In the browser, not in the app. TalkBack reads it as "Privacy policy, opens in the browser".
             DropdownMenuItem(
                 text = { Text(stringResource(Res.string.privacy_open), fontSize = 16.sp, color = colors.fg) },
@@ -274,7 +279,7 @@ private fun MoreMenu(openLicenses: () -> Unit, modifier: Modifier) {
                     Icon(LineIcons.OpenOutside, stringResource(Res.string.a11y_opens_browser), Modifier.size(16.dp), tint = colors.fgSubtle)
                 },
                 onClick = {
-                    open = false
+                    expanded = false
                     uri.openUri(PRIVACY_URL)
                 },
             )
@@ -300,7 +305,7 @@ internal fun toneLabel(tone: Tone): StringResource = when (tone) {
  * when it appears or its text changes ([live]): the computer leaving, the card moving, a wrong PIN.
  */
 @Composable
-private fun Banner(text: String, tone: Tone, live: Boolean = true, action: (@Composable () -> Unit)? = null) {
+internal fun Banner(text: String, tone: Tone, live: Boolean = true, action: (@Composable () -> Unit)? = null) {
     val (bg, fg, icon) = when (tone) {
         Tone.Info -> Triple(colors.surface3, colors.fgMuted, Icons.Filled.Info)
         Tone.Done -> Triple(colors.doneBg, colors.doneFg, Icons.Filled.CheckCircle)
@@ -416,8 +421,8 @@ private fun ResultIcon(tone: Tone) {
 // ---------------------------------------------------------------------------------------------
 
 @Composable
-private fun StartScreen(s: Screen.Start, actions: FirmaActions, openLicenses: () -> Unit, scan: () -> Unit) {
-    Layout(hero = { Wordmark(heading = true) }, pane = stringResource(Res.string.app_name), menu = openLicenses) {
+private fun StartScreen(s: Screen.Start, actions: FirmaActions, open: (Overlay) -> Unit) {
+    Layout(hero = { Wordmark(heading = true) }, pane = stringResource(Res.string.app_name), menu = open) {
         Actions {
             when (s.notice) {
                 StartNotice.BadLink -> Banner(stringResource(Res.string.notice_bad_link), Tone.Attention)
@@ -428,13 +433,22 @@ private fun StartScreen(s: Screen.Start, actions: FirmaActions, openLicenses: ()
                 null -> Unit
             }
             NfcBanner(s.nfc, actions)
-            Primary(stringResource(Res.string.start_scan), onClick = scan, enabled = s.nfc != NfcAvailability.Missing)
-            // Google Play asks apps that touch government services to say they don't represent one
-            // (docs/research/play-policy.md). Framer's "Móvil · Inicio": 10/18, centred, fg-subtle.
-            Text(
-                stringResource(Res.string.start_disclaimer), Modifier.fillMaxWidth(),
-                fontSize = 10.sp, lineHeight = 18.sp, textAlign = TextAlign.Center, color = colors.fgSubtle,
-            )
+            Primary(stringResource(Res.string.start_scan), onClick = { open(Overlay.Scanner) }, enabled = s.nfc != NfcAvailability.Missing)
+            // Google Play asks apps that touch government services to say, where users see it, that
+            // they don't represent one, and to name the official sources of what they show
+            // (docs/research/play-policy.md). The "⋯" menu opens the sources too.
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    stringResource(Res.string.start_disclaimer), Modifier.fillMaxWidth(),
+                    fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center, color = colors.fgMuted,
+                )
+                TextButton(onClick = { open(Overlay.Sources) }) {
+                    Text(
+                        stringResource(Res.string.sources_open),
+                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, textDecoration = TextDecoration.Underline,
+                    )
+                }
+            }
         }
     }
 }
@@ -462,9 +476,9 @@ private fun ScanScreen(platform: Platform, actions: FirmaActions, close: () -> U
 }
 
 @Composable
-private fun ConfirmPairingScreen(s: Screen.ConfirmPairing, actions: FirmaActions, openLicenses: () -> Unit) {
+private fun ConfirmPairingScreen(s: Screen.ConfirmPairing, actions: FirmaActions, open: (Overlay) -> Unit) {
     val title = stringResource(Res.string.pair_title)
-    Layout(hero = { Wordmark() }, pane = title, menu = openLicenses) {
+    Layout(hero = { Wordmark() }, pane = title, menu = open) {
         Words {
             Title(title)
             Body(stringResource(Res.string.pair_body))
@@ -477,8 +491,8 @@ private fun ConfirmPairingScreen(s: Screen.ConfirmPairing, actions: FirmaActions
 }
 
 @Composable
-private fun HomeScreen(s: Screen.Home, actions: FirmaActions, openLicenses: () -> Unit) {
-    Layout(hero = { Wordmark(heading = true) }, pane = stringResource(Res.string.app_name), menu = openLicenses) {
+private fun HomeScreen(s: Screen.Home, actions: FirmaActions, open: (Overlay) -> Unit) {
+    Layout(hero = { Wordmark(heading = true) }, pane = stringResource(Res.string.app_name), menu = open) {
         Actions {
             NfcBanner(s.nfc, actions)
             // One banner whose text changes, so TalkBack announces each change of the link.

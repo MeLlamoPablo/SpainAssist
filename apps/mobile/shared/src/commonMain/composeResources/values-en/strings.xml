@@ -4,7 +4,8 @@
 
     <!-- Start -->
     <string name="start_scan">Scan QR code</string>
-    <string name="start_disclaimer">Spain Assist is not affiliated with any government body</string>
+    <string name="start_disclaimer">Spain Assist is a private app and does not represent any government entity.</string>
+    <string name="sources_open">Official sources</string>
     <string name="scan_title">Point at the code on your computer</string>
     <string name="camera_denied">To scan the code, let the app use the camera.</string>
     <string name="camera_allow">Allow the camera</string>
@@ -97,7 +98,7 @@
     <string name="result_login_cancelled">The computer cancelled login.</string>
     <string name="result_login_failed">Could not log in. Try again from your computer.</string>
 
-    <!-- The "⋯" menu: licences and privacy -->
+    <!-- The "⋯" menu: official sources, licences and privacy -->
     <string name="menu_more">More options</string>
     <string name="licenses_open">Open-source licences</string>
     <string name="privacy_open">Privacy policy</string>
@@ -113,7 +114,16 @@
     <string name="licenses_google_body">The QR code scanner uses Google’s ML Kit, which isn’t free software. Google’s terms apply.</string>
     <string name="licenses_google_notices">Open-source notices inside it</string>
     <string name="licenses_google_hide">Hide the notices</string>
-    <string name="licenses_back">Back</string>
+    <string name="back">Back</string>
+
+    <!-- Official sources -->
+    <string name="sources_title">Official sources</string>
+    <string name="sources_lead">The information about government procedures shown in the app comes from these official sources:</string>
+    <string name="source_dnie">Spanish electronic ID card (DNIe)</string>
+    <string name="source_signature">Electronic signature</string>
+    <string name="source_sedes">Spanish government e-services (sedes electrónicas)</string>
+    <string name="source_clave">Cl@ve</string>
+    <string name="source_tax_agency">Agencia Tributaria (tax agency)</string>
 
     <!-- Read by TalkBack only -->
     <string name="a11y_status_info">Information</string>

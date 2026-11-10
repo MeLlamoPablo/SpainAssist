@@ -4,7 +4,9 @@
 
     <!-- Start -->
     <string name="start_scan">Escanear QR</string>
-    <string name="start_disclaimer">Spain Assist no está afiliada a ninguna administración pública</string>
+    <!-- Google Play's wording for apps that aren't a government's (docs/research/play-policy.md); also on the sources page -->
+    <string name="start_disclaimer">Spain Assist es una app privada y no representa a ninguna entidad gubernamental.</string>
+    <string name="sources_open">Fuentes oficiales</string>
     <string name="scan_title">Apunta al código del ordenador</string>
     <string name="camera_denied">Para escanear el código, deja que la app use la cámara.</string>
     <string name="camera_allow">Dar permiso a la cámara</string>
@@ -97,7 +99,7 @@
     <string name="result_login_cancelled">El ordenador ha cancelado el acceso.</string>
     <string name="result_login_failed">No se ha podido entrar. Vuelve a intentarlo desde el ordenador.</string>
 
-    <!-- The "⋯" menu: licences and privacy -->
+    <!-- The "⋯" menu: official sources, licences and privacy -->
     <string name="menu_more">Más opciones</string>
     <string name="licenses_open">Licencias de código abierto</string>
     <string name="privacy_open">Política de privacidad</string>
@@ -113,7 +115,16 @@
     <string name="licenses_google_body">El escáner de códigos QR usa ML Kit de Google, que no es software libre. Se rige por las condiciones de Google.</string>
     <string name="licenses_google_notices">Avisos del código abierto que incluye</string>
     <string name="licenses_google_hide">Ocultar los avisos</string>
-    <string name="licenses_back">Volver</string>
+    <string name="back">Volver</string>
+
+    <!-- Official sources: the same as the store description (docs/play-listing.md) -->
+    <string name="sources_title">Fuentes oficiales</string>
+    <string name="sources_lead">La información sobre trámites que aparece en la app procede de estas fuentes oficiales:</string>
+    <string name="source_dnie">DNI electrónico</string>
+    <string name="source_signature">Firma electrónica</string>
+    <string name="source_sedes">Sedes electrónicas de la Administración</string>
+    <string name="source_clave">Cl@ve</string>
+    <string name="source_tax_agency">Agencia Tributaria</string>
 
     <!-- Read by TalkBack only -->
     <string name="a11y_status_info">Información</string>

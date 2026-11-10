@@ -50,7 +50,7 @@ internal fun LicensesScreen(platform: Platform, onBack: () -> Unit) {
         }
         licenses.groups.forEach { group -> key(group.license) { LicenseSection(group, uri) } }
         if (licenses.proprietary.isNotEmpty()) ProprietarySection(licenses.proprietary, platform, uri)
-        Secondary(stringResource(Res.string.licenses_back), onBack)
+        Secondary(stringResource(Res.string.back), onBack)
     }
 }
 
