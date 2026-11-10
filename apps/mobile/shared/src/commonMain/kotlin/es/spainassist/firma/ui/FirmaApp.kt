@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -59,6 +60,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -67,14 +69,21 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -434,24 +443,56 @@ private fun StartScreen(s: Screen.Start, actions: FirmaActions, open: (Overlay) 
             }
             NfcBanner(s.nfc, actions)
             Primary(stringResource(Res.string.start_scan), onClick = { open(Overlay.Scanner) }, enabled = s.nfc != NfcAvailability.Missing)
-            // Google Play asks apps that touch government services to say, where users see it, that
-            // they don't represent one, and to name the official sources of what they show
-            // (docs/research/play-policy.md). The "⋯" menu opens the sources too.
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    stringResource(Res.string.start_disclaimer), Modifier.fillMaxWidth(),
-                    fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center, color = colors.fgMuted,
-                )
-                TextButton(onClick = { open(Overlay.Sources) }) {
-                    Text(
-                        stringResource(Res.string.sources_open),
-                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = colors.fg, textDecoration = TextDecoration.Underline,
-                    )
-                }
-            }
+            Disclaimer { open(Overlay.Sources) }
         }
     }
 }
+
+/**
+ * Google Play asks apps that touch government services to say, where users see it, that they don't
+ * represent one, and to name the official sources of what they show (docs/research/play-policy.md):
+ * one paragraph that ends with a link to the sources. The "⋯" menu opens them too.
+ *
+ * The link is a [LinkAnnotation], which TalkBack lists in its Links menu; a double tap on the
+ * paragraph opens the sources too. A line of 14 sp text is a small target, so a tap up to
+ * [LINK_SLOP] around the link opens it as well: the paragraph has room for that below it. A tap on
+ * the link itself may open the page twice, which is once.
+ */
+@Composable
+private fun Disclaimer(openSources: () -> Unit) {
+    val disclaimer = stringResource(Res.string.start_disclaimer)
+    val label = stringResource(Res.string.sources_open)
+    val link = TextLinkStyles(SpanStyle(color = colors.fg, fontWeight = FontWeight.SemiBold, textDecoration = TextDecoration.Underline))
+    val text = buildAnnotatedString {
+        append(disclaimer)
+        append(' ')
+        withLink(LinkAnnotation.Clickable("sources", link) { openSources() }) { append(label) }
+    }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val slop = with(LocalDensity.current) { LINK_SLOP.toPx() }
+    Text(
+        text,
+        Modifier.fillMaxWidth()
+            .semantics {
+                onClick {
+                    openSources()
+                    true
+                }
+            }
+            .pointerInput(text) {
+                detectTapGestures { tap ->
+                    val bounds = layout?.getPathForRange(text.length - label.length, text.length)?.getBounds()
+                    if (bounds != null && bounds.inflate(slop).contains(tap)) openSources()
+                }
+            }
+            .padding(bottom = LINK_SLOP),
+        fontSize = 14.sp, lineHeight = 20.sp, textAlign = TextAlign.Center, color = colors.fgMuted,
+        onTextLayout = { layout = it },
+    )
+}
+
+/** Around the disclaimer's link: with its 20 sp line, a 48 dp tall target. */
+private val LINK_SLOP = 14.dp
 
 @Composable
 private fun ScanScreen(platform: Platform, actions: FirmaActions, close: () -> Unit) {
