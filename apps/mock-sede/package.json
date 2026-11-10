@@ -19,7 +19,7 @@
     "@sa/shared": "workspace:*",
     "asn1js": "^3.1.0",
     "hono": "^4.13.13",
-    "node-forge": "^1.4.0",
+    "node-forge": "^1.4.3",
     "pdf-lib": "^1.17.1",
     "pkijs": "^3.4.3",
     "zod": "^4.6.7"
