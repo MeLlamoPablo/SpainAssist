@@ -103,6 +103,8 @@ export interface RunOptions {
   /** Independent samples of the same conversation in the replay cache. */
   cacheVariant?: string;
   captureBrowser?: boolean;
+  /** The app's `codemode` feature flag (docs/codemode.md). */
+  codemode?: boolean;
   /** Continue a checkpoint of an earlier run of the same fixture. */
   from?: CheckpointRef;
   /**
@@ -432,6 +434,7 @@ class FixtureRun {
       limits: this.limits,
       options: {
         captureBrowser: options.captureBrowser ?? false,
+        ...(options.codemode ? { codemode: true } : {}),
         settleTimeoutMs: this.settleTimeoutMs,
         evaluateIntervalMs: this.evaluateIntervalMs,
         checkpoint: this.checkpointEnabled,
@@ -524,6 +527,7 @@ class FixtureRun {
             },
             now: frozenNow(today, this.startedAt),
             captureBrowser: options.captureBrowser ?? false,
+            codemode: options.codemode ?? false,
             ...(restoreFrom ? { restoreFrom } : {}),
             signal: this.controller.signal,
           },
@@ -871,9 +875,9 @@ class FixtureRun {
         }
         break;
       case 'cap': {
-        // The run's and each agent's request and dollar caps stop an agent that loops or bloats its
-        // context: its doing, scored like the fixture's own limits. The key's reserve, the daily
-        // and lifetime caps, the kill switch and the plan windows are the harness's budget.
+        // The run's cost limit and the request caps stop an agent that loops or bloats its context:
+        // its doing, scored like the fixture's own limits. The key's balance, the kill switch and
+        // the plan windows are the harness's budget.
         const ending = classifyCap(event.reason, event.agent);
         const what = `meter cap ${event.reason} (${event.agent}): ${event.message}`;
         this.end(

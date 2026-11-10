@@ -1,4 +1,12 @@
-import type { AppInfo, MapPoint, WindowControlsStyle } from '@sa/shared';
+import type {
+  AppInfo,
+  ChatItem,
+  CodemodeAgentInfo,
+  MapPoint,
+  UiEvent,
+  WindowControlsStyle,
+  WorkflowInfo,
+} from '@sa/shared';
 import type { BrowserHolder } from '../browser/holder';
 import type { ChatService } from '../chat/service';
 import type { CompanionService } from '../companion/service';
@@ -52,6 +60,16 @@ export interface IpcServices {
   exportTranscripts(): Promise<string>;
   deleteProcedure(id: string): Promise<void>;
   wipeAll(): Promise<void>;
+  /** The codemode harness (`codemode` flag); absent without it. */
+  codemode?: {
+    state(): { agents: CodemodeAgentInfo[]; workflows: WorkflowInfo[] };
+    uiEvent(workflowId: string, key: string, event: UiEvent): boolean;
+    pins(workflowId: string, key: string, addresses: string[]): Promise<(MapPoint | null)[]>;
+    agentLog(agentId: string): Promise<ChatItem[]>;
+    stopAgent(agentId: string): Promise<void>;
+    cancelWorkflow(workflowId: string): Promise<void>;
+    uiFailed(workflowId: string, key: string, rev: number, detail: string): boolean;
+  };
 }
 
 /** Registers every SaMethods handler on the router. */
@@ -224,6 +242,33 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   );
   router.register('companion.unlock', S['companion.unlock'], (itemId, values) =>
     companion().unlock(itemId, values),
+  );
+
+  /** Codemode needs its flag: main refuses what the UI hides. */
+  const codemode = () => {
+    if (!s.codemode) throw new UserError(t(lang(), 'codemodeOff'), 'unavailable');
+    return s.codemode;
+  };
+  router.register('codemode.state', S['codemode.state'], () =>
+    s.codemode ? s.codemode.state() : { agents: [], workflows: [] },
+  );
+  router.register('codemode.uiEvent', S['codemode.uiEvent'], (workflowId, key, event) =>
+    codemode().uiEvent(workflowId, key, event),
+  );
+  router.register('codemode.pins', S['codemode.pins'], (workflowId, key, addresses) =>
+    codemode().pins(workflowId, key, addresses),
+  );
+  router.register('codemode.agentLog', S['codemode.agentLog'], (agentId) =>
+    codemode().agentLog(agentId),
+  );
+  router.register('codemode.stopAgent', S['codemode.stopAgent'], (agentId) =>
+    codemode().stopAgent(agentId),
+  );
+  router.register('codemode.uiFailed', S['codemode.uiFailed'], (workflowId, key, rev, detail) =>
+    codemode().uiFailed(workflowId, key, rev, detail),
+  );
+  router.register('codemode.cancelWorkflow', S['codemode.cancelWorkflow'], (workflowId) =>
+    codemode().cancelWorkflow(workflowId),
   );
 
   router.register('media.get', S['media.get'], (id) => s.media.dataUrl(id));

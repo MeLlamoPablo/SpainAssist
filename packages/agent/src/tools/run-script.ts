@@ -80,6 +80,8 @@ const BASE_HEAP_BYTES = 16 * 1024 * 1024;
 /** The variant's own maximum (2 GB); an imported memory may not declare more. */
 const MAX_WASM_PAGES = 32768;
 const HEAP_SLACK_BYTES = 1024 * 1024;
+/** Jobs run between two checks of the deadline (see runJobs). */
+const JOB_BATCH = 1000;
 
 const FetchRequest = z.object({
   url: z.string().min(1).max(8000),
@@ -159,8 +161,15 @@ export async function runScript(code: string, options: RunScriptOptions = {}): P
   runtime.setMaxStackSize(1024 * 1024);
   runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
   const context = runtime.newContext();
+  // In batches, stopping at the deadline: a job may queue another for ever (an async loop that
+  // restarts itself when interrupted), and one call would never return, nor the timeout fire.
   const runJobs = () => {
-    if (!disposed) runtime.executePendingJobs().dispose();
+    while (!disposed) {
+      const result = runtime.executePendingJobs(JOB_BATCH);
+      const drained = !result.error && result.value < JOB_BATCH;
+      result.dispose();
+      if (drained || Date.now() > deadline) return;
+    }
   };
 
   const optionalString = (handle: QuickJSHandle | undefined) =>

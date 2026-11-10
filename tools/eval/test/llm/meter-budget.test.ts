@@ -87,8 +87,8 @@ describe('meter budget', () => {
 
   it('stops a run at its USD cap (the next request would cross it), per run not per meter', async () => {
     env = await startEnv({ mock: costing(0.2) });
-    const run = env.openRun({ limits: { perRunUsd: 0.5, perAgentUsd: 10 } });
-    const other = env.openRun({ limits: { perRunUsd: 0.5, perAgentUsd: 10 } });
+    const run = env.openRun({ limits: { perRunUsd: 0.5 } });
+    const other = env.openRun({ limits: { perRunUsd: 0.5 } });
     const statuses: number[] = [];
     for (let i = 0; i < 5; i++) {
       const res = await call(run, 'procedure-1', `step ${i}`);
@@ -100,47 +100,6 @@ describe('meter budget', () => {
     expect(run.usage().costUsd).toBeCloseTo(0.6, 12);
     expect((await call(other)).status).toBe(200);
     expect(env.llm.requests()).toHaveLength(4);
-  });
-
-  it('caps each agent, with a tight cap for the answerer by default', async () => {
-    env = await startEnv({ mock: costing(0.03) });
-    const run = env.openRun();
-    const results: Record<string, number[]> = { answerer: [], 'procedure-1': [] };
-    for (let i = 0; i < 3; i++) {
-      for (const agent of ['answerer', 'procedure-1']) {
-        const res = await call(run, agent, `${agent} ${i}`);
-        results[agent]!.push(res.status);
-        await res.text();
-      }
-    }
-    // The answerer's cap is $0.05: admitted at 0, 0.03; refused once 0.06 is spent. A procedure agent has $0.35.
-    expect(results.answerer).toEqual([200, 200, 402]);
-    expect(results['procedure-1']).toEqual([200, 200, 200]);
-    const agentRefusal = env.ledgerLines().find((l) => l.reason === 'agent_budget');
-    expect(agentRefusal).toMatchObject({
-      agent: 'answerer',
-      error: 'agent answerer spent $0.0600 of $0.0500',
-    });
-  });
-
-  it('takes per-agent caps from the options, by agent role', async () => {
-    env = await startEnv({
-      mock: costing(0.03),
-      meter: { limits: { perAgentUsd: 0.04, perAgentUsdByRole: { assistant: 0.2 } } },
-    });
-    const run = env.openRun();
-    const procedure: number[] = [];
-    const assistant: number[] = [];
-    for (let i = 0; i < 3; i++) {
-      const a = await call(run, 'procedure-1', `p${i}`);
-      procedure.push(a.status);
-      await a.text();
-      const b = await call(run, 'assistant', `a${i}`);
-      assistant.push(b.status);
-      await b.text();
-    }
-    expect(procedure).toEqual([200, 200, 402]);
-    expect(assistant).toEqual([200, 200, 200]);
   });
 
   it('caps requests per run and per agent (loop guards)', async () => {
@@ -194,7 +153,7 @@ describe('meter budget', () => {
       },
     });
     // One request reserves about $0.0041: the cap fits two of them at once, not three.
-    const run = env.openRun({ limits: { perRunUsd: 0.009, perAgentUsd: 1 } });
+    const run = env.openRun({ limits: { perRunUsd: 0.009 } });
     const results = await Promise.all(
       Array.from({ length: 6 }, (_, i) => call(run, `procedure-${i}`, `parallel ${i}`)),
     );
@@ -328,41 +287,6 @@ describe('meter budget', () => {
       expect(env.ledgerLines().map((line) => line.kind)).toEqual(['forward']);
     });
 
-    it('does not let several processes spend the same headroom: the daily cap holds across meters', async () => {
-      env = await startEnv({ mock: slow, meter: { limits: { dailyUsd: 0.009 } } });
-      // Two more "processes" on the same home and the same upstream. One request reserves about
-      // $0.0041: the day has room for two of them, not three.
-      const others = await Promise.all(
-        [1, 2].map(() =>
-          createMeter({
-            home: env.t.home,
-            upstreams: { voucher: `${env.llm.url}/v1` },
-            limits: { dailyUsd: 0.009 },
-          }),
-        ),
-      );
-      try {
-        const runs = [
-          env.openRun(),
-          ...others.map((meter, i) =>
-            meter.openRun({ runId: `other-${i}`, provider: 'voucher', cache: 'off' }),
-          ),
-        ];
-        const results = await Promise.all(
-          runs.flatMap((run, i) =>
-            [0, 1].map((n) => call(run, `procedure-${n}`, `parallel ${i}-${n}`)),
-          ),
-        );
-        const statuses = results.map((res) => res.status).sort();
-        await Promise.all(results.map((res) => res.text()));
-        expect(statuses.filter((status) => status === 200)).toHaveLength(2);
-        expect(statuses.filter((status) => status === 402)).toHaveLength(4);
-        expect(env.llm.requests()).toHaveLength(2);
-      } finally {
-        await Promise.all(others.map((meter) => meter.close()));
-      }
-    });
-
     it('does not let several processes take the key below zero', async () => {
       env = await startEnv({
         mock: slow,
@@ -386,7 +310,7 @@ describe('meter budget', () => {
     });
 
     it('refuses and releases when another process reserved the headroom just before this one did', async () => {
-      env = await startEnv({ meter: { limits: { dailyUsd: 0.005 } } });
+      env = await startEnv({ meter: { keyRemainingUsd: 0.005 } });
       const competitor = new Ledger(env.t.paths.ledgerDir);
       // Between this meter's check and its reservation another process reserves the same room:
       // simulated by writing the competitor's line right before the meter's own.
@@ -396,7 +320,7 @@ describe('meter budget', () => {
         reserve(input);
       };
       const r = await refusal(await call(env.openRun()));
-      expect(r.reason).toBe('daily');
+      expect(r.reason).toBe('key_balance');
       expect(env.llm.requests()).toHaveLength(0);
       // The meter's own reservation was released; the competitor's stays on the books.
       competitor.refresh();
@@ -426,81 +350,19 @@ describe('meter budget', () => {
         await down.close();
       }
     });
-
-    it('counts what a dead process left in flight against the day, but not against the key balance', async () => {
-      env = await startEnv({ meter: { limits: { dailyUsd: 0.005 } } });
-      // A process that was killed with a request in flight: its reservation has no settle line.
-      new Ledger(env.t.paths.ledgerDir).reserve({
-        rid: 'dead',
-        run: 'killed',
-        agent: 'procedure-1',
-        provider: 'voucher',
-        path: '/v1/chat/completions',
-        usd: 0.004,
-      });
-      const r = await refusal(await call(env.openRun()));
-      expect(r.reason).toBe('daily');
-      expect(r.message).toContain('spent $0.0040 of $0.0050 today');
-    });
   });
 
-  describe('the ledger across runs and processes', () => {
-    const seed = (usd: number, at = new Date()) =>
-      new Ledger(env.t.paths.ledgerDir).append({
-        runId: 'earlier-process',
-        agent: 'procedure-1',
-        provider: 'voucher',
-        kind: 'forward',
-        path: '/v1/chat/completions',
-        status: 200,
-        cost: { usd, source: 'header' },
-        ts: at.toISOString(),
-      });
-
-    it('stops at the daily ceiling, counting what other processes spent today', async () => {
-      env = await startEnv();
-      const run = env.openRun();
-      seed(0.998);
-      const r = await refusal(await call(run));
-      expect(r).toMatchObject({ status: 402, reason: 'daily' });
-      expect(r.message).toContain('out of budget');
-      // Spend from another day does not count.
-      env.t.cleanup();
-    });
-
-    it("ignores yesterday's spend and replayed or mock spend", async () => {
-      env = await startEnv();
-      const run = env.openRun();
-      seed(50, new Date(Date.now() - 36 * 3_600_000));
-      expect((await call(run)).status).toBe(200);
-    });
-
-    it('stops at a lifetime ceiling until the ledger epoch is reset', async () => {
-      env = await startEnv({ meter: { limits: { lifetimeUsd: 1 } } });
-      const run = env.openRun();
-      seed(0.999, new Date(Date.now() - 40 * 24 * 3_600_000));
-      const r = await refusal(await call(run));
-      expect(r).toMatchObject({ status: 402, reason: 'lifetime' });
-      env.meter.ledger.epoch('new voucher');
-      expect((await call(run, 'procedure-1', 'again')).status).toBe(200);
-    });
-
-    it("does not count the mock provider's simulated cost against the real ceilings", async () => {
-      env = await startEnv({
-        provider: 'mock',
-        mock: costing(0.4),
-        meter: { limits: { dailyUsd: 0.5 } },
-      });
-      const run = env.openRun({ limits: { perRunUsd: 10, perAgentUsd: 10 } });
-      for (let i = 0; i < 3; i++) {
-        const res = await call(run, 'procedure-1', `x${i}`);
-        expect(res.status).toBe(200);
-        await res.text();
-      }
-      // The simulated cost counts for the run (so cost limits can be exercised), not for the day.
-      expect(run.usage().costUsd).toBeCloseTo(1.2, 12);
-      expect(env.meter.ledger.spentTodayUsd()).toBe(0);
-    });
+  it("does not count the mock provider's simulated cost as real spend", async () => {
+    env = await startEnv({ provider: 'mock', mock: costing(0.4) });
+    const run = env.openRun({ limits: { perRunUsd: 10 } });
+    for (let i = 0; i < 3; i++) {
+      const res = await call(run, 'procedure-1', `x${i}`);
+      expect(res.status).toBe(200);
+      await res.text();
+    }
+    // The simulated cost counts for the run (so cost limits can be exercised), not as spend.
+    expect(run.usage().costUsd).toBeCloseTo(1.2, 12);
+    expect(env.meter.ledger.summary().allTimeUsd).toBe(0);
   });
 
   describe('kill switch', () => {
@@ -582,10 +444,7 @@ describe('meter budget', () => {
     refusals.push(
       await refusal(await call(env.openRun({ limits: { maxInputTokensPerRequest: 1 } }))),
     );
-    refusals.push(await refusal(await call(env.openRun({ limits: { perAgentUsd: 0.001 } }))));
-    refusals.push(await refusal(await call(env.openRun({ limits: { dailyUsd: 0.001 } }))));
-    refusals.push(await refusal(await call(env.openRun({ limits: { lifetimeUsd: 0.001 } }))));
-    expect(new Set(refusals.map((r) => r.reason)).size).toBe(8);
+    expect(new Set(refusals.map((r) => r.reason)).size).toBe(5);
     for (const r of refusals) {
       expect(r.status).toBe(402);
       expect(r.type).toBe('budget_exceeded');

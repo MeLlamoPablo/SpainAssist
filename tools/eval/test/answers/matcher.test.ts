@@ -74,6 +74,21 @@ describe('matchesPrompt', () => {
     expect(promptText(credentialPrompt)).toBe('Añade tu Cl@ve Permanente');
   });
 
+  it("tests text against the form's field labels too, not its option labels", () => {
+    const captcha: PendingPrompt = {
+      itemId: 'i3',
+      agent: 'procedure',
+      kind: 'form',
+      title: 'Escribe el código aquí, en la app',
+      fields: [{ key: 'value', type: 'text', label: 'Caracteres de la imagen', secret: true }],
+    };
+    const words = 'c[oó]digo\\s+de\\s+seguridad|captcha|caracteres|imagen';
+    expect(matchesPrompt({ kind: 'form', fieldKeys: ['value'], text: words }, captcha)).toBe(true);
+    expect(matchesPrompt({ text: 'm[eé]todo de identificaci[oó]n' }, methodsForm)).toBe(true);
+    expect(matchesPrompt({ text: 'app en el m[oó]vil' }, methodsForm)).toBe(false);
+    expect(promptText(captcha)).toBe('Escribe el código aquí, en la app\nCaracteres de la imagen');
+  });
+
   it('finds text with or without accents', () => {
     expect(matchesPrompt({ text: 'cómo quieres' }, methodsForm)).toBe(true);
     expect(matchesPrompt({ text: 'como quieres' }, methodsForm)).toBe(true);

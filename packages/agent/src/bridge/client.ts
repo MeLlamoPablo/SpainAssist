@@ -1,6 +1,12 @@
 import { type ClientRequest, Agent as HttpAgent, request as httpRequest } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
-import type { BridgeErrorCode, BridgeMethod, BridgeParamsOf, BridgeResults } from '@sa/shared';
+import {
+  type BridgeErrorCode,
+  type BridgeMethod,
+  type BridgeParamsOf,
+  type BridgeResults,
+  PROCEDURE_HEADER,
+} from '@sa/shared';
 
 /**
  * Client for the app's host bridge (see @sa/shared bridge.ts):
@@ -37,6 +43,8 @@ export interface BridgeCallOptions {
   signal?: AbortSignal;
   /** Override the per-method default timeout (ms). 0 = no timeout. */
   timeoutMs?: number;
+  /** Codemode: the procedure the call acts on (its browser, its card). */
+  procedureId?: string;
 }
 
 /** Methods that may wait for the user (no timeout). */
@@ -44,9 +52,15 @@ const WAITS_FOR_USER: ReadonlySet<string> = new Set([
   'prompt.form',
   'prompt.confirm',
   'prompt.userAction',
+  'prompt.credential',
+  'prompt.phoneCall',
   'browser.loginClave',
   'browser.fillFromUser',
   'browser.useCertificate',
+  // Codemode: a poll waits for the user.
+  'workflow.events',
+  // Map lookups of an interface may take a moment.
+  'workflow.ui',
 ]);
 
 export function defaultBridgeTimeoutMs(method: string): number {
@@ -125,6 +139,7 @@ export class BridgeClient implements BridgeTransport {
           agent: this.agent,
           headers: {
             authorization: `Bearer ${this.token}`,
+            ...(options.procedureId ? { [PROCEDURE_HEADER]: options.procedureId } : {}),
             'content-type': 'application/json',
             'content-length': body.length,
             accept: 'application/json',

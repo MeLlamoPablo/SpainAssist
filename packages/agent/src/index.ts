@@ -31,6 +31,7 @@ export {
   INHERITED_ENV_VARS,
 } from './launch';
 export { buildAssistantPrompt, REPORT_PREFIX } from './prompt/assistant';
+export { AGENT_REPORT_PREFIX, WORKFLOW_RESULT_PREFIX } from './prompt/codemode';
 export { buildSystemPrompt, type SystemPromptOptions } from './prompt/system';
 export {
   CHATGPT_ENDPOINTS,
@@ -73,6 +74,7 @@ export { type RpcTransport, type RpcTransportFactory, spawnTransport } from './r
 export {
   ASSISTANT_TOOL_NAMES,
   type AssistantToolName,
+  COORDINATOR_TOOL_NAMES,
   TOOL_NAMES,
   type ToolName,
 } from './tools/names';

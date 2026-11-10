@@ -43,6 +43,8 @@ describe('appointment picker logic', () => {
     expect(dayHeading('2026-10-19', 'es')).toEqual({ weekday: 'LUN', day: '19' });
     expect(dayHeading('2026-10-22', 'en')).toEqual({ weekday: 'THU', day: '22' });
     expect(slotLabel('2026-10-19T09:30', 'es')).toBe('lunes, 19 de octubre de 2026, 09:30');
+    // An agent's value that isn't a slot is shown as it is, not thrown on.
+    expect(slotLabel('mañana', 'es')).toBe('mañana');
   });
 
   it('prefills only an offered slot and shows a request for more', () => {

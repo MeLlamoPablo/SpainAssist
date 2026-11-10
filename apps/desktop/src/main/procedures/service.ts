@@ -9,11 +9,13 @@ import {
   type ProcedureRuntime,
   type ProcedureUpdate,
   type PromptItem,
+  WORKING_CONTEXT_MAX_BYTES,
+  type WorkingContext,
 } from '@sa/shared';
 import type { ProcedurePaths } from '../app/paths';
 import type { TranscriptSink } from '../chat/sink';
 import { closeStaleItem } from '../conversation/service';
-import { UserError } from '../core/errors';
+import { BridgeError, UserError } from '../core/errors';
 import type { EventBus } from '../core/events';
 import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
@@ -105,8 +107,7 @@ export class ProcedureService {
     return this.deps.store.paths(id);
   }
 
-  async create(title: string): Promise<Procedure> {
-    const id = this.deps.ids('p');
+  async create(title: string, id = this.deps.ids('p')): Promise<Procedure> {
     const procedure = emptyProcedure(
       id,
       title.slice(0, 160) || t(this.deps.lang(), 'newProcedure'),
@@ -120,13 +121,74 @@ export class ProcedureService {
   }
 
   rename(id: string, title: string): ProcedureListItem {
-    this.save({ ...this.require(id), title: title.trim().slice(0, 160), updatedAt: this.now() });
+    this.save(
+      { ...this.require(id), title: title.trim().slice(0, 160), updatedAt: this.now() },
+      { bump: true },
+    );
     return this.get(id)!;
   }
 
   setArchived(id: string, archived: boolean): ProcedureListItem {
-    this.save({ ...this.require(id), archived, updatedAt: this.now() });
+    this.save({ ...this.require(id), archived, updatedAt: this.now() }, { bump: true });
     return this.get(id)!;
+  }
+
+  /**
+   * Codemode: the procedure with this id, created with `title` (and `initial`) when it does not
+   * exist. Ids come from the workflow's key (see codemode/handlers.ts), so a re-run finds it.
+   */
+  async getOrCreate(
+    id: string,
+    title: string,
+    initial: ProcedureUpdate = {},
+  ): Promise<{ procedure: Procedure; created: boolean }> {
+    const existing = this.procedures.get(id);
+    if (existing) return { procedure: existing, created: false };
+    await this.create(title, id);
+    const hasInitial = Object.values(initial).some((v) => v !== undefined);
+    return {
+      procedure: hasInitial ? this.applyUpdate(id, initial) : this.require(id),
+      created: true,
+    };
+  }
+
+  /**
+   * Codemode: an update made with the version the agent read. Someone changed the card since
+   * (another agent, the user renaming it): `conflict`, so the agent re-reads and adapts.
+   */
+  applyVersionedUpdate(id: string, expectedVersion: number, update: ProcedureUpdate): Procedure {
+    const current = this.procedures.get(id);
+    if (!current) throw new BridgeError('not_found', `No procedure "${id}".`);
+    const version = current.version ?? 0;
+    if (version !== expectedVersion)
+      throw new BridgeError(
+        'conflict',
+        `The procedure "${current.title}" changed since you read it (version ${expectedVersion}, now ${version}). Call refresh(), check what changed and update again.`,
+      );
+    return this.applyUpdate(id, update);
+  }
+
+  /** The private working context of a procedure (agents only, never shown to the user). */
+  async context(id: string): Promise<WorkingContext> {
+    this.require(id);
+    return this.deps.store.loadContext(id);
+  }
+
+  async setContext(id: string, patch: Partial<WorkingContext>): Promise<WorkingContext> {
+    const current = await this.context(id);
+    const next: WorkingContext = {
+      notes: patch.notes ?? current.notes,
+      data: patch.data ? { ...current.data, ...patch.data } : current.data,
+    };
+    for (const [key, value] of Object.entries(next.data)) if (value === null) delete next.data[key];
+    const size = JSON.stringify(next).length;
+    if (size > WORKING_CONTEXT_MAX_BYTES)
+      throw new BridgeError(
+        'bad_request',
+        `The working context would be too large (${size} characters, max ${WORKING_CONTEXT_MAX_BYTES}): keep notes short.`,
+      );
+    await this.deps.store.saveContext(id, next);
+    return next;
   }
 
   /** Bumps updatedAt (new activity in the conversation). */
@@ -155,8 +217,8 @@ export class ProcedureService {
     else if (update.nextAction !== undefined) next.nextAction = update.nextAction;
     next.updatedAt = this.now();
     const valid = Procedure.parse(next);
-    this.save(valid);
-    return valid;
+    this.save(valid, { bump: true });
+    return this.require(id);
   }
 
   async delete(id: string): Promise<void> {
@@ -184,7 +246,9 @@ export class ProcedureService {
     return this.deps.store.flush();
   }
 
-  private save(p: Procedure): void {
+  /** `bump`: the card's content changed (codemode agents' optimistic concurrency). */
+  private save(p: Procedure, { bump = false }: { bump?: boolean } = {}): void {
+    if (bump) p = { ...p, version: (this.procedures.get(p.id)?.version ?? p.version ?? 0) + 1 };
     this.procedures.set(p.id, p);
     this.deps.store.saveProcedure(p);
     this.emitUpsert(p.id);

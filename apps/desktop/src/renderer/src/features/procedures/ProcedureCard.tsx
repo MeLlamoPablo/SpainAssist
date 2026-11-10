@@ -372,7 +372,7 @@ function StatusStrip({
 }
 
 /** Where and when, each with a button that opens it in Google Maps or Google Calendar. */
-function AppointmentLinks({
+export function AppointmentLinks({
   appointment,
   title,
   details,
@@ -418,7 +418,7 @@ function AppointmentLinks({
 // Menu, rename
 // ---------------------------------------------------------------------------------------------
 
-function CardMenu({
+export function CardMenu({
   procedure: p,
   onRename,
 }: {
@@ -485,7 +485,7 @@ function CardMenu({
   );
 }
 
-function TitleEditor({
+export function TitleEditor({
   procedure: p,
   onDone,
 }: {

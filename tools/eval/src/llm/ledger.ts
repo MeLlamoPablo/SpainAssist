@@ -7,8 +7,7 @@ import { ensurePrivateDir } from './home';
 
 /**
  * The spend ledger: append-only JSONL under `<home>/ledger/spend-YYYY-MM.jsonl`, one line per
- * model request (forwarded, replayed from the cache or refused) plus `epoch` lines
- * that reset the lifetime total. Several eval processes may append at once: every line is one
+ * model request (forwarded, replayed from the cache or refused). Several eval processes may append at once: every line is one
  * `O_APPEND` write of a few hundred bytes, and readers tolerate a torn last line and keep their
  * byte offsets, so the totals are cheap to refresh before every budget decision.
  *
@@ -74,13 +73,6 @@ export interface LedgerRequest {
 
 export type LedgerRecord = Omit<LedgerRequest, 'type' | 'v' | 'ts'> & { ts?: string };
 
-interface LedgerEpoch {
-  type: 'epoch';
-  v: 1;
-  ts: string;
-  note?: string;
-}
-
 /** A request about to go upstream: counted as spent (its worst case) until it settles. */
 interface LedgerReserve {
   type: 'reserve';
@@ -110,12 +102,9 @@ interface Pending {
   ts: string;
   atMs: number;
   provider: EvalProvider;
-  day: string;
 }
 
 export interface LedgerSummary {
-  /** Real USD since the last epoch. */
-  sinceEpochUsd: number;
   allTimeUsd: number;
   /** Real USD by UTC day. */
   byDay: Record<string, number>;
@@ -137,14 +126,12 @@ export interface LedgerSummary {
   pending: { requests: number; usd: number; oldest?: string };
   /** The last `x-litellm-key-*` headers seen. */
   lastKey?: { spendUsd: number; maxBudgetUsd: number; at: string };
-  lastEpochAt?: string;
 }
 
 const MAX_ERROR_CHARS = 400;
 
 export class Ledger {
   private readonly offsets = new Map<string, { offset: number; tail: string }>();
-  private sinceEpochUsd = 0;
   private allTimeUsd = 0;
   private readonly byDay = new Map<string, number>();
   private readonly byRun = new Map<
@@ -158,8 +145,6 @@ export class Ledger {
   private readonly requests = { forward: 0, replay: 0, reject: 0 };
   private codexTotal = 0;
   private lastKey: LedgerSummary['lastKey'];
-  private lastEpochAt: string | undefined;
-  private lastEpochMs: number | undefined;
   private readonly pending = new Map<string, Pending>();
 
   constructor(
@@ -182,12 +167,6 @@ export class Ledger {
     return entry;
   }
 
-  /** Resets the lifetime total (the next ceiling check starts from zero). */
-  epoch(note?: string): void {
-    const ts = this.clock().toISOString();
-    this.write(ts, { type: 'epoch', v: 1, ts, ...(note ? { note } : {}) });
-  }
-
   /**
    * Puts a request on the books before it goes upstream (see the top of this file). Settle it by
    * appending its `forward` line with the same `rid`, or `release` it.
@@ -203,10 +182,7 @@ export class Ledger {
     this.write(ts, { type: 'release', v: 1, ts, rid });
   }
 
-  private write(
-    ts: string,
-    line: LedgerRequest | LedgerEpoch | LedgerReserve | LedgerRelease,
-  ): void {
+  private write(ts: string, line: LedgerRequest | LedgerReserve | LedgerRelease): void {
     ensurePrivateDir(this.dir);
     appendFileSync(join(this.dir, `spend-${ts.slice(0, 7)}.jsonl`), `${JSON.stringify(line)}\n`, {
       mode: 0o600,
@@ -252,16 +228,10 @@ export class Ledger {
   }
 
   private ingest(line: string): void {
-    let entry: LedgerRequest | LedgerEpoch | LedgerReserve | LedgerRelease;
+    let entry: LedgerRequest | LedgerReserve | LedgerRelease;
     try {
-      entry = JSON.parse(line) as LedgerRequest | LedgerEpoch | LedgerReserve | LedgerRelease;
+      entry = JSON.parse(line) as LedgerRequest | LedgerReserve | LedgerRelease;
     } catch {
-      return;
-    }
-    if (entry.type === 'epoch') {
-      this.sinceEpochUsd = 0;
-      this.lastEpochAt = entry.ts;
-      this.lastEpochMs = Date.parse(entry.ts);
       return;
     }
     if (entry.type === 'reserve') {
@@ -271,7 +241,6 @@ export class Ledger {
         ts: entry.ts,
         atMs,
         provider: entry.provider,
-        day: entry.ts.slice(0, 10),
       });
       if (entry.provider === 'codex') this.codexTotal++;
       return;
@@ -313,7 +282,6 @@ export class Ledger {
     run.requests++;
     const usd = entry.provider === 'voucher' ? (entry.cost?.usd ?? 0) : 0;
     run.usd += usd;
-    this.sinceEpochUsd += usd;
     this.allTimeUsd += usd;
     const day = entry.ts.slice(0, 10);
     this.byDay.set(day, (this.byDay.get(day) ?? 0) + usd);
@@ -336,39 +304,19 @@ export class Ledger {
     }
   }
 
-  /** Real USD since the last epoch (call `refresh()` first for other processes' lines). */
-  spentSinceEpochUsd(): number {
-    return this.sinceEpochUsd;
-  }
-
-  spentOnDayUsd(day: string): number {
-    return this.byDay.get(day) ?? 0;
-  }
-
-  spentTodayUsd(): number {
-    return this.spentOnDayUsd(this.clock().toISOString().slice(0, 10));
-  }
-
   /**
    * The worst case of the voucher requests that are reserved and not settled (call `refresh()`
-   * first for other processes' lines). `day` keeps those reserved on that UTC day; `sinceMs` those
-   * reserved at or after that time: a request that is still in flight is recent, an older
+   * first for other processes' lines). `sinceMs` keeps those reserved at or after that time: a request that is still in flight is recent, an older
    * reservation belongs to a process that died.
    */
-  pendingUsd(filter: { day?: string; sinceMs?: number } = {}): number {
+  pendingUsd(filter: { sinceMs?: number } = {}): number {
     let total = 0;
     for (const reservation of this.pending.values()) {
       if (reservation.provider !== 'voucher') continue;
-      if (filter.day !== undefined && reservation.day !== filter.day) continue;
       if (filter.sinceMs !== undefined && reservation.atMs < filter.sinceMs) continue;
       total += reservation.usd;
     }
     return total;
-  }
-
-  /** `pendingUsd` of the current epoch: what the lifetime ceiling counts. */
-  pendingSinceEpochUsd(): number {
-    return this.pendingUsd(this.lastEpochMs !== undefined ? { sinceMs: this.lastEpochMs } : {});
   }
 
   private pendingSummary(): LedgerSummary['pending'] {
@@ -385,7 +333,6 @@ export class Ledger {
 
   summary(): LedgerSummary {
     return {
-      sinceEpochUsd: this.sinceEpochUsd,
       allTimeUsd: this.allTimeUsd,
       byDay: Object.fromEntries(this.byDay),
       byRun: Object.fromEntries(this.byRun),
@@ -397,7 +344,6 @@ export class Ledger {
       codex: { total: this.codexTotal },
       pending: this.pendingSummary(),
       ...(this.lastKey ? { lastKey: this.lastKey } : {}),
-      ...(this.lastEpochAt ? { lastEpochAt: this.lastEpochAt } : {}),
     };
   }
 }

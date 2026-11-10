@@ -13,6 +13,8 @@ import type {
 } from '@sa/agent';
 import {
   BrowserError,
+  type BrowserQueryArgs,
+  type BrowserQueryOp,
   type ClientCertificateUse,
   type RefInfo,
   type TypeOptions,
@@ -553,6 +555,19 @@ export class FakeBrowser implements BrowserPort {
   }
   async describeRef(_procedureId: string, ref: string): Promise<RefInfo | null> {
     return this.refs.get(ref) ?? null;
+  }
+  /** Answers of `query` by op (codemode tests); default null. */
+  readonly queryAnswers = new Map<string, unknown>();
+  async query(procedureId: string, target: string, op: BrowserQueryOp, args?: BrowserQueryArgs) {
+    this.calls.push({ method: 'query', procedureId, args: [target, op, args] });
+    return this.queryAnswers.get(op) ?? null;
+  }
+  async reload(procedureId: string) {
+    return this.record('reload', procedureId);
+  }
+  async info(procedureId: string) {
+    this.calls.push({ method: 'info', procedureId, args: [] });
+    return { url: this.url, title: 'Página de prueba' };
   }
   async useClientCertificate(procedureId: string, use: ClientCertificateUse | null) {
     this.certificates = use?.origins.map((origin) => ({ origin })) ?? [];

@@ -3,6 +3,7 @@ export * from './app-link';
 export * from './bridge';
 export * from './certificate-issuer';
 export * from './chat';
+export * from './codemode';
 export * from './companion';
 export * from './countries';
 export * from './file-name';

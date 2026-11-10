@@ -273,6 +273,12 @@ export interface FeatureFlags {
    * data sharing is on.
    */
   errorReports: boolean;
+  /**
+   * The codemode harness (docs/codemode.md): agents write resumable JavaScript workflows instead
+   * of calling one tool per step, independent of procedures. Off: the assistant and one agent per
+   * procedure, as before.
+   */
+  codemode: boolean;
 }
 
 /** Unleash flag name of each feature flag. */
@@ -280,12 +286,14 @@ export const FEATURE_FLAG_NAMES: Record<keyof FeatureFlags, string> = {
   dniePhone: 'dnie-phone',
   mustUpdate: 'must-update',
   errorReports: 'error-reports',
+  codemode: 'codemode',
 };
 
 export const FEATURES_OFF: FeatureFlags = {
   dniePhone: 'off',
   mustUpdate: false,
   errorReports: false,
+  codemode: false,
 };
 
 export const DEFAULT_SETTINGS: Settings = {

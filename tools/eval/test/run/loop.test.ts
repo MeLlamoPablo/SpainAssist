@@ -666,8 +666,6 @@ describe('the meter stops the run', () => {
   it.each([
     ['stopped', 'the STOP file exists'],
     ['key_balance', 'the key is nearly empty'],
-    ['daily', 'the daily cap'],
-    ['lifetime', 'the lifetime cap'],
     ['codex_cooldown', 'the plan usage limit'],
   ] as const)(
     'a %s cap is the harness running out of budget: aborted, no score',

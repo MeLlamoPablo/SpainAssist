@@ -23,6 +23,10 @@ export interface AgentManagerDeps {
   workDir(agentId: string): string;
   /** A run ended (or the process died during one). Not called for runs of stopped agents. */
   onRunEnd?(agentId: string, result: RunResult): void;
+  /** An agent's process ended: stopped, idle or crashed (codemode: its workflow runs end). */
+  onGone?(agentId: string): void;
+  /** Codemode: the agent must not be stopped as idle (one of its workflows runs). */
+  keepAlive?(agentId: string): boolean;
   /** Resolved agent host script (throws if it is not built). */
   hostScript(): string;
   /** process.execPath (Electron) */
@@ -280,6 +284,7 @@ export class AgentManager {
     if (this.agents.get(id) === record) this.agents.delete(id);
     deps.prompts.cancelAll(id);
     record.mapper.finalize('aborted');
+    this.gone(id);
     if (record.stopping) return;
     deps.logger.warn('agent exited', {
       agentId: id,
@@ -296,6 +301,17 @@ export class AgentManager {
       }
       if (wasBusy) this.runEnded(record, { aborted: false, error: message, text: '' });
     }
+  }
+
+  /**
+   * Starts the agent's process without a message (codemode: its host resumes the workflows
+   * that wait for the user). A no-op when it runs.
+   */
+  wake(agentId: string): Promise<void> {
+    return this.queue.run(agentId, async () => {
+      const agent = await this.ensure(agentId);
+      this.scheduleIdle(agent);
+    });
   }
 
   /** Stops the current run and cancels its prompts without approving or completing them. */
@@ -335,6 +351,7 @@ export class AgentManager {
       this.deps.tokens.revokeToken(agentId, record.token);
       if (this.agents.get(agentId) === record) this.agents.delete(agentId);
       if (record.sink.exists()) record.mapper.finalize('aborted');
+      this.gone(agentId);
       this.deps.logger.info('agent stopped', { agentId });
     })();
     return record.stopping;
@@ -342,6 +359,14 @@ export class AgentManager {
 
   async stopAll(): Promise<void> {
     await Promise.all([...this.agents.keys()].map((id) => this.stop(id)));
+  }
+
+  private gone(agentId: string): void {
+    try {
+      this.deps.onGone?.(agentId);
+    } catch (err) {
+      this.deps.logger.error('agent gone handler failed', { error: errorMessage(err) });
+    }
   }
 
   private clearIdle(record: AgentRecord): void {
@@ -358,7 +383,12 @@ export class AgentManager {
   private onIdle(record: AgentRecord): void {
     const id = record.agentId;
     if (this.agents.get(id) !== record || record.exited || record.stopping) return;
-    if (record.busy || record.client.running || this.deps.prompts.pendingCount(id) > 0) {
+    if (
+      record.busy ||
+      record.client.running ||
+      this.deps.prompts.pendingCount(id) > 0 ||
+      this.deps.keepAlive?.(id)
+    ) {
       this.scheduleIdle(record);
       return;
     }

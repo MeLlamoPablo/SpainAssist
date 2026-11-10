@@ -157,6 +157,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
         dniePhone: 'release',
         mustUpdate: false,
         errorReports: false,
+        codemode: false,
         ...opts.features,
       },
       errorReports: false,

@@ -13,44 +13,31 @@ export type CapReason =
   | 'requests_cap'
   | 'agent_requests_cap'
   | 'input_too_large'
-  | 'lifetime'
-  | 'daily'
   | 'key_balance'
   | 'run_budget'
-  | 'agent_budget'
   /** A Codex usage limit was observed; answered locally with the same 429 until it resets. */
   | 'codex_cooldown';
 
 /**
  * Every cap of the meter, and what refuses a request first: a request is checked, in this order,
  * against the kill switch, the requests of the run and of the agent, its estimated input size,
- * then (voucher) the lifetime ceiling and the day, the key's balance, the cost of
- * the run and of the agent. Codex use has no cap of its own beyond the request counts: the plan
- * has no price per call, and its own usage limit is honoured as a cooldown. The ledger's figures
- * (lifetime, day) and the key's balance count every reservation in it, those of other processes
- * and of requests in flight included.
+ * then (voucher) the key's balance and the cost of the run. A voucher is the evals' own money, so
+ * nothing holds part of it back: runs may spend all of it, and the balance check only keeps
+ * parallel requests from overshooting it (it counts every reservation in the ledger, those of
+ * other processes and of requests in flight included). Codex use has no cap of its own beyond the
+ * request counts: the plan has no price per call, and its own usage limit is honoured as a
+ * cooldown.
  *
  * `perRunUsd` and `perRunRequests` are `MeterBudget` (contracts.ts): they cap one run's spend and
- * request count. For Codex runs (the plan has no price per call) only the request counts apply.
- *
- * The defaults are what a voucher run enforces, with one exception: the run loop gives each run
- * the cost limit of its fixture as `perRunUsd` (`RunLimits.maxCostUsd`, `--max-cost`; $0.30 for
- * the vida laboral fixtures), which is below the day and the per-agent caps, so it binds first.
- * The meter's own `perRunUsd` is for a run that has no fixture.
+ * request count. The run loop gives each run the cost limit of its fixture as `perRunUsd`
+ * (`RunLimits.maxCostUsd`, `--max-cost`); the default is for a run that has no fixture.
  */
 export interface MeterLimits extends MeterBudget {
   perRunRequests: number;
   /** One agent of a run (`assistant`, `procedure-3`, `answerer`). */
-  perAgentUsd: number;
-  /** Tighter caps by agent role (`answerer` talks a little, so it gets little). */
-  perAgentUsdByRole: Record<string, number>;
   perAgentRequests: number;
   /** A request estimated above this many input tokens is refused before it is sent. */
   maxInputTokensPerRequest: number;
-  /** Real voucher spend since the ledger's last epoch; undefined: only the key's own balance. */
-  lifetimeUsd?: number;
-  /** Real voucher spend per UTC day. */
-  dailyUsd: number;
 }
 
 export type MeterLimitsInput = Partial<MeterLimits>;
@@ -58,26 +45,17 @@ export type MeterLimitsInput = Partial<MeterLimits>;
 export const DEFAULT_LIMITS: MeterLimits = {
   perRunUsd: 0.5,
   perRunRequests: 250,
-  perAgentUsd: 0.35,
-  perAgentUsdByRole: { answerer: 0.05 },
   perAgentRequests: 200,
   maxInputTokensPerRequest: 400_000,
-  dailyUsd: 1,
 };
 
 export function resolveLimits(...layers: (MeterLimitsInput | undefined)[]): MeterLimits {
-  const out: MeterLimits = {
-    ...DEFAULT_LIMITS,
-    perAgentUsdByRole: { ...DEFAULT_LIMITS.perAgentUsdByRole },
-  };
+  const out: MeterLimits = { ...DEFAULT_LIMITS };
   for (const layer of layers) {
     if (!layer) continue;
-    const { perAgentUsdByRole, ...rest } = layer;
-    for (const [key, value] of Object.entries(rest)) {
+    for (const [key, value] of Object.entries(layer)) {
       if (value !== undefined) (out as unknown as Record<string, unknown>)[key] = value;
     }
-    if (perAgentUsdByRole)
-      out.perAgentUsdByRole = { ...out.perAgentUsdByRole, ...perAgentUsdByRole };
   }
   return out;
 }

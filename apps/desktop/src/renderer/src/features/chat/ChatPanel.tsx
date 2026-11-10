@@ -21,6 +21,7 @@ import {
   useState,
 } from 'react';
 import { BrandLogo, BrandMark } from '../../components/brand';
+import { ErrorBoundary, Unshowable } from '../../components/ErrorBoundary';
 import { Button, IconButton } from '../../components/ui/button';
 import { EmptyState, Skeleton } from '../../components/ui/misc';
 import { useT } from '../../i18n';
@@ -41,7 +42,7 @@ import {
 } from './ChatItems';
 import { Composer } from './Composer';
 import { chatDict } from './i18n';
-import { buildRows, isProcedureEvent, pendingPrompts } from './rows';
+import { buildRows, type ChatRow, isProcedureEvent, pendingPrompts } from './rows';
 
 /**
  * Keep routine tool calls out of the conversation. Procedure events and failures remain visible;
@@ -137,30 +138,19 @@ export function ChatPanel() {
             />
           ) : null}
           {empty ? <Welcome /> : null}
-          {rows.map((row) => {
-            switch (row.kind) {
-              case 'day':
-                return <DaySeparator key={row.key} date={row.date} />;
-              case 'event':
-                return <ProcedureEventRow key={row.key} item={row.item} />;
-              case 'activities':
-              case 'activity':
-                return <ActivityFailure key={row.key} />;
-            }
-            const item = row.item;
-            switch (item.type) {
-              case 'user':
-                return <UserMessage key={row.key} item={item} />;
-              case 'assistant':
-                return <AssistantMessage key={row.key} item={item} />;
-              case 'notice':
-                return <NoticeRow key={row.key} item={item} />;
-              case 'prompt':
-                return <PromptCard key={row.key} item={item} />;
-              default:
-                return null;
-            }
-          })}
+          {rows.map((row) => (
+            <ErrorBoundary
+              key={row.key}
+              resetKeys={[row.kind === 'item' ? row.item : row.key]}
+              fallback={
+                <Unshowable
+                  what={row.kind === 'item' && row.item.type === 'prompt' ? 'question' : 'message'}
+                />
+              }
+            >
+              <Row row={row} />
+            </ErrorBoundary>
+          ))}
           {thinking ? <ThinkingDots label={t.writing} /> : null}
         </div>
       </div>
@@ -199,6 +189,32 @@ export function ChatPanel() {
       </div>
     </section>
   );
+}
+
+/** One row of the transcript. */
+function Row({ row }: { row: ChatRow }) {
+  switch (row.kind) {
+    case 'day':
+      return <DaySeparator date={row.date} />;
+    case 'event':
+      return <ProcedureEventRow item={row.item} />;
+    case 'activities':
+    case 'activity':
+      return <ActivityFailure />;
+  }
+  const item = row.item;
+  switch (item.type) {
+    case 'user':
+      return <UserMessage item={item} />;
+    case 'assistant':
+      return <AssistantMessage item={item} />;
+    case 'notice':
+      return <NoticeRow item={item} />;
+    case 'prompt':
+      return <PromptCard item={item} />;
+    default:
+      return null;
+  }
 }
 
 /** The assistant's pending questions (one at a time) or the composer. */
@@ -254,7 +270,13 @@ function Dock({
           </div>
         ) : null}
         <div className="min-h-0 overflow-y-auto rounded-2xl">
-          <PromptCard key={current.id} item={current} />
+          <ErrorBoundary
+            key={current.id}
+            resetKeys={[current]}
+            fallback={<Unshowable what="question" />}
+          >
+            <PromptCard item={current} />
+          </ErrorBoundary>
         </div>
         <button
           type="button"

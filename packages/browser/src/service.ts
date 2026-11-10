@@ -55,6 +55,7 @@ import {
   staleRefError,
   toActionError,
 } from './errors';
+import { buildLocator, describeChain, isLocatorTarget, parseTarget } from './locator';
 import { NetworkTracker } from './network';
 import {
   afirmaPageNote,
@@ -66,6 +67,8 @@ import {
 } from './notes';
 import { type RefMeta, renderSnapshot } from './snapshot';
 import type {
+  BrowserQueryArgs,
+  BrowserQueryOp,
   BrowserService,
   BrowserServiceOptions,
   ClientCertificateUse,
@@ -179,6 +182,8 @@ interface Session {
   pdfHashes: Set<string>;
   pdfPages: WeakMap<Page, string>;
   crashedPages: WeakSet<Page>;
+  /** Pages whose current document holds a secret the app typed: no page code may read them. */
+  secretPages: WeakSet<Page>;
   lastMedia?: { at: number; id: string; key: string };
   queue: Promise<void>;
   screencast?: Screencast;
@@ -311,6 +316,7 @@ export class PlaywrightBrowserService implements BrowserService {
     return this.act(procedureId, step, async (s) => {
       if (opts.secret) this.addSecret(s, text);
       const page = await this.pageFor(s);
+      if (opts.secret) s.secretPages.add(page);
       const loc = await this.resolveRef(page, ref);
       if (opts.expect) await this.checkExpectation(s, page, loc, ref, opts.expect);
       const what = `type into ${ref}`;
@@ -556,15 +562,193 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   async describeRef(procedureId: string, ref: string): Promise<RefInfo | null> {
-    if (!this.sessions.has(procedureId) || !REF_RE.test(ref.trim())) return null;
+    const target = ref.trim();
+    if (!this.sessions.has(procedureId) || !(REF_RE.test(target) || isLocatorTarget(target)))
+      return null;
     return this.run(procedureId, async (s) => {
       const page = this.livePage(s);
       if (!page || !s.context) return null;
-      const loc = page.locator(`aria-ref=${ref.trim()}`);
+      let loc: Locator;
+      try {
+        loc = buildLocator(page, parseTarget(target));
+      } catch {
+        return null;
+      }
       const count = await loc.count().catch(() => 0);
-      if (count < 1) return null;
-      return this.refInfo(s, page, loc.first(), ref.trim());
+      // Strict like Playwright: a locator that matches several elements describes none.
+      if (count !== 1 && (count < 1 || isLocatorTarget(target))) return null;
+      return this.refInfo(s, page, loc.first(), target);
     });
+  }
+
+  /**
+   * Codemode: a read or a light action on a locator (`target`, see locator.ts) or, with no
+   * target, on the page. Results are JSON, secrets typed by the app masked. Page code
+   * (`evaluate`) runs only in the page, and never while a secret the app typed is in its document.
+   */
+  query(
+    procedureId: string,
+    target: string,
+    op: BrowserQueryOp,
+    args: BrowserQueryArgs = {},
+  ): Promise<unknown> {
+    const step = MUTATING_QUERIES.has(op) ? { action: op, args: { target, ...args } } : undefined;
+    return this.act(procedureId, step, async (s) => {
+      const page = await this.pageFor(s);
+      // Playwright reads 0 as "no limit": the longest allowed instead.
+      const limit = (ms: number) => (ms === 0 ? 60_000 : Math.min(ms, 60_000));
+      const timeout = limit(args.timeout ?? 10_000);
+      const mask = (value: unknown): unknown => maskDeep(value, s.secretVariants);
+      if (op === 'evaluate' || op === 'evaluateAll') {
+        if (s.secretPages.has(page))
+          throw new BrowserError(
+            'expectation_failed',
+            'Page code is refused while a secret the app typed is on this page. Navigate (or submit) first; the app types secrets so that no code reads them.',
+          );
+        const source = String(args.fn ?? '');
+        if (!source.trim() || source.length > 20_000)
+          throw new BrowserError('bad_input', 'evaluate needs a function.');
+        // A function whose source is the workflow's: Playwright sends String(fn) to the page and
+        // never calls it here.
+        const pageFunction = Object.assign(() => undefined, { toString: () => source });
+        const arg = args.arg ?? null;
+        try {
+          const value = !target
+            ? await withTimeout(
+                page.evaluate(pageFunction as never, arg),
+                timeout + 5_000,
+                'evaluate timed out',
+              )
+            : op === 'evaluateAll'
+              ? await buildLocator(page, parseTarget(target)).evaluateAll(
+                  pageFunction as never,
+                  arg,
+                )
+              : await (await this.resolveLocatorOrRef(page, target)).evaluate(
+                  pageFunction as never,
+                  arg,
+                  { timeout },
+                );
+          return mask(capJson(value));
+        } catch (err) {
+          throw toActionError(err, op, s.secretVariants);
+        }
+      }
+      if (!target) {
+        throw new BrowserError('bad_input', `${op} needs a locator.`);
+      }
+      const loc =
+        op === 'count' ||
+        op === 'allTextContents' ||
+        op === 'allInnerTexts' ||
+        op === 'waitFor' ||
+        op === 'isVisible'
+          ? buildLocator(page, parseTarget(target))
+          : await this.resolveLocatorOrRef(page, target);
+      try {
+        switch (op) {
+          case 'count':
+            return await loc.count();
+          case 'isVisible':
+            return await loc.first().isVisible();
+          case 'isEnabled':
+            return await loc.isEnabled({ timeout });
+          case 'isChecked':
+            return await loc.isChecked({ timeout });
+          case 'textContent':
+            return mask(await loc.textContent({ timeout }));
+          case 'innerText':
+            // biome-ignore lint/performance/useDomNodeTextContent: Playwright's Locator.innerText, not the DOM's
+            return mask(await loc.innerText({ timeout }));
+          case 'inputValue': {
+            const field = await fieldState(loc);
+            if (field.password || field.marked)
+              throw new BrowserError(
+                'expectation_failed',
+                'The value of a password or secret field is never read.',
+              );
+            return mask(await loc.inputValue({ timeout }));
+          }
+          case 'getAttribute': {
+            const name = String(args.name ?? '');
+            if (!/^[a-zA-Z_:][-a-zA-Z0-9_:.]{0,80}$/.test(name))
+              throw new BrowserError('bad_input', 'getAttribute needs an attribute name.');
+            if (name.toLowerCase() === 'value' && (await fieldState(loc)).password)
+              throw new BrowserError(
+                'expectation_failed',
+                'The value of a password field is never read.',
+              );
+            return mask(await loc.getAttribute(name, { timeout }));
+          }
+          case 'allTextContents':
+            return mask(capJson(await loc.allTextContents()));
+          case 'allInnerTexts':
+            return mask(capJson(await loc.allInnerTexts()));
+          case 'waitFor': {
+            const state = args.state ?? 'visible';
+            if (!['attached', 'detached', 'visible', 'hidden'].includes(state))
+              throw new BrowserError('bad_input', 'Unknown waitFor state.');
+            await loc
+              .first()
+              .waitFor({ state: state as 'visible', timeout: limit(args.timeout ?? 20_000) });
+            return null;
+          }
+          case 'hover':
+            await loc.hover({ timeout });
+            return null;
+          case 'focus':
+            await loc.focus({ timeout });
+            return null;
+          case 'dblclick':
+            await loc.dblclick({ timeout });
+            return this.observe(s);
+          case 'press': {
+            const key = String(args.key ?? '');
+            if (!key || key.length > 40)
+              throw new BrowserError('bad_input', 'press needs a key like "Enter".');
+            await loc.press(key, { timeout });
+            return this.observe(s);
+          }
+        }
+      } catch (err) {
+        if (err instanceof BrowserError) throw err;
+        throw toActionError(err, op, s.secretVariants);
+      }
+      throw new BrowserError('bad_input', `Unknown operation ${op}.`);
+    });
+  }
+
+  /** Reloads the active tab. */
+  reload(procedureId: string): Promise<BrowserObservation> {
+    return this.act(procedureId, { action: 'reload', args: {} }, async (s) => {
+      const page = await this.pageFor(s);
+      try {
+        await page.reload({ waitUntil: 'commit' });
+      } catch (err) {
+        throw new BrowserError(
+          'navigation',
+          `Could not reload: ${cleanPlaywrightMessage(errorMessage(err))}`,
+        );
+      }
+      return this.observe(s);
+    });
+  }
+
+  /** URL and title of the active tab, without a snapshot. */
+  info(procedureId: string): Promise<{ url: string; title: string }> {
+    return this.run(procedureId, async (s) => {
+      const page = await this.pageFor(s);
+      return {
+        url: maskSecrets(page.url(), s.secretVariants),
+        title: maskSecrets(await page.title().catch(() => ''), s.secretVariants),
+      };
+    });
+  }
+
+  private resolveLocatorOrRef(page: Page, target: string): Promise<Locator> {
+    return isLocatorTarget(target)
+      ? this.resolveLocator(page, target)
+      : this.resolveRef(page, target);
   }
 
   async useClientCertificate(procedureId: string, use: ClientCertificateUse | null): Promise<void> {
@@ -1143,6 +1327,8 @@ export class PlaywrightBrowserService implements BrowserService {
       s.notes.push('The tab crashed. The next action will reload it.');
     });
     page.on('framenavigated', (frame) => {
+      // A new document: the secret typed into the previous one is gone with it.
+      if (frame === page.mainFrame()) s.secretPages.delete(page);
       if (frame === page.mainFrame() && s.active === page && isHttpUrl(frame.url())) {
         s.lastUrl = frame.url();
       }
@@ -1240,6 +1426,7 @@ export class PlaywrightBrowserService implements BrowserService {
 
   private async resolveRef(page: Page, ref: string): Promise<Locator> {
     const r = ref.trim();
+    if (isLocatorTarget(r)) return this.resolveLocator(page, r);
     if (!REF_RE.test(r)) {
       throw new BrowserError(
         'invalid_ref',
@@ -1255,6 +1442,42 @@ export class PlaywrightBrowserService implements BrowserService {
     }
     if (count < 1) throw staleRefError(r);
     return loc.first();
+  }
+
+  /** A codemode locator, strict like Playwright's: exactly one element. */
+  private async resolveLocator(page: Page, target: string): Promise<Locator> {
+    const chain = parseTarget(target);
+    const loc = buildLocator(page, chain);
+    let count = 0;
+    try {
+      count = await loc.count();
+    } catch (err) {
+      throw new BrowserError(
+        'bad_input',
+        `Invalid locator ${describeChain(chain)}: ${cleanPlaywrightMessage(errorMessage(err))}`,
+      );
+    }
+    if (count === 1) return loc;
+    if (count === 0) {
+      // Give the page a moment, as Playwright's actions would.
+      const appeared = await loc
+        .first()
+        .waitFor({ state: 'attached', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+      const now = appeared ? await loc.count().catch(() => 0) : 0;
+      if (now === 1) return loc;
+      if (now === 0)
+        throw new BrowserError(
+          'stale_ref',
+          `${describeChain(chain)} matches no element. Read page.snapshot() to see the page.`,
+        );
+      count = now;
+    }
+    throw new BrowserError(
+      'bad_input',
+      `${describeChain(chain)} matches ${count} elements: make it specific (exact: true, filter, nth, first).`,
+    );
   }
 
   private async refInfo(
@@ -2096,6 +2319,46 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 }
 
+/** Codemode queries that change the page (capture mode records them as steps). */
+const MUTATING_QUERIES: ReadonlySet<BrowserQueryOp> = new Set([
+  'hover',
+  'focus',
+  'dblclick',
+  'press',
+  'evaluate',
+]);
+const MAX_QUERY_JSON = 200_000;
+
+/** Values a query returns must be JSON and not huge. */
+function capJson(value: unknown): unknown {
+  let text: string | undefined;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    throw new BrowserError(
+      'bad_input',
+      'The page returned something that is not JSON (an element? return its text or attributes).',
+    );
+  }
+  if (text === undefined) return null;
+  if (text.length > MAX_QUERY_JSON)
+    throw new BrowserError(
+      'bad_input',
+      `The result is too large (${text.length} characters): return less.`,
+    );
+  return JSON.parse(text) as unknown;
+}
+
+/** Masks secrets in every string of a JSON value. */
+function maskDeep(value: unknown, secrets: string[]): unknown {
+  if (!secrets.length) return value;
+  if (typeof value === 'string') return maskSecrets(value, secrets);
+  if (Array.isArray(value)) return value.map((v) => maskDeep(v, secrets));
+  if (value && typeof value === 'object')
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, maskDeep(v, secrets)]));
+  return value;
+}
+
 // ===============================================================================================
 // Helpers
 // ===============================================================================================
@@ -2122,6 +2385,7 @@ function newSession(id: string): Session {
     pdfHashes: new Set(),
     pdfPages: new WeakMap(),
     crashedPages: new WeakSet(),
+    secretPages: new WeakSet(),
     queue: Promise.resolve(),
     closed: false,
     visible: false,
@@ -2300,7 +2564,9 @@ function describePageError(error: Error): string {
     .trim()
     .slice(0, 240);
   let where = '';
-  const frame = /\(?((?:https?|file):\/\/[^\s)]+?):(\d+):\d+\)?/.exec(String(error?.stack ?? ''));
+  // The page writes its stack: matching it whole takes time that grows with its square.
+  const stack = String(error?.stack ?? '').slice(0, 4096);
+  const frame = /\(?((?:https?|file):\/\/[^\s)]+?):(\d+):\d+\)?/.exec(stack);
   if (frame?.[1]) {
     try {
       where = ` (${new URL(frame[1]).pathname}:${frame[2]})`;

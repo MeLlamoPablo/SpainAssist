@@ -34,7 +34,7 @@ import type { ProcedureService } from '../procedures/service';
 import type { ProviderManager } from '../providers/manager';
 import type { FeedbackService } from '../remote/feedback';
 import { setPersonalPartial } from '../vault/partial';
-import type { BridgeContext, BridgeHandlers } from './server';
+import type { BridgeContext, ClassicHandlers } from './server';
 
 /** How long a map form that was not shown keeps its lookup results for a retry. */
 const RETRY_PLACES_MS = 10 * 60_000;
@@ -219,7 +219,7 @@ function certificateSiteBlock(origin: URL): string | null {
  * Implementations of every host-bridge method (see @sa/shared bridge.ts). Each runs for the
  * procedure identified by the caller's token. Secrets never travel back to the agent.
  */
-export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
+export function createBridgeHandlers(deps: BridgeHandlerDeps): ClassicHandlers {
   const lang = () => deps.lang();
   const approvals = new Map<string, number>();
   /** Per procedure: origins outside the official list where the user allowed certificate logins. */
@@ -263,7 +263,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): BridgeHandlers {
     deps.conversation.addNotice(
       'info',
       t(lang(), 'savedToVault', { labels }),
-      agentId === ASSISTANT_AGENT_ID ? undefined : agentId,
+      agentId === ASSISTANT_AGENT_ID || !deps.procedures.has(agentId) ? undefined : agentId,
     );
   }
 

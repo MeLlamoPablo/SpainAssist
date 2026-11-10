@@ -123,6 +123,11 @@ export const Procedure = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   archived: z.boolean(),
+  /**
+   * Bumped on every change of the card. Codemode agents update with the version they read and
+   * get a conflict when someone changed it since (optimistic concurrency). Absent: 0.
+   */
+  version: z.number().int().nonnegative().optional(),
 });
 export type Procedure = z.infer<typeof Procedure>;
 
@@ -185,5 +190,6 @@ export function emptyProcedure(
     createdAt: now,
     updatedAt: now,
     archived: false,
+    version: 0,
   };
 }

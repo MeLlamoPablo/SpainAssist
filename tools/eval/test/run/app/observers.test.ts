@@ -680,3 +680,107 @@ describe('the leak check', () => {
     expect(leaked()).toEqual(['message of assistant']);
   });
 });
+
+describe('codemode', () => {
+  const agent: AgentIdentity = { ...procedure, agentKey: 'procedure-a_00000000000000bb' };
+  delete (agent as { procedureId?: string }).procedureId;
+
+  it('makes a codemode agent’s bridge calls the classic tool calls they stand for', () => {
+    r.observers.bridgeCall({
+      method: 'browser.loginClave',
+      params: { method: 'permanente' },
+      agentId: 'a_00000000000000bb',
+      procedureId: 'p_00000000000000aa',
+      role: 'agent',
+    });
+    // The coordinator's calls come from its own tools (their events), not from workflows.
+    r.observers.bridgeCall({
+      method: 'agents.start',
+      params: { title: 'Vida laboral', brief: 'Descarga el informe.' },
+      agentId: ASSISTANT_AGENT_ID,
+      procedureId: ASSISTANT_AGENT_ID,
+      role: 'orchestrator',
+    });
+    r.observers.bridgeCall({
+      method: 'vault.document',
+      params: { documentId: 'd_1' },
+      agentId: 'a_00000000000000bb',
+      procedureId: 'a_00000000000000bb',
+      role: 'agent',
+    });
+    expect(
+      r.observed.map((o) =>
+        o.type === 'tool_start' ? [o.agent, o.procedureId, o.tool, o.args] : o.type,
+      ),
+    ).toEqual([
+      ['procedure', 'p_00000000000000aa', 'browser_login_clave', { method: 'permanente' }],
+      ['procedure', undefined, 'document_read', { documentId: 'd_1' }],
+    ]);
+    // Not the model's tool calls: the run's limits count `codemode` calls only.
+    expect(r.observers.counters().toolCalls).toBe(0);
+  });
+
+  it('names the codemode coordinator’s tools after the classic assistant’s', () => {
+    for (const [id, tool] of [
+      ['s1', 'agent_start'],
+      ['s2', 'agent_message'],
+      ['s3', 'procedure_read'],
+    ] as const)
+      r.observers.agentEvent(assistant, { type: 'tool_start', toolCallId: id, tool, args: {} });
+    expect(r.observed.map((o) => (o.type === 'tool_start' ? [o.agent, o.tool] : o.type))).toEqual([
+      ['assistant', 'procedure_start'],
+      ['assistant', 'procedure_message'],
+      ['assistant', 'procedure_read'],
+    ]);
+  });
+
+  it('leaves out the classic agents’ calls, the workflow bookkeeping and the prompts', () => {
+    for (const method of [
+      'workflow.memo',
+      'workflows.list',
+      'prompt.confirm',
+      'agent.credential',
+    ]) {
+      r.observers.bridgeCall({
+        method,
+        params: {},
+        agentId: 'a_1',
+        procedureId: 'a_1',
+        role: 'agent',
+      });
+    }
+    r.observers.bridgeCall({
+      method: 'browser.loginClave',
+      params: {},
+      agentId: 'p_00000000000000aa',
+      procedureId: 'p_00000000000000aa',
+    });
+    expect(r.observed).toEqual([]);
+  });
+
+  it('makes a workflow result that reaches its agent that agent’s tool result', () => {
+    r.observers.agentMessage(agent, 'Sigue, por favor.');
+    r.observers.agentMessage(agent, '[Workflow "vida-laboral" succeeded]\nResult:\n{"ok":true}');
+    expect(r.observed).toMatchObject([
+      {
+        type: 'tool_end',
+        agent: 'procedure',
+        tool: 'codemode',
+        isError: false,
+        text: '[Workflow "vida-laboral" succeeded]\nResult:\n{"ok":true}',
+      },
+    ]);
+  });
+
+  it('announces an interface as a prompt and counts it', () => {
+    r.observers.interfaceShown({
+      itemId: 'wf_vida-laboral:acceso:1',
+      agent: 'procedure',
+      kind: 'form',
+      title: '¿Cómo entras?',
+      fields: [{ key: 'button', type: 'select', label: 'Botón que pulsas' }],
+    });
+    expect(types()).toEqual(['prompt_shown']);
+    expect(r.observers.counters().prompts).toBe(1);
+  });
+});

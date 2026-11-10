@@ -8,7 +8,8 @@ import {
   type PromptResponse,
   UserActionPrompt,
 } from './chat';
-import { ProcedureUpdate } from './procedure';
+import { CodemodeSlug, type UiEvent } from './codemode';
+import { Procedure as ProcedureSchema, ProcedureUpdate } from './procedure';
 import { FeedbackKind, FeedbackVote } from './services';
 import { PersonalDataInput } from './vault';
 
@@ -94,7 +95,15 @@ export const BrowserObservation = z.object({
 });
 export type BrowserObservation = z.infer<typeof BrowserObservation>;
 
-const Ref = z.string().min(1).max(32).describe('Element ref from the latest snapshot, e.g. "e12"');
+/**
+ * An element: a ref from the latest snapshot ("e12"), or, from codemode workflows, `loc:` and the
+ * JSON of a Playwright locator chain (see @sa/browser locator.ts).
+ */
+const Ref = z
+  .string()
+  .min(1)
+  .max(4000)
+  .describe('Element ref from the latest snapshot, e.g. "e12"');
 
 // ---------------------------------------------------------------------------------------------
 // Methods
@@ -104,6 +113,24 @@ const Ref = z.string().min(1).max(32).describe('Element ref from the latest snap
 export const ASSISTANT_AGENT_ID = 'assistant';
 
 const ProcedureRef = z.string().min(1).max(64).describe('Procedure id, e.g. "p_0123456789abcdef"');
+
+const ProcedureId = z.string().min(1).max(64);
+const RunId = z.string().min(1).max(64);
+const AgentId = z.string().min(1).max(64);
+const StateKey = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/, 'Letters, digits and _.:- (max 100).');
+
+/** A procedure's private working context: for agents, never shown to the user. */
+export const WorkingContext = z.object({
+  notes: z.string().max(20_000),
+  data: z.record(z.string().max(100), z.unknown()),
+});
+export type WorkingContext = z.infer<typeof WorkingContext>;
+export const WORKING_CONTEXT_MAX_BYTES = 64 * 1024;
+
+/** The bridge header with which a codemode agent acts on a procedure (its browser, its card). */
+export const PROCEDURE_HEADER = 'x-sa-procedure';
 
 export const BridgeParams = {
   // --- procedure (its own agent) ---------------------------------------------------------------
@@ -274,6 +301,132 @@ export const BridgeParams = {
   /** Rates a learning from feedback.search (by its id). */
   'feedback.vote': z.object({ id: z.string().min(1).max(64), vote: FeedbackVote }),
 
+  // --- codemode (the `codemode` feature flag; docs/codemode.md) ------------------------------
+  /**
+   * Starts a run of a workflow: creates its record, or resumes it with its durable state when the
+   * id exists (another live run of it is refused with `conflict`). Returns the run's id.
+   */
+  'workflow.begin': z.object({
+    workflowId: CodemodeSlug,
+    title: z.string().max(120).optional(),
+    procedures: z.array(ProcedureId).max(20).optional(),
+    source: z.string().min(1).max(200_000),
+  }),
+  'workflow.memo': z.object({
+    runId: RunId,
+    key: StateKey,
+    value: z.unknown().optional(),
+    delete: z.boolean().optional(),
+  }),
+  /** Interfaces of a run: open (validated, its map addresses located), render, durable, close. */
+  'workflow.ui': z.object({
+    runId: RunId,
+    action: z.enum(['open', 'render', 'durable', 'close']),
+    key: StateKey,
+    rev: z.number().int().nonnegative().optional(),
+    tree: z.unknown().optional(),
+    name: StateKey.optional(),
+    value: z.unknown().optional(),
+    result: z.unknown().optional(),
+  }),
+  /**
+   * Long poll: the user's events on the run's open interfaces after `after`. Answers at once when
+   * there are some, else within 25 s with none; `ended` when the run was cancelled from outside.
+   */
+  'workflow.events': z.object({ runId: RunId, after: z.number().int().nonnegative() }),
+  /** The calling agent's status on the meter (api.setStatus). */
+  'workflow.setStatus': z.object({ status: z.string().min(1).max(120) }),
+  /** The run ended. `deliver`: the agent's tool already returned, so main tells the agent. */
+  'workflow.end': z.object({
+    runId: RunId,
+    outcome: z.object({
+      status: z.enum(['succeeded', 'failed', 'cancelled']),
+      value: z.string().max(100_000).optional(),
+      error: z.string().max(10_000).optional(),
+      code: z.string().max(40).optional(),
+      /** console output and the user's notes, for an agent that hears the outcome later. */
+      logs: z.string().max(10_000).optional(),
+    }),
+    deliver: z.boolean().default(false),
+  }),
+  /** This agent's workflows to resume when its process starts (they were waiting for the user). */
+  'workflow.resumable': z.object({}),
+  'workflows.list': z.object({}),
+  'workflows.get': z.object({ id: CodemodeSlug }),
+  'workflows.cancel': z.object({ id: CodemodeSlug, reason: z.string().max(300).optional() }),
+
+  /** Every procedure's card (no private context). */
+  'procs.list': z.object({ includeArchived: z.boolean().default(false) }),
+  'procs.get': z.object({ id: ProcedureId }),
+  /**
+   * A procedure by a key stable within the run's workflow (or a full id): created the first time,
+   * the same one on every later run. Adds it to the workflow's procedures.
+   */
+  'procs.getOrCreate': ProcedureUpdate.extend({
+    runId: RunId,
+    id: z.string().min(1).max(64),
+    title: ProcedureSchema.shape.title,
+  }),
+  /** Optimistic concurrency: `conflict` when the procedure changed since `expectedVersion`. */
+  'procs.update': z.object({
+    id: ProcedureId,
+    expectedVersion: z.number().int().nonnegative(),
+    patch: ProcedureUpdate,
+  }),
+  'procs.context': z.object({ id: ProcedureId }),
+  'procs.setContext': z.object({ id: ProcedureId, context: WorkingContext.partial() }),
+
+  /** The coordinator's background agents (codemode only). */
+  'agents.start': z.object({
+    status: z.string().min(1).max(120),
+    brief: z.string().min(1).max(8000),
+    procedures: z.array(ProcedureId).max(20).optional(),
+  }),
+  'agents.message': z.object({
+    agentId: AgentId,
+    message: z.string().min(1).max(4000),
+    urgent: z.boolean().optional(),
+    status: z.string().min(1).max(120).optional(),
+  }),
+  'agents.stop': z.object({ agentId: AgentId }),
+  'agents.list': z.object({}),
+
+  /** Reads and light actions on a locator, or on the page with an empty target. */
+  'browser.query': z.object({
+    target: z.string().max(4000),
+    op: z.enum([
+      'textContent',
+      'innerText',
+      'inputValue',
+      'getAttribute',
+      'isVisible',
+      'isEnabled',
+      'isChecked',
+      'count',
+      'allTextContents',
+      'allInnerTexts',
+      'waitFor',
+      'hover',
+      'focus',
+      'dblclick',
+      'press',
+      'evaluate',
+      'evaluateAll',
+    ]),
+    args: z
+      .object({
+        name: z.string().max(100).optional(),
+        key: z.string().max(40).optional(),
+        fn: z.string().max(20_000).optional(),
+        arg: z.unknown().optional(),
+        state: z.string().max(20).optional(),
+        timeout: z.number().int().min(0).max(60_000).optional(),
+      })
+      .default({}),
+  }),
+  'browser.reload': z.object({}),
+  'browser.info': z.object({}),
+
   // --- agent host internals (not tools) ------------------------------------------------------
   /**
    * Current inference credential for this agent process, in pi-ai `Credential` shape
@@ -370,11 +523,82 @@ export interface BridgeResults {
   'feedback.search': { results: import('./services').FeedbackEntry[] };
   'feedback.submit': { submitted: boolean; id?: string; redactions: number; reason?: string };
   'feedback.vote': { counted: boolean; reason?: string };
+  'workflow.begin': {
+    runId: string;
+    resumed: boolean;
+    procedures: string[];
+    state: {
+      memo: Record<string, { value?: unknown }>;
+      ui: Record<
+        string,
+        {
+          status: 'open' | 'closed';
+          result?: unknown;
+          durable?: Record<string, unknown>;
+          rev?: number;
+        }
+      >;
+    };
+  };
+  'workflow.memo': Record<string, never>;
+  'workflow.ui': Record<string, never>;
+  'workflow.events': { events: { seq: number; key: string; event: UiEvent }[]; ended?: boolean };
+  'workflow.setStatus': Record<string, never>;
+  'workflow.end': Record<string, never>;
+  'workflow.resumable': {
+    workflows: { workflowId: string; title?: string; source: string; procedures: string[] }[];
+  };
+  'workflows.list': {
+    workflows: {
+      id: string;
+      title?: string;
+      status: string;
+      agentId: string;
+      procedures: string[];
+      openUi: string[];
+    }[];
+  };
+  'workflows.get': {
+    id: string;
+    title?: string;
+    status: string;
+    agentId: string;
+    procedures: string[];
+    memoKeys: string[];
+    openUi: string[];
+    result?: unknown;
+    error?: string;
+  };
+  'workflows.cancel': { cancelled: boolean };
+  'procs.list': { procedures: VersionedProcedure[] };
+  'procs.get': VersionedProcedure;
+  'procs.getOrCreate': VersionedProcedure & { created: boolean };
+  'procs.update': VersionedProcedure;
+  'procs.context': WorkingContext;
+  'procs.setContext': Record<string, never>;
+  'agents.start': { agentId: string };
+  'agents.message': { delivered: 'started' | 'queued'; cancelledPrompts: number };
+  'agents.stop': { stopped: boolean };
+  'agents.list': {
+    agents: {
+      id: string;
+      status: string;
+      activity: string;
+      now?: string;
+      procedures: string[];
+    }[];
+  };
+  'browser.query': { value: unknown; observation?: BrowserObservation };
+  'browser.reload': BrowserObservation;
+  'browser.info': { url: string; title: string };
   'agent.credential': { credential: Record<string, unknown> | null };
   'agent.refreshCredential': { credential: Record<string, unknown> | null };
   'agent.exaKey': { key: string | null };
   'agent.voucherSpend': Record<string, never>;
 }
+
+/** A procedure card as codemode agents read it (no runtime state, no private context). */
+export type VersionedProcedure = import('./procedure').Procedure;
 
 /** Methods only the assistant may call. */
 export const ASSISTANT_METHODS: ReadonlySet<BridgeMethod> = new Set<BridgeMethod>([
@@ -393,9 +617,39 @@ export const ASSISTANT_METHODS: ReadonlySet<BridgeMethod> = new Set<BridgeMethod
   'agent.voucherSpend',
 ]);
 
-/** Methods a procedure's agent may call: everything except the assistant's `procedures.*`. */
+/** Codemode methods (`codemode` flag): no legacy agent may call them. */
+const CODEMODE_PREFIXES = ['workflow.', 'workflows.', 'procs.', 'agents.'] as const;
+const CODEMODE_BROWSER: ReadonlySet<BridgeMethod> = new Set<BridgeMethod>([
+  'browser.query',
+  'browser.reload',
+  'browser.info',
+]);
+
+export function isCodemodeMethod(method: BridgeMethod): boolean {
+  return (
+    CODEMODE_PREFIXES.some((prefix) => method.startsWith(prefix)) || CODEMODE_BROWSER.has(method)
+  );
+}
+
+/** Methods a procedure's agent may call: everything except the assistant's and codemode's. */
 export function procedureMayCall(method: BridgeMethod): boolean {
-  return !method.startsWith('procedures.');
+  return !method.startsWith('procedures.') && !isCodemodeMethod(method);
+}
+
+/** The roles of the codemode harness. */
+export type CodemodeBridgeRole = 'orchestrator' | 'agent';
+
+/**
+ * What each codemode role may call. The coordinator only delegates: its agents and reading the
+ * cards (its tools, packages/agent/src/tools/coordinator.ts). Agents: everything else, workflows,
+ * procedures, vault, the browser and the user prompts, but no agents of their own.
+ */
+export function codemodeMayCall(role: CodemodeBridgeRole, method: BridgeMethod): boolean {
+  if (method.startsWith('procedures.') || method.startsWith('procedure.')) return false;
+  if (method.startsWith('agent.')) return true;
+  if (role === 'orchestrator')
+    return method.startsWith('agents.') || method === 'procs.list' || method === 'procs.get';
+  return !method.startsWith('agents.');
 }
 
 export const BridgeErrorCode = z.enum([
@@ -406,6 +660,7 @@ export const BridgeErrorCode = z.enum([
   'policy_denied', // e.g. credential not allowed on this domain
   'browser_error',
   'unavailable', // e.g. feedback server unreachable
+  'conflict', // codemode: a procedure changed since it was read, a page is locked, a workflow runs elsewhere
   'internal',
 ]);
 export type BridgeErrorCode = z.infer<typeof BridgeErrorCode>;

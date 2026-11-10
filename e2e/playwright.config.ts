@@ -18,7 +18,10 @@ export default defineConfig<E2eOptions>({
   use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [
     { name: 'electron', testMatch: 'desktop.spec.ts' },
-    { name: 'web', testMatch: ['map-options.spec.ts', 'shell-scroll.spec.ts'] },
+    {
+      name: 'web',
+      testMatch: ['map-options.spec.ts', 'shell-scroll.spec.ts', 'codemode-ui.spec.ts'],
+    },
     // The agent's browser as users get it (fixtures.ts, `parity`), and the app's --self-test.
     { name: 'parity', testMatch: 'parity.spec.ts', use: { parity: true } },
   ],

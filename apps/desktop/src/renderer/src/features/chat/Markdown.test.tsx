@@ -48,6 +48,17 @@ function render(text: string, documents: DocumentMeta[] | null = [DOC]): string 
 
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 
+describe('assistant text too long to parse quickly', () => {
+  it('shows as it is', () => {
+    // Runs of emphasis take the parser time growing with the square of their length.
+    const html = render('*a'.repeat(6_000));
+    expect(html).toBe(
+      `<div class="prose-sa"><p class="selectable whitespace-pre-wrap break-words">${'*a'.repeat(6_000)}</p></div>`,
+    );
+    expect(render('**Hola**')).toContain('<strong>Hola</strong>');
+  });
+});
+
 describe('document links in assistant messages', () => {
   it('shows a document link alone in its paragraph as a card', () => {
     const html = render(

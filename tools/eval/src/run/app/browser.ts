@@ -12,6 +12,8 @@
  *     value of each, so a second one would silently undo the first.
  *   - `initScripts`: `WEBRTC_BLOCK` runs in every frame of every context. The proxy carries TCP
  *     only, and a page can send UDP to any IP address through WebRTC; no resolver rule stops that.
+ *     With the world's clock, `worldClockScript` runs there too: a page's `Date` starts at the
+ *     world's frozen day, as the agents' and the server's do, instead of the machine's.
  *   - `ignoreHTTPSErrors` is off: the pinned key is what makes the certificates trusted, and
  *     ignoring errors would also keep service workers from registering.
  *   - capture (HAR, trace, the HTML after each step) goes to `<runDir>/browser/<procedure>/`
@@ -46,6 +48,33 @@ export const WEBRTC_BLOCK = `(() => {
   }
 })();`;
 
+/**
+ * Moves a page's clock by `offsetMs` (the world's time less the machine's): `new Date()`,
+ * `Date()` and `Date.now()` give the world's time, still ticking, so a page's own checks ("a past
+ * date") and its datepickers agree with the server, which judges by the world's day. A date the
+ * page builds from parts or a string is left as it is. Runs before the page's own scripts in every
+ * frame; workers keep the machine's clock.
+ */
+function worldClockScript(offsetMs: number): string {
+  if (!Number.isFinite(offsetMs))
+    throw new Error(`The world clock's offset is no number: ${offsetMs}`);
+  return `(() => {
+  const offset = ${Math.round(offsetMs)};
+  const RealDate = globalThis.Date;
+  const realNow = RealDate.now;
+  const now = () => realNow.call(RealDate) + offset;
+  function Date(...args) {
+    if (!new.target) return new RealDate(now()).toString();
+    return Reflect.construct(RealDate, args.length === 0 ? [now()] : args, new.target);
+  }
+  Object.setPrototypeOf(Date, RealDate);
+  Date.prototype = RealDate.prototype;
+  Date.now = () => now();
+  Object.defineProperty(RealDate.prototype, 'constructor', { value: Date, writable: true, configurable: true });
+  globalThis.Date = Date;
+})();`;
+}
+
 /** The switches the network layer sets: nobody else may. */
 const OWNED_SWITCHES = [
   '--ignore-certificate-errors-spki-list',
@@ -78,6 +107,8 @@ interface EvalBrowserOptions {
   capture?: { dir: string; scratchDir: string };
   /** The fetch of AutoFirma's triphase signing: the world's (`createWorldFetch`). */
   signerFetch?: typeof fetch;
+  /** The world's clock (the frozen instant, moving at real speed): the pages' `Date`. */
+  clock?: () => Date;
 }
 
 export function createEvalBrowserFactory(options: EvalBrowserOptions): BrowserFactory {
@@ -85,16 +116,18 @@ export function createEvalBrowserFactory(options: EvalBrowserOptions): BrowserFa
   // the network fails like a dead one, and leaves a `denied` record.
   const signerFetch =
     options.signerFetch ?? createEgressGuard({ allowOrigins: [], log: options.log }).fetch;
-  const { capture } = options;
+  const { capture, clock } = options;
   return (opts: BrowserOptions) => {
     const afirma = opts.afirma;
     assertNoClash(opts.launchArgs);
+    // The world's clock runs at the machine's speed: the two differ by one offset for the run.
+    const clockScripts = clock ? [worldClockScript(clock().getTime() - Date.now())] : [];
     return createBrowserService({
       ...opts,
       certificates: options.network,
       ignoreHTTPSErrors: false,
       headless: true,
-      initScripts: [...(opts.initScripts ?? []), WEBRTC_BLOCK],
+      initScripts: [...clockScripts, ...(opts.initScripts ?? []), WEBRTC_BLOCK],
       // The CLI saves the run when it is interrupted: Playwright's own SIGINT handler would exit
       // the process (130) as soon as Chromium has closed, before anything is written.
       handleSignals: false,

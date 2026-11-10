@@ -135,10 +135,38 @@ export function activityLabel(
       };
     case 'run_script':
       return { text: es ? 'Procesando datos' : 'Working with data', icon: Braces };
+    case 'codemode': {
+      // A workflow names what it does for the user.
+      const title = str(args.title);
+      return { text: title ?? (es ? 'Trabajando en ello' : 'Working on it'), icon: Braces };
+    }
     case 'procedure_update':
       return { text: es ? 'Actualizando el plan' : 'Updating the plan', icon: ClipboardList };
     case 'procedure_get':
       return { text: es ? 'Repasando el trámite' : 'Reviewing the procedure', icon: ClipboardList };
+    // --- the codemode coordinator (never names agents to the user) ---
+    case 'agent_start': {
+      const title = str(args.title);
+      return {
+        text: title
+          ? es
+            ? `Me pongo con ${q(lang, title)}`
+            : `Getting started on ${q(lang, title)}`
+          : es
+            ? 'Me pongo con ello'
+            : 'Getting started',
+        icon: Rocket,
+      };
+    }
+    case 'agent_message':
+      return { text: es ? 'Paso la información' : 'Passing it on', icon: Send };
+    case 'agent_stop':
+      return { text: es ? 'Parando el trabajo' : 'Stopping the work', icon: X };
+    case 'agent_list':
+      return {
+        text: es ? 'Repasando lo que tengo en marcha' : 'Reviewing work in progress',
+        icon: ClipboardList,
+      };
     // --- the assistant (orchestrator) ---
     case 'procedure_start': {
       const title = str(args.title);

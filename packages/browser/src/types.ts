@@ -162,6 +162,39 @@ export interface TypeOptions {
   expect?: { inputType?: string; frameOrigin?: string };
 }
 
+/** Codemode reads and light actions on a locator (`BrowserService.query`). */
+export type BrowserQueryOp =
+  | 'textContent'
+  | 'innerText'
+  | 'inputValue'
+  | 'getAttribute'
+  | 'isVisible'
+  | 'isEnabled'
+  | 'isChecked'
+  | 'count'
+  | 'allTextContents'
+  | 'allInnerTexts'
+  | 'waitFor'
+  | 'hover'
+  | 'focus'
+  | 'dblclick'
+  | 'press'
+  | 'evaluate'
+  | 'evaluateAll';
+
+export interface BrowserQueryArgs {
+  /** getAttribute */
+  name?: string;
+  /** press */
+  key?: string;
+  /** evaluate: the function's source, run only in the page. */
+  fn?: string;
+  arg?: unknown;
+  /** waitFor */
+  state?: string;
+  timeout?: number;
+}
+
 export interface ScreencastFrame {
   data: Buffer;
   timestamp: number;
@@ -202,6 +235,18 @@ export interface BrowserService {
     ref: string,
     files: { name: string; mimeType: string; buffer: Buffer }[],
   ): Promise<BrowserObservation>;
+  /**
+   * Codemode: reads and light actions on a locator target ("e12" or `loc:` + chain, see
+   * locator.ts), or on the page with an empty target (evaluate).
+   */
+  query(
+    procedureId: string,
+    target: string,
+    op: BrowserQueryOp,
+    args?: BrowserQueryArgs,
+  ): Promise<unknown>;
+  reload(procedureId: string): Promise<BrowserObservation>;
+  info(procedureId: string): Promise<{ url: string; title: string }>;
   /** Information about a ref from the latest snapshot (null if unknown/stale). */
   describeRef(procedureId: string, ref: string): Promise<RefInfo | null>;
   /**

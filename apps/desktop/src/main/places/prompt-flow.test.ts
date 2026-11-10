@@ -16,7 +16,7 @@ const form = FormPrompt.parse({
     },
   ],
 });
-const ctx = { procedureId: 'demo', signal: new AbortController().signal };
+const ctx = { procedureId: 'demo', agentId: 'demo', signal: new AbortController().signal };
 function setup(placeLookup: PlaceLookup) {
   const ask = vi.fn().mockResolvedValue({
     kind: 'form',

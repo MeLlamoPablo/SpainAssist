@@ -34,6 +34,7 @@ export interface SharedOptions {
     | 'limits'
     | 'models'
     | 'captureBrowser'
+    | 'codemode'
     | 'keepWorld'
     | 'codexConsent'
     | 'localBaseUrl'
@@ -142,6 +143,7 @@ export function readSharedOptions(parsed: ParsedArgs, command: string): SharedOp
       ...(Object.keys(limits).length > 0 ? { limits } : {}),
       ...(Object.keys(models).length > 0 ? { models } : {}),
       ...(flag(parsed, 'capture-browser') ? { captureBrowser: true } : {}),
+      ...(flag(parsed, 'codemode') ? { codemode: true } : {}),
       ...(flag(parsed, 'keep-world') ? { keepWorld: true } : {}),
       ...(flag(parsed, 'codex-consent') ? { codexConsent: true } : {}),
     },

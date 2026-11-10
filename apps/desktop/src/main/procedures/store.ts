@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
-import { ChatItem, Procedure } from '@sa/shared';
+import { join } from 'node:path';
+import { ChatItem, Procedure, WorkingContext } from '@sa/shared';
 import { type ProcedurePaths, procedurePaths } from '../app/paths';
 import {
   DebouncedWriter,
@@ -16,6 +17,7 @@ import { isSafeId } from '../core/util';
  * On-disk layout of procedures (all private: dirs 0700, files 0600):
  *   procedures/<id>/procedure.json   Procedure
  *   procedures/<id>/transcript.json  ChatItem[]
+ *   procedures/<id>/context.json     codemode: private working context of agents
  *   procedures/<id>/session.jsonl    pi session (written by the agent host)
  *   procedures/<id>/media/           screenshots shown in the UI
  *   procedures/<id>/work/            agent cwd (empty)
@@ -78,6 +80,18 @@ export class ProcedureStore {
   saveTranscript(id: string, items: () => ChatItem[]): void {
     const file = this.paths(id).transcriptFile;
     this.writer.schedule(`${id}/transcript`, () => writeFileAtomic(file, JSON.stringify(items())));
+  }
+
+  /** Codemode: the procedure's private working context (`context.json`), empty when none. */
+  async loadContext(id: string): Promise<WorkingContext> {
+    const raw = await readJsonFile(join(this.paths(id).dir, 'context.json')).catch(() => undefined);
+    const parsed = WorkingContext.safeParse(raw);
+    return parsed.success ? parsed.data : { notes: '', data: {} };
+  }
+
+  async saveContext(id: string, context: WorkingContext): Promise<void> {
+    await this.writer.flush(`${id}/context`);
+    await writeFileAtomic(join(this.paths(id).dir, 'context.json'), JSON.stringify(context));
   }
 
   /** Synchronous read (transcripts are small; screenshots live in media/). */

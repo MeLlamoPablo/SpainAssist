@@ -30,8 +30,18 @@ export {
   normalizeOrigin,
 } from './certificates';
 export { BrowserError, type BrowserErrorCode } from './errors';
+export {
+  describeChain,
+  encodeTarget,
+  isLocatorTarget,
+  LOCATOR_PREFIX,
+  type LocatorChain,
+  type LocatorStep,
+} from './locator';
 export { type RenderOptions, type RenderResult, renderSnapshot } from './snapshot';
 export type {
+  BrowserQueryArgs,
+  BrowserQueryOp,
   BrowserService,
   BrowserServiceOptions,
   CertificateProxy,

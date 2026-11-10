@@ -66,6 +66,8 @@ export interface AgentFleetOptions {
   onLaunch(identity: AgentIdentity): void;
   /** Every event of every client, before the app sees it. */
   onEvent(identity: AgentIdentity, event: AgentEvent): void;
+  /** Every message the app sends an agent (a prompt, a steer or a follow-up), before it is sent. */
+  onMessage?(identity: AgentIdentity, text: string): void;
   /** An agent operation that the app waits on starts (+1) or ends (-1). */
   onOperation(delta: 1 | -1): void;
   /** No agent may start once the run is aborted. */
@@ -85,6 +87,7 @@ class TrackedClient implements AgentClientPort {
     private readonly inner: PiRpcClient,
     readonly identity: AgentIdentity,
     private readonly operation: (delta: 1 | -1) => void,
+    private readonly message: (text: string) => void = () => {},
   ) {}
 
   private async track<T>(call: () => Promise<T>): Promise<T> {
@@ -100,12 +103,15 @@ class TrackedClient implements AgentClientPort {
     return this.track(() => this.inner.start());
   }
   prompt(text: string, images?: PromptImage[]) {
+    this.message(text);
     return this.track(() => this.inner.prompt(text, images));
   }
   steer(text: string) {
+    this.message(text);
     return this.track(() => this.inner.steer(text));
   }
   followUp(text: string) {
+    this.message(text);
     return this.track(() => this.inner.followUp(text));
   }
   abort(): Promise<void> {
@@ -152,7 +158,9 @@ export class AgentFleet {
 
   private identify(config: AgentHostConfig): AgentIdentity {
     const { runDir } = this.options.spec;
-    const assistant = config.role === 'assistant';
+    // Codemode's coordinator is the chat's agent too; its other agents (`a_…`, `s_…`) are the
+    // procedure agents' counterparts, but their ids are no procedure's.
+    const assistant = config.role === 'assistant' || config.role === 'orchestrator';
     const agentKey = agentKeyOf(config.procedureId);
     const generation = (this.generations.get(agentKey) ?? 0) + 1;
     this.generations.set(agentKey, generation);
@@ -160,7 +168,7 @@ export class AgentFleet {
     return {
       agentKey,
       agent: assistant ? 'assistant' : 'procedure',
-      ...(assistant ? {} : { procedureId: config.procedureId }),
+      ...(assistant || config.role === 'agent' ? {} : { procedureId: config.procedureId }),
       sessionFile: config.sessionFile,
       generation,
       netlog: join(runDir, 'net', `host-${agentKey}${suffix}.jsonl`),
@@ -248,7 +256,9 @@ export class AgentFleet {
     const inner = new PiRpcClient(launch);
     // First listener: the observers see an event before the app reacts to it.
     inner.on((event) => options.onEvent(identity, event));
-    const client = new TrackedClient(inner, identity, options.onOperation);
+    const client = new TrackedClient(inner, identity, options.onOperation, (text) =>
+      options.onMessage?.(identity, text),
+    );
     this.clients.add(client);
     inner.on((event) => {
       if (event.type === 'process_exit') this.clients.delete(client);

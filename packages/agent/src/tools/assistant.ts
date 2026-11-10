@@ -73,7 +73,7 @@ function renderBrief(p: ProcedureBrief): string {
 }
 
 function renderCard(p: ProcedureListItem): string {
-  const lines = [renderProcedure(p).replace(/^Plan card updated\. /, '')];
+  const lines = [renderProcedure(p).replace(/^Procedure updated\. /, '')];
   if (p.summary) lines.push(`Summary: ${clip(p.summary, 400)}`);
   lines.push(
     `Agent: ${ACTIVITY[p.runtime.activity]}${p.runtime.error ? ` (error: ${p.runtime.error})` : ''}`,
@@ -131,7 +131,7 @@ export function assistantTools(bridge: BridgeTransport) {
       name: 'procedure_read',
       label: 'Read a procedure',
       description:
-        "Read one procedure's card as the user sees it: status, steps, requirements, key facts, next action and pending questions (ids, fields and options). Use it to answer questions about a procedure; ask its agent (procedure_message) only for what the card does not say.",
+        'Read one procedure as the user sees it: status, steps, requirements, key facts, next action and pending questions (ids, fields and options). Use it to answer questions about a procedure; ask its agent (procedure_message) only for what it does not say.',
       parameters: ProcedureReadParams,
       async execute(_id, params, signal) {
         return callBridge(bridge, 'procedures.read', params, signal, (procedure) =>

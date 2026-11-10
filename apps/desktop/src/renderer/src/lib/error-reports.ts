@@ -12,3 +12,11 @@ export function startErrorReports(): void {
       defaults.filter((i) => !['Breadcrumbs', 'HttpContext', 'BrowserSession'].includes(i.name)),
   });
 }
+
+/**
+ * An error an `ErrorBoundary` caught while rendering. React doesn't rethrow those, so the SDK's
+ * global handlers never see them. Without `startErrorReports` the SDK has no client: a no-op.
+ */
+export function reportRenderError(error: unknown, componentStack?: string | null): void {
+  Sentry.captureException(error, componentStack ? { contexts: { react: { componentStack } } } : {});
+}

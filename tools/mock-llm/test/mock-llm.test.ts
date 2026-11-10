@@ -310,12 +310,12 @@ describe('mock LLM', () => {
 
     const s1 = await step(results);
     expect(s1.calls.map((c) => c.name)).toEqual(['feedback_search']);
-    const s3 = await step(() => 'Plan card updated. Status: researching. Steps: 3.');
+    const s3 = await step(() => 'Procedure updated. Status: researching. Steps: 3.');
     expect(s3.calls[0]?.name).toBe('procedure_update');
     expect(JSON.parse(s3.calls[0]?.arguments ?? '{}').steps).toHaveLength(3);
     const s4 = await step(results);
     expect(s4.calls[0]?.name).toBe('ask_user');
-    const s5 = await step(() => 'Plan card updated. Status: planned.');
+    const s5 = await step(() => 'Procedure updated. Status: planned.');
     expect(s5.calls[0]?.name).toBe('procedure_update');
     const s6 = await step(results);
     expect(s6.calls).toHaveLength(0);

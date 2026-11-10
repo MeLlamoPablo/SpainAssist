@@ -5,7 +5,7 @@
 import type { BrowserServiceOptions } from '@sa/browser';
 import { describe, expect, it, vi } from 'vitest';
 import { NetLog } from '../../../src/net';
-import { createEvalBrowserFactory } from '../../../src/run/app/browser';
+import { createEvalBrowserFactory, WEBRTC_BLOCK } from '../../../src/run/app/browser';
 
 const created: BrowserServiceOptions[] = [];
 vi.mock('@sa/browser', async (importOriginal) => ({
@@ -49,6 +49,21 @@ describe('createEvalBrowserFactory', () => {
     expect(options.downloadsDir).toBe('/tmp/downloads');
     expect(options.launchArgs).toBeUndefined();
     expect(options.capture).toBeUndefined();
+  });
+
+  it("sets the pages' clock to the world's before any other script, only with the world's clock", () => {
+    created.length = 0;
+    const log = new NetLog({ worldId: 'w' });
+    createEvalBrowserFactory({ network, log })(appOptions({ initScripts: ['shim'] }));
+    expect(created[0]?.initScripts).toEqual(['shim', WEBRTC_BLOCK]);
+    const world = Date.parse('2026-11-03T10:00:00+01:00');
+    createEvalBrowserFactory({ network, log, clock: () => new Date(world) })(
+      appOptions({ initScripts: ['shim'] }),
+    );
+    const scripts = created[1]?.initScripts ?? [];
+    expect(scripts.slice(1)).toEqual(['shim', WEBRTC_BLOCK]);
+    const offset = Number(/const offset = (-?\d+);/.exec(scripts[0] as string)?.[1]);
+    expect(Math.abs(Date.now() + offset - world)).toBeLessThan(5_000);
   });
 
   it('records into the run directory, keeping typed secrets, only when asked', () => {

@@ -205,8 +205,6 @@ describe("the caps of a run and of an agent are the agent's doing", () => {
 
   it.each([
     ['run_budget', 'assistant', 'limit:cost'],
-    ['agent_budget', 'assistant', 'limit:cost'],
-    ['agent_budget', 'procedure-p_1', 'limit:cost'],
     ['input_too_large', 'procedure-p_1', 'limit:cost'],
     ['requests_cap', 'assistant', 'limit:requests'],
     ['requests_cap', 'procedure-p_1', 'limit:requests'],
@@ -229,13 +227,10 @@ describe("the caps of a run and of an agent are the agent's doing", () => {
   );
 
   it.each([
-    ['agent_budget', 'answerer'],
     ['agent_requests_cap', 'answerer'],
     ['input_too_large', 'answerer'],
     ['stopped', 'assistant'],
-    ['lifetime', 'assistant'],
-    ['daily', 'procedure-p_1'],
-    ['key_balance', 'assistant'],
+    ['key_balance', 'procedure-p_1'],
     ['codex_cooldown', 'assistant'],
   ] as const)('%s of %s is the harness budget: aborted, no score', async (reason, agent) => {
     env = createEnv();
@@ -259,11 +254,8 @@ describe("the caps of a run and of an agent are the agent's doing", () => {
       'requests_cap',
       'agent_requests_cap',
       'input_too_large',
-      'lifetime',
-      'daily',
       'key_balance',
       'run_budget',
-      'agent_budget',
       'codex_cooldown',
     ];
     for (const reason of reasons) {

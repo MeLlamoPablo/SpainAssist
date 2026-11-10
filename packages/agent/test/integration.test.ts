@@ -13,6 +13,7 @@ import { type AgentHostConfig, buildAgentLaunch, PiRpcClient } from '../src/inde
 import type { AgentEvent } from '../src/rpc/events';
 import {
   ASSISTANT_TOOL_NAMES,
+  COORDINATOR_TOOL_NAMES,
   EXA_TOOL_NAMES,
   TOOL_NAMES,
   WEB_RESEARCH_TOOL_NAME,
@@ -389,6 +390,27 @@ describe('agent host over RPC (integration)', () => {
     expect(events.slice(from).filter((e) => e.type === 'assistant_rewrite')).toHaveLength(1);
     expect(events.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
       text: `Sigue mal.\n\n${miscopied}`,
+    });
+  });
+
+  it('gives the codemode coordinator only delegation tools, and leaves its messages as written', async () => {
+    llm.setScenario({
+      rules: [{ when: { lastUser: 'tasa' }, reply: { text: '¿Para qué TIE es la tasa?' } }],
+    });
+    const { client, events } = await start(undefined, undefined, { role: 'orchestrator' });
+    await client.prompt('Quiero pagar la tasa de la TIE');
+    await waitFor(events, isRunEnd);
+    const completions = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
+    const body = completions[0]?.body as ChatRequest;
+    // No research, interfaces or procedures of its own: only agents and reading cards.
+    expect((body.tools ?? []).map((t) => t.function?.name)).toEqual([...COORDINATOR_TOOL_NAMES]);
+    expect(String(body.messages?.[0]?.content)).toContain('Never ask in chat');
+    // The prompt asks for no questions in chat; the host doesn't make it write one again.
+    expect(completions).toHaveLength(1);
+    const flow = events.filter((e) => e.type !== 'log' && e.type !== 'usage');
+    expect(flow.filter((e) => e.type === 'assistant_rewrite')).toHaveLength(0);
+    expect(flow.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
+      text: '¿Para qué TIE es la tasa?',
     });
   });
 

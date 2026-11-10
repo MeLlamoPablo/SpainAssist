@@ -3,10 +3,11 @@ import type { BlockedRequest, HostResolver } from '../research/fetch';
 import { assistantTools } from './assistant';
 import { browserTools } from './browser';
 import type { AnyToolDefinition } from './common';
+import { coordinatorTools } from './coordinator';
 import { documentTools } from './documents';
 import { downloadTools } from './downloads';
 import { fetchUrlTool } from './fetch-url';
-import { ASSISTANT_TOOL_NAMES, TOOL_NAMES } from './names';
+import { ASSISTANT_TOOL_NAMES, COORDINATOR_TOOL_NAMES, TOOL_NAMES } from './names';
 import { procedureTools } from './procedure';
 import { researchTools } from './research';
 import { runScriptTool } from './run-script';
@@ -96,6 +97,11 @@ export function createAssistantTools(
   ]);
 }
 
+/** The tools of the codemode coordinator. */
+export function createCoordinatorTools(deps: Pick<ToolDeps, 'bridge'>): AnyToolDefinition[] {
+  return finish(COORDINATOR_TOOL_NAMES, coordinatorTools(deps.bridge));
+}
+
 /** Checks the list against `names`, marks stateful tools sequential and sorts it like `names`. */
 function finish(names: readonly string[], tools: AnyToolDefinition[]): AnyToolDefinition[] {
   const order = new Map<string, number>(names.map((name, i) => [name, i]));
@@ -123,6 +129,9 @@ const SEQUENTIAL_TOOLS: ReadonlySet<string> = new Set([
   'procedure_respond',
   'procedure_stop',
   'procedure_cancel',
+  'agent_start',
+  'agent_message',
+  'agent_stop',
   'ask_user',
   'confirm_action',
   'request_user_action',

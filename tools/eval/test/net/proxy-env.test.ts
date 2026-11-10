@@ -84,8 +84,15 @@ describe('a process with an environment proxy', () => {
     });
 
   it('sends a request to loopback through the proxy, key and all (the control)', async () => {
-    expect(await run('unguarded')).toMatch(/^failed:/);
+    // Node's fetch either tunnels it (CONNECT, which the proxy refuses: "failed") or, as the
+    // built-in `NODE_USE_ENV_PROXY` support of current Node does for an http:// URL, forwards it
+    // with its headers (the proxy's own 502). Either way the loopback server never sees it.
+    expect(await run('unguarded')).toMatch(/^(failed:|status 502:$)/);
     expect(proxied.length).toBeGreaterThan(0);
+    // A forwarded request shows the proxy its headers: the key with them.
+    for (const line of proxied.filter((l) => !l.startsWith('CONNECT'))) {
+      expect(line).toContain('Bearer voucher-key');
+    }
   }, 30_000);
 
   it('sends it straight to the loopback server once the harness has done its part', async () => {

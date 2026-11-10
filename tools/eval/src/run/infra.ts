@@ -11,11 +11,10 @@ type CapReason = Extract<MeterEvent, { type: 'cap' }>['reason'];
  *
  * - the INFRASTRUCTURE failed (the model gateway, an agent host process that crashed, Chromium that
  *   would not launch, SpainBench): the run ends as `error`, unscored;
- * - the harness's own BUDGET said no (the key's reserve, the daily and lifetime caps, the kill
- *   switch, the gateway's limits, a Codex plan window): the run ends as `limit:budget`, unscored
- *   (status `aborted`);
- * - the AGENT hit a limit its own behaviour trips (the per-run and per-agent request and dollar
- *   caps): the run ends as `limit:requests` or `limit:cost` and the rules judge what happened.
+ * - the harness's own BUDGET said no (the key's balance, the kill switch, the gateway's limits, a
+ *   Codex plan window): the run ends as `limit:budget`, unscored (status `aborted`);
+ * - the AGENT hit a limit its own behaviour trips (the request caps, the run's cost limit): the run
+ *   ends as `limit:requests` or `limit:cost` and the rules judge what happened.
  */
 export type Blame =
   | { by: 'infrastructure'; source: 'model' | 'host' | 'browser'; kind: string }
@@ -50,11 +49,11 @@ export function classifyAgentFailure(kind: AgentErrorKind): Blame {
 export type CapEnding = 'limit:cost' | 'limit:requests' | 'limit:budget';
 
 /**
- * The meter's caps, by who trips them. The dollar and request caps of a run and of one agent stop
- * an agent that loops or bloats its context: the agent's doing, so they are scored limits (`run_budget`
- * is the fixture's own cost limit; `requests_cap` counts the whole run). Caps of the simulated user
- * (the `answerer` agent, a few cents) are the harness's. So are the key's reserve, the daily and
- * lifetime caps, the kill switch and a Codex usage limit.
+ * The meter's caps, by who trips them. The run's cost limit and the request caps of a run and of
+ * one agent stop an agent that loops or bloats its context: the agent's doing, so they are scored
+ * limits (`run_budget` is the fixture's own cost limit; `requests_cap` counts the whole run). Caps
+ * of the simulated user (the `answerer` agent) are the harness's. So are the key's balance, the
+ * kill switch and a Codex usage limit.
  */
 export function classifyCap(reason: CapReason, agent: string): CapEnding {
   const answerer = agent === 'answerer';
@@ -65,12 +64,9 @@ export function classifyCap(reason: CapReason, agent: string): CapEnding {
       return 'limit:requests';
     case 'agent_requests_cap':
       return answerer ? 'limit:budget' : 'limit:requests';
-    case 'agent_budget':
     case 'input_too_large':
       return answerer ? 'limit:budget' : 'limit:cost';
     case 'stopped':
-    case 'lifetime':
-    case 'daily':
     case 'key_balance':
     case 'codex_cooldown':
       return 'limit:budget';

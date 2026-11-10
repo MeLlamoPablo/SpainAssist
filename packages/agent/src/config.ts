@@ -10,8 +10,10 @@ export const AgentHostConfigSchema = z.object({
   /**
    * "assistant": the orchestrator behind the single chat (delegates everything);
    * "procedure": the agent of one procedure (does the work).
+   * Codemode (`codemode` flag, docs/codemode.md): "orchestrator" (the chat) and "agent"
+   * (background work, any procedures); one tool, `codemode`.
    */
-  role: z.enum(['assistant', 'procedure']).default('procedure'),
+  role: z.enum(['assistant', 'procedure', 'orchestrator', 'agent']).default('procedure'),
   /** The procedure this agent works on, or ASSISTANT_AGENT_ID for the assistant. */
   procedureId: z.string().min(1),
   /** pi session file of this agent (JSONL). Created if missing, resumed otherwise. */

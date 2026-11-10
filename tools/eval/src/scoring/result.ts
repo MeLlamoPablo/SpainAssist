@@ -72,8 +72,8 @@ export const CUT_SHORT_ENDINGS: readonly string[] = [
 
 /**
  * Endings that give no score, and the status they give. `limit:budget` and `replay-miss` are the
- * harness running out of money or recordings (the key's reserve, the daily and lifetime caps, the
- * kill switch, the gateway's limits, the cache), not the agent's doing; `error` includes the
+ * harness running out of money or recordings (the key's balance, the kill switch, the gateway's
+ * limits, the cache), not the agent's doing; `error` includes the
  * infrastructure failing (the model gateway, an agent host that crashed, Chromium, SpainBench).
  */
 const UNSCORED_ENDINGS: Record<string, RunStatus> = {

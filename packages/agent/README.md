@@ -53,6 +53,20 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 - `src/host/hooks.ts`, `src/host/runtime.ts` — `HostHooks` and the `@sa/agent/host-runtime`
   subpath for harnesses (see "Eval hooks"); the shipped host does not use them.
 
+## Codemode
+
+Behind the `codemode` flag (`docs/codemode.md`), roles `orchestrator` and `agent` have one
+tool, `codemode`, which runs a workflow module in QuickJS (`src/codemode/`):
+
+| File | What |
+| --- | --- |
+| `kernel.ts` | JavaScript evaluated in every run: `api`, `@spainassist/ui`, durable state, the hooks renderer, event dispatch |
+| `transform.ts` | sucrase: JSX and ESM to the kernel's module format, keeping line numbers |
+| `workflow-run.ts` | One run in a fresh QuickJS instance: host calls, CPU slices, cancellation |
+| `host-ops.ts` | What each `api.*` operation does: bridge calls (with the procedure header), research, fetch |
+| `engine.ts` | Runs in the host: begin/end with main, event long-poll, detaching, periodic resume |
+| `tool.ts`, `declarations.ts`, `classify.ts` | The tool, the API's `.d.ts` per role, `api.classify` |
+
 ## Tools
 
 The names are in `src/tools/names.ts`. The assistant has `procedure_list`, `procedure_read`,

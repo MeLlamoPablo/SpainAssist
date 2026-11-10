@@ -94,6 +94,7 @@ describe('defaults', () => {
         dniePhone: 'off',
         mustUpdate: false,
         errorReports: false,
+        codemode: false,
       },
       errorReports: false,
     });
@@ -146,6 +147,7 @@ describe('defaults', () => {
       dniePhone: 'off',
       mustUpdate: false,
       errorReports: false,
+      codemode: false,
     });
     expect(credentialAllowedOn('clave_permanente', 'https://localhost/')).toBe(false);
     expect(existsSync(join(root, 'elsewhere'))).toBe(false);

@@ -78,7 +78,7 @@ export function evaluate(
     // A busy machine makes a page slow, and a scripted model that waits for it looks again: more
     // requests than the meter's caps and the fixtures' own limits for a real run allow. These runs
     // test the harness, not those caps (a test of them passes its own `limits` and `meterLimits`).
-    meterLimits: { perAgentUsd: 100, perAgentRequests: 100_000, perRunRequests: 100_000 },
+    meterLimits: { perAgentRequests: 100_000, perRunRequests: 100_000 },
     // Stopping everything takes longer when the machine is busy: that is not what these test.
     shutdownTimeoutMs: 90_000,
     ...request,

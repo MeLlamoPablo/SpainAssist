@@ -49,6 +49,7 @@ describe('buildAnswererMessages', () => {
     expect(system!.content).toContain(INSTRUCTIONS);
     expect(system!.content).toMatch(/Never invent data/);
     expect(system!.content).toMatch(/Never give passwords/);
+    expect(system!.content).toMatch(/A preference the facts state answers a choice/);
     expect(user!.role).toBe('user');
     expect(user!.content).toContain('[you] sácame la vida laboral');
     expect(user!.content).toContain('[assistant] Voy a empezar el trámite.');

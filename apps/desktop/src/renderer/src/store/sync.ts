@@ -2,6 +2,7 @@ import type { CompanionStatus, SaEvent } from '@sa/shared';
 import { api } from '../lib/api';
 import { useAppStore } from './app';
 import { useChatStore } from './chat';
+import { useCodemodeStore } from './codemode';
 import { useProcedureStore } from './procedures';
 import { useVaultStore } from './vault';
 
@@ -42,6 +43,14 @@ function applyEvent(event: SaEvent): void {
       return;
     case 'updates.status':
       useAppStore.setState({ updates: event.status });
+      return;
+    case 'codemode.agent':
+      useCodemodeStore.getState().upsertAgent(event.agent);
+      return;
+    case 'codemode.workflow':
+      useCodemodeStore.getState().upsertWorkflow(event.workflow);
+      return;
+    case 'codemode.agentLog':
       return;
   }
 }
@@ -86,7 +95,7 @@ export async function startSync(): Promise<() => void> {
 
 async function loadInitialState(): Promise<void> {
   const appInfo = api.invoke('app.info');
-  const [info, settings, provider, procedures, state, companion, updates, dataImport] =
+  const [info, settings, provider, procedures, state, companion, updates, dataImport, codemode] =
     await Promise.all([
       appInfo,
       api.invoke('settings.get'),
@@ -99,9 +108,12 @@ async function loadInitialState(): Promise<void> {
       ),
       api.invoke('updates.status'),
       api.invoke('dataImport.status'),
+      // Main answers empty without the codemode feature flag.
+      api.invoke('codemode.state'),
     ]);
   document.documentElement.dataset.platform = info.platform;
   useProcedureStore.getState().setAll(procedures);
+  useCodemodeStore.getState().setAll(codemode);
   useChatStore.getState().setState(state);
   useAppStore.setState({
     info,

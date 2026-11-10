@@ -143,7 +143,7 @@ export function formatBudgetStatus(status: BudgetStatus): string {
 
   lines.push('', 'Ledger (real voucher spend; cache replays are free)');
   lines.push(
-    `  since the last epoch ${usd(ledger.sinceEpochUsd)}${ledger.lastEpochAt ? ` (epoch ${ledger.lastEpochAt})` : ''}, all time ${usd(ledger.allTimeUsd)}`,
+    `  all time ${usd(ledger.allTimeUsd)}`,
     `  requests: ${ledger.requests.forward} forwarded, ${ledger.requests.replay} replayed (${ledger.looseReplays} loose; would have cost ${usd(ledger.replayedUsd)}), ${ledger.requests.reject} refused`,
   );
   if (ledger.pending.requests > 0) {
@@ -176,8 +176,8 @@ export function formatBudgetStatus(status: BudgetStatus): string {
   lines.push('', 'Caps (voucher runs)');
   lines.push(
     `  per run ${v.perRunRequests} requests and the cost limit of its fixture (--max-cost overrides it; ${usd(v.perRunUsd)} for a run without one)`,
-    `  per agent ${usd(v.perAgentUsd)} and ${v.perAgentRequests} requests (answerer ${usd(v.perAgentUsdByRole.answerer ?? v.perAgentUsd)}); largest request ${v.maxInputTokensPerRequest} input tokens`,
-    `  per day ${usd(v.dailyUsd)}${v.lifetimeUsd !== undefined ? `, lifetime ${usd(v.lifetimeUsd)}` : ''} (UTC, all runs and processes); and what the key has left`,
+    `  per agent ${v.perAgentRequests} requests; largest request ${v.maxInputTokensPerRequest} input tokens`,
+    '  and what the key has left: runs may spend all of it',
     '  A request is refused by the first cap it reaches; each one counts the worst case of the requests in flight, its own included.',
   );
 

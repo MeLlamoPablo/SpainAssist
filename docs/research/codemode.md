@@ -1,6 +1,7 @@
 # Codemode harness: research and design options
 
-Research: 2026-10-22–23. Saved: 2026-10-23. Status: planning only; no implementation.
+Research: 2026-10-22–23. Saved: 2026-10-23. Status: implemented behind the `codemode` flag on
+2026-11-08; the design as built and its decisions are in [../codemode.md](../codemode.md).
 
 This records the harness investigation, external research, API and UI alternatives, and the
 subsequent user corrections. It distinguishes requirements from proposals: illustrative APIs in

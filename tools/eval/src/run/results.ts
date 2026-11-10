@@ -3,15 +3,16 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
-import type {
-  BenchWrongTurn,
-  CacheMode,
-  EvalModelChoice,
-  EvalProvider,
-  Fixture,
-  Observation,
-  RunLimits,
-  RunResult,
+import {
+  type BenchWrongTurn,
+  BRIDGE_CALL_PREFIX,
+  type CacheMode,
+  type EvalModelChoice,
+  type EvalProvider,
+  type Fixture,
+  type Observation,
+  type RunLimits,
+  type RunResult,
 } from '../contracts';
 import { fixtureSecrets } from '../fixtures';
 import { ensurePrivateDir, evalHome, writeFileAtomic } from '../llm/home';
@@ -155,6 +156,8 @@ export interface RunManifest {
   limits: RunLimits;
   options: {
     captureBrowser: boolean;
+    /** The app ran with the `codemode` feature flag; absent before it existed and when off. */
+    codemode?: boolean;
     settleTimeoutMs: number;
     evaluateIntervalMs: number;
     checkpoint: boolean;
@@ -450,6 +453,7 @@ export function copyLedgerLines(ledgerDir: string, runId: string, target: string
 /** What happened in a run, counted from its observations. Deterministic for a given input. */
 export function renderActivity(observations: readonly Observation[]): string {
   const toolCalls = new Map<string, number>();
+  const steps = new Map<string, number>();
   const byAgent = { assistant: 0, procedure: 0 };
   const answers = { structured: 0, answerer: 0, default: 0 };
   const net = new Map<string, number>();
@@ -460,6 +464,10 @@ export function renderActivity(observations: readonly Observation[]): string {
   for (const observation of observations) {
     switch (observation.type) {
       case 'tool_start':
+        if (observation.toolCallId.startsWith(BRIDGE_CALL_PREFIX)) {
+          steps.set(observation.tool, (steps.get(observation.tool) ?? 0) + 1);
+          break;
+        }
         byAgent[observation.agent]++;
         toolCalls.set(observation.tool, (toolCalls.get(observation.tool) ?? 0) + 1);
         break;
@@ -495,6 +503,11 @@ export function renderActivity(observations: readonly Observation[]): string {
     `- Tool calls: ${total} (assistant ${byAgent.assistant}, procedure ${byAgent.procedure})${
       total > 0 ? `; most used: ${sorted(toolCalls, 5)}` : ''
     }`,
+    ...(steps.size > 0
+      ? [
+          `- Workflow steps (codemode bridge calls): ${[...steps.values()].reduce((a, b) => a + b, 0)}; most used: ${sorted(steps, 5)}`,
+        ]
+      : []),
     `- Prompts: ${shown} shown, ${answered} answered (scripted ${answers.structured}, answerer ${answers.answerer}, default ${answers.default})`,
     `- Network: ${netTotal} request(s)${netTotal > 0 ? ` (${sorted(net)})` : ''}`,
   ];

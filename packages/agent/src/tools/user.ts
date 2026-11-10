@@ -416,7 +416,7 @@ export function userTools(bridge: BridgeTransport) {
                   : []),
               ...(response.notes ? [`The user's notes: ${response.notes}`] : []),
               response.outcome === 'done'
-                ? 'Use what they learned: update the card and tell the user what comes next.'
+                ? 'Use what they learned: update the procedure and tell the user what comes next.'
                 : 'Ask how they want to continue, or set nextAction if they will call later.',
             ].join('\n'),
             {

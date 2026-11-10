@@ -69,13 +69,12 @@ describe('spend ledger', () => {
       cost: { usd: 0, source: 'none' },
       apiEquivalentUsd: 3,
     });
-    ledger.append({ ...base, kind: 'reject', reason: 'daily', status: 402, cost: undefined });
+    ledger.append({ ...base, kind: 'reject', reason: 'run_budget', status: 402, cost: undefined });
     const summary = ledger.summary();
-    expect(summary.sinceEpochUsd).toBeCloseTo(0.01, 12);
     expect(summary.allTimeUsd).toBeCloseTo(0.01, 12);
     expect(summary.replayedUsd).toBeCloseTo(0.5, 12);
     expect(summary.requests).toEqual({ forward: 3, replay: 1, reject: 1 });
-    expect(ledger.spentTodayUsd()).toBeCloseTo(0.01, 12);
+    expect(summary.byDay['2026-10-17']).toBeCloseTo(0.01, 12);
     expect(summary.byRun['run-1']).toMatchObject({ requests: 3, replays: 1, rejects: 1 });
   });
 
@@ -107,11 +106,11 @@ describe('spend ledger', () => {
     const a = new Ledger(dir, now);
     a.append(base);
     const b = new Ledger(dir, now);
-    expect(b.spentSinceEpochUsd()).toBeCloseTo(0.01, 12);
+    expect(b.summary().allTimeUsd).toBeCloseTo(0.01, 12);
     b.append(base);
-    expect(a.spentSinceEpochUsd()).toBeCloseTo(0.01, 12); // not refreshed yet
+    expect(a.summary().allTimeUsd).toBeCloseTo(0.01, 12); // not refreshed yet
     a.refresh();
-    expect(a.spentSinceEpochUsd()).toBeCloseTo(0.02, 12);
+    expect(a.summary().allTimeUsd).toBeCloseTo(0.02, 12);
 
     const file = join(dir, 'spend-2026-10.jsonl');
     const line = JSON.stringify({
@@ -123,27 +122,13 @@ describe('spend ledger', () => {
     });
     appendFileSync(file, line.slice(0, 40));
     a.refresh();
-    expect(a.spentSinceEpochUsd()).toBeCloseTo(0.02, 12);
+    expect(a.summary().allTimeUsd).toBeCloseTo(0.02, 12);
     appendFileSync(file, `${line.slice(40)}\n`);
     a.refresh();
-    expect(a.spentSinceEpochUsd()).toBeCloseTo(0.52, 12);
+    expect(a.summary().allTimeUsd).toBeCloseTo(0.52, 12);
     appendFileSync(file, 'not json at all\n');
     a.refresh();
-    expect(a.spentSinceEpochUsd()).toBeCloseTo(0.52, 12);
-  });
-
-  it('resets the lifetime total at an epoch but keeps the history', () => {
-    const ledger = new Ledger(dir, now);
-    ledger.append(base);
-    clock = new Date('2026-10-17T12:00:00.000Z');
-    ledger.epoch('new voucher');
-    expect(ledger.spentSinceEpochUsd()).toBe(0);
-    expect(ledger.summary().lastEpochAt).toBe('2026-10-17T12:00:00.000Z');
-    ledger.append(base);
-    const summary = ledger.summary();
-    expect(summary.sinceEpochUsd).toBeCloseTo(0.01, 12);
-    expect(summary.allTimeUsd).toBeCloseTo(0.02, 12);
-    expect(new Ledger(dir, now).spentSinceEpochUsd()).toBeCloseTo(0.01, 12);
+    expect(a.summary().allTimeUsd).toBeCloseTo(0.52, 12);
   });
 
   it('counts Codex requests and remembers the last key headers', () => {
@@ -179,17 +164,15 @@ describe('spend ledger', () => {
       ledger.reserve(reservation('r1'));
       ledger.reserve(reservation('r2', 0.03));
       expect(ledger.pendingUsd()).toBeCloseTo(0.05, 12);
-      expect(ledger.pendingUsd({ day: '2026-10-17' })).toBeCloseTo(0.05, 12);
-      expect(ledger.pendingUsd({ day: '2026-10-16' })).toBe(0);
       // Pending is not spend, and a reservation is not a request.
-      expect(ledger.spentTodayUsd()).toBe(0);
+      expect(ledger.summary().allTimeUsd).toBe(0);
       expect(ledger.summary().requests).toEqual({ forward: 0, replay: 0, reject: 0 });
       expect(ledger.summary().pending).toMatchObject({ requests: 2 });
       expect(ledger.summary().pending.usd).toBeCloseTo(0.05, 12);
 
       ledger.append({ ...base, rid: 'r1', cost: { usd: 0.004, source: 'header' } });
       expect(ledger.pendingUsd()).toBeCloseTo(0.03, 12);
-      expect(ledger.spentTodayUsd()).toBeCloseTo(0.004, 12);
+      expect(ledger.summary().allTimeUsd).toBeCloseTo(0.004, 12);
       ledger.release('r2');
       expect(ledger.pendingUsd()).toBe(0);
       expect(ledger.summary().pending).toEqual({ requests: 0, usd: 0 });
@@ -201,12 +184,11 @@ describe('spend ledger', () => {
       // Another process starts later and finds the reservation of a process that never settled.
       const b = new Ledger(dir, now);
       expect(b.pendingUsd()).toBeCloseTo(0.02, 12);
-      expect(b.spentTodayUsd() + b.pendingUsd({ day: '2026-10-17' })).toBeCloseTo(0.02, 12);
       // Only a recent reservation can still be in flight: the old one is no longer subtracted
-      // from the key's balance (the key server already knows what it cost), but still counts today.
+      // from the key's balance (the key server already knows what it cost), but stays on the books.
       clock = new Date('2026-10-17T11:00:00.000Z');
       expect(b.pendingUsd({ sinceMs: clock.getTime() - 30 * 60_000 })).toBe(0);
-      expect(b.pendingUsd({ day: '2026-10-17' })).toBeCloseTo(0.02, 12);
+      expect(b.pendingUsd()).toBeCloseTo(0.02, 12);
       expect(b.summary().pending).toMatchObject({
         requests: 1,
         oldest: '2026-10-17T10:00:00.000Z',
@@ -233,22 +215,12 @@ describe('spend ledger', () => {
       ledger.append({ ...base, provider: 'codex', cost: undefined });
       expect(ledger.summary().codex).toEqual({ total: 2 });
     });
-
-    it('keeps reservations out of the lifetime total of an earlier epoch', () => {
-      const ledger = new Ledger(dir, now);
-      ledger.reserve(reservation('before'));
-      clock = new Date('2026-10-17T12:00:00.000Z');
-      ledger.epoch('new voucher');
-      ledger.reserve(reservation('after', 0.01));
-      expect(ledger.pendingSinceEpochUsd()).toBeCloseTo(0.01, 12);
-      expect(ledger.pendingUsd()).toBeCloseTo(0.03, 12);
-    });
   });
 
   it('starts empty when the directory does not exist', () => {
     const ledger = new Ledger(join(t.home, 'nowhere'), now);
     expect(ledger.summary()).toMatchObject({
-      sinceEpochUsd: 0,
+      allTimeUsd: 0,
       requests: { forward: 0, replay: 0, reject: 0 },
       pending: { requests: 0, usd: 0 },
     });

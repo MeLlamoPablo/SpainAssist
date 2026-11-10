@@ -191,6 +191,7 @@ function systemPrompt(request: AnswererRequest): string {
     '',
     'Rules:',
     '- Answer only with what you know from the facts above. If they do not say, do not invent it: leave a form field out (null) or say you do not know.',
+    '- A preference the facts state answers a choice: when they say any option will do or how to pick one ("any office in Madrid", "the earliest date"), pick an option that fits it instead of leaving the field out.',
     '- Never make up passwords, PINs, codes, ID numbers, document numbers or any credential that the facts do not give.',
     `- Write in ${language}, informally, in short sentences.`,
     '- Reply with ONE JSON object and nothing else: no markdown fences, no commentary.',

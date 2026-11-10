@@ -26,9 +26,12 @@ export function MapOptionsPicker({
   describedBy,
   invalid,
   onReadyChange,
+  loadPins,
 }: {
   /** The pending prompt item, whose map pins main keeps. */
   promptId: string;
+  /** Where the pins come from (workflow interfaces); default the pending prompt's. */
+  loadPins?: () => Promise<(MapPoint | null)[] | null>;
   field: FormField;
   value: string;
   onChange: (value: string) => void;
@@ -89,14 +92,13 @@ export function MapOptionsPicker({
   useEffect(() => {
     let active = true;
     setPinsFailed(false);
-    api
-      .invoke('places.pins', promptId, field.key)
+    (loadPins ? loadPins() : api.invoke('places.pins', promptId, field.key))
       .then((found) => active && setPoints(found))
       .catch(() => active && setPinsFailed(true));
     return () => {
       active = false;
     };
-  }, [promptId, field.key]);
+  }, [promptId, field.key, loadPins]);
   const noMap = points === null;
   const places = sortedPlaces(options, points ?? [], home);
   const labels = [t.street, t.postal, t.city, t.province, t.country];

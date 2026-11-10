@@ -58,12 +58,15 @@ export function dayHeading(date: string, lang: Lang): { weekday: string; day: st
 
 /** "lunes, 19 de octubre de 2026, 19:00" */
 export function slotLabel(slot: string, lang: Lang): string {
+  const day = utc(slot.slice(0, 10));
+  // Formatting an invalid date throws: show what isn't a slot as it is.
+  if (Number.isNaN(day.getTime())) return slot;
   const date = new Intl.DateTimeFormat(locale(lang), {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
     timeZone: 'UTC',
-  }).format(utc(slot.slice(0, 10)));
+  }).format(day);
   return `${date}, ${slot.slice(11, 16)}`;
 }

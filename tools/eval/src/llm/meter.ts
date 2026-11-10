@@ -5,7 +5,7 @@ import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import type { CacheMode, EvalProvider } from '../contracts';
 import { alignIds } from './align';
-import { agentRole, type CacheHit, keptHeaders, type MissDiagnostic, ResponseCache } from './cache';
+import { type CacheHit, keptHeaders, type MissDiagnostic, ResponseCache } from './cache';
 import { type CanonicalRequest, canonicalizeRequest } from './canonical';
 import { requireCodexConsent } from './codex-auth';
 import { cooldownFromError, isUsageLimit, readCooldown, writeCooldown } from './codex-cooldown';
@@ -98,9 +98,8 @@ const LIMIT_HEADER = /^(?:x-codex-(?!turn-state$)|x-ratelimit-|retry-after$)/i;
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 /**
  * How long a reservation without a settle line can still be a request in flight: a reasoning model
- * may stay silent for minutes. Older ones belong to a process that died; they keep counting
- * against the day and the lifetime ceiling (their cost may be billed), but no longer against the
- * key's balance, which the key server reports with whatever they cost.
+ * may stay silent for minutes. Older ones belong to a process that died: they no longer count
+ * against the key's balance, which the key server reports with whatever they cost.
  */
 const IN_FLIGHT_MS = 30 * 60_000;
 /**
@@ -118,7 +117,6 @@ const REPLAY_BASE_PATH: Record<EvalProvider, string> = {
 interface Agent {
   totals: UsageTotals;
   inflightCount: number;
-  inflightUsd: number;
 }
 
 interface Occurrence {
@@ -193,7 +191,7 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
   const agentOf = (run: Run, key: string): Agent => {
     let agent = run.agents.get(key);
     if (!agent) {
-      agent = { totals: new UsageTotals(), inflightCount: 0, inflightUsd: 0 };
+      agent = { totals: new UsageTotals(), inflightCount: 0 };
       run.agents.set(key, agent);
     }
     return agent;
@@ -436,22 +434,6 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
     }
     if (codex) return undefined;
 
-    if (run.provider === 'voucher') {
-      if (limits.lifetimeUsd !== undefined) {
-        const spent = ledger.spentSinceEpochUsd() + ledger.pendingSinceEpochUsd() - ownUsd;
-        if (spent + reserveUsd > limits.lifetimeUsd) {
-          return refuse(
-            'lifetime',
-            `spent ${formatUsd(spent)} of the ${formatUsd(limits.lifetimeUsd)} lifetime ceiling`,
-          );
-        }
-      }
-      const day = clock().toISOString().slice(0, 10);
-      const today = ledger.spentTodayUsd() + ledger.pendingUsd({ day }) - ownUsd;
-      if (today + reserveUsd > limits.dailyUsd) {
-        return refuse('daily', `spent ${formatUsd(today)} of ${formatUsd(limits.dailyUsd)} today`);
-      }
-    }
     const remaining = keyRemaining();
     if (remaining !== undefined) {
       const inFlight = ledger.pendingUsd({ sinceMs: nowMs - IN_FLIGHT_MS }) - ownUsd;
@@ -467,14 +449,6 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
       return refuse(
         'run_budget',
         `this run spent ${formatUsd(runSpent)} of ${formatUsd(limits.perRunUsd)}`,
-      );
-    }
-    const agentCap = limits.perAgentUsdByRole[agentRole(agentKey)] ?? limits.perAgentUsd;
-    const agentSpent = agent.totals.costUsd() + agent.inflightUsd;
-    if (agentSpent + reserveUsd > agentCap) {
-      return refuse(
-        'agent_budget',
-        `agent ${agentKey} spent ${formatUsd(agentSpent)} of ${formatUsd(agentCap)}`,
       );
     }
     return undefined;
@@ -936,7 +910,6 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
       run.inflightCount++;
       run.inflightUsd += reserveUsd;
       agent.inflightCount++;
-      agent.inflightUsd += reserveUsd;
       let released = false;
       const release = (settledInLedger: boolean): void => {
         if (released) return;
@@ -944,7 +917,6 @@ export async function createMeter(options: MeterOptions): Promise<MeterHandle> {
         run.inflightCount--;
         run.inflightUsd -= reserveUsd;
         agent.inflightCount--;
-        agent.inflightUsd -= reserveUsd;
         // A request that ended with no line of its own (the settling failed) is taken off the books.
         if (!settledInLedger) ledger.release(rid);
       };

@@ -15,6 +15,7 @@ import {
   type SaArgs,
   type SaMethod,
   SettingsPatch,
+  UiEvent,
 } from '@sa/shared';
 import { z } from 'zod';
 
@@ -138,6 +139,22 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
     id,
     z.strictObject({ can: DniAccessNumber.optional(), pin: DniePin.optional() }),
   ]),
+  'codemode.state': none,
+  'codemode.uiEvent': z.tuple([z.string().min(1).max(64), z.string().min(1).max(100), UiEvent]),
+  'codemode.pins': z.tuple([
+    z.string().min(1).max(64),
+    z.string().min(1).max(100),
+    z.array(z.string().max(500)).max(50),
+  ]),
+  'codemode.agentLog': z.tuple([id]),
+  'codemode.stopAgent': z.tuple([id]),
+  'codemode.uiFailed': z.tuple([
+    z.string().min(1).max(64),
+    z.string().min(1).max(100),
+    z.number().int().nonnegative(),
+    z.string().max(2000),
+  ]),
+  'codemode.cancelWorkflow': z.tuple([z.string().min(1).max(64)]),
   'media.get': z.tuple([id]),
   'browser.show': z.tuple([id]),
 };

@@ -6,13 +6,11 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { defineDict, useLang, useT } from '../../i18n';
 import { cn } from '../../lib/cn';
 import { formatCredits } from '../../lib/format';
 import { useAppStore, type View } from '../../store/app';
-import { cardState, useProcedureStore } from '../../store/procedures';
+import { useCodemodeStore } from '../../store/codemode';
 
 const dict = defineDict({
   es: {
@@ -20,7 +18,7 @@ const dict = defineDict({
     procedures: 'Mis trámites',
     myData: 'Mis datos',
     settings: 'Ajustes',
-    waiting: (n: number) => (n === 1 ? '1 trámite te espera' : `${n} trámites te esperan`),
+    waiting: (n: number) => (n === 1 ? '1 formulario te espera' : `${n} formularios te esperan`),
     voucher: 'Bono',
     lowCredit: 'Te queda poco saldo',
     none: 'Conecta una IA',
@@ -32,7 +30,7 @@ const dict = defineDict({
     myData: 'My data',
     settings: 'Settings',
     waiting: (n: number) =>
-      n === 1 ? '1 procedure is waiting for you' : `${n} procedures are waiting for you`,
+      n === 1 ? '1 form is waiting for you' : `${n} forms are waiting for you`,
     voucher: 'Voucher',
     lowCredit: 'Credit is running low',
     none: 'Connect an AI',
@@ -52,10 +50,10 @@ export function TopBar() {
   const t = useT(dict);
   const view = useAppStore((s) => s.view);
   const navigate = useAppStore((s) => s.navigate);
-  const procedures = useProcedureStore(useShallow((s) => Object.values(s.byId)));
-  const waiting = useMemo(
-    () => procedures.filter((p) => !p.archived && cardState(p) === 'yourTurn').length,
-    [procedures],
+  // Only the workflows' open forms (codemode) count: a card's "Siguiente" is not a reason to
+  // badge the tab.
+  const waiting = useCodemodeStore((s) =>
+    Object.values(s.workflows).reduce((n, w) => n + w.ui.length, 0),
   );
 
   return (

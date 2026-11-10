@@ -8,22 +8,41 @@ import {
   type BridgeMethod,
   BridgeParams,
   type BridgeResults,
+  type CodemodeBridgeRole,
+  codemodeMayCall,
+  PROCEDURE_HEADER,
   procedureMayCall,
 } from '@sa/shared';
 import type { z } from 'zod';
 import { BridgeError } from '../core/errors';
 import type { Logger } from '../core/logger';
 import { errorMessage } from '../core/util';
+import { runAsCaller } from './caller';
 import type { TokenRegistry } from './tokens';
 
 export interface BridgeContext {
   /**
    * The calling agent: a procedure id, or ASSISTANT_AGENT_ID for the assistant. Methods are
    * gated by kind before handlers run, so procedure-scoped handlers always get a procedure id.
+   * Codemode agents act on the procedure they name in the `x-sa-procedure` header (its browser,
+   * its card); without one, this is the agent's id.
    */
   procedureId: string;
+  /** The calling agent's id (codemode agents differ from `procedureId`). */
+  agentId: string;
   /** Aborted when the agent's HTTP request closes (e.g. the run was aborted). */
   signal: AbortSignal;
+}
+
+/** A call that passed the policy and its params' validation, about to reach its handler. */
+export interface BridgeCall {
+  method: BridgeMethod;
+  /** The validated params. */
+  params: unknown;
+  agentId: string;
+  procedureId: string;
+  /** Codemode: the caller's role; undefined for the classic harness's agents. */
+  role?: CodemodeBridgeRole;
 }
 
 /** The agent tool behind a bridge method: "browser.fillFromVault" -> "browser_fill_from_vault". */
@@ -40,6 +59,27 @@ export type BridgeHandlers = {
   ) => Promise<BridgeResults[M]>;
 };
 
+/** The codemode harness's own methods (codemode/handlers.ts). */
+type CodemodeMethod = Extract<
+  BridgeMethod,
+  | `workflow.${string}`
+  | `workflows.${string}`
+  | `procs.${string}`
+  | `agents.${string}`
+  | 'browser.query'
+  | 'browser.reload'
+  | 'browser.info'
+>;
+export type CodemodeHandlers = Pick<BridgeHandlers, CodemodeMethod>;
+export type ClassicHandlers = Omit<BridgeHandlers, CodemodeMethod>;
+
+/** Codemode methods that act on a procedure, so they need the procedure header. */
+function needsProcedure(method: BridgeMethod): boolean {
+  return (
+    method.startsWith('browser.') || method === 'downloads.save' || method.startsWith('prompt.')
+  );
+}
+
 const STATUS: Record<BridgeErrorCode, number> = {
   bad_request: 400,
   unauthorized: 401,
@@ -49,6 +89,7 @@ const STATUS: Record<BridgeErrorCode, number> = {
   internal: 500,
   browser_error: 502,
   unavailable: 503,
+  conflict: 409,
 };
 
 const METHOD_PATH = /^\/rpc\/([A-Za-z]+\.[A-Za-z]+)$/;
@@ -83,6 +124,11 @@ export class BridgeServer {
       logger: Logger;
       /** The agent a token belongs to still exists (the assistant, or a live procedure). */
       agentExists(id: string): boolean;
+      /** Codemode: the role of an agent, or undefined for the classic harness's agents. */
+      roleOf?(agentId: string): CodemodeBridgeRole | undefined;
+      procedureExists?(id: string): boolean;
+      /** Hears every call before its handler runs (the eval suite's observers; none in the app). */
+      onCall?(call: BridgeCall): void;
       maxBodyBytes?: number;
     },
   ) {}
@@ -157,12 +203,32 @@ export class BridgeServer {
 
     const auth = req.headers.authorization ?? '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : undefined;
-    const procedureId = this.deps.tokens.resolve(token);
-    if (!procedureId || !this.deps.agentExists(procedureId))
+    const agentId = this.deps.tokens.resolve(token);
+    if (!agentId || !this.deps.agentExists(agentId))
       return this.fail(res, 'unauthorized', 'Invalid or expired token');
-    const allowed =
-      procedureId === ASSISTANT_AGENT_ID ? ASSISTANT_METHODS.has(method) : procedureMayCall(method);
+    const role = this.deps.roleOf?.(agentId);
+    const allowed = role
+      ? codemodeMayCall(role, method)
+      : agentId === ASSISTANT_AGENT_ID
+        ? ASSISTANT_METHODS.has(method)
+        : procedureMayCall(method);
     if (!allowed) return this.fail(res, 'policy_denied', 'This method is not available to you.');
+    let procedureId = agentId;
+    if (role) {
+      const header = req.headers[PROCEDURE_HEADER];
+      const named = typeof header === 'string' ? header.trim() : '';
+      if (named) {
+        if (!this.deps.procedureExists?.(named))
+          return this.fail(res, 'not_found', `No procedure "${named.slice(0, 64)}".`);
+        procedureId = named;
+      } else if (needsProcedure(method)) {
+        return this.fail(
+          res,
+          'bad_request',
+          'This needs a procedure: create or get one first (api.procedures.getOrCreate), or pass its id.',
+        );
+      }
+    }
 
     let raw: unknown;
     try {
@@ -181,11 +247,19 @@ export class BridgeServer {
 
     const log = this.deps.logger;
     try {
+      this.deps.onCall?.({ method, params: parsed.data, agentId, procedureId, role });
+    } catch (err) {
+      log.warn(`rpc ${method}: onCall failed`, { error: errorMessage(err) });
+    }
+    try {
       const handler = this.deps.handlers[method] as (
         params: unknown,
         ctx: BridgeContext,
       ) => Promise<unknown>;
-      const call = () => handler(parsed.data, { procedureId, signal: controller.signal });
+      const call = () =>
+        runAsCaller(agentId, () =>
+          handler(parsed.data, { procedureId, agentId, signal: controller.signal }),
+        );
       // Development capture mode labels browser actions with the agent's tool call.
       const result = method.startsWith('browser.')
         ? await withCaptureTool({ tool: agentToolName(method), args: parsed.data }, call)

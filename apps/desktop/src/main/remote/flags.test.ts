@@ -31,6 +31,7 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
+      codemode: false,
     });
     const request = fetch.requests[0];
     expect(request?.url.pathname).toBe('/api/frontend');
@@ -81,6 +82,7 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
+      codemode: false,
     });
     await vi.waitFor(() => expect(fetch.requests).toHaveLength(2));
   });
@@ -93,6 +95,7 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'release',
       mustUpdate: false,
       errorReports: false,
+      codemode: false,
     });
     const off = load(() =>
       jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: false }] }),
@@ -128,6 +131,7 @@ describe('loadFeatureFlags', () => {
       dniePhone: 'off',
       mustUpdate: true,
       errorReports: false,
+      codemode: false,
     });
   });
 

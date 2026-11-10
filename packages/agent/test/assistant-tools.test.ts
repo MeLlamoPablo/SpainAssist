@@ -79,7 +79,7 @@ describe('assistant tools', () => {
     expect(read).toContain('Procedure p_1');
     expect(read).toContain('Pedir cita [current, agent]');
     expect(read).toContain('Agent: waiting for the user');
-    expect(read).not.toContain('Plan card updated');
+    expect(read).not.toContain('Procedure updated');
 
     bridge.setHandler('procedures.start', (params) => ({
       procedureId: 'p_2',

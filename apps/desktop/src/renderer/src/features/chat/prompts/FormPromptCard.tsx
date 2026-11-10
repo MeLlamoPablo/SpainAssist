@@ -506,10 +506,11 @@ function FieldControl({
   );
 }
 
-const chipClass =
+export const chipClass =
   'inline-flex h-9 items-center gap-1.5 rounded-lg border border-line-strong/70 bg-surface px-3.5 text-[13.5px] font-medium text-fg-muted shadow-xs transition-colors duration-150 hover:border-line-strong hover:text-fg data-[state=on]:border-accent data-[state=on]:bg-accent-soft data-[state=on]:text-accent-text';
 
-function DocumentPicker({
+/** A saved document, or one the user adds now (also used by workflow interfaces). */
+export function DocumentPicker({
   inputId,
   value,
   onChange,

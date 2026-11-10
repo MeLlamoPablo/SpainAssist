@@ -29,6 +29,8 @@ export interface ChatServiceDeps {
   logger: Logger;
   clock: Clock;
   lang: () => Language;
+  /** Codemode: what the coordinator reads with each message (the procedures, when they changed). */
+  decorate?: (text: string) => string;
 }
 
 /**
@@ -98,7 +100,7 @@ export class ChatService {
       const { promptText, images } = await this.buildPrompt(text, attachments);
       await this.deps.agents.send(
         ASSISTANT_AGENT_ID,
-        promptText,
+        this.deps.decorate ? this.deps.decorate(promptText) : promptText,
         images.length ? images : undefined,
       );
     } catch (err) {

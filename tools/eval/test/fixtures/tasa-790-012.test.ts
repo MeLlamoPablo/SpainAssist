@@ -110,6 +110,9 @@ describe('the fixture', () => {
   it('tells the answerer how she wants to pay, and only when asked', () => {
     expect(fixture().persona).toContain('ES42 2100 3627 1702 0185 9326');
     expect(fixture().persona).toMatch(/Say this only when you are asked how to pay/);
+    // On the form itself: no mock serves the bank, and a question about which bank gets this too.
+    expect(fixture().persona).toMatch(/chosen on the 790-012 form itself/);
+    expect(fixture().persona).toMatch(/or with which bank or account/);
   });
 });
 

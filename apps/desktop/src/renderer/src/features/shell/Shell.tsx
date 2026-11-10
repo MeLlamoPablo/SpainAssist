@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
+import { ErrorBoundary, UnshowablePart } from '../../components/ErrorBoundary';
 import { useAppStore, type View } from '../../store/app';
 import { ChatPanel } from '../chat/ChatPanel';
+import { CodemodeProceduresView } from '../codemode/ProceduresView';
 import { ProceduresView } from '../procedures/ProceduresView';
 import { SettingsView } from '../settings/SettingsView';
 import { VaultView } from '../vault/VaultView';
@@ -12,20 +14,44 @@ import { TopBar } from './TopBar';
  */
 export function Shell() {
   const view = useAppStore((s) => s.view);
+  // The codemode flag also brings its own design of "Mis trámites" (docs/codemode.md).
+  const codemode = useAppStore((s) => s.info?.features.codemode ?? false);
   useShortcuts();
 
   return (
     <div className="flex h-full min-w-[960px]">
-      <ChatPanel />
+      {/* Each side survives an error in the other; the top bar stays to move elsewhere. */}
+      <ErrorBoundary fallback={(retry) => <ChatFallback retry={retry} />}>
+        <ChatPanel />
+      </ErrorBoundary>
       <main className="@container relative flex min-w-0 flex-1 flex-col bg-surface">
         <TopBar />
         <div className="min-h-0 flex-1 overflow-y-auto" id="pane-scroll" data-scroll-stable>
-          {view.kind === 'procedures' ? <ProceduresView /> : null}
-          {view.kind === 'vault' ? <VaultView initialTab={view.tab} /> : null}
-          {view.kind === 'settings' ? <SettingsView section={view.section} /> : null}
+          <ErrorBoundary resetKeys={[view]} fallback={(retry) => <UnshowablePart retry={retry} />}>
+            {view.kind === 'procedures' ? (
+              codemode ? (
+                <CodemodeProceduresView />
+              ) : (
+                <ProceduresView />
+              )
+            ) : null}
+            {view.kind === 'vault' ? <VaultView initialTab={view.tab} /> : null}
+            {view.kind === 'settings' ? <SettingsView section={view.section} /> : null}
+          </ErrorBoundary>
         </div>
       </main>
     </div>
+  );
+}
+
+/** In place of the chat panel, at its width. */
+function ChatFallback({ retry }: { retry: () => void }) {
+  return (
+    <section className="drag flex w-[clamp(400px,36%,560px)] shrink-0 flex-col justify-center border-r border-line bg-surface">
+      <div className="no-drag">
+        <UnshowablePart retry={retry} />
+      </div>
+    </section>
   );
 }
 

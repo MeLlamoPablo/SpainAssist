@@ -116,22 +116,20 @@ describe('budgetStatus', () => {
       now: () => clock,
       limits: { perRunUsd: 0.2 },
     });
-    expect(status.ledger.sinceEpochUsd).toBeCloseTo(0.0123, 12);
+    expect(status.ledger.allTimeUsd).toBeCloseTo(0.0123, 12);
     expect(status.ledger.byDay).toEqual({ '2026-10-17': 0.0123 });
-    expect(status.limits).toMatchObject({ perRunUsd: 0.2, dailyUsd: 1 });
+    expect(status.limits).toMatchObject({ perRunUsd: 0.2, perRunRequests: 250 });
     const text = formatBudgetStatus(status);
     expect(text).toContain('balance $5.00 left');
-    expect(text).toContain('since the last epoch $0.0123');
+    expect(text).toContain('all time $0.0123');
     expect(text).toContain('1 forwarded, 1 replayed (0 loose; would have cost $0.0100)');
     expect(text).toContain('by day: 2026-10-17 $0.0123');
     expect(text).toContain('anthropic/claude-haiku-5.5 $0.0123 (1)');
     expect(text).toContain(
       'per run 250 requests and the cost limit of its fixture (--max-cost overrides it; $0.2000 for a run without one)',
     );
-    expect(text).toContain('per agent $0.3500 and 200 requests (answerer $0.0500)');
-    expect(text).toContain(
-      'per day $1.00 (UTC, all runs and processes); and what the key has left',
-    );
+    expect(text).toContain('per agent 200 requests; largest request 400000 input tokens');
+    expect(text).toContain('and what the key has left: runs may spend all of it');
     expect(text).toContain('last gateway headers: spend $0.5000 of $5.00');
     expect(text).not.toContain(TEST_VOUCHER_KEY);
   });

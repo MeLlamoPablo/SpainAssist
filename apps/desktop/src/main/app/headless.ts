@@ -127,6 +127,8 @@ export interface HeadlessOptions {
   ids?: IdFactory;
   /** Idle agents stop after this many ms (default 10 minutes); they resume from their session. */
   idleMs?: number;
+  /** Hears every bridge call of the agents before its handler runs (the eval suite's observers). */
+  onBridgeCall?: MainDeps['onBridgeCall'];
   /** `appInfo.version`. */
   version?: string;
 }
@@ -284,6 +286,7 @@ export async function createHeadlessApp(opts: HeadlessOptions): Promise<Headless
       ...(opts.clock ? { clock: opts.clock } : {}),
       ...(opts.ids ? { ids: opts.ids } : {}),
       ...(opts.idleMs !== undefined ? { idleMs: opts.idleMs } : {}),
+      ...(opts.onBridgeCall ? { onBridgeCall: opts.onBridgeCall } : {}),
     });
   } catch (error) {
     closeLogger();

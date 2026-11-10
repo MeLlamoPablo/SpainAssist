@@ -2,6 +2,7 @@ import { type AppLink, parseAppLink } from '@sa/shared';
 import { memo, type ReactNode } from 'react';
 import ReactMarkdown, { type Components, defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { safeExternalUrl } from '../../lib/format';
@@ -111,10 +112,14 @@ const components: Components = {
 /** Keeps app links (`sa:…`), which the default transform drops as an unknown scheme. */
 const urlTransform = (url: string) => (parseAppLink(url) ? url : defaultUrlTransform(url));
 
+/** Parsing some markdown (runs of emphasis) takes time growing with the square of its length. */
+const MAX_MARKDOWN_CHARS = 10_000;
+
 /**
  * Assistant markdown. Raw HTML is dropped; web links open in the system browser and app links
  * (`sa:…`, see `parseAppLink`) open that part of the app. A document link alone in its paragraph
- * shows as a document card.
+ * shows as a document card. Text too long to parse quickly, or that the parser can't handle
+ * (lists or quotes nested hundreds deep overflow its stack), shows as it is.
  */
 export const Markdown = memo(function Markdown({
   text,
@@ -125,16 +130,24 @@ export const Markdown = memo(function Markdown({
   streaming?: boolean;
   className?: string;
 }) {
+  const plain = <p className="selectable whitespace-pre-wrap break-words">{text}</p>;
   return (
     <div className={cn('prose-sa', streaming && 'is-streaming', className)}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        skipHtml
-        urlTransform={urlTransform}
-        components={components}
-      >
-        {text}
-      </ReactMarkdown>
+      {text.length > MAX_MARKDOWN_CHARS ? (
+        plain
+      ) : (
+        // While it streams, one failure is enough: try the whole text again once it's complete.
+        <ErrorBoundary resetKeys={[streaming || text]} fallback={plain}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            skipHtml
+            urlTransform={urlTransform}
+            components={components}
+          >
+            {text}
+          </ReactMarkdown>
+        </ErrorBoundary>
+      )}
     </div>
   );
 });

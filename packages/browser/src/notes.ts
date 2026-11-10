@@ -58,7 +58,9 @@ const CAPTCHA_TEXT =
 const RECAPTCHA_NOTICE =
   /(?:protegido por|protected by|est[aá] protegido por) reCAPTCHA|reCAPTCHA (?:v3|Enterprise)? ?(?:y|and) (?:se aplican|the Google)/gi;
 
-function isVisibleCaptchaFrame(url: string): boolean {
+function isVisibleCaptchaFrame(full: string): boolean {
+  // Pages set their URLs: the patterns below take time that grows with the square of the length.
+  const url = full.slice(0, 4096);
   if (/\/recaptcha\/(?:api2|enterprise)\/anchor/.test(url)) return !/[?&]size=invisible/.test(url);
   if (/hcaptcha\.com\/.*#frame=checkbox|hcaptcha\.com\/captcha\/.*checkbox/.test(url)) return true;
   if (/challenges\.cloudflare\.com\/cdn-cgi\/challenge-platform/.test(url)) return true;

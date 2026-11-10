@@ -160,4 +160,45 @@ describe('buildCanaries', () => {
     });
     expect(canaries.map((c) => c.value)).toContain('2016-12-15');
   });
+
+  it("leaves out the address's town, postal code and province, but keeps the street", () => {
+    const personal = {
+      ...PERSONA,
+      addressStreet: 'Calle de la Alhóndiga 14, 2º A, 41702 Villanueva del Prado',
+      addressPostalCode: '41702',
+      addressMunicipality: 'Villanueva del Prado',
+      addressProvince: 'Sevilla',
+    };
+    // What `sensitiveValues` lists for an address: the street, its parts and the town.
+    const canaries = buildCanaries({
+      vault: fakeVault(personal, [
+        'Calle de la Alhóndiga 14, 2º A, 41702 Villanueva del Prado',
+        'Calle de la Alhóndiga 14',
+        '41702 Villanueva del Prado',
+        'Villanueva del Prado',
+        '2º A',
+        '41702',
+      ]),
+      secrets: [],
+      world: [],
+      codes: new Map(),
+    });
+    const values = canaries.map((c) => c.value);
+    expect(values).toEqual(
+      expect.arrayContaining([
+        'Calle de la Alhóndiga 14, 2º A, 41702 Villanueva del Prado',
+        'Calle de la Alhóndiga 14',
+      ]),
+    );
+    expect(values).not.toContain('Villanueva del Prado');
+    expect(values).not.toContain('41702 Villanueva del Prado');
+    // A research query that names the town is no leak; one that names the street is.
+    const scanner = new CanaryScanner(canaries);
+    const hit = (url: string) =>
+      scanner.scanParts([url]).filter((h) => h.kind === 'full' || h.kind === 'encoded');
+    expect(
+      hit('https://search.test/?q=cambio+de+titularidad+Villanueva+del+Prado+Sevilla'),
+    ).toHaveLength(0);
+    expect(hit('https://search.test/?q=Calle+de+la+Alhondiga+14')).toHaveLength(1);
+  });
 });

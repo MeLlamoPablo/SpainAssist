@@ -928,6 +928,15 @@ function demoProcedures(now: number, t: Tr): ProcedureListItem[] {
       requirements: [
         { id: 'dni', label: t('Tu DNI', 'Your DNI'), status: 'have' },
         { id: 'email', label: t('Un correo electrónico', 'An email address'), status: 'have' },
+        {
+          id: 'copia',
+          label: t('Copia de seguridad del certificado', 'A backup of the certificate'),
+          status: 'missing',
+          detail: t(
+            'Expórtalo a un archivo .p12 por si cambias de ordenador.',
+            'Export it to a .p12 file in case you change computers.',
+          ),
+        },
       ],
       facts: [
         {

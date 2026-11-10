@@ -200,7 +200,7 @@ describe('meter: Codex (ChatGPT plan)', () => {
     expect(env.ledgerLines().at(-1)?.limitHeaders).not.toHaveProperty('x-unrelated');
     expect(env.meter.ledger.summary().codex.total).toBe(1);
     // Codex spend is never dollars of the voucher key.
-    expect(env.meter.ledger.summary().sinceEpochUsd).toBe(0);
+    expect(env.meter.ledger.summary().allTimeUsd).toBe(0);
   });
 
   it('hashes the decompressed body: a recording made with zstd replays for a plain request, and back', async () => {
@@ -300,7 +300,7 @@ describe('meter: Codex (ChatGPT plan)', () => {
         });
       }
       // Dollar limits that would stop any voucher run mean nothing for a plan.
-      const run = env.openRun({ limits: { perRunUsd: 0, dailyUsd: 0 } });
+      const run = env.openRun({ limits: { perRunUsd: 0 } });
       for (let i = 0; i < 3; i++) {
         const res = await codexPost(run, 'p', responsesBody(`request ${i}`));
         expect(res.status).toBe(200);

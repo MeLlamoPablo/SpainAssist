@@ -100,7 +100,7 @@ describe('record / replay cache', () => {
       usage: { prompt: 2000, cacheRead: 1500 },
     });
     // Replays are not spend.
-    expect(env.meter.ledger.summary().sinceEpochUsd).toBeCloseTo(recording.usage().costUsd, 12);
+    expect(env.meter.ledger.summary().allTimeUsd).toBeCloseTo(recording.usage().costUsd, 12);
     expect(env.meter.ledger.summary().replayedUsd).toBeCloseTo(recording.usage().costUsd, 12);
   });
 
@@ -617,7 +617,7 @@ describe('record / replay cache', () => {
     await (await post(env.openRun({ cache: 'record' }), 'p', body)).text();
     const run = env.openRun({
       cache: 'auto',
-      limits: { perRunUsd: 0, perRunRequests: 1, dailyUsd: 0 },
+      limits: { perRunUsd: 0, perRunRequests: 1 },
     });
     for (let i = 0; i < 3; i++) {
       const res = await post(run, 'p', body);

@@ -476,6 +476,13 @@ describe('runScript', () => {
     const hung = await runScript('await new Promise(() => {});', { timeoutMs: 200 });
     expect(hung).toMatchObject({ ok: false, error: 'Timed out after 1 s' });
 
+    // Interrupted, it starts again from its catch: one batch of jobs used to never end.
+    const restarting = await runScript(
+      'function loop() { return (async () => { for (;;) await null; })().catch(loop); } loop(); await new Promise(() => {});',
+      { timeoutMs: 200 },
+    );
+    expect(restarting).toMatchObject({ ok: false, error: 'Timed out after 1 s' });
+
     let aborted = false;
     const fetchImpl = ((_url: string, init: RequestInit) =>
       new Promise((_resolve, reject) => {

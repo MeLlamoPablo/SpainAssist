@@ -2,15 +2,23 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { BRIDGE_ENV, DEFAULT_THINKING_LEVEL, setExtraTrustedHosts } from '@sa/shared';
 import { BridgeClient } from '../bridge/client';
+import { createClassifier } from '../codemode/classify';
+import { buildDeclarations } from '../codemode/declarations';
+import { WorkflowEngine } from '../codemode/engine';
+import { createImageStore } from '../codemode/host-ops';
+import { codemodeTool } from '../codemode/tool';
 import { parseHostConfig } from '../config';
 import { buildAssistantPrompt } from '../prompt/assistant';
+import { buildCodemodePrompt } from '../prompt/codemode';
+import { buildCoordinatorPrompt } from '../prompt/coordinator';
 import { buildSystemPrompt } from '../prompt/system';
 import { parseLiteLLMSpendHeaders } from '../providers/services';
 import { createChatGPTResearchTool } from '../research/chatgpt-research';
 import { createExaTools } from '../research/exa';
 import { createKeyServerResearchTool } from '../research/key-server-research';
 import type { AnyToolDefinition } from '../tools/common';
-import { createAssistantTools, createTools } from '../tools/index';
+import { createAssistantTools, createCoordinatorTools, createTools } from '../tools/index';
+import { EXA_TOOL_NAMES, WEB_RESEARCH_TOOL_NAME } from '../tools/names';
 import { BridgeCredentialStore } from './credentials';
 import { createSpainAssistExtension } from './extension';
 import type { HostHooks } from './hooks';
@@ -70,38 +78,52 @@ export async function runHost(
   const imagesSupported = model.input.includes('image');
   const redactPages = redactsPages(model.id);
 
+  // Codemode (docs/codemode.md): its agents write workflows; its coordinator, the chat's agent,
+  // only delegates to them with a few plain tools.
+  const codemode = config.role === 'agent';
+  const coordinator = config.role === 'orchestrator';
   const assistant = config.role === 'assistant';
-  const tools = assistant
-    ? createAssistantTools({ bridge, timeZone: config.timeZone })
-    : createTools({
-        bridge,
-        imagesSupported,
-        allowPrivateHosts: config.research.allowPrivateHosts ?? false,
-        boeBaseUrl: config.research.boeBaseUrl,
-        fetchImpl: hooks.egress?.fetch,
-        resolveHost: hooks.egress?.resolveHost,
-        onBlocked: hooks.egress?.onBlocked,
-        now: hooks.now,
-        feedback: config.feedback,
-        dniePhone: config.dniePhone,
-        redactPages,
-        timeZone: config.timeZone,
-      });
+  // The chat's agent: its final messages link documents the user sees.
+  const chatAgent = assistant || coordinator;
+  const tools = codemode
+    ? []
+    : coordinator
+      ? createCoordinatorTools({ bridge })
+      : assistant
+        ? createAssistantTools({ bridge, timeZone: config.timeZone })
+        : createTools({
+            bridge,
+            imagesSupported,
+            allowPrivateHosts: config.research.allowPrivateHosts ?? false,
+            boeBaseUrl: config.research.boeBaseUrl,
+            fetchImpl: hooks.egress?.fetch,
+            resolveHost: hooks.egress?.resolveHost,
+            onBlocked: hooks.egress?.onBlocked,
+            now: hooks.now,
+            feedback: config.feedback,
+            dniePhone: config.dniePhone,
+            redactPages,
+            timeZone: config.timeZone,
+          });
   // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
   // OpenAI's hosted web search, BYOK and custom endpoints on Exa's keyless tier. A research
-  // stub (hooks) replaces both the choice and the tools, for procedure agents only.
-  const stub = assistant ? undefined : hooks.research;
+  // stub (hooks) replaces both the choice and the tools, for procedure agents only (and every
+  // codemode agent). The codemode coordinator never researches.
+  const stub = assistant || coordinator ? undefined : hooks.research;
+  const researchTools: AnyToolDefinition[] = [];
   const keyServerUrl = config.research.keyServerUrl;
-  const research = stub
-    ? stub.backend
-    : await researchBackend(
-        config,
-        async () => (await credentials.read(config.model.provider))?.type === 'oauth',
-      );
+  const research = coordinator
+    ? undefined
+    : stub
+      ? stub.backend
+      : await researchBackend(
+          config,
+          async () => (await credentials.read(config.model.provider))?.type === 'oauth',
+        );
   if (stub) {
-    tools.push(...stub.tools({ config, bridge, language: config.language }));
+    researchTools.push(...stub.tools({ config, bridge, language: config.language }));
   } else if (research === 'key server' && keyServerUrl) {
-    tools.push(
+    researchTools.push(
       createKeyServerResearchTool({
         keyServerUrl,
         apiKey: async () => {
@@ -112,7 +134,7 @@ export async function runHost(
       }),
     );
   } else if (research === 'chatgpt') {
-    tools.push(
+    researchTools.push(
       createChatGPTResearchTool({
         runtime: modelRuntime,
         // The catalog's model of that id, at the agent model's endpoint (a mock in e2e runs).
@@ -126,7 +148,7 @@ export async function runHost(
       }),
     );
   } else if (research === 'exa') {
-    tools.push(
+    researchTools.push(
       ...createExaTools({
         apiKey: async () => (await bridge.call('agent.exaKey', {})).key ?? undefined,
         language: config.language,
@@ -134,23 +156,80 @@ export async function runHost(
       }),
     );
   }
+  let engine: WorkflowEngine | undefined;
+  if (codemode) {
+    // Codemode: research, fetch and every other capability become the workflow API; the
+    // model's only tool is `codemode` (docs/codemode.md).
+    const wrappedResearch = wrapTools(researchTools, hooks.wrapTool);
+    const searchTool =
+      wrappedResearch.find((t) => t.name === WEB_RESEARCH_TOOL_NAME) ??
+      wrappedResearch.find((t) => t.name === EXA_TOOL_NAMES[0]);
+    const images = createImageStore();
+    engine = new WorkflowEngine({
+      bridge,
+      images,
+      imagesSupported,
+      ...(searchTool
+        ? {
+            research: {
+              kind: searchTool.name === WEB_RESEARCH_TOOL_NAME ? 'web_research' : 'exa',
+              search: searchTool,
+            },
+          }
+        : {}),
+      classify: createClassifier(modelRuntime, model),
+      allowPrivateHosts: config.research.allowPrivateHosts ?? false,
+      ...(config.research.boeBaseUrl ? { boeBaseUrl: config.research.boeBaseUrl } : {}),
+      ...(hooks.egress?.fetch ? { fetchImpl: hooks.egress.fetch } : {}),
+      ...(hooks.egress?.resolveHost ? { resolveHost: hooks.egress.resolveHost } : {}),
+      ...(hooks.egress?.onBlocked ? { onBlocked: hooks.egress.onBlocked } : {}),
+      detachAfterMs: 2 * 60_000,
+    });
+    tools.push(codemodeTool({ engine, images, imagesSupported, language: config.language }));
+  } else {
+    tools.push(...researchTools);
+  }
+  const declarations = codemode
+    ? buildDeclarations({
+        search: researchTools.length > 0,
+        ...(config.feedback ? { feedback: config.feedback } : {}),
+        dniePhone: config.dniePhone,
+      })
+    : '';
   const agentTools = wrapTools(tools, hooks.wrapTool);
   const systemPrompt = () =>
-    assistant
-      ? buildAssistantPrompt({
+    codemode
+      ? buildCodemodePrompt({
           language: config.language,
           timeZone: config.timeZone,
           now: hooks.now?.(),
-        })
-      : buildSystemPrompt({
-          language: config.language,
-          timeZone: config.timeZone,
-          now: hooks.now?.(),
-          research: promptResearch(research),
-          feedback: config.feedback,
+          research: researchTools.length ? promptResearch(research) : undefined,
+          ...(config.feedback ? { feedback: config.feedback } : {}),
           dniePhone: config.dniePhone,
           certificateRequests: config.certificateRequests,
-        });
+          declarations,
+        })
+      : coordinator
+        ? buildCoordinatorPrompt({
+            language: config.language,
+            timeZone: config.timeZone,
+            now: hooks.now?.(),
+          })
+        : assistant
+          ? buildAssistantPrompt({
+              language: config.language,
+              timeZone: config.timeZone,
+              now: hooks.now?.(),
+            })
+          : buildSystemPrompt({
+              language: config.language,
+              timeZone: config.timeZone,
+              now: hooks.now?.(),
+              research: promptResearch(research),
+              feedback: config.feedback,
+              dniePhone: config.dniePhone,
+              certificateRequests: config.certificateRequests,
+            });
   // Voucher keys: LiteLLM reports the key's spend on every call; the app shows it live.
   const onProviderResponse =
     config.model.provider === LITELLM_PROVIDER_ID
@@ -172,7 +251,7 @@ export async function runHost(
     redactPages,
     ...(onProviderResponse ? { onProviderResponse } : {}),
     // Only the assistant's messages reach the chat, where document links show as cards.
-    ...(assistant
+    ...(chatAgent
       ? {
           savedDocuments: async () =>
             (await bridge.call('vault.read', { keys: [] })).documents.map(({ id, name }) => ({
@@ -252,6 +331,12 @@ export async function runHost(
     'info',
     `ready: ${config.role}, ${model.provider}/${model.id}, ${agentTools.length} tools, web research ${research ?? 'off'}`,
   );
+  // Codemode: workflows that waited for the user resume in this process (their state is in the
+  // app). In the background: their outcomes reach the agent as messages through the app.
+  if (engine) {
+    const resumer = engine;
+    setTimeout(() => resumer.startResuming(), 0);
+  }
   await pi.runRpcMode(runtime);
 }
 

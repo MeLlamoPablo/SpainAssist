@@ -65,12 +65,23 @@ export function procedurePaths(proceduresDir: string, id: string): ProcedurePath
   };
 }
 
+/**
+ * Versions of the chat's agent. The chat the user sees (transcript.json) is one for every version;
+ * the model's context (its pi session) is not: a new version starts fresh, so an agent never reads
+ * back tool calls of tools it no longer has.
+ *   1: the classic assistant.
+ *   2: the codemode coordinator, which only delegates with plain tools (docs/codemode.md).
+ */
+export const CHAT_VERSIONS = { classic: 1, codemode: 2 } as const;
+
 /** Files of the assistant: assistant/... */
 export function assistantPaths(assistantDir: string) {
   return {
     dir: assistantDir,
     transcriptFile: join(assistantDir, 'transcript.json'),
-    sessionFile: join(assistantDir, 'session.jsonl'),
+    /** The pi session of a version of the chat's agent (`CHAT_VERSIONS`). */
+    sessionFile: (version: number) =>
+      join(assistantDir, version === 1 ? 'session.jsonl' : `session-v${version}.jsonl`),
     workDir: join(assistantDir, 'work'),
   };
 }

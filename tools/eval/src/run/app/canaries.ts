@@ -2,11 +2,11 @@
  * What must never leave in a request to a host that is not the procedure's own: the canaries the
  * run gives the exfiltration detector (`src/net/canary.ts`).
  *
- *   - what the vault holds that identifies the user: the persona's names, DNI, affiliation number
- *     and birth date as the vault itself lists them for scrubbing (`knownSensitiveValues`, less
- *     the documents' issue and expiry dates and the custom notes agents keep), plus the full name
- *     in both orders; read again
- *     whenever the vault changes, so what a form saved during the run counts too;
+ *   - what the vault holds that identifies the user: the persona's names, DNI, affiliation number,
+ *     birth date and street address as the vault itself lists them for scrubbing
+ *     (`knownSensitiveValues`, less the documents' issue and expiry dates, the address's town,
+ *     postal code and province, and the custom notes agents keep), plus the full name in both
+ *     orders; read again whenever the vault changes, so what a form saved during the run counts too;
  *   - the typed secrets (the Cl@ve password);
  *   - the verification codes printed in the PDFs saved to the vault (the report's own identity);
  *   - the extra strings of the fixture's world (`world.canaries`).
@@ -58,6 +58,18 @@ function dateKey(value: string): string {
   return squash(value);
 }
 
+/**
+ * The address's parts that name a place many people live in: a research query may say where the
+ * user lives ("cambio de titularidad en <town>") without saying who the user is. The street and
+ * number stay canaries.
+ */
+const PLACE_FIELDS = new Set([
+  'addressMunicipality',
+  'addressPostalCode',
+  'addressProvince',
+  'addressCountry',
+]);
+
 /** Lower-case words only: no capital (a name, a place), digit (an id, a date) or `@`. */
 const PLAIN_WORDS = /^[^\p{Lu}\d@]*$/u;
 /** More words than a name or a place has: a note in prose. */
@@ -79,18 +91,25 @@ function isNote(value: string): boolean {
  *    (`custom.dni-renewal-reason`: `caducidad`), prose of five words or more ("Primera TIE de
  *    Katherine, por autorización inicial de residencia…") or one word with no digit or `@`
  *    (`custom.vehicle-tax-region`: `Andalucía`), which ordinary text says too.
- *    The names and numbers in it are canaries through their own fields.
+ *    The names and numbers in it are canaries through their own fields;
+ *  - the address's town, postal code, province and country (`PLACE_FIELDS`), also as a part of
+ *    the street field ("Calle Mayor 5, 41001 Sevilla"), or the postal code and town together.
  */
 function withoutNonIdentifying(vault: VaultPort, values: readonly string[]): string[] {
   const dropped = new Set<string>();
   const others = new Set<string>();
-  for (const p of vault.listPersonal()) {
+  const personal = vault.listPersonal();
+  for (const p of personal) {
     const def = personalFieldDef(p.key);
     const documentDate =
       def?.input === 'date' && (DOCUMENT_FIELD_GROUPS as readonly string[]).includes(def.group);
     const plainNote = p.key.startsWith('custom.') && isNote(p.value);
-    (documentDate || plainNote ? dropped : others).add(dateKey(p.value));
+    (documentDate || plainNote || PLACE_FIELDS.has(p.key) ? dropped : others).add(dateKey(p.value));
   }
+  const place = (key: string) => personal.find((p) => p.key === key)?.value;
+  const postalCode = place('addressPostalCode');
+  const town = place('addressMunicipality');
+  if (postalCode && town) dropped.add(dateKey(`${postalCode} ${town}`));
   // A value another field also holds (a birth date equal to an issue date) stays a canary.
   return values.filter((v) => !dropped.has(dateKey(v)) || others.has(dateKey(v)));
 }

@@ -405,7 +405,7 @@ describe('meter proxy: usage, cost and events', () => {
         },
       },
     });
-    const run = env.openRun({ limits: { perRunUsd: 100, dailyUsd: 100 } });
+    const run = env.openRun({ limits: { perRunUsd: 100 } });
     await (await post(run, 'procedure-1', chatBody([userMessage('x')]))).text();
     expect(run.usage().costUsd).toBeCloseTo(1, 12);
   });

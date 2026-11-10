@@ -143,8 +143,6 @@ describe.each(listFixtures().map((f) => [f.id, f] as const))('fixture %s', (_id,
     // run that reaches the fixture's is cut with the rules' verdict.
     expect(fixture.limits.maxRequests).toBeLessThan(DEFAULT_LIMITS.perAgentRequests);
     expect(fixture.limits.maxRequests).toBeLessThan(DEFAULT_LIMITS.perRunRequests);
-    expect(fixture.limits.maxCostUsd).toBeLessThan(DEFAULT_LIMITS.perAgentUsd);
-    expect(fixture.limits.maxCostUsd).toBeLessThan(DEFAULT_LIMITS.dailyUsd);
     expect(transfer ? TRANSFER_LIMITS : RUN_LIMITS).toEqual(fixture.limits);
   });
 

@@ -111,7 +111,7 @@ const ProcedureUpdateParams = Type.Object({
             },
             {
               description:
-                "Set it once an in-person appointment is confirmed (e.g. you booked the cita): the card shows it with Google Maps and Google Calendar buttons. Don't repeat its date and place in facts",
+                "Set it once an in-person appointment is confirmed (e.g. you booked the cita): the app shows it with Google Maps and Google Calendar buttons. Don't repeat its date and place in facts",
             },
           ),
         ),
@@ -137,7 +137,7 @@ function validUrl(url: string): boolean {
 }
 
 export function renderProcedure(procedure: Procedure): string {
-  const lines = [`Plan card updated. Status: ${procedure.status}.`, `Title: ${procedure.title}`];
+  const lines = [`Procedure updated. Status: ${procedure.status}.`, `Title: ${procedure.title}`];
   if (procedure.administration) {
     lines.push(
       `Administration: ${procedure.administration.name} (${procedure.administration.level})`,
@@ -175,7 +175,7 @@ export function procedureTools(bridge: BridgeTransport) {
       name: 'procedure_update',
       label: 'Update plan',
       description:
-        'Update the plan card the user sees for this procedure. Send only the fields that change, but arrays (steps, requirements, facts, sources) REPLACE the previous list entirely: always send the complete list. Call it early and after every meaningful change (new facts, a step done, a blocker). Returns the updated card.',
+        'Update the procedure as the user sees it. Send only the fields that change, but arrays (steps, requirements, facts, sources) REPLACE the previous list entirely: always send the complete list. Call it early and after every meaningful change (new facts, a step done, a blocker). Returns the updated procedure.',
       parameters: ProcedureUpdateParams,
       async execute(_id, params, signal) {
         const { clearNextAction, nextAction, ...rest } = params;

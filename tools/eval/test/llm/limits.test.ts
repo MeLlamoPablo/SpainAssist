@@ -16,26 +16,21 @@ describe('meter limits', () => {
     expect(DEFAULT_LIMITS).toMatchObject({
       perRunUsd: 0.5,
       perRunRequests: 250,
-      perAgentUsd: 0.35,
-      dailyUsd: 1,
-      perAgentUsdByRole: { answerer: 0.05 },
+      perAgentRequests: 200,
     });
-    expect(DEFAULT_LIMITS.lifetimeUsd).toBeUndefined();
   });
 
-  it('layers overrides without touching the defaults, merging the nested ones', () => {
+  it('layers overrides without touching the defaults', () => {
     const limits = resolveLimits(
-      { perRunUsd: 2, perAgentUsdByRole: { assistant: 0.5 } },
+      { perRunUsd: 2 },
       { perRunRequests: 7, perRunUsd: undefined },
       undefined,
     );
     expect(limits).toMatchObject({
       perRunUsd: 2,
       perRunRequests: 7,
-      perAgentUsdByRole: { answerer: 0.05, assistant: 0.5 },
     });
     expect(DEFAULT_LIMITS.perRunUsd).toBe(0.5);
-    expect(DEFAULT_LIMITS.perAgentUsdByRole).toEqual({ answerer: 0.05 });
   });
 
   it('answers caps with a non-retryable 402 that says "out of budget"', () => {

@@ -48,8 +48,7 @@ const ask =
 
 describe('with the real meter', () => {
   it("stops at the fixture's cost limit when usage events show it was crossed, and no request goes out after", async () => {
-    // One agent may spend more than the fixture's limit here: only the limit of the run counts.
-    meter = await startEnv({ mock: costing(0.2), meter: { limits: { perAgentUsd: 10 } } });
+    meter = await startEnv({ mock: costing(0.2) });
     env = createEnv();
     const outcome = await env.run(
       miniFixture({
@@ -135,21 +134,6 @@ describe('with the real meter', () => {
       });
       expect(outcome.result.notes[0]).toMatch(/meter cap agent_requests_cap \(assistant\)/);
       expect(outcome.result.usage.requests).toBe(4);
-    });
-
-    it("the meter's per-agent dollar cap too", async () => {
-      meter = await startEnv({ mock: costing(0.1), meter: { limits: { perAgentUsd: 0.25 } } });
-      env = createEnv();
-      const outcome = await env.run(shipped({ maxCostUsd: 5 }), ask(20), {
-        meter: meter.meter,
-        provider: 'voucher',
-      });
-      expect(outcome.result).toMatchObject({
-        status: 'failed_required',
-        score: 0,
-        endedBy: 'limit:cost',
-      });
-      expect(outcome.result.notes[0]).toMatch(/meter cap agent_budget \(assistant\)/);
     });
 
     it('an agent that did the job and then looped keeps its score, marked as not tested to the end', async () => {

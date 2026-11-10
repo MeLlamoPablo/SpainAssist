@@ -39,8 +39,10 @@ export class BrowserError extends Error {
 const ANSI = /\u001b\[[0-9;]*m/g;
 
 /** First meaningful part of a Playwright error message, without the call log. */
-export function cleanPlaywrightMessage(message: string): string {
-  const withoutLog = message.split(/\n\s*(?:Call log|=+ logs =+):?/)[0] ?? message;
+export function cleanPlaywrightMessage(full: string): string {
+  // Pages write parts of it (their errors): keep the matching below cheap.
+  const message = full.slice(0, 8192);
+  const withoutLog = message.split(/\n[ \t]*(?:Call log|=+ logs =+):?/)[0] ?? message;
   return withoutLog
     .replace(ANSI, '')
     .replace(/^(?:\w+\.)+\w+: /, '') // "locator.click: " / "page.goto: "

@@ -54,6 +54,12 @@ flowchart TB
     briefs and steers procedure agents, and relays their reports.
   - **Procedure agents**: one per active procedure. They do the research, the browsing and the
     forms, and keep the procedure's card up to date. Their activity goes to the card, not the chat.
+  - **Codemode** (the `codemode` flag, [codemode.md](codemode.md)) replaces both: the chat's
+    coordinator, which only delegates with a few plain tools and never asks the user, and
+    background agents independent of procedures, each with one tool that runs resumable JavaScript
+    workflows (QuickJS, in the agent's process) whose durable state main keeps. Agents ask the
+    user and create the procedures, which become durable records any agent may update (with
+    versions), plus a private working context.
 - **Browser**: one bundled Chromium (Chrome for Testing), with an isolated context per procedure.
   Its windows stay minimized unless the user needs to help (CAPTCHA, QR, manual step). The app never
   downloads a browser: the Microsoft Store forbids downloading code.
@@ -98,6 +104,15 @@ procedure agent then works in the background. The assistant reads procedure card
 asking their agents, passes on new information, and can resume, stop or cancel a procedure. When a
 run ends, the assistant gets a short report and tells the user in a sentence or two.
 
+### Codemode workflows
+Behind the `codemode` flag. An agent writes a module (`export async function main(api)`); main
+stores its memoized steps and the state of the interfaces it shows, the agent's host executes it
+and long-polls the user's events. The agent's turn ends while the user answers; the workflow
+continues by itself and its outcome reaches the agent as a message. After a restart, an
+interface stays on screen and the workflow resumes from its state when the user acts on it. The
+protocol is model-checked (`packages/agent/test/codemode-protocol.test.ts`). Details, decisions and
+measurements: [codemode.md](codemode.md).
+
 ### Research and the card
 A procedure agent researches first, then plans, then asks for what's missing, then acts.
 - Voucher users get `web_research` on Parallel, sold by the key server from the voucher.
@@ -110,7 +125,10 @@ card.
 
 ### Asking the user
 Agents ask through native prompts: forms, confirmations, manual actions, credential requests and
-phone calls. Procedure prompts show on the card; the assistant's show in the chat. Questions never
+phone calls. Procedure prompts show on the card; the assistant's show in the chat. With the
+codemode flag (its own design of "Mis trámites", docs/codemode.md), workflows' interfaces show
+above the procedure cards, not tied to any procedure, and what agents are doing shows in a meter
+apart from the cards. Questions never
 block the chat. Unanswered forms and phone calls survive a restart.
 - **Forms** can fill from and save to the vault through `vaultKey` fields; secrets and documents
   are never saved from answers.

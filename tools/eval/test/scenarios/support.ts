@@ -247,7 +247,7 @@ export class Site {
       case 'web_research':
         return '{"success":true,"status":"completed"}';
       case 'procedure_update':
-        return 'Plan card updated. Status: in_progress.';
+        return 'Procedure updated. Status: in_progress.';
       case 'browser_open': {
         const url = String(args.url);
         if (url.includes('/Informe+de+tu+vida+laboral')) return this.go('info');

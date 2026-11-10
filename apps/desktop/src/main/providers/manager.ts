@@ -876,7 +876,7 @@ export class ProviderManager {
    * endpoints run every role on the user's model.
    */
   async agentModel(
-    role: AgentHostConfig['role'] | 'scanner' = 'procedure',
+    role: 'assistant' | 'procedure' | 'scanner' = 'procedure',
   ): Promise<AgentHostConfig['model']> {
     const p = this.config();
     if (!p) throw new NoProviderError();
@@ -917,7 +917,7 @@ export class ProviderManager {
    * Author of the learnings a role's agents share: "<model id> · <reasoning level>" as the agent
    * runs it (custom endpoints without reasoning run at "off").
    */
-  async agentAuthor(role: AgentHostConfig['role'] = 'procedure'): Promise<string> {
+  async agentAuthor(role: 'assistant' | 'procedure' = 'procedure'): Promise<string> {
     const model = await this.agentModel(role);
     const level =
       model.provider === 'custom' && !model.reasoning

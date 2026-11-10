@@ -120,6 +120,10 @@ export function createTestService(overrides: Partial<BrowserServiceOptions> = {}
       log.push(`${level} ${msg}${data === undefined ? '' : ` ${JSON.stringify(data)}`}`);
     };
   const service = createBrowserService({
+    // A Chromium other than Playwright's own, e.g. one preinstalled on the machine.
+    ...(process.env.SA_BROWSER_EXECUTABLE
+      ? { executablePath: process.env.SA_BROWSER_EXECUTABLE }
+      : {}),
     headless: !HEADED,
     ...(HEADED ? { startHidden: true } : {}),
     downloadsDir,

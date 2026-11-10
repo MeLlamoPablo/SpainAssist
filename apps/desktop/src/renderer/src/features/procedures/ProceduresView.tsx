@@ -55,7 +55,7 @@ export function ProceduresView() {
 const SUGGESTION_ICONS: LucideIcon[] = [IdCard, House, FileBadge];
 
 /** No procedures yet: a quiet preview and a few ways to start. */
-function EmptyProcedures() {
+export function EmptyProcedures() {
   const t = useT(procedureDict);
   // Agents can't run without an AI, nor after OpenAI ended the ChatGPT sign-in.
   const ready = useAppStore((s) => Boolean(s.provider?.configured && !s.provider.sessionEnded));

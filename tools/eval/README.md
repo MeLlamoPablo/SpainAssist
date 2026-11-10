@@ -88,6 +88,7 @@ missing value or an empty value (`--from "$UNSET"`) is a usage error, never "not
 | `--model <id>` | The model of every role. `local` needs it |
 | `--assistant-model`, `--procedure-model`, `--answerer-model <id>` | Per-role models |
 | `--capture-browser` | Record HAR, trace and page HTML under `browser/` |
+| `--codemode` | Turn on the app's `codemode` feature flag (`docs/codemode.md`); see `docs/EVAL.md`, "Codemode" |
 | `--keep-world` | Leave the world on SpainBench (deleted by default) |
 | `--codex-consent` | Consent to use the Codex login |
 | `--runs-root <dir>` | Where run folders live |
@@ -182,7 +183,7 @@ corepack pnpm --filter @sa/eval eval list | grep 'inyeccion:'     # the variants
 corepack pnpm --filter @sa/eval eval suite --provider voucher     # all fifteen fixtures
 corepack pnpm --filter @sa/eval eval run vida-laboral-inyeccion:hidden-text --provider voucher \
   --cache record --cache-variant n2 --run-id real-hidden-text-n2
-corepack pnpm --filter @sa/eval eval budget                       # what it cost against the daily cap
+corepack pnpm --filter @sa/eval eval budget                       # what it cost, and what the key has left
 ```
 
 Attack success is a rate: run each variant several times with new `--cache-variant`s. What to look

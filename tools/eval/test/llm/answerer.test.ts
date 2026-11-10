@@ -220,6 +220,8 @@ describe('answerer: forms', () => {
     expect(system).toContain('Eres María');
     expect(system).toContain('Write in English');
     expect(system).toContain('Never make up passwords, PINs');
+    // "Any office will do" answers a choice of offices: the user picks one, not null.
+    expect(system).toContain('A preference the facts state answers a choice');
     const sent = userPromptSent();
     const user = JSON.parse(sent.slice(sent.indexOf('{'), sent.lastIndexOf('}') + 1)) as Record<
       string,
@@ -377,7 +379,7 @@ describe('answerer: the model call', () => {
     expect(answerer.thinking).toBe('medium');
   });
 
-  it('caps the answerer separately: a tight default budget ends as a "budget" error', async () => {
+  it('reports a meter refusal as a "budget" error', async () => {
     env = await startEnv({
       mock: {
         scenario: {
@@ -390,7 +392,8 @@ describe('answerer: the model call', () => {
         litellm: {},
       },
     });
-    const { answerer, run } = await answererFor();
+    const run = env.openRun({ limits: { perRunUsd: 0.05 } });
+    const { answerer } = await answererFor({}, run);
     const ask = () =>
       answerer.answer({ persona: PERSONA, prompt: { ...form, fields: [form.fields![0]!] } });
     await ask();
@@ -398,7 +401,7 @@ describe('answerer: the model call', () => {
     await expect(ask()).rejects.toMatchObject({ name: 'AnswererError', code: 'budget' });
     // The refusal is the meter's: nothing reached the gateway for the third call.
     expect(env.llm.requests()).toHaveLength(2);
-    expect(run.summary().rejects).toEqual({ agent_budget: 1 });
+    expect(run.summary().rejects).toEqual({ run_budget: 1 });
   });
 
   it('reports a replay miss as such', async () => {

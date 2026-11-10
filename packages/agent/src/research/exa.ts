@@ -50,7 +50,7 @@ export function exaKeySettingsPath(language: 'es' | 'en'): string {
 }
 
 function blocker(language: 'es' | 'en', reason: string): string {
-  return `Web research is blocked: ${reason} This is a research blocker. Tell the coordinator in plain words that the user's Exa key needs fixing in ${exaKeySettingsPath(language)}: replace it, or remove it to use Exa's free tier. Keep the card in researching status with that as nextAction. Do not ask the user for information or execute the procedure, and do not call Exa again until the user has fixed it.`;
+  return `Web research is blocked: ${reason} This is a research blocker. Tell the coordinator in plain words that the user's Exa key needs fixing in ${exaKeySettingsPath(language)}: replace it, or remove it to use Exa's free tier. Keep the procedure in researching status with that as nextAction. Do not ask the user for information or execute the procedure, and do not call Exa again until the user has fixed it.`;
 }
 
 interface ExaResult {

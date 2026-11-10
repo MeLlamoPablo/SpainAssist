@@ -33,8 +33,10 @@ export function PromptShell({
   const t = useT(chatDict);
   const pending = item.status === 'pending';
   const headingId = `prompt-${item.id}`;
-  // Questions from a procedure's agent say which procedure asks (and link to its card).
-  const procedure = useProcedure(item.procedureId);
+  // Questions from a procedure's agent say which procedure asks (and link to its card). Not with
+  // codemode, where questions are not tied to procedures (docs/codemode.md, decision 5).
+  const codemode = useAppStore((s) => s.info?.features.codemode ?? false);
+  const procedure = useProcedure(codemode ? undefined : item.procedureId);
   const focusProcedure = useAppStore((s) => s.focusProcedure);
 
   if (!pending) {

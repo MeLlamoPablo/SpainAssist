@@ -71,6 +71,7 @@
       transform: none;
     }
   }
+
   @keyframes caret {
     0% {
       opacity: 1;
@@ -317,6 +318,11 @@
   .prose-sa {
     user-select: text;
     cursor: auto;
+  }
+  /* Even inside selectable text: dragging across a button shouldn't select its label. */
+  button,
+  [role="button"] {
+    user-select: none;
   }
 
   button,

@@ -4,6 +4,7 @@ import './styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { BootError } from './features/shell/BootError';
 import { initApi } from './lib/api';
 import { startErrorReports } from './lib/error-reports';
@@ -21,7 +22,18 @@ async function boot() {
     applyInitialRoute();
     root.render(
       <StrictMode>
-        <App />
+        {/* The last resort: parts of the app have their own boundaries. */}
+        <ErrorBoundary
+          fallback={(_, error) => (
+            <BootError
+              crashed
+              message={error instanceof Error ? error.message : String(error)}
+              onRetry={() => window.location.reload()}
+            />
+          )}
+        >
+          <App />
+        </ErrorBoundary>
       </StrictMode>,
     );
   } catch (err) {

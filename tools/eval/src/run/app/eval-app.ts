@@ -55,6 +55,7 @@ import {
 } from './browser';
 import { maskHomeInTree } from './home-paths';
 import { ensureEvalHostBundle, type HostBundleOptions } from './host-bundle';
+import { InterfacePrompts } from './interfaces';
 import { Observers } from './observers';
 import { offlinePlaces } from './places';
 import { copyProfile, isEmptyDirectory, profileDirOf, seedVault } from './profile';
@@ -153,6 +154,8 @@ class EvalAppImpl implements EvalApp {
   private readonly tails = new Map<string, SessionTail>();
   private readonly followers: NetLogFollower[] = [];
   private readonly unsubscribe: (() => void)[] = [];
+  /** Codemode: the workflows' interfaces as prompts of the simulator. */
+  private interfaces: InterfacePrompts | undefined;
   private stopping: Promise<void> | undefined;
   private closing: Promise<void> | undefined;
 
@@ -204,6 +207,27 @@ class EvalAppImpl implements EvalApp {
     // What the run knew before the app existed (the fixture's passwords, the model's credential).
     for (const secret of this.parts.secrets.list()) this.parts.meter.addSecret(secret);
     observers.announcePending(app.services.prompts.pendingItems());
+    const codemode = app.services.codemode;
+    if (codemode) {
+      const interfaces = new InterfacePrompts({
+        port: {
+          workflows: () => codemode.workflows.infos(),
+          uiEvent: (workflowId, key, event) =>
+            app.invoke('codemode.uiEvent', workflowId, key, event),
+        },
+        onShown: (prompt) => observers.interfaceShown(prompt),
+        onNote: (text) => spec.sink.push({ type: 'note', text }),
+        onRender: (render) => spec.sink.push({ type: 'interface_render', ...render }),
+      });
+      this.interfaces = interfaces;
+      this.unsubscribe.push(
+        app.on((event) => {
+          if (event.type === 'codemode.workflow') interfaces.update(event.workflow);
+        }),
+      );
+      this.unsubscribe.push(() => interfaces.close());
+      for (const workflow of codemode.workflows.infos()) interfaces.update(workflow);
+    }
     observers.refreshCanaries();
     const onAbort = () => void this.abort('signal');
     spec.signal.addEventListener('abort', onAbort, { once: true });
@@ -238,7 +262,11 @@ class EvalAppImpl implements EvalApp {
     const { services } = this.parts.app;
     this.settling++;
     queueMicrotask(() => {
-      Promise.all([services.coordinator.settled(), services.chat.settled()])
+      Promise.all([
+        services.coordinator.settled(),
+        services.chat.settled(),
+        services.codemode?.coordinator.settled(),
+      ])
         .catch(() => {})
         .finally(() => {
           this.settling--;
@@ -256,13 +284,21 @@ class EvalAppImpl implements EvalApp {
   }
 
   pendingPrompts(): PendingPrompt[] {
-    return this.parts.app.services.prompts
-      .pendingItems()
-      .map(({ owner, item }) => toPendingPrompt(owner, item));
+    return [
+      ...this.parts.app.services.prompts
+        .pendingItems()
+        .map(({ owner, item }) => toPendingPrompt(owner, item)),
+      ...(this.interfaces?.pending() ?? []),
+    ];
   }
 
   async respond(itemId: string, response: PromptResponse): Promise<void> {
     this.assertOpen('answer a prompt');
+    const interfaces = this.interfaces;
+    if (interfaces?.owns(itemId)) {
+      await this.operation(() => interfaces.respond(itemId, response));
+      return;
+    }
     await this.operation(() => this.parts.app.invoke('chat.respond', itemId, response));
   }
 
@@ -303,6 +339,16 @@ class EvalAppImpl implements EvalApp {
     if (services.agents.isRunning(ASSISTANT_AGENT_ID)) return false;
     for (const procedure of services.procedures.list()) {
       if (services.agents.isRunning(procedure.id)) return false;
+    }
+    const codemode = services.codemode;
+    if (codemode) {
+      // A workflow keeps running after its agent's turn ended (it detached), and an answer to an
+      // interface is a few events long.
+      if (this.interfaces?.busy() || (this.interfaces?.pending().length ?? 0) > 0) return false;
+      for (const agent of codemode.directory.infos()) {
+        if (services.agents.isRunning(agent.id)) return false;
+      }
+      if (codemode.workflows.list().some((workflow) => workflow.status === 'running')) return false;
     }
     return services.prompts.pendingItems().length === 0;
   }
@@ -618,6 +664,8 @@ export async function createEvalAppWith(
 
   const halt = { stopped: false };
   let impl: EvalAppImpl | undefined;
+  // Codemode's observations start with the agents, after the observers exist.
+  let observersRef: Observers | undefined;
   const fleet = new AgentFleet({
     spec,
     deps,
@@ -626,6 +674,7 @@ export async function createEvalAppWith(
     hostBundle,
     onLaunch: (identity) => impl?.onLaunch(identity),
     onEvent: (identity, event) => impl?.onAgentEvent(identity, event),
+    onMessage: (identity, text) => observersRef?.agentMessage(identity, text),
     onOperation: (delta) => impl?.onAgentOperation(delta),
     aborted: () => halt.stopped,
   });
@@ -649,6 +698,7 @@ export async function createEvalAppWith(
       browserFactory: createEvalBrowserFactory({
         network,
         log: browserLog,
+        clock,
         // AutoFirma's triphase server is a site's host like any other: SpainBench serves it.
         signerFetch: createWorldFetch(
           {
@@ -673,6 +723,12 @@ export async function createEvalAppWith(
       hostScript: hostBundle,
       clock,
       idleMs: IDLE_MS,
+      ...(spec.codemode
+        ? {
+            features: { codemode: true },
+            onBridgeCall: (call) => observersRef?.bridgeCall(call),
+          }
+        : {}),
       openVault: async (dir, keys) => {
         vault = await openVault(dir, keys);
         return vault;
@@ -689,6 +745,7 @@ export async function createEvalAppWith(
       fixture: spec.fixture,
       vault: opened,
     });
+    observersRef = observers;
     impl = new EvalAppImpl({
       spec,
       runDir,

@@ -298,7 +298,7 @@ export interface PendingPrompt {
 export interface AnswerMatcher {
   agent?: AgentKind;
   kind?: PromptKind;
-  /** Case-insensitive regexes tested against title + message. */
+  /** Case-insensitive regexes tested against title + message + the form's field labels. */
   text?: string;
   /** Every listed key must be a field of the form. */
   fieldKeys?: string[];
@@ -518,9 +518,8 @@ export interface RunResult {
    * rule matched), `decided` (every rule was decided before the agents stopped),
    * `settle-timeout` (they kept working after every required rule had matched),
    * `limit:wall-clock|tool-calls|requests|cost|prompts` (a `RunLimits` entry, or the meter's
-   * per-run and per-agent request and dollar caps, which the agent's own behaviour trips),
-   * `limit:budget` (the key's reserve, the daily and lifetime caps, the kill switch, the gateway or
-   * the plan said no: the harness's budget, no score), `replay-miss` (the replay cache had no
+   * per-run and per-agent request caps, which the agent's own behaviour trips), `limit:budget`
+   * (the key's balance, the kill switch, the gateway or the plan said no: the harness's budget, no score), `replay-miss` (the replay cache had no
    * recording: no score), `abort`, `error` (the run or the infrastructure failed: no score), or
    * `unexpected-prompt` (the fixture's `fail` policy met a prompt it has no answer for: no score).
    */
@@ -608,7 +607,24 @@ export type Observation =
       data: unknown;
     }
   | { seq: number; t: string; type: 'quiescent' }
-  | { seq: number; t: string; type: 'note'; text: string };
+  | { seq: number; t: string; type: 'note'; text: string }
+  /** Codemode: a render of an open workflow interface (`src/run/app/interfaces.ts`). */
+  | {
+      seq: number;
+      t: string;
+      type: 'interface_render';
+      workflowId: string;
+      key: string;
+      rev: number;
+      /** Something the user can act on (not loading, an input or an enabled button). */
+      actionable: boolean;
+    };
+
+/**
+ * The `toolCallId` prefix of a codemode agent's bridge call recorded as the classic tool it stands
+ * for (`src/run/app/observers.ts`): a step of a workflow, not a tool call of the model.
+ */
+export const BRIDGE_CALL_PREFIX = 'bridge-';
 
 /** Read access to everything a rule may look at, evaluated lazily. */
 export interface RunView {
@@ -731,6 +747,11 @@ export interface EvalAppSpec {
   now: string;
   /** Record Playwright's HAR, trace and HTML per step under `browser/`. */
   captureBrowser: boolean;
+  /**
+   * The app's `codemode` feature flag (docs/codemode.md): workflow interfaces become prompts of the
+   * simulator, and the agents' bridge calls become observations.
+   */
+  codemode?: boolean;
   /** Restore this profile copy (a checkpoint's `profileDir`) instead of creating one. */
   restoreFrom?: { profileDir: string; browserStateFile?: string };
   /** Aborted by the run: stop everything now, cancel pending model requests. */

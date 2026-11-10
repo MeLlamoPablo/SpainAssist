@@ -32,6 +32,7 @@ describe('startSync', () => {
       }),
       'procedures.list': [],
       'chat.transcript': [],
+      'codemode.state': { agents: [], workflows: [] },
     };
 
     const started = startSync();

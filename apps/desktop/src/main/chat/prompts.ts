@@ -12,6 +12,7 @@ import {
   type PromptResponse,
   visibleFormFields,
 } from '@sa/shared';
+import { currentCaller } from '../bridge/caller';
 import { type ConversationService, promptSurvivesRestart } from '../conversation/service';
 import { BridgeError, PromptCancelledError, UserError } from '../core/errors';
 import { t } from '../core/i18n';
@@ -35,6 +36,8 @@ export interface AskOptions {
 interface PendingPrompt {
   /** The agent that asks: ASSISTANT_AGENT_ID or a procedure id. */
   owner: string;
+  /** The agent whose bridge call showed it (a codemode agent waits on it); none after a restart. */
+  asker?: string;
   item: PromptItem;
   resolve(response: PromptResponse): void;
   reject(err: Error): void;
@@ -62,6 +65,8 @@ export class PromptManager {
       logger: Logger;
       clock: Clock;
       lang: () => Language;
+      /** An agent started or stopped waiting for the user on prompts it showed. */
+      onAsking?(agentId: string, asking: boolean): void;
     },
   ) {}
 
@@ -102,6 +107,7 @@ export class PromptManager {
       }
       this.pending.delete(id);
       entry.cleanup();
+      this.syncAsker(entry.asker);
       entry.reject(new PromptCancelledError());
     }
   }
@@ -119,6 +125,7 @@ export class PromptManager {
       prompt,
       status: 'pending',
     };
+    const asker = currentCaller();
     return new Promise<PromptResponse>((resolve, reject) => {
       const onAbort = () => this.finishCancelled(item.id);
       opts.signal?.addEventListener('abort', onAbort, { once: true });
@@ -129,7 +136,9 @@ export class PromptManager {
         reject,
         cleanup: () => opts.signal?.removeEventListener('abort', onAbort),
         ...(opts.mapPins ? { mapPins: opts.mapPins } : {}),
+        ...(asker ? { asker } : {}),
       });
+      this.syncAsker(asker);
       this.store(owner, item);
       if (procedureId) procedures.setUnread(procedureId);
       this.sync(owner);
@@ -184,6 +193,7 @@ export class PromptManager {
     const itemId = entry.item.id;
     this.pending.delete(itemId);
     entry.cleanup();
+    this.syncAsker(entry.asker);
     this.store(entry.owner, {
       ...entry.item,
       status: 'answered',
@@ -314,6 +324,7 @@ export class PromptManager {
     if (!entry) return false;
     this.pending.delete(itemId);
     entry.cleanup();
+    this.syncAsker(entry.asker);
     this.store(entry.owner, { ...entry.item, status: 'cancelled' });
     this.sync(entry.owner);
     entry.reject(new PromptCancelledError(reason));
@@ -324,6 +335,13 @@ export class PromptManager {
   private store(owner: string, item: PromptItem): void {
     if (owner === ASSISTANT_AGENT_ID) this.deps.conversation.upsertItem(item);
     else this.deps.procedures.upsertItem(owner, item);
+  }
+
+  private syncAsker(asker: string | undefined): void {
+    if (!asker || asker === ASSISTANT_AGENT_ID || !this.deps.onAsking) return;
+    let asking = false;
+    for (const entry of this.pending.values()) if (entry.asker === asker) asking = true;
+    this.deps.onAsking(asker, asking);
   }
 
   private sync(owner: string): void {

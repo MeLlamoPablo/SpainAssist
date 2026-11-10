@@ -7,17 +7,22 @@ import {
   ASSISTANT_AGENT_ID,
   dniePhoneOffered,
   type Language,
+  type UiEvent,
   type WindowControlsStyle,
 } from '@sa/shared';
 import type { Sidecar } from '@sa/sidecar';
 import type { KeyProvider } from '@sa/vault';
 import { AgentManager } from '../agents/manager';
 import { createBridgeHandlers, saveFormAnswers, withVaultErrors } from '../bridge/handlers';
-import { BridgeServer } from '../bridge/server';
+import { type BridgeCall, BridgeServer } from '../bridge/server';
 import { TokenRegistry } from '../bridge/tokens';
 import { BrowserHolder } from '../browser/holder';
 import { PromptManager, redactResponse } from '../chat/prompts';
 import { ChatService } from '../chat/service';
+import { CodemodeAgents } from '../codemode/agents';
+import { CodemodeCoordinator } from '../codemode/coordinator';
+import { createCodemodeHandlers } from '../codemode/handlers';
+import { WorkflowService } from '../codemode/workflows';
 import { CompanionService } from '../companion/service';
 import { Coordinator } from '../conversation/coordinator';
 import { ConversationService } from '../conversation/service';
@@ -57,7 +62,7 @@ import { createUpdates, type Updates } from '../updates/updater';
 import type { ChooseSavePath } from '../vault/certificate-export';
 import { VaultService } from '../vault/service';
 import type { SaEnv } from './env';
-import { type AppPaths, assistantPaths } from './paths';
+import { type AppPaths, assistantPaths, CHAT_VERSIONS } from './paths';
 
 /** Everything the composition root needs from the outside world (Electron or tests). */
 export interface MainDeps {
@@ -123,6 +128,8 @@ export interface MainDeps {
   ids?: IdFactory;
   /** Idle agent shutdown (default 10 min). */
   idleMs?: number;
+  /** Hears every bridge call of the agents before it runs (the eval suite; none in the app). */
+  onBridgeCall?: (call: BridgeCall) => void;
 }
 
 export interface MainServices {
@@ -145,6 +152,12 @@ export interface MainServices {
   /** DNIe with the phone; only with the `dnie-phone` feature flag. */
   companion?: CompanionService;
   feedback: FeedbackService;
+  /** The codemode harness; only with the `codemode` feature flag. */
+  codemode?: {
+    workflows: WorkflowService;
+    directory: CodemodeAgents;
+    coordinator: CodemodeCoordinator;
+  };
   deleteProcedure(id: string): Promise<void>;
   wipeAll(): Promise<void>;
   shutdown(): Promise<void>;
@@ -170,6 +183,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     );
 
   const assistant = assistantPaths(paths.assistantDir);
+  const codemodeOn = deps.appInfo.features.codemode;
   for (const dir of [
     paths.userData,
     paths.assistantDir,
@@ -220,9 +234,39 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     logger: logger.child('prompts'),
     clock,
     lang,
+    onAsking: (agentId, asking) => directory.setAsking(agentId, asking),
   });
   const media = new MediaStore((pid) => procedureStore.paths(pid).mediaDir);
   const tokens = new TokenRegistry();
+
+  // Codemode (docs/codemode.md): agents independent of procedures, durable workflows.
+  const directory = new CodemodeAgents({
+    dir: join(paths.userData, 'agents'),
+    events,
+    logger: logger.child('codemode'),
+    clock,
+  });
+  let codemodeCoordinator!: CodemodeCoordinator;
+  const workflows = new WorkflowService({
+    dir: join(paths.userData, 'workflows'),
+    events,
+    logger: logger.child('workflows'),
+    clock,
+    placeLookup: (address, signal) => places.place(address, signal),
+    agentAlive: (id) => agents.isActive(id),
+    onEnd: (end) => codemodeCoordinator.onWorkflowEnd(end),
+    onDetachedEvent: (workflow) => codemodeCoordinator.onDetachedEvent(workflow),
+    onStale: (workflow) => codemodeCoordinator.onStale(workflow),
+  });
+  if (codemodeOn) {
+    await directory.init();
+    await workflows.init();
+    workflows.startSweeping();
+    events.on((e) => {
+      if (e.type === 'codemode.workflow') codemodeCoordinator.onWorkflowChanged(e.workflow.agentId);
+    });
+  }
+  const isCodemodeAgent = (id: string) => codemodeOn && directory.has(id);
 
   // Late-bound references (circular wiring between agents, providers and the bridge).
   let providers!: ProviderManager;
@@ -237,24 +281,51 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     tokens,
     bridgeUrl: () => bridge.url(),
     sink: (agentId) =>
-      agentId === ASSISTANT_AGENT_ID ? conversation : procedures.sinkFor(agentId),
+      agentId === ASSISTANT_AGENT_ID
+        ? conversation
+        : isCodemodeAgent(agentId)
+          ? directory.sinkFor(agentId)
+          : procedures.sinkFor(agentId),
     workDir: (agentId) =>
-      agentId === ASSISTANT_AGENT_ID ? assistant.workDir : procedures.paths(agentId).workDir,
+      agentId === ASSISTANT_AGENT_ID
+        ? assistant.workDir
+        : isCodemodeAgent(agentId)
+          ? directory.paths(agentId).workDir
+          : procedures.paths(agentId).workDir,
     onRunEnd: (agentId, result) => {
       providers.creditSpent();
-      coordinator.onRunEnd(agentId, result);
+      if (codemodeOn) codemodeCoordinator.onRunEnd(agentId, result);
+      else coordinator.onRunEnd(agentId, result);
     },
+    ...(codemodeOn
+      ? {
+          onGone: (agentId: string) => codemodeCoordinator.onAgentGone(agentId),
+          keepAlive: (agentId: string) => codemodeCoordinator.keepAlive(agentId),
+        }
+      : {}),
     buildConfig: async (agentId) => {
       const s = settings.get();
       const isAssistant = agentId === ASSISTANT_AGENT_ID;
-      if (!isAssistant) procedures.transcript(agentId); // load before events arrive
+      const kind = codemodeOn
+        ? isAssistant
+          ? 'orchestrator'
+          : directory.kindOf(agentId)
+        : undefined;
+      if (!isAssistant) {
+        // Load before events arrive.
+        if (kind) await directory.transcript(agentId);
+        else procedures.transcript(agentId);
+      }
       return {
-        role: isAssistant ? 'assistant' : 'procedure',
+        role: kind ?? (isAssistant ? 'assistant' : 'procedure'),
         procedureId: agentId,
         extraTrustedHosts: [...env.extraTrustedHosts],
+        // Each version of the chat's agent has its own pi session: another tool set, a fresh context.
         sessionFile: isAssistant
-          ? assistant.sessionFile
-          : procedureStore.paths(agentId).sessionFile,
+          ? assistant.sessionFile(kind ? CHAT_VERSIONS.codemode : CHAT_VERSIONS.classic)
+          : kind
+            ? directory.paths(agentId).sessionFile
+            : procedureStore.paths(agentId).sessionFile,
         language: s.language,
         model: await providers.agentModel(isAssistant ? 'assistant' : 'procedure'),
         research: {
@@ -263,7 +334,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
           // BYOK and custom endpoints research with Exa, keyless or with the user's key.
           ...(providers.researchesWithExa() ? { exa: true } : {}),
           // ChatGPT plans research on the models their plan offers.
-          ...(isAssistant ? {} : { chatgptModels: await providers.researchModels() }),
+          ...(isAssistant && !kind ? {} : { chatgptModels: await providers.researchModels() }),
         },
         // Community learnings respect the sharing setting at call time. Sharing and rating also
         // need a user key (one vote per user and learning), which the server checks.
@@ -447,28 +518,58 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     ...(capture ? { finishCapture: (id: string) => browser.finishCapture(id) } : {}),
   });
 
+  codemodeCoordinator = new CodemodeCoordinator({
+    agents,
+    directory,
+    workflows,
+    procedures,
+    conversation,
+    prompts,
+    logger: logger.child('codemode'),
+    clock,
+    lang,
+    documents: () => vaultFn().listDocuments(),
+  });
+
   bridge = new BridgeServer({
     tokens,
-    handlers: createBridgeHandlers({
-      procedures,
-      conversation,
-      coordinator,
-      prompts,
-      vault: vaultFn,
-      browser,
-      media,
-      events,
-      providers,
-      feedback,
-      biometric: deps.biometric,
-      certificateOrigins: deps.certificateOrigins,
-      logger: logger.child('bridge'),
-      lang,
-      placeLookup: places.place,
-      dniePhone,
-    }),
+    handlers: {
+      ...createBridgeHandlers({
+        procedures,
+        conversation,
+        coordinator,
+        prompts,
+        vault: vaultFn,
+        browser,
+        media,
+        events,
+        providers,
+        feedback,
+        biometric: deps.biometric,
+        certificateOrigins: deps.certificateOrigins,
+        logger: logger.child('bridge'),
+        lang,
+        placeLookup: places.place,
+        dniePhone,
+      }),
+      ...createCodemodeHandlers({
+        workflows,
+        procedures,
+        directory,
+        coordinator: codemodeCoordinator,
+        browser,
+      }),
+    },
     logger: logger.child('bridge'),
-    agentExists: (id) => id === ASSISTANT_AGENT_ID || procedures.has(id),
+    agentExists: (id) => id === ASSISTANT_AGENT_ID || procedures.has(id) || isCodemodeAgent(id),
+    ...(codemodeOn
+      ? {
+          roleOf: (id: string) =>
+            id === ASSISTANT_AGENT_ID ? 'orchestrator' : directory.kindOf(id),
+          procedureExists: (id: string) => procedures.has(id),
+        }
+      : {}),
+    ...(deps.onBridgeCall ? { onCall: deps.onBridgeCall } : {}),
   });
   await bridge.listen();
 
@@ -480,6 +581,9 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     logger: logger.child('chat'),
     clock,
     lang,
+    ...(codemodeOn
+      ? { decorate: (text: string) => codemodeCoordinator.decorateUserMessage(text) }
+      : {}),
   });
 
   prompts.restore(async (owner, item, response) => {
@@ -539,6 +643,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     );
     await browser.downloads.discard(id);
     await procedures.delete(id);
+    workflows.forgetProcedure(id);
+    directory.forgetProcedure(id);
   }
 
   async function wipeAll(): Promise<void> {
@@ -550,6 +656,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     await browser.closeAll();
     await vaultPort.wipe();
     await procedures.deleteAll();
+    await workflows.deleteAll();
+    await directory.deleteAll();
     await conversation.clear();
     await rm(paths.assistantDir, { recursive: true, force: true }).catch(() => {});
     await settings.reset();
@@ -568,6 +676,9 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     await bridge.close().catch(() => {});
     await procedures.flush().catch(() => {});
     await conversation.flush().catch(() => {});
+    workflows.dispose();
+    await workflows.flush().catch(() => {});
+    await directory.flush().catch(() => {});
     await vault.cleanupTmp().catch(() => {});
   }
 
@@ -633,6 +744,31 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       }),
     deleteProcedure,
     wipeAll,
+    ...(codemodeOn
+      ? {
+          codemode: {
+            state: () => ({ agents: directory.infos(), workflows: workflows.infos() }),
+            uiEvent: (workflowId: string, key: string, event: UiEvent) =>
+              workflows.userEvent(workflowId, key, event),
+            pins: async (workflowId: string, key: string, addresses: string[]) => {
+              const signal = AbortSignal.timeout(20_000);
+              await workflows.locateOpen(workflowId, key, signal);
+              return workflows.pins(workflowId, key, addresses);
+            },
+            agentLog: async (agentId: string) =>
+              structuredClone(await directory.transcript(agentId)),
+            stopAgent: async (agentId: string) => {
+              if (directory.kindOf(agentId) === 'agent')
+                await codemodeCoordinator.stopAgent(agentId);
+            },
+            uiFailed: (workflowId: string, key: string, rev: number, detail: string) =>
+              workflows.uiFailed(workflowId, key, rev, detail),
+            cancelWorkflow: async (workflowId: string) => {
+              await workflows.cancel(workflowId, 'The user dismissed it');
+            },
+          },
+        }
+      : {}),
   });
 
   return {
@@ -654,6 +790,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     browser,
     companion,
     feedback,
+    ...(codemodeOn ? { codemode: { workflows, directory, coordinator: codemodeCoordinator } } : {}),
     deleteProcedure,
     wipeAll,
     shutdown,

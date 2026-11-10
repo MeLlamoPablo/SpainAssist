@@ -201,6 +201,16 @@ describe('the launch of an agent host', () => {
     expect(launched.at(-1)).toMatchObject({ agentKey: 'assistant', generation: 1 });
   });
 
+  it("counts codemode's coordinator as the assistant and its agents as procedure agents with no procedure", () => {
+    const f = fleet();
+    f.lib.buildAgentLaunch(options(config({ role: 'orchestrator', procedureId: 'assistant' })));
+    f.lib.buildAgentLaunch(options(config({ role: 'agent', procedureId: 'a_00000000000000bb' })));
+    expect(launched.map((l) => [l.agentKey, l.agent, l.procedureId])).toEqual([
+      ['assistant', 'assistant', undefined],
+      ['procedure-a_00000000000000bb', 'procedure', undefined],
+    ]);
+  });
+
   it('gives the host an environment with no proxy, no NODE_OPTIONS, and loopback excluded from any proxy', () => {
     const launch = fleet().lib.buildAgentLaunch(options(config()));
     expect(launch.env.HTTPS_PROXY).toBeUndefined();

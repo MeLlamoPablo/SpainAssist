@@ -1,9 +1,15 @@
 import type { AnswerMatcher, PendingPrompt } from '../contracts';
 import { compilePattern, shorten, testPattern } from './text';
 
-/** The text an `AnswerMatcher.text` regex is tested against: title and message. */
-export function promptText(prompt: Pick<PendingPrompt, 'title' | 'message'>): string {
-  return prompt.message ? `${prompt.title}\n${prompt.message}` : prompt.title;
+/**
+ * The text an `AnswerMatcher.text` regex is tested against: title, message and the labels of the
+ * form's fields. A form may say what it asks for in a field's label alone ("Escribe el código
+ * aquí", with the field "Caracteres de la imagen").
+ */
+export function promptText(prompt: Pick<PendingPrompt, 'title' | 'message' | 'fields'>): string {
+  return [prompt.title, prompt.message, ...(prompt.fields ?? []).map((field) => field.label)]
+    .filter((part) => !!part)
+    .join('\n');
 }
 
 /** `agent kind "title"`, for notes and details. */
