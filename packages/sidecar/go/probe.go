@@ -23,6 +23,26 @@ import (
 
 const probeTimeout = 5 * time.Second
 
+// upstreamCipherSuites are the TLS 1.2 suites Chromium offers, for every connection the sidecar
+// makes to a site. Go no longer offers RSA key exchange by default (and Go 1.27 removed the
+// GODEBUG that brought it back), but some government hosts accept nothing else
+// (onlinesec.correos.es, voto por correo): without it the probe's handshake fails before the
+// certificate request, and Chromium, which does offer it, shows its picker.
+var upstreamCipherSuites = []uint16{
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+	tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+	tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+}
+
 // errProbed ends a probe's handshake: the server asked for a certificate, nothing more to learn.
 var errProbed = errors.New("the server asked for a client certificate")
 
@@ -80,6 +100,7 @@ func (p *proxy) probe(target string) (asks, known bool) {
 		// its own connection, or the sidecar does when it intercepts.
 		InsecureSkipVerify: true,
 		MinVersion:         tls.VersionTLS12,
+		CipherSuites:       upstreamCipherSuites,
 		NextProtos:         []string{"h2", "http/1.1"},
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 			asked = true
@@ -109,6 +130,7 @@ func (p *proxy) newAnonymous() *httputil.ReverseProxy {
 				RootCAs:            p.roots,
 				InsecureSkipVerify: p.insecure,
 				MinVersion:         tls.VersionTLS12,
+				CipherSuites:       upstreamCipherSuites,
 				Renegotiation:      tls.RenegotiateOnceAsClient,
 			},
 			MaxIdleConnsPerHost:   6,

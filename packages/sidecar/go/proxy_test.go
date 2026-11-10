@@ -109,8 +109,9 @@ func newUpstream(t *testing.T, maxVersion uint16) *upstream {
 	return newSite(t, maxVersion, tls.RequestClientCert)
 }
 
-// newSite is a site that asks for a client certificate as clientAuth says.
-func newSite(t *testing.T, maxVersion uint16, clientAuth tls.ClientAuthType) *upstream {
+// newSite is a site that asks for a client certificate as clientAuth says, with only the given
+// TLS 1.2 cipher suites if any.
+func newSite(t *testing.T, maxVersion uint16, clientAuth tls.ClientAuthType, suites ...uint16) *upstream {
 	t.Helper()
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s := seen{Version: r.TLS.Version, Host: r.Host, XFF: r.Header.Get("X-Forwarded-For")}
@@ -119,7 +120,7 @@ func newSite(t *testing.T, maxVersion uint16, clientAuth tls.ClientAuthType) *up
 		}
 		_ = json.NewEncoder(w).Encode(s)
 	}))
-	srv.TLS = &tls.Config{ClientAuth: clientAuth, MaxVersion: maxVersion}
+	srv.TLS = &tls.Config{ClientAuth: clientAuth, MaxVersion: maxVersion, CipherSuites: suites}
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	roots := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
@@ -328,6 +329,26 @@ func TestSitesThatAskForACertificateGetNone(t *testing.T) {
 		if c.lastSPKI() != h.p.spki {
 			t.Fatalf("TLS %x: the browser should see the sidecar's pinned key", version)
 		}
+	}
+}
+
+// Like onlinesec.correos.es: TLS 1.2 with RSA key exchange only, which Go doesn't offer by
+// default. The probe must still see the request, and both upstreams must still connect.
+func TestSitesWithRSAKeyExchangeOnly(t *testing.T) {
+	up := newSite(t, tls.VersionTLS12, tls.RequestClientCert, tls.TLS_RSA_WITH_AES_128_GCM_SHA256)
+	h := newHarness(t, up.roots)
+	resp, s, body := h.client("s1", password).fetch(t, up.URL+"/")
+	if resp.StatusCode != 200 || s.CN != "" || resp.Header.Get("X-Sa-Certificate-Requested") != "none" {
+		t.Fatalf("anonymous: got %d %s", resp.StatusCode, body)
+	}
+
+	ca := newCA(t)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	cert := newClient(t, ca, "PRUEBA RSA", key)
+	h.configure(t, "s2", []string{up.target}, &identitySpec{ID: "cert-1", Chain: []string{b64(cert.der)}, Key: pkcs8(t, key)})
+	resp, s, body = h.client("s2", password).fetch(t, up.URL+"/")
+	if resp.StatusCode != 200 || s.CN != "PRUEBA RSA" {
+		t.Fatalf("with a certificate: got %d %s", resp.StatusCode, body)
 	}
 }
 

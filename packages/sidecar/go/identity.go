@@ -193,6 +193,7 @@ func (id *identity) dialTLS(ctx context.Context, _, addr string) (net.Conn, erro
 		RootCAs:            id.p.roots,
 		InsecureSkipVerify: id.p.insecure,
 		MinVersion:         tls.VersionTLS12,
+		CipherSuites:       upstreamCipherSuites,
 		Renegotiation:      tls.RenegotiateOnceAsClient,
 		ClientSessionCache: id.cache,
 		NextProtos:         []string{"http/1.1"},
