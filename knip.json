@@ -4,7 +4,7 @@
     ".": {
       "entry": [
         "scripts/*.mjs",
-        "marketing/render.mjs",
+        "marketing/*.mjs",
         "marketing/*/scene.js",
         "tools/scan-eval/run.mjs"
       ],

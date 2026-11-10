@@ -18,3 +18,6 @@ node marketing/render.mjs dni-video --stills 3,7.5  # PNGs of those seconds
 ```
 
 Needs ffmpeg and the Chromium that `apps/desktop`'s playwright-core expects.
+
+`play-screens.mjs` renders the phone screens of the Play listing from `dni-video`, without its
+government names (`docs/play-listing.md`, "Graphics").

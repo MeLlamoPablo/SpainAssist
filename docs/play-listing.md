@@ -9,15 +9,18 @@ listing up to date.
 Rules for every text here and in the graphics (`play-policy.md`): never call the app "official"
 or "la app del DNI", no government logos or coats of arms, and in every language the description
 opens with the disclaimer in Play's words ("no representa a ninguna entidad gubernamental") and
-the official sources, one for every government site or body the app or the graphics show. A
-screenshot that shows a government document carries the disclaimer too, and graphics name a
-sede by a generic "Sede Oficial" rather than its domain where they can.
+the official sources, one for every government site or body the app or the graphics show. The
+graphics show no government content that would need a source: no sede's domain, agency, form,
+logo or login service (Cl@ve), only the generic idea of a sede, as a "Sede electrónica" chip
+("E-government site" in English), and mock documents that aren't government ones.
 
-Play rejected the listing twice under Misleading Claims ("Missing Source Link for Government
-Information"). On 2026-11-03 only the en-US description had sources; Play flagged the es-ES one.
-On 2026-11-05 the es-ES description listed them at the end, below the security notes, and Play
-flagged it again, quoting its first paragraph, together with screenshot 1, which shows
-sede.agenciatributaria.gob.es without a disclaimer or the Agencia Tributaria as a source.
+Play rejected the listing several times under Misleading Claims ("Missing Source Link for
+Government Information"). On 2026-11-03 only the en-US description had sources; Play flagged the
+es-ES one. On 2026-11-05 the es-ES description listed them at the end, below the security notes,
+and Play flagged it again, quoting its first paragraph, together with screenshot 1, which showed
+sede.agenciatributaria.gob.es without a disclaimer or the Agencia Tributaria as a source. Each
+time the reviewers pointed at the description and screenshot 1, which is why the 2026-11-10
+graphics drop every government name rather than adding sources for them.
 
 ## Store listing
 
@@ -127,9 +130,9 @@ Contact: hola@spainassist.es
 The app is in Spanish and English (`composeResources/values-en`), so the English listing
 describes the same app. It has its own graphics with the English UI (English frames next to the
 Spanish ones on the "Play Store" page, on Framer's main branch), exported to
-`~/Desktop/SpainAssist-play/listing/en/` and uploaded as `en-*.png`: `en-feature-graphic-1105.png`
-and `en-01-sign-1105.png` … `en-05-encrypted-1105.png`, in the Spanish order. The Modelo 100 page stays in
-Spanish, since it is a Spanish tax form.
+`~/Desktop/SpainAssist-play/listing/en/` and uploaded as `en-*.png`: `en-feature-graphic-1110.png`
+and `en-01-sign-1110.png` … `en-05-encrypted-1110.png`, in the Spanish order. The contract on
+screenshot 1 is in English there too.
 
 ### Contact details and links
 
@@ -149,42 +152,53 @@ Spanish, since it is a Spanish tax form.
 
 Exported to `~/Desktop/SpainAssist-play/listing/` (outside the repo: binary, regenerated from
 Framer, and the repo is no place for 1 MB of marketing PNGs per release). Designed on the
-"Play Store" page of the Framer project "Spain Assistant". Each upload gets a new date suffix
-(`-1105` for the 2026-11-05 set): Console's asset library keeps every file ever uploaded, and
+"Play Store" page of the Framer project "Spain Assist". Each upload gets a new date suffix
+(`-1110` for the 2026-11-10 set): Console's asset library keeps every file ever uploaded, and
 reused names make the old and new ones hard to tell apart when picking. The library also
 deduplicates: a file identical to one already there is shown under the old name.
 
 | File | Size | Play slot |
 | --- | --- | --- |
 | `icon-512.png` | 512×512, 32-bit PNG | App icon (the launcher's flag on white) |
-| `feature-graphic-1024x500-1105.png` | 1024×500, 24-bit PNG | Feature graphic |
-| `01-firma-1105.png` … `05-cifrado-1105.png` | 1080×1920, 24-bit PNG | Phone screenshots, in this order |
+| `feature-graphic-1024x500-1110.png` | 1024×500, 24-bit PNG | Feature graphic |
+| `01-firma-1110.png` … `05-cifrado-1110.png` | 1080×1920, 24-bit PNG | Phone screenshots, in this order |
 
 Screenshots, by headline (frame slug in brackets):
 
-1. Firma con tu DNI desde el móvil (`revisar`): the Modelo 100 from the DNI video.
+1. Firma con tu DNI desde el móvil (`revisar`): a rental contract to sign
+   (`Contrato_Alquiler.pdf`, between two made-up people), the site chip reading "Sede
+   electrónica", and the disclaimer at the bottom.
 2. Vincúlalo con un QR. Escanea el código que muestra Spain Assist en tu ordenador. (`inicio`):
-   the scanner filming the desktop pairing dialog, as in the DNI video.
+   the scanner filming the desktop pairing dialog, as in the DNI video. Behind the dialog, out of
+   focus, Mis datos › Credenciales shows only the DNI and an unnamed digital certificate.
 3. Acerca el DNI y listo. El móvil lee tu DNI por NFC. Sin lector de tarjetas. (`acerca`)
-4. Identifícate en sedes electrónicas (`entrar-revisar`)
+4. Identifícate en sedes electrónicas (`entrar-revisar`): "Entrar en" over a "Sede electrónica"
+   chip.
 5. Cifrado de extremo a extremo. Tus documentos y firmas viajan seguros en todo momento. (`firmado`)
 
+The feature graphic shows screen 1's phone screen, without the disclaimer. None of them shows the
+start screen, so none carries its disclaimer.
+
+Screen 1 keeps the disclaimer band (the "Phone Down · Disclaimer" variant of the "Play Store
+Screenshot" component, used by screen 1 alone), now in Play's words, like the descriptions:
+
+> Spain Assist es una app privada
+> y no representa a ninguna entidad gubernamental.
+
+> Spain Assist is a private app
+> and does not represent any government entity.
+
+Nothing on the graphics needs it any more; it stays because it costs nothing and is the first
+thing a reviewer reads after the headline.
+
 Screens 1 and 2 are images rendered from `marketing/dni-video` (the Framer component takes one
-image per screen), not emulator captures.
-
-Screen 1, the one Play flagged on 2026-11-05, shows a tax return, so it carries the disclaimer at
-the bottom (the "Phone Down · Disclaimer" variant of the "Play Store Screenshot" component, used by
-screen 1 alone), and its site chip reads "Sede Oficial" instead of sede.agenciatributaria.gob.es.
-The PDF keeps the made-up Agencia Tributaria header. The feature graphic shows the same screen,
-also with "Sede Oficial", and no disclaimer.
-
-> Spain Assist es una app privada,
-> no afiliada a ninguna administración pública.
-
-The DNI video itself still shows the domain: screen 1's image is `#screen` at t=10.5, captured
-at 3× with the punch-hole hidden and the chip's text replaced (in English, also the title and the
-two buttons). Screen 4 still shows sede.agenciatributaria.gob.es, and the blurred desktop behind
-screen 2's QR shows Cl@ve, which is why the description lists both.
+image per screen), not emulator captures. `node marketing/play-screens.mjs` renders them, in
+Spanish and English, into `marketing/dni-video/out/play/`: it swaps in the contract, the chip and
+the English strings, takes the two Cl@ve cards and the certificate's FNMT issuer out of the window
+the scanner films, and leaves the video itself as it was (Modelo 100,
+sede.agenciatributaria.gob.es, Cl@ve). Screen 4 is an emulator capture whose chip the same script
+repaints (`--entrar es.png,en.png`), since `PreviewActivity`'s mock request comes from
+sede.agenciatributaria.gob.es.
 
 Play's limits: 2 to 8 phone screenshots, each side 320 to 3840 px and the long side at most twice
 the short one (so 1080×2400 raw captures don't qualify; 1080×1920 does).
@@ -206,7 +220,9 @@ adb exec-out screencap -p > revisar.png
 ```
 
 With the emulator's host GPU, `screencap` returned blank white frames; start the emulator with
-`-gpu swiftshader_indirect` to capture.
+`-gpu swiftshader_indirect` to capture. A new `entrar-revisar` capture shows
+sede.agenciatributaria.gob.es again: run it through `marketing/play-screens.mjs --entrar` before
+it goes into Framer.
 
 ## App content
 
