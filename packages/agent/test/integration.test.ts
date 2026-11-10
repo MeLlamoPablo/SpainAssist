@@ -430,6 +430,53 @@ describe('agent host over RPC (integration)', () => {
     );
   });
 
+  it('records a provider or thinking level change when a session resumes, once', async () => {
+    bridge.setHandler('agent.credential', () => ({
+      credential: { type: 'api_key', key: 'llm-key-from-bridge' },
+    }));
+    const selections = () =>
+      readFileSync(join(workDir, 'sessions', 'p1.jsonl'), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter((e) => e.type === 'model_change' || e.type === 'thinking_level_change')
+        .map(({ type, provider, modelId, thinkingLevel }) =>
+          type === 'model_change' ? `${provider}/${modelId}` : `thinking ${thinkingLevel}`,
+        );
+    const chatgpt: AgentHostConfig['model'] = {
+      provider: 'custom',
+      id: 'mock-model',
+      baseUrl: llm.baseUrl,
+      reasoning: true,
+      thinkingLevel: 'high',
+    };
+    // The subscription's limit is hit: the app resumes the agent on a voucher.
+    const voucher: AgentHostConfig['model'] = {
+      provider: 'litellm',
+      id: 'anthropic/claude-haiku-5.5',
+      baseUrl: llm.baseUrl,
+      thinkingLevel: 'medium',
+    };
+    const first = await start(chatgpt);
+    await first.client.prompt('Hola, quiero renovar el DNI');
+    await waitFor(first.events, isRunEnd);
+    await first.client.stop();
+    expect(selections()).toEqual(['custom/mock-model', 'thinking high']);
+
+    for (let restart = 0; restart < 2; restart++) {
+      const resumed = await start(voucher);
+      await resumed.client.prompt('¿Sigues ahí?');
+      await waitFor(resumed.events, isRunEnd);
+      await resumed.client.stop();
+    }
+    expect(selections()).toEqual([
+      'custom/mock-model',
+      'thinking high',
+      'litellm/anthropic/claude-haiku-5.5',
+      'thinking medium',
+    ]);
+  });
+
   it('compacts while idle by extending the last request, so the summary reads its cache', async () => {
     llm.setScenario({
       rules: [

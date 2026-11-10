@@ -19,7 +19,7 @@ import { hostLog } from './log';
 import { configureModel, LITELLM_PROVIDER_ID, needsPromptCacheKey } from './model';
 import { redactsPages } from './redaction';
 import { promptResearch, researchBackend } from './research';
-import { prepareSessionFile } from './session';
+import { prepareSessionFile, recordSessionSelection } from './session';
 
 /**
  * Agent host: one process per active agent (the assistant, or one procedure's agent). Reads its configuration from the environment
@@ -235,6 +235,7 @@ export async function runHost(
         thinkingLevel: config.model.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
         tools: agentTools.map((tool) => tool.name),
       });
+      recordSessionSelection(options.sessionManager, result.session);
       return { ...result, services, diagnostics: services.diagnostics };
     },
     { cwd, agentDir, sessionManager },
