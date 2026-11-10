@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as cms from '@peculiar/asn1-cms';
 import { AsnConvert, AsnSerializer, OctetString } from '@peculiar/asn1-schema';
+import { Certificate } from '@peculiar/asn1-x509';
 import { describe, expect, it } from 'vitest';
 import { resolveAlgorithm } from '../src/algorithms';
 import { cosignCades, countersignCades, createCades, OID, parseCades } from '../src/cades';
@@ -141,6 +142,29 @@ describe('CAdES', () => {
     expect(hex512).toContain('0609608648016503040203'); // sha512 OID present
     // FNMT policy OID 1.3.6.1.4.1.5734.3.10.1 copied from the certificate
     expect(hex256).toContain('060a2b06010401ac66030a01');
+  });
+
+  it("puts the certificate's serial number in IssuerSerial (v1 and v2)", async () => {
+    const id = rsaIdentity();
+    const serial = Buffer.from(
+      AsnConvert.parse(id.certDer, Certificate).tbsCertificate.serialNumber,
+    );
+    // INTEGER { serial }: it was a zero-length INTEGER (Java: "Zero length BigInteger").
+    const integer = Buffer.concat([Buffer.from([0x02, serial.length]), serial]).toString('hex');
+    for (const [algorithm, attribute] of [
+      ['SHA512withRSA', OID.signingCertificateV2],
+      ['SHA1withRSA', OID.signingCertificate],
+    ] as const) {
+      const sig = await createCades({
+        data: DATA,
+        implicit: true,
+        algorithm: resolveAlgorithm(algorithm, 'rsa'),
+        signer: keyObjectSigner(id.privateKey, id.keyType),
+        chain: id.chain,
+      });
+      const value = signedAttribute(sig, attribute) as unknown as { toBER(): ArrayBuffer };
+      expect(Buffer.from(value.toBER()).toString('hex')).toContain(integer);
+    }
   });
 
   it('uses signing-certificate (v1) for SHA-1', async () => {

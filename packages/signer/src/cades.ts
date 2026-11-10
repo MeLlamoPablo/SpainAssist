@@ -15,6 +15,7 @@ import * as cms from '@peculiar/asn1-cms';
 import * as ess from '@peculiar/asn1-ess';
 import {
   AsnConvert,
+  AsnIntegerArrayBufferConverter,
   AsnProp,
   AsnPropTypes,
   AsnSerializer,
@@ -113,6 +114,26 @@ AsnProp({ type: SigPolicyQualifierInfo, repeated: 'sequence', optional: true })(
 AsnType({ type: AsnTypeTypes.Sequence })(SignaturePolicyId);
 
 // ---------------------------------------------------------------------------------------------
+// IssuerSerial (RFC 5035) of ESS signing-certificate(-v2). @peculiar/asn1-ess declares its
+// serialNumber as an INTEGER without the ArrayBuffer converter, so the certificate's serial came
+// out as a zero-length INTEGER, which Java verifiers reject ("Zero length BigInteger": Correos).
+// ---------------------------------------------------------------------------------------------
+
+class IssuerSerial {
+  issuer = new GeneralNames();
+  serialNumber = new ArrayBuffer(0);
+  constructor(params: Partial<IssuerSerial> = {}) {
+    Object.assign(this, params);
+  }
+}
+AsnProp({ type: GeneralNames })(IssuerSerial.prototype, 'issuer');
+AsnProp({ type: AsnPropTypes.Integer, converter: AsnIntegerArrayBufferConverter })(
+  IssuerSerial.prototype,
+  'serialNumber',
+);
+AsnType({ type: AsnTypeTypes.Sequence })(IssuerSerial);
+
+// ---------------------------------------------------------------------------------------------
 // Signed attributes
 // ---------------------------------------------------------------------------------------------
 
@@ -159,7 +180,7 @@ function signingCertificateAttribute(
   v2: boolean,
   includePolicies: boolean,
 ): cms.Attribute {
-  const issuerSerial = new ess.IssuerSerial({
+  const issuerSerial = new IssuerSerial({
     issuer: new GeneralNames([new GeneralName({ directoryName: cert.tbsCertificate.issuer })]),
     serialNumber: cert.tbsCertificate.serialNumber,
   });
