@@ -2478,7 +2478,8 @@ async function coverOf(loc: Locator, err: unknown): Promise<string | undefined> 
   if (!/intercepts pointer events/i.test(err instanceof Error ? err.message : String(err))) {
     return undefined;
   }
-  return loc
+  // No functions inside: the app's bundle wraps named ones in a helper the page doesn't have.
+  const found = await loc
     .evaluate((el) => {
       const box = el.getBoundingClientRect();
       const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
@@ -2492,29 +2493,37 @@ async function coverOf(loc: Locator, err: unknown): Promise<string | undefined> 
       ) {
         cover = cover.parentElement;
       }
-      const clip = (t: string | null | undefined) =>
-        (t ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
       const modal = 'dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]';
       const dialog = top.closest(modal) ?? cover.querySelector(modal);
-      if (dialog) {
-        const labelled = dialog.getAttribute('aria-labelledby');
-        const name =
-          clip(dialog.getAttribute('aria-label')) ||
-          clip(
-            labelled ? document.getElementById(labelled.split(' ')[0] ?? '')?.textContent : '',
-          ) ||
-          clip(dialog.querySelector('h1, h2, h3, h4, legend')?.textContent) ||
-          // biome-ignore lint/performance/useDomNodeTextContent: the text on screen, not hidden nodes
-          clip((dialog as HTMLElement).innerText);
-        return name ? `the dialog "${name}"` : 'a dialog';
-      }
-      const heading = clip(cover.querySelector('h1, h2, h3, h4, legend')?.textContent);
-      if (heading) return `a popup titled "${heading}"`;
-      // biome-ignore lint/performance/useDomNodeTextContent: the text on screen, not hidden nodes
-      const text = clip((cover as HTMLElement).innerText);
-      return text ? `an element that reads "${text}"` : undefined;
+      const labelled = dialog?.getAttribute('aria-labelledby')?.split(' ')[0];
+      const heading = 'h1, h2, h3, h4, legend';
+      return {
+        dialog: !!dialog,
+        names: dialog
+          ? [
+              dialog.getAttribute('aria-label'),
+              labelled ? document.getElementById(labelled)?.textContent : undefined,
+              dialog.querySelector(heading)?.textContent,
+              // biome-ignore lint/performance/useDomNodeTextContent: the text on screen, not hidden nodes
+              (dialog as HTMLElement).innerText,
+            ]
+          : [],
+        heading: cover.querySelector(heading)?.textContent,
+        // biome-ignore lint/performance/useDomNodeTextContent: the text on screen, not hidden nodes
+        text: (cover as HTMLElement).innerText,
+      };
     })
     .catch(() => undefined);
+  if (!found) return undefined;
+  const clip = (t: string | null | undefined) => (t ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (found.dialog) {
+    const name = found.names.map(clip).find(Boolean);
+    return name ? `the dialog "${name}"` : 'a dialog';
+  }
+  const heading = clip(found.heading);
+  if (heading) return `a popup titled "${heading}"`;
+  const text = clip(found.text);
+  return text ? `an element that reads "${text}"` : undefined;
 }
 
 interface FieldState {
