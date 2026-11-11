@@ -229,11 +229,60 @@ Three more codemode arms ran the same 17 fixtures × 5 samples, each after a cha
   that failed.
 - **Slower:** median 131 s against 90 s for `haikucode2`, which mostly ended early.
 
+## Follow-up: fixes from the runs at master
 
-- **DNI:** have agents ask only what the next step needs (book first; the fee is paid at the
-  office), and check the vault's DNI data before any form.
-- **Forgetting imports** (`'Form' is not defined`) still costs a turn in many runs: the kernel
-  could import the UI components into every workflow.
+`haikucode5` ran master (65f167f3, with the prompt changes since `haikucode4`); its errors and
+stalled runs led to the fixes of e1c28668, which `haikucode6` ran. Two browser fixes came after
+and were measured on vida laboral only (`haikucode7`: 570e7178, `haikucode8`: 27790926).
+
+| Family | Base | `haikucode5` | `haikucode6` |
+| --- | --- | --- | --- |
+| Vida laboral (6) | 99% | 93% | 100% |
+| DNI (3) | 66% | 43% | 53% |
+| Transfers (6) | 0% | 6% | 13% |
+| ILP (1) | 33% | 43% | 68% |
+| Fee 790-012 (1) | 55% | 60% | 44% |
+| **All 17** | **52%** | **48%** | **55%** |
+| Cost (scored runs) | $7.85 | $1.74 | $2.70 |
+| Median run | 137 s | 117 s | 142 s |
+
+- **`haikucode6` against base: +4 points [−3, +10]**, at a third of the cost; against
+  `haikucode5` +8 [−0, +15]. 10 of 30 transfers completed (2 in base, 4 in `haikucode5`), and 4
+  were filed with the DGT.
+- **The first question comes sooner on every fixture** (median, base → `haikucode6`): transfers
+  153 → 67 s (con datos), the fee 111 → 34 s, DNI 58 → 42 s. Whole runs take about as long as
+  base, because transfers now get further instead of ending at their cost cap or at a question.
+- **Vida laboral:** 105 s in `haikucode6` against 78 s in base. A popup over "Consultar vida
+  laboral" made agents click the button behind it again and again, 8 s each. Naming the popup
+  (it only reached the app in 570e7178: the page function had a helper that the app's bundle
+  wraps in `__name`) and failing a covered click in 2.5 s brought it to **78 s, as base, for $0.30
+  against $0.54** (`haikucode8`, 96%: one run asked which report).
+
+What `haikucode5` showed, and the fix:
+
+- **Haiku's thinking filled the 8,192-token voucher cap** in 17 replies of `haikucode4`, and a
+  reply that is all thinking ended the agent's run with no report (transfers stalled at 85 s).
+  The cap is 16,384 now, and the host asks the model to act after such a reply
+  (`host/thinking-cutoff.ts`).
+- **Workflows reached for what QuickJS lacks:** components without importing them, `locator.or`,
+  `pressSequentially`, `URL`, `api.memo` (for `api.state.memo`, 6 runs). These work now, and a
+  member `api`, pages or locators lack names what they have instead of "not a function".
+  `?.` in `page.evaluate` broke because Sucrase compiled it to a helper the page doesn't have.
+- **`vault.save`'s declaration listed keys that don't exist** ("nif", "address.*"); it lists the
+  real ones.
+- **Forms the simulated user couldn't submit:** a required field the persona had no answer for
+  (the seller's DNI, how to pay the DNI fee, whether they have a copy of a paper) left the button
+  disabled and the run quiet. The simulated user now says in chat what they don't know, once;
+  says no when asked about a paper the facts don't mention; transfer personas read the seller's
+  NIF off their contract or invoice, and the DNI persona pays at the office.
+- **Asking to save the report** ("¿guardo una copia en tus documentos?") failed 2 vida laboral
+  runs; the prompt now says saving their document is part of the request.
+
+- **DNI** (53%) is still below base (66%): agents ask before booking and offer slots that have
+  passed (the mock's calendar starts before its frozen "today"; the prompt now asks for slots
+  still to come).
+- **The base arm ran before these eval fixes.** The persona changes would help it on transfers
+  too (it stopped to ask for the seller's DNI); re-running it ($7.85) didn't fit the voucher.
 - ~~Asking in chat~~ and ~~the fee's payment method~~: done ([Follow-up](#follow-up-a-coordinator-that-never-asks)).
 - **`told-signed` (ILP):** check its matcher against the messages above.
 
