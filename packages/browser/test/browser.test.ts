@@ -271,6 +271,15 @@ describe('actions', () => {
     }
   });
 
+  it('fails a covered click in seconds, not after the whole action timeout', async () => {
+    const obs = await t.service.open('covered-fast', `${a.origin}/covered`);
+    const started = Date.now();
+    await expect(
+      t.service.click('covered-fast', refOf(obs.snapshot, 'button "Consultar"')),
+    ).rejects.toMatchObject({ message: expect.stringContaining('is on top of it') });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
   it('waits for text to appear or disappear', async () => {
     let obs = await t.service.open('wait', `${a.origin}/delayed`);
     expect(obs.snapshot).toContain('Cargando datos');

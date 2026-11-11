@@ -289,6 +289,13 @@ export class PlaywrightBrowserService implements BrowserService {
       const popups = await this.watchPopups(s, page);
       try {
         try {
+          // A popup over the element fails in seconds, not after the whole timeout: Playwright
+          // retries a covered click until it expires, and models then click it again.
+          const covered = await loc.click({ trial: true, timeout: COVER_WAIT_MS }).then(
+            () => undefined,
+            (err: unknown) => (/intercepts pointer events/i.test(String(err)) ? err : undefined),
+          );
+          if (covered) throw covered;
           await loc.click();
         } catch (err) {
           throw toActionError(err, `click ${ref}`, s.secretVariants, await coverOf(loc, err));
@@ -2467,6 +2474,9 @@ function navigationOutcome(msg: string): string {
   if (/navigation .*interrupted/i.test(msg)) return 'interrupted by another navigation';
   return /net::(ERR_[A-Z_]+)/.exec(msg)?.[1] ?? 'error';
 }
+
+/** How long a click waits for something on top of its element to go away. */
+const COVER_WAIT_MS = 2_500;
 
 /**
  * What covers `loc` when Playwright says another element intercepts its clicks: the open dialog
