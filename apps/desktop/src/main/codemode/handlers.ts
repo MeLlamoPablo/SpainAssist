@@ -40,7 +40,12 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
   const requireProcedure = (id: string): Procedure => {
     const p = procedures.get(id);
     if (!p)
-      throw new BridgeError('not_found', `No procedure "${id}". api.procedures.list() lists them.`);
+      throw new BridgeError(
+        'not_found',
+        /^p_/.test(id)
+          ? `No procedure "${id}". api.procedures.list() lists them.`
+          : `No procedure "${id}": ids look like "p_…". api.procedures.getOrCreate({ id: ${JSON.stringify(id)}, title }) returns the one this workflow made with that key; api.procedures.list() lists them all.`,
+      );
     return p;
   };
 

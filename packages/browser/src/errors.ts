@@ -88,6 +88,8 @@ export function toActionError(
   err: unknown,
   what: string,
   secrets: Iterable<string> = [],
+  /** What is on top of the element, when something else intercepts its clicks. */
+  cover?: string,
 ): BrowserError {
   if (err instanceof BrowserError) {
     return new BrowserError(err.code, maskSecrets(err.message, secrets));
@@ -96,7 +98,9 @@ export function toActionError(
   const msg = cleanPlaywrightMessage(raw);
   let friendly: string;
   if (/intercepts pointer events/i.test(raw)) {
-    friendly = `Could not ${what}: another element is on top of it (for example a cookie banner, a popup or a loading overlay). Close it or wait, then take a new snapshot.`;
+    friendly = cover
+      ? `Could not ${what}: ${cover} is on top of it (look for it in the snapshot; it may be near the end). Use it or close it first, then take a new snapshot.`
+      : `Could not ${what}: another element is on top of it (for example a cookie banner, a popup or a loading overlay). Close it or wait, then take a new snapshot.`;
   } else if (
     /Target (?:page, context or browser )?(?:has been )?closed|browser has been closed/i.test(raw)
   ) {

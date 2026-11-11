@@ -37,8 +37,12 @@ import { probeCustomEndpoint } from './probe';
 
 /** pi provider of voucher keys: our LiteLLM gateway at the voucher's base URL. */
 const VOUCHER_PROVIDER = 'litellm';
-/** Output token cap for credit-capped voucher keys (pi defaults to the model maximum). */
-const VOUCHER_MAX_TOKENS = 8192;
+/**
+ * Output token cap for credit-capped voucher keys (pi defaults to the model maximum). Room for a
+ * reasoning model's thinking and a whole codemode module after it: at 8192, Haiku's thinking
+ * alone sometimes filled it, and the module never came.
+ */
+const VOUCHER_MAX_TOKENS = 16_384;
 /** LiteLLM writes spend to its database in batches (`proxy_batch_write_at: 10` s). */
 const CREDIT_RECHECK_MS = 12_000;
 /** Placeholder key for custom endpoints without auth (local models, mock LLM). */

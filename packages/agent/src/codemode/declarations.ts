@@ -1,3 +1,5 @@
+import { PERSONAL_FIELDS } from '@sa/shared';
+
 /**
  * The `.d.ts` the model reads: the codemode agents' API, documentation only (workflows are
  * JavaScript; nothing typechecks them). Comments say what types can't: semantics, effects and
@@ -138,7 +140,7 @@ interface Vault {
     documents: { id: string; name: string; mimeType: string; createdAt: string }[];
     credentials: { id: string; kind: string; label: string; policy: "auto"|"ask"; usernameHint?: string; certificate?: { holderName?: string; issuer: string; validTo: string } }[];
   }>;
-  /** Saves personal data the user gave (never passwords, PINs or codes). Keys: "nif", "phone", "address.*", "custom.<slug>"… */
+  /** Saves personal data the user gave (never passwords, PINs or codes). Keys: ${PERSONAL_FIELDS.map((f) => f.key).join(', ')}; anything else is "custom.<slug>" with a label. */
   save(items: { key: string; value: string; label?: string }[]): Promise<{ saved: string[] }>;
 }
 interface Documents {
@@ -175,7 +177,7 @@ interface Locator {
   locator(selector: string): Locator; getByRole(role: string, o?: { name?: string | RegExp; exact?: boolean }): Locator;
   getByText(t: string, o?: { exact?: boolean }): Locator; getByLabel(t: string, o?: { exact?: boolean }): Locator;
   getByPlaceholder(t: string): Locator; getByTitle(t: string): Locator; getByTestId(id: string): Locator;
-  filter(o: { hasText?: string; hasNotText?: string }): Locator; nth(i: number): Locator; first(): Locator; last(): Locator; all(): Promise<Locator[]>;
+  filter(o: { hasText?: string; hasNotText?: string }): Locator; or(other: Locator): Locator; nth(i: number): Locator; first(): Locator; last(): Locator; all(): Promise<Locator[]>;
   click(): Promise<ActionResult>; fill(value: string, o?: { submit?: boolean }): Promise<ActionResult>; press(key: string): Promise<ActionResult>;
   check(): Promise<ActionResult>; uncheck(): Promise<ActionResult>; selectOption(values: string | string[]): Promise<ActionResult>;
   /** Uploads saved documents (vault ids). */

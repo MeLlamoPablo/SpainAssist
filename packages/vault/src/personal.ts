@@ -92,7 +92,11 @@ export function normalizePersonalInput(
   const isCustom = key.startsWith('custom.');
   const def = isCustom ? undefined : personalFieldDef(key);
   if (!isCustom && !def)
-    throw invalid(`Unknown personal data field "${key}"`, 'unknown_field', key);
+    throw invalid(
+      `Unknown personal data field "${key}": the fields are ${PERSONAL_FIELDS.map((f) => f.key).join(', ')}; anything else is "custom.<slug>" with a label`,
+      'unknown_field',
+      key,
+    );
   if (typeof input.value !== 'string')
     throw invalid(`The value of "${key}" must be text`, 'text_required', key);
   if (input.value.length > MAX_VALUE_LENGTH)

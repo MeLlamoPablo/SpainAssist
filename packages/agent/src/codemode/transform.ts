@@ -14,6 +14,9 @@ export function transformModule(source: string): string {
     production: true,
     // The kernel resolves imports itself; no interop helpers for default imports of CommonJS.
     enableLegacyBabel5ModuleInterop: false,
+    // QuickJS runs modern syntax. Rewriting `?.` and `??` would call helpers that a function sent
+    // to page.evaluate (its source text) doesn't have in the page.
+    disableESTransforms: true,
   });
   return code;
 }

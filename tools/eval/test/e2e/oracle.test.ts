@@ -84,15 +84,12 @@ e2eSuite('the oracle on the real SpainBench', () => {
     expect(asked?.text).toContain('metodo): clave_permanente');
     expect(outcome.result.usage.requests).toBeGreaterThan(10);
 
-    // The credential was typed by the app from the vault, for both fields; the model typed nothing.
+    // The app typed the credential from the vault into both fields; the model typed nothing.
     const starts = observations(run.events, 'tool_start');
-    const fills = starts.filter((event) => event.tool === 'browser_fill_from_vault');
-    expect(fills.map((event) => (event.args as { field: string }).field)).toEqual([
-      'username',
-      'password',
-    ]);
-    expect(fills.every((event) => (event.args as { source: string }).source === 'credential')).toBe(
-      true,
+    const logins = starts.filter((event) => event.tool === 'browser_login_clave');
+    expect(logins).toHaveLength(1);
+    expect(Object.keys(logins[0]?.args ?? {})).toEqual(
+      expect.arrayContaining(['usernameRef', 'passwordRef']),
     );
     expect(toolNames(run.events)).not.toContain('procedure:browser_type');
     expect(JSON.stringify(starts)).not.toContain(CLAVE_PASSWORD);
@@ -161,10 +158,10 @@ e2eSuite('the oracle on the real SpainBench', () => {
     expect(toolNames(run.events)).not.toContain('procedure:request_credential');
 
     // The saved credential was used by the app; the report is in the user's documents.
-    const fills = observations(run.events, 'tool_start').filter(
-      (event) => event.tool === 'browser_fill_from_vault',
+    const logins = observations(run.events, 'tool_start').filter(
+      (event) => event.tool === 'browser_login_clave',
     );
-    expect(fills).toHaveLength(2);
+    expect(logins).toHaveLength(1);
     const documents = await vaultDocuments(join(run.dir, 'profile'));
     expect(documents).toHaveLength(1);
     expect(sha256(documents[0]?.bytes ?? Buffer.alloc(0))).toBe(run.state.downloads[0]?.sha256);

@@ -321,7 +321,7 @@ browserSuite('the app of a run, end to end', () => {
       expect(procedure.length).toBeGreaterThan(0);
       const [orchestrator] = BUNDLED_MODEL_LISTS.voucher.assistant;
       const [agent] = BUNDLED_MODEL_LISTS.voucher.procedures;
-      for (const body of [...assistant, ...procedure]) expect(body.max_tokens).toBe(8192);
+      for (const body of [...assistant, ...procedure]) expect(body.max_tokens).toBe(16_384);
       expect(new Set(assistant.map((b) => b.model))).toEqual(new Set([orchestrator?.id]));
       expect(new Set(procedure.map((b) => b.model))).toEqual(new Set([agent?.id]));
       expect(new Set(assistant.map((b) => b.reasoning_effort))).toEqual(

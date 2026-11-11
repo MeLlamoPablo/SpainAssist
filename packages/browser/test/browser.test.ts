@@ -40,6 +40,20 @@ beforeAll(async () => {
       'Inicio',
     ),
     '/popup': page('<h1>Ventana emergente</h1><p>Contenido del popup</p>', 'Popup'),
+    '/covered': page(
+      `<button>Consultar</button> <button>Leer</button>
+       <div style="position:fixed;inset:0"><div role="dialog"><h2>Elige tu método</h2><button>Continuar</button></div></div>`,
+      'Tapado',
+    ),
+    '/covered-popup': page(
+      `<button>Consultar</button>
+       <div style="position:fixed;inset:0"><div><button>Cerrar</button><h2>Elige tu método</h2></div></div>`,
+      'Tapado',
+    ),
+    '/covered-plain': page(
+      `<button>Consultar</button><div style="position:fixed;inset:0;background:#fff">Cargando…</div>`,
+      'Tapado',
+    ),
     '/form': page(
       `<h1>Formulario</h1>
        <form action="/result" method="get">
@@ -229,6 +243,32 @@ describe('actions', () => {
     obs = await t.service.press('keys', 'Enter');
     expect(new URL(obs.url).pathname).toBe('/result');
     await expect(t.service.press('keys', 'NoSuchKey')).rejects.toMatchObject({ code: 'action' });
+  });
+
+  it('names what covers an element it cannot click', async () => {
+    const quick = createTestService({ actionTimeoutMs: 1_000 });
+    try {
+      let obs = await quick.service.open('covered', `${a.origin}/covered`);
+      await expect(
+        quick.service.click('covered', refOf(obs.snapshot, 'button "Consultar"')),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('the dialog "Elige tu método" is on top of it'),
+      });
+      obs = await quick.service.open('covered', `${a.origin}/covered-popup`);
+      await expect(
+        quick.service.click('covered', refOf(obs.snapshot, 'button "Consultar"')),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('a popup titled "Elige tu método" is on top of it'),
+      });
+      obs = await quick.service.open('covered', `${a.origin}/covered-plain`);
+      await expect(
+        quick.service.click('covered', refOf(obs.snapshot, 'button "Consultar"')),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('an element that reads "Cargando…" is on top of it'),
+      });
+    } finally {
+      await quick.cleanup();
+    }
   });
 
   it('waits for text to appear or disappear', async () => {

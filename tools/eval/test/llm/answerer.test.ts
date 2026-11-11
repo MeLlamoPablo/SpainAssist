@@ -222,6 +222,8 @@ describe('answerer: forms', () => {
     expect(system).toContain('Never make up passwords, PINs');
     // "Any office will do" answers a choice of offices: the user picks one, not null.
     expect(system).toContain('A preference the facts state answers a choice');
+    // "Do you have a copy of the seller's DNI?" the facts don't mention: no, not null.
+    expect(system).toContain('what they do not mention you do not have');
     const sent = userPromptSent();
     const user = JSON.parse(sent.slice(sent.indexOf('{'), sent.lastIndexOf('}') + 1)) as Record<
       string,

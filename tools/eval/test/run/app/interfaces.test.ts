@@ -358,6 +358,45 @@ describe('InterfacePrompts', () => {
     expect(prompts.pending()).toEqual([second]);
   });
 
+  it('says once what the user does not know when a required field keeps the form shut', async () => {
+    const unknown: string[][] = [];
+    const yesNo = [
+      { value: 'si', label: 'Sí' },
+      { value: 'no', label: 'No' },
+    ];
+    const { prompts, shown } = setup(
+      (s) =>
+        el(
+          'Root',
+          {},
+          el('Choice', {
+            label: '¿Tienes el contrato?',
+            options: yesNo,
+            ...(s.contrato ? { value: String(s.contrato) } : {}),
+            onChange: h('r/0/1#onChange'),
+          }),
+          el('Choice', {
+            label: '¿Tienes copia del DNI del vendedor?',
+            options: yesNo,
+            ...(s.copia ? { value: String(s.copia) } : {}),
+            onChange: h('r/0/2#onChange'),
+          }),
+          el(
+            'Button',
+            { disabled: !(s.contrato && s.copia), onClick: h('r/0/3#onClick') },
+            'Seguir',
+          ),
+        ),
+      { onUnknown: (labels) => unknown.push(labels) },
+    );
+    const first = await waitFor(() => shown[0]);
+    await prompts.respond(first.itemId, form({ tienes_el_contrato: 'si' }));
+    expect(unknown).toEqual([['¿Tienes copia del DNI del vendedor?']]);
+    const second = await waitFor(() => shown[1]);
+    await prompts.respond(second.itemId, form({ tienes_el_contrato: 'si' }));
+    expect(unknown).toHaveLength(1);
+  });
+
   it('shows a tree that never holds still after a while', async () => {
     const { workflow, shown } = setup((s) => dniTree({ dni: String(s.dni) }));
     const ticking = setInterval(() => workflow.rerender(), 10);

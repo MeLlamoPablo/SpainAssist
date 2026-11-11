@@ -414,6 +414,22 @@ describe('agent host over RPC (integration)', () => {
     });
   });
 
+  it('has the model go on when a reply hit the output limit while thinking', async () => {
+    llm.setScenario({
+      rules: [
+        { when: { lastUser: '^Your last reply hit the output limit' }, reply: { text: 'Hecho.' } },
+        { when: { lastUser: 'piensa' }, reply: { reasoning: 'Veamos…', finishReason: 'length' } },
+      ],
+    });
+    const { client, events } = await start();
+    await client.prompt('piensa mucho');
+    await waitFor(events, isRunEnd);
+    expect(llm.requests().filter((r) => r.path.endsWith('/chat/completions'))).toHaveLength(2);
+    expect(events.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
+      text: 'Hecho.',
+    });
+  });
+
   it('has no web research without a voucher', async () => {
     const { client, events } = await start();
     await client.prompt('¿Sigues ahí?');

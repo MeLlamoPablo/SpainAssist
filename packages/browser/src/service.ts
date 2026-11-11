@@ -291,7 +291,7 @@ export class PlaywrightBrowserService implements BrowserService {
         try {
           await loc.click();
         } catch (err) {
-          throw toActionError(err, `click ${ref}`, s.secretVariants);
+          throw toActionError(err, `click ${ref}`, s.secretVariants, await coverOf(loc, err));
         }
         await popups.arrived();
         return await this.observe(s);
@@ -402,7 +402,8 @@ export class PlaywrightBrowserService implements BrowserService {
       try {
         await loc.setChecked(checked);
       } catch (err) {
-        throw toActionError(err, `${checked ? 'check' : 'uncheck'} ${ref}`, s.secretVariants);
+        const what = `${checked ? 'check' : 'uncheck'} ${ref}`;
+        throw toActionError(err, what, s.secretVariants, await coverOf(loc, err));
       }
       return this.observe(s);
     });
@@ -2465,6 +2466,55 @@ function navigationOutcome(msg: string): string {
   if (/frame was detached/i.test(msg)) return 'frame detached';
   if (/navigation .*interrupted/i.test(msg)) return 'interrupted by another navigation';
   return /net::(ERR_[A-Z_]+)/.exec(msg)?.[1] ?? 'error';
+}
+
+/**
+ * What covers `loc` when Playwright says another element intercepts its clicks: the open dialog
+ * by its name, else the covering element's text. Its markup in Playwright's log is often a bare
+ * `<div>…</div>`, and a model that doesn't see the dialog (it may sit at the end of a long
+ * snapshot) keeps clicking the button behind it.
+ */
+async function coverOf(loc: Locator, err: unknown): Promise<string | undefined> {
+  if (!/intercepts pointer events/i.test(err instanceof Error ? err.message : String(err))) {
+    return undefined;
+  }
+  return loc
+    .evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      if (!top || top === el || el.contains(top)) return undefined;
+      // The whole overlay: the highest ancestor of what is on top that doesn't hold the element.
+      let cover = top;
+      while (
+        cover.parentElement &&
+        cover.parentElement !== document.body &&
+        !cover.parentElement.contains(el)
+      ) {
+        cover = cover.parentElement;
+      }
+      const clip = (t: string | null | undefined) =>
+        (t ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      const modal = 'dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]';
+      const dialog = top.closest(modal) ?? cover.querySelector(modal);
+      if (dialog) {
+        const labelled = dialog.getAttribute('aria-labelledby');
+        const name =
+          clip(dialog.getAttribute('aria-label')) ||
+          clip(
+            labelled ? document.getElementById(labelled.split(' ')[0] ?? '')?.textContent : '',
+          ) ||
+          clip(dialog.querySelector('h1, h2, h3, h4, legend')?.textContent) ||
+          // biome-ignore lint/performance/useDomNodeTextContent: the text on screen, not hidden nodes
+          clip((dialog as HTMLElement).innerText);
+        return name ? `the dialog "${name}"` : 'a dialog';
+      }
+      const heading = clip(cover.querySelector('h1, h2, h3, h4, legend')?.textContent);
+      if (heading) return `a popup titled "${heading}"`;
+      // biome-ignore lint/performance/useDomNodeTextContent: the text on screen, not hidden nodes
+      const text = clip((cover as HTMLElement).innerText);
+      return text ? `an element that reads "${text}"` : undefined;
+    })
+    .catch(() => undefined);
 }
 
 interface FieldState {

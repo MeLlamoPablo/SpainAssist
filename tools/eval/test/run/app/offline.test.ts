@@ -60,7 +60,7 @@ describe('the app process', () => {
       expect(model).toMatchObject({
         provider: 'litellm',
         ...BUNDLED_MODEL_LISTS.voucher.assistant[0],
-        maxTokens: 8192,
+        maxTokens: 16_384,
       });
       expect(model.baseUrl).toBe(world.run.agentBaseUrl('app'));
       expect(egressAttempts).toEqual([]);

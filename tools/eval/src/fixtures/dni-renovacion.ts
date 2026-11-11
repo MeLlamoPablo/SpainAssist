@@ -118,7 +118,7 @@ function personaText(dni: { issueDate: string; expiry: string }, knowsData: bool
 ${reason}
 ${knowsData ? 'You saved these details in the app before.' : 'You have the card at hand and can type its details when asked; you cannot scan it right now.'} Your mobile phone is ${PERSONA.phone} and your email is ${PERSONA.email}.
 If you are asked for the security code (captcha) of the appointment website, the image shows the characters ${CAPTCHA_TEXT}.
-For an appointment, any police documentation office in Madrid city is fine; you prefer the earliest date available, any time of day.
+For an appointment, any police documentation office in Madrid city is fine; you prefer the earliest date available, any time of day. You will pay the renewal fee at the office, as most people do.
 You are not good with technology. Answer briefly, in plain Spanish. If you are asked something that is not in this description, say that you do not know it or leave it out. Do not invent data.`;
 }
 

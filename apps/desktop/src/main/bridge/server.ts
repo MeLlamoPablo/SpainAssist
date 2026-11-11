@@ -219,7 +219,11 @@ export class BridgeServer {
       const named = typeof header === 'string' ? header.trim() : '';
       if (named) {
         if (!this.deps.procedureExists?.(named))
-          return this.fail(res, 'not_found', `No procedure "${named.slice(0, 64)}".`);
+          return this.fail(
+            res,
+            'not_found',
+            `No procedure "${named.slice(0, 64)}".${/^p_/.test(named) ? '' : ' Ids look like "p_…": use the id of what api.procedures.getOrCreate returned.'}`,
+          );
         procedureId = named;
       } else if (needsProcedure(method)) {
         return this.fail(

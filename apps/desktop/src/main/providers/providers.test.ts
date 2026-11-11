@@ -50,7 +50,7 @@ describe('ProviderManager', () => {
       id: 'test/voucher-model',
       thinkingLevel: 'medium',
       baseUrl: 'https://llm.example.test/v1',
-      maxTokens: 8192,
+      maxTokens: 16_384,
     });
     // The assistant (orchestrator) has its own model and effort.
     expect(await app.services.providers.agentModel('assistant')).toEqual({
@@ -58,7 +58,7 @@ describe('ProviderManager', () => {
       id: 'test/voucher-assistant',
       thinkingLevel: 'high',
       baseUrl: 'https://llm.example.test/v1',
-      maxTokens: 8192,
+      maxTokens: 16_384,
     });
     expect(await app.services.providers.credentialFor('litellm')).toEqual({
       type: 'api_key',
@@ -125,7 +125,7 @@ describe('ProviderManager', () => {
       id: 'test/voucher-model',
       thinkingLevel: 'medium',
       baseUrl: 'http://127.0.0.1:8789/v1',
-      maxTokens: 8192,
+      maxTokens: 16_384,
     });
     const status = await app.invoke('providers.status');
     expect(status.credit).toEqual({ usageUsd: 0.5, limitUsd: 5, remainingUsd: 4.5 });
@@ -938,7 +938,7 @@ describe('custom endpoint capabilities', () => {
       supportsImages: true,
       reasoning: true,
       contextWindow: 40_960,
-      maxTokens: 8192,
+      maxTokens: 16_384,
     };
     const res = await app.invoke('providers.setCustom', {
       baseUrl: 'http://127.0.0.1:11434/v1',

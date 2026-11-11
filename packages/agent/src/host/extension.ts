@@ -3,6 +3,7 @@ import type { AnyToolDefinition } from '../tools/common';
 import { registerDocumentLinkCheck, type SavedDocument } from './document-links';
 import { type IdleCompactionOptions, registerIdleCompaction } from './idle-compaction';
 import { redactOldPages } from './redaction';
+import { registerThinkingCutoffCheck } from './thinking-cutoff';
 
 export interface SpainAssistExtensionOptions {
   tools: AnyToolDefinition[];
@@ -45,6 +46,8 @@ export function createSpainAssistExtension(options: SpainAssistExtensionOptions)
     if (options.idleCompaction) registerIdleCompaction(pi, options.idleCompaction);
 
     if (options.savedDocuments) registerDocumentLinkCheck(pi, options.savedDocuments);
+
+    registerThinkingCutoffCheck(pi);
 
     const { onProviderResponse } = options;
     if (onProviderResponse)

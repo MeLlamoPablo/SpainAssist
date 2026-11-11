@@ -93,6 +93,14 @@ describe('locator chains', () => {
     ).toBe('Cita previa');
   });
 
+  it('match either of two locators with or()', async () => {
+    const either = target([
+      ['getByRole', 'link', { name: 'Enviar' }],
+      ['or', [['getByRole', 'button', { name: 'Enviar más tarde' }]]],
+    ]);
+    expect(await t.service.query(id, either, 'textContent')).toBe('Enviar más tarde');
+  });
+
   it('refuse unknown steps and say what matched nothing', async () => {
     await expect(t.service.query(id, 'loc:[["context"]]', 'count')).rejects.toThrow(
       /Unknown locator step "context"/,

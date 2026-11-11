@@ -480,7 +480,11 @@ export const KERNEL = String.raw`
   }
 
   var procedures = {
-    list: function (opts) { return call('procedures.list', opts || {}); },
+    list: function (opts) {
+      return call('procedures.list', opts || {}).then(function (list) {
+        return list.map(function (d) { return new Procedure(d); });
+      });
+    },
     get: function (id) { return call('procedures.get', { id: id }).then(function (d) { return new Procedure(d); }); },
     getOrCreate: function (input) {
       if (!input || typeof input !== 'object') throw new TypeError('procedures.getOrCreate({ id, title }) needs an object.');
@@ -514,8 +518,32 @@ export const KERNEL = String.raw`
     return value;
   }
 
+  /**
+   * Members the runtime probes (promises, JSON, inspection) and that an object may lack quietly.
+   */
+  var PROBED = new Set(['then', 'catch', 'finally', 'toJSON', 'toString', 'valueOf', 'inspect', 'nodeType', '$$typeof', 'asymmetricMatch', 'length']);
+
+  /**
+   * obj, naming what it has when code reads a member it lacks: "locator.pressSequentially
+   * does not exist" instead of QuickJS's bare "not a function", which models can't act on.
+   */
+  function strict(obj, what) {
+    return new Proxy(obj, {
+      get: function (target, key, receiver) {
+        if (typeof key !== 'string' || key in target || PROBED.has(key)) return Reflect.get(target, key, receiver);
+        var names = [];
+        for (var o = target; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+          Object.getOwnPropertyNames(o).forEach(function (n) {
+            if (n !== 'constructor' && n.charAt(0) !== '_' && names.indexOf(n) === -1) names.push(n);
+          });
+        }
+        throw new TypeError(what + '.' + key + ' does not exist. ' + what + ' has: ' + names.join(', ') + '.');
+      },
+    });
+  }
+
   class Locator {
-    constructor(page, chain) { this._page = page; this._chain = chain; }
+    constructor(page, chain) { this._page = page; this._chain = chain; return strict(this, 'locator'); }
     _with(step) { return new Locator(this._page, this._chain.concat([ser(step)])); }
     _op(op, extra) { return this._page._op(op, Object.assign({ target: this._chain }, extra || {})); }
     locator(selector, options) { return this._with(['locator', selector, options || null]); }
@@ -527,6 +555,11 @@ export const KERNEL = String.raw`
     getByAltText(text, options) { return this._with(['getByAltText', text, options || null]); }
     getByTestId(id) { return this._with(['getByTestId', id]); }
     filter(options) { return this._with(['filter', options || {}]); }
+    /** Matches this locator or other (Playwright's or). */
+    or(other) {
+      if (!(other instanceof Locator)) throw new TypeError('locator.or(other) needs a locator of the same page.');
+      return this._with(['or', other._chain]);
+    }
     nth(index) { return this._with(['nth', index]); }
     first() { return this._with(['first']); }
     last() { return this._with(['last']); }
@@ -536,6 +569,11 @@ export const KERNEL = String.raw`
     focus() { return this._op('focus'); }
     fill(value, options) { return this._op('fill', { value: String(value), submit: !!(options && options.submit) }); }
     press(key) { return this._op('press', { key: key }); }
+    /** Playwright's key-by-key typing; fill types key by key itself where a field needs it. */
+    pressSequentially(text) { return this.fill(text); }
+    /** Actions scroll to their element themselves; this only waits until it is there. */
+    scrollIntoViewIfNeeded() { return this.waitFor({ state: 'attached' }); }
+    type(text) { return this.fill(text); }
     check() { return this._op('check', { checked: true }); }
     uncheck() { return this._op('check', { checked: false }); }
     setChecked(checked) { return this._op('check', { checked: !!checked }); }
@@ -568,7 +606,7 @@ export const KERNEL = String.raw`
   }
 
   class Page {
-    constructor(procedureId) { this.procedureId = procedureId; }
+    constructor(procedureId) { this.procedureId = procedureId; return strict(this, 'page'); }
     _op(op, args) { return call('browser.' + op, Object.assign({ procedureId: this.procedureId }, args || {})); }
     _loc(step) { return new Locator(this, [ser(step)]); }
     locator(selector, options) { return this._loc(['locator', selector, options || null]); }
@@ -728,6 +766,8 @@ export const KERNEL = String.raw`
   }
 
   api.browser = browser;
+  // Models write api.memo for api.state.memo often enough to keep it working.
+  Object.defineProperty(api, 'memo', { enumerable: false, value: function (key, fn) { return state.memo(key, fn); } });
   unavailable('agents', 'agents start no other agents.');
   Object.freeze(api.state); Object.freeze(api.ui);
 
@@ -735,12 +775,84 @@ export const KERNEL = String.raw`
   // Modules and entry points for the host
   // ------------------------------------------------------------------------------------------
 
+  /** URLSearchParams, as much as workflows use: QuickJS has none. */
+  class URLSearchParamsLite {
+    constructor(init) {
+      this._pairs = [];
+      var text = typeof init === 'string' ? init.replace(/^\?/, '') : '';
+      if (text) text.split('&').forEach(function (part) {
+        if (!part) return;
+        var i = part.indexOf('=');
+        var dec = function (x) { try { return decodeURIComponent(x.replace(/\+/g, ' ')); } catch (e) { return x; } };
+        this._pairs.push(i === -1 ? [dec(part), ''] : [dec(part.slice(0, i)), dec(part.slice(i + 1))]);
+      }, this);
+      else if (init && typeof init === 'object') Object.keys(init).forEach(function (k) { this._pairs.push([k, String(init[k])]); }, this);
+    }
+    get(name) { var p = this._pairs.find(function (x) { return x[0] === name; }); return p ? p[1] : null; }
+    getAll(name) { return this._pairs.filter(function (x) { return x[0] === name; }).map(function (x) { return x[1]; }); }
+    has(name) { return this._pairs.some(function (x) { return x[0] === name; }); }
+    set(name, value) { this.delete(name); this._pairs.push([name, String(value)]); }
+    append(name, value) { this._pairs.push([name, String(value)]); }
+    delete(name) { this._pairs = this._pairs.filter(function (x) { return x[0] !== name; }); }
+    forEach(fn) { this._pairs.forEach(function (x) { fn(x[1], x[0]); }); }
+    entries() { return this._pairs.map(function (x) { return [x[0], x[1]]; })[Symbol.iterator](); }
+    keys() { return this._pairs.map(function (x) { return x[0]; })[Symbol.iterator](); }
+    values() { return this._pairs.map(function (x) { return x[1]; })[Symbol.iterator](); }
+    [Symbol.iterator]() { return this.entries(); }
+    toString() { return this._pairs.map(function (x) { return encodeURIComponent(x[0]) + '=' + encodeURIComponent(x[1]); }).join('&'); }
+  }
+
+  /** URL for http(s) addresses, relative ones resolved against a base: QuickJS has none. */
+  class URLLite {
+    constructor(input, base) {
+      var text = String(input).trim();
+      var m = /^([a-zA-Z][a-zA-Z0-9+.-]*:)\/\/([^\/?#]*)([^?#]*)(\?[^#]*)?(#.*)?$/.exec(text);
+      if (!m) {
+        if (base === undefined) throw new TypeError('Invalid URL: ' + text);
+        var b = base instanceof URLLite ? base : new URLLite(base);
+        var path = b.pathname;
+        if (/^\/\//.test(text)) return new URLLite(b.protocol + text);
+        var rest = /^([^?#]*)(\?[^#]*)?(#.*)?$/.exec(text);
+        var p = rest[1];
+        if (p === '') p = path;
+        else if (p.charAt(0) !== '/') p = path.replace(/[^\/]*$/, '') + p;
+        var out = [];
+        p.split('/').forEach(function (seg, i, all) {
+          if (seg === '..') { if (out.length > 1) out.pop(); if (i === all.length - 1) out.push(''); }
+          else if (seg === '.') { if (i === all.length - 1) out.push(''); }
+          else out.push(seg);
+        });
+        var search = rest[2] !== undefined ? rest[2] : (rest[1] === '' ? b.search : '');
+        return new URLLite(b.origin + out.join('/') + search + (rest[3] || ''));
+      }
+      this.protocol = m[1].toLowerCase();
+      this.host = m[2].toLowerCase();
+      var hp = /^(.*?)(?::(\d+))?$/.exec(this.host);
+      this.hostname = hp[1];
+      this.port = hp[2] || '';
+      this.pathname = m[3] || '/';
+      this.search = m[4] && m[4] !== '?' ? m[4] : '';
+      this.hash = m[5] && m[5] !== '#' ? m[5] : '';
+      this.searchParams = new URLSearchParamsLite(this.search);
+    }
+    get origin() { return this.protocol + '//' + this.host; }
+    get href() {
+      var q = this.searchParams.toString();
+      return this.origin + this.pathname + (q ? '?' + q : '') + this.hash;
+    }
+    toString() { return this.href; }
+    toJSON() { return this.href; }
+  }
+
   var modules = { '@spainassist/ui': uiModule };
   function requireModule(name) {
     if (Object.prototype.hasOwnProperty.call(modules, name)) return modules[name];
     throw new Error('Cannot import "' + name + '": only "@spainassist/ui" is available.');
   }
 
+  if (typeof g.URL === 'undefined') { g.URLSearchParams = URLSearchParamsLite; g.URL = URLLite; }
+  // What a module forgets to import still works: the components and hooks are globals too.
+  Object.keys(uiModule).forEach(function (k) { if (!(k in g)) g[k] = uiModule[k]; });
   g.__sa_h = h;
   g.__sa_Fragment = FRAGMENT;
   g.__sa_dispatch = dispatch;
@@ -751,7 +863,7 @@ export const KERNEL = String.raw`
     factory(module, module.exports, requireModule);
     var main = module.exports.main || module.exports.default;
     if (typeof main !== 'function') throw new TypeError('The module must export an async function main(api).');
-    return Promise.resolve().then(function () { return main(api); }).then(function (value) {
+    return Promise.resolve().then(function () { return main(strict(api, 'api')); }).then(function (value) {
       return value === undefined ? '' : toJson(value, 'The value main returned');
     });
   };

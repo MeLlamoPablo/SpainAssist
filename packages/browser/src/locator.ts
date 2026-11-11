@@ -20,6 +20,7 @@ export type LocatorStep =
     ]
   | ['getByTestId', string]
   | ['filter', FilterOptions]
+  | ['or', LocatorStep[]]
   | ['nth', number]
   | ['first']
   | ['last'];
@@ -132,8 +133,9 @@ export function parseTarget(target: string): LocatorChain {
 const REF_RE = /^(?:f\d+)?e\d+$/;
 
 /** The Playwright locator of a chain on `page`. Throws `bad_input` for anything unknown. */
-export function buildLocator(page: Page | Frame, chain: LocatorChain): Locator {
+export function buildLocator(page: Page | Frame, chain: LocatorChain, depth = 0): Locator {
   if (!chain.length) bad('Empty locator.');
+  if (chain.length > MAX_STEPS) bad(`A locator has at most ${MAX_STEPS} steps.`);
   let loc: Locator | undefined;
   const root = page;
   for (const [index, step] of chain.entries()) {
@@ -198,6 +200,13 @@ export function buildLocator(page: Page | Frame, chain: LocatorChain): Locator {
         if (!loc) bad('filter(...) needs a locator before it.');
         loc = loc.filter(textOptions(step[1], 'filter'));
         break;
+      case 'or': {
+        if (!loc) bad('or(...) needs a locator before it.');
+        if (depth > 1) bad('or(...) nests at most twice.');
+        if (!Array.isArray(step[1])) bad('or(other) needs a locator.');
+        loc = loc.or(buildLocator(page, step[1], depth + 1));
+        break;
+      }
       case 'nth': {
         if (!loc) bad('nth(...) needs a locator before it.');
         const n = step[1];
@@ -226,6 +235,7 @@ export function describeChain(chain: LocatorChain): string {
   return chain
     .map(([name, ...args]) => {
       if (name === 'ref') return `ref(${JSON.stringify(args[0])})`;
+      if (name === 'or') return `or(${describeChain(args[0] as LocatorChain)})`;
       const shown = args
         .filter((a) => a !== null && a !== undefined)
         .map((a) => JSON.stringify(a))

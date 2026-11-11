@@ -363,6 +363,8 @@ interface Entry {
   waitingSince?: number;
   /** The last rev reported to `onRender`. */
   renderedRev?: number;
+  /** The user already said in chat what of this interface they don't know. */
+  toldUnknown?: boolean;
 }
 
 export interface InterfacePromptsOptions {
@@ -371,6 +373,11 @@ export interface InterfacePromptsOptions {
   onShown(prompt: PendingPrompt): void;
   /** Something the run's notes should say. */
   onNote(text: string): void;
+  /**
+   * The user couldn't submit the interface: required fields they had no answer for (labels). A
+   * person stuck there says so in chat; it is called once per interface.
+   */
+  onUnknown?(labels: string[]): void;
   /** A render of an open interface (each rev once). */
   onRender?(render: { workflowId: string; key: string; rev: number; actionable: boolean }): void;
   /** How long a tree after an answer must hold still to be a prompt (default 1.5 s). */
@@ -590,6 +597,13 @@ export class InterfacePrompts {
         this.options.onNote(
           `interface ${itemId}: the button "${label}" is ${button ? 'still disabled' : 'no longer on screen'}`,
         );
+        const unknown = form.fields
+          .filter((f) => f.key !== BUTTON_FIELD && f.required && emptyValue(values[f.key]))
+          .map((f) => f.label);
+        if (button && unknown.length > 0 && !entry.toldUnknown) {
+          entry.toldUnknown = true;
+          this.options.onUnknown?.(unknown);
+        }
         // Not answered as far as the form goes: what is on screen now is asked again.
         entry.answeredRev = shownRev;
         entry.answeredTree = undefined;
@@ -617,4 +631,14 @@ export class InterfacePrompts {
       await sleep(POLL_MS);
     }
   }
+}
+
+/** No answer: left out, or blank. */
+function emptyValue(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === null ||
+    value === '' ||
+    (Array.isArray(value) && value.length === 0)
+  );
 }

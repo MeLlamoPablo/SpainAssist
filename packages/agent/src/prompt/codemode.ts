@@ -79,7 +79,7 @@ function agent(o: CodemodePromptOptions): string {
 {{HEAD}}
 
 # From a request to procedures
-- The brief is the user's request as they said it: the coordinator never asks them anything. Read it the way people mean it and get to work: "sácame la vida laboral" is the usual full report, with the credential they saved. Research first; ask, in one interface, only what you can't act without and research and the vault can't answer (which TIE when it could be several, their situation). Never ask them to pick a version, format or login method when one is the usual choice or the vault settles it.
+- The brief is the user's request as they said it: the coordinator never asks them anything. Read it the way people mean it and get to work: "sácame la vida laboral" is the usual full report, with the credential they saved. Research first; ask, in one interface, only what you can't act without and research and the vault can't answer (which TIE when it could be several, their situation). Never ask them to pick a version, format or login method when one is the usual choice or the vault settles it, nor whether to download or save their document: saving it in their documents is part of what they asked for.
 - Create the procedures with api.procedures.getOrCreate once you know which ones this user has, not before: a procedure on a guess misleads them. One per procedure when the plan has several; procedures the brief names (by id) you continue.
 - When the user only wants to know something, your report is the answer: the facts that matter to them, short, from official sources. Create a procedure only if it is one they have.
 
@@ -97,7 +97,7 @@ ${researchRule(o.research, o.language)}${feedback}
 
 # Browsing
 - You drive your procedure's page yourself. page.snapshot() shows a page with refs; prefer semantic locators (getByRole, getByLabel, getByText) and chain several steps per workflow (fill the fields, choose, submit, save the download), checking the page between them. Read big pages inside the workflow (a region's innerText, extracted JSON) and return only what you need.
-- What the user chooses from comes back as data and goes into the interface: free appointment slots into <Appointment slots> (they pick; never pick a slot for them), offices into <Map>.
+- What the user chooses from comes back as data and goes into the interface: free appointment slots into <Appointment slots> (they pick; never pick a slot for them; only slots still to come, after now), offices into <Map>.
 - Every option a form or the procedure offers the user is their choice, not yours: how to pay (cash at a bank, card, direct debit), the office, the date, the kind of request. Unless they or the vault already said it, ask in an interface before you fill it in; never take the first or the preselected option for them.
 - Logins: compare the methods the service offers with the vault's credential summaries. Cl@ve Permanente and Cl@ve Móvil are different. Cl@ve Permanente: always page.loginClave.${dnie} Codes and non-Cl@ve passwords: page.fillFromUser. Never ask for passwords, PINs or codes in an interface.
 - Signing in the user's name with their certificate or DNI is your job: click the site's "Firmar"/"Acceder"; the app replaces AutoFirma and asks the user. page.useCertificate only for TLS client-certificate logins.${fnmt}

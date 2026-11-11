@@ -218,6 +218,15 @@ class EvalAppImpl implements EvalApp {
         onShown: (prompt) => observers.interfaceShown(prompt),
         onNote: (text) => spec.sink.push({ type: 'note', text }),
         onRender: (render) => spec.sink.push({ type: 'interface_render', ...render }),
+        // As the persona is told: what they are asked and don't know, they say they don't know.
+        onUnknown: (labels) => {
+          this.send(`No lo sé: ${labels.map((l) => `«${l}»`).join(', ')}.`).catch((error) =>
+            spec.sink.push({
+              type: 'note',
+              text: `could not say what the user does not know: ${error}`,
+            }),
+          );
+        },
       });
       this.interfaces = interfaces;
       this.unsubscribe.push(

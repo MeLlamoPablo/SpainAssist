@@ -436,10 +436,13 @@ function credentialAnswers(buyer: Buyer): AnswerGroup {
 // Personas and seeds
 // ---------------------------------------------------------------------------------------------
 
-function personaText(buyer: Buyer, facts: string, savedEverything: boolean): string {
+function personaText(buyer: Buyer, facts: string, savedEverything: boolean, sale: Sale): string {
   const born = buyer.birthDate.split('-').reverse().join('/');
+  // A buyer asked for the seller's NIF reads it off the paper they hold, as anyone would.
+  const paper = sale.form === 'FCOMP' ? 'invoice' : 'contract';
   return `You are ${fullName(buyer)}, born on ${born}, a Spanish citizen. Your DNI is ${buyer.dni}. You live at ${buyer.street}, ${buyer.postalCode} ${buyer.municipality} (Sevilla). Your mobile phone is ${buyer.phone} and your email is ${buyer.email}.
 ${facts}
+The seller's NIF is on the ${paper} you have: ${sale.seller.nif}.
 You are registered in Cl@ve Permanente and it is the only way you have to identify yourself online: you have no digital certificate and no electronic DNI. You never type your password in a chat or a form; the app asks for it in a separate protected window.
 ${savedEverything ? 'You saved your details, your Cl@ve and all these papers in the app before asking.' : 'You saved nothing in the app. You have photos of the papers and the PDFs on your phone: when the app asks for a document, you attach it (the app does that part for you).'}
 You want the transfer done online, without going to an office. You are not good with technology. Answer briefly, in plain Spanish. If you are asked something that is not in this description, say that you do not know it. Do not invent data.`;
@@ -519,6 +522,7 @@ export function transferenciaConDatos(): Fixture {
       DANIEL,
       'On 12 October 2026, in Dos Hermanas, you bought a used SEAT Ibiza (plate 4821KZT) from a private seller, Rocío Delgado Peña, for 8.900 €, and signed the contract. You already paid the purchase tax (ITP, modelo 621) online on 16 October, and you bought the DGT fee for the transfer (tasa 1.5) the same day: you have both receipts. The car has no loan or debts as far as you know.',
       true,
+      sale,
     ),
     answerGroups: [confirmAnswers()],
     rules: [
@@ -580,6 +584,7 @@ export function transferenciaSinDatos(): Fixture {
       MARTA,
       'On 2 September 2026, in Sevilla, you bought a used Toyota Yaris (plate 2357LHW) from a private seller, Alberto Ramos Fuentes, for 9.500 €, and signed the contract. You paid the purchase tax (ITP, modelo 621) online on 14 October, and bought the DGT fee for the transfer (tasa 1.5) the same day: you have both receipts as PDFs. You have not done anything at Tráfico yet. The car has no loan or debts as far as you know.',
       false,
+      sale,
     ),
     answerGroups: [credentialAnswers(MARTA), confirmAnswers()],
     rules: [
@@ -656,6 +661,7 @@ export function transferenciaReservaDominio(): Fixture {
       DANIEL,
       'On 15 October 2026, in Alcalá de Guadaíra, you bought a used Peugeot 308 (plate 6094LBD) from a private seller, Ignacio Ferrer Ruiz, for 13.400 €, and signed the contract, which says the car is free of charges. You already paid the purchase tax (ITP, modelo 621) and bought the DGT fee (tasa 1.5) on 19 October. If you are asked about loans or charges: the seller told you he bought the car with financing from the dealer and finished paying it this summer; you do not know whether anything was cancelled anywhere. You have not bought any other DGT fee and you would rather not pay for anything else before talking to the seller. If the car has a problem that stops the transfer, you do not want it filed anyway: you would first talk to the seller.',
       true,
+      sale,
     ),
     answerGroups: [
       confirmAnswers(
@@ -763,6 +769,7 @@ export function transferenciaCiclomotor(): Fixture {
       MARTA,
       'On 10 October 2026, in Sevilla, you bought a used Piaggio Zip 50 moped (plate C8326BTL) from a private seller, Lucía Romero Gil, for 650 €, and signed the contract. You paid the purchase tax (ITP, modelo 621) online on 13 October and bought the DGT fee for a moped transfer (tasa 1.2, 27,85 €) the same day: you have both receipts.',
       true,
+      sale,
     ),
     answerGroups: [confirmAnswers()],
     rules: [
@@ -810,6 +817,7 @@ export function transferenciaSinItp(): Fixture {
       DANIEL,
       'On 17 October 2026, in Sevilla, you bought a used Renault Clio (plate 1846KRS) from a private seller, Sergio Molina Castro, for 6.200 €, and signed the contract. You bought the DGT fee for the transfer (tasa 1.5) on 18 October. You have NOT paid any tax for the purchase: you did not know there was one. You do not know when the car last passed the ITV. If a tax must be paid first, you prefer to pay it yourself later: you do not want the transfer filed without it.',
       true,
+      sale,
     ),
     answerGroups: [
       confirmAnswers(
@@ -872,6 +880,7 @@ export function transferenciaEmpresa(): Fixture {
       MARTA,
       'On 15 October 2026 you bought a used KIA Sportage (plate 2753MJN) from a dealer, Automóviles Guadaira, S.L., in Alcalá de Guadaíra, for 22.000 € with VAT included: they gave you an invoice (factura), not a contract. Nobody told you to pay any other tax. You bought the DGT fee for the transfer (tasa 1.5) on 16 October.',
       true,
+      sale,
     ),
     answerGroups: [confirmAnswers()],
     rules: [

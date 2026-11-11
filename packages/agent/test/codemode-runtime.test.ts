@@ -325,6 +325,32 @@ describe('codemode runtime', () => {
     }
   });
 
+  it('draws components and hooks a module forgot to import', async () => {
+    const started = startRun(`
+      export async function main(api) {
+        return api.ui.present('code', () => {
+          const [code] = useDurableState('code', 'X7K2');
+          return (
+            <Form title="Código">
+              <Button onClick={() => api.ui.close({ code })}>Seguir</Button>
+            </Form>
+          );
+        });
+      }
+    `);
+    const { run, store } = started;
+    await until(() => store.trees.has('code'));
+    const tree = store.trees.get('code');
+    run.dispatch('code', {
+      handler: handlerOf(findNode(tree?.tree, 'Button', 'Seguir'), 'onClick'),
+      rev: tree?.rev ?? 0,
+    });
+    const outcome = await started.done;
+    expect(outcome.status === 'succeeded' && JSON.parse(outcome.value ?? '')).toEqual({
+      code: 'X7K2',
+    });
+  });
+
   it('rejects unknown components with the list of real ones', async () => {
     const outcome = await startRun(`
       export async function main(api) {
@@ -473,6 +499,20 @@ describe('codemode runtime', () => {
     ]);
   });
 
+  it('sends page.evaluate functions as they were written, ?. and ?? included', async () => {
+    const started = startRun(
+      `export async function main(api) {
+        const page = await api.browser.currentPage();
+        return page.evaluate(() => document.querySelector('h1')?.textContent ?? '');
+      }`,
+      { procedures: ['p_1'], call: async () => 'ok' },
+    );
+    expect((await started.done).status).toBe('succeeded');
+    expect(JSON.stringify(started.calls)).toContain(
+      "document.querySelector('h1')?.textContent ?? ''",
+    );
+  });
+
   it('has one snapshot: ariaSnapshot() says to use page.snapshot() and reaches no host', async () => {
     const started = startRun(
       `export async function main(api) {
@@ -496,14 +536,56 @@ describe('codemode runtime', () => {
   it('gives agents the browser, and no agents of their own', async () => {
     const agent = await startRun(
       `export async function main(api) {
-        try { api.agents.start({}); } catch (e) { return [e.code, typeof api.browser.currentPage, typeof api.classify, api.subagents]; }
+        try { api.agents.start({}); } catch (e) { return [e.code, typeof api.browser.currentPage, typeof api.classify, 'subagents' in api]; }
       }`,
     ).done;
     expect(agent.status === 'succeeded' && JSON.parse(agent.value ?? '')).toEqual([
       'policy_denied',
       'function',
       'function',
-      null,
+      false,
+    ]);
+  });
+
+  it('names what api, pages and locators have when code uses what they lack', async () => {
+    const outcome = await startRun(
+      `export async function main(api) {
+        const page = await api.browser.currentPage();
+        const errors = [];
+        for (const f of [() => api.setContext({}), () => page.evaluateAll(() => 1), () => page.getByText('x').frobnicate()]) {
+          try { f(); } catch (e) { errors.push(e.message); }
+        }
+        return errors;
+      }`,
+      { procedures: ['p_1'] },
+    ).done;
+    expect(outcome.status).toBe('succeeded');
+    const errors: string[] = outcome.status === 'succeeded' ? JSON.parse(outcome.value ?? '') : [];
+    expect(errors[0]).toMatch(/^api\.setContext does not exist\. api has: .*procedures/);
+    expect(errors[1]).toMatch(/^page\.evaluateAll does not exist\. page has: .*evaluate/);
+    expect(errors[2]).toMatch(
+      /^locator\.frobnicate does not exist\. locator has: .*pressSequentially/,
+    );
+  });
+
+  it('has URL and URLSearchParams, and api.memo for api.state.memo', async () => {
+    const outcome = await startRun(
+      `export async function main(api) {
+        const base = 'https://www.citapreviadnie.es/citaPreviaDni/SeleccionCita.action?oficina=x';
+        const day = new URL('SeleccionCita.action?oficina=x&fecha=2026-10-19', base);
+        const up = new URL('../inicio.html#arriba', base);
+        const q = new URLSearchParams('a=1&b=dos%20tres');
+        q.set('c', 'ñ');
+        return [day.searchParams.get('fecha'), day.origin, up.href, q.get('b'), q.toString(), await api.memo('k', () => 7)];
+      }`,
+    ).done;
+    expect(outcome.status === 'succeeded' && JSON.parse(outcome.value ?? '')).toEqual([
+      '2026-10-19',
+      'https://www.citapreviadnie.es',
+      'https://www.citapreviadnie.es/inicio.html#arriba',
+      'dos tres',
+      'a=1&b=dos%20tres&c=%C3%B1',
+      7,
     ]);
   });
 
