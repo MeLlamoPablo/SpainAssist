@@ -21,7 +21,6 @@ import { EXA_TOOL_NAMES, WEB_RESEARCH_TOOL_NAME } from '../tools/names';
 import { BridgeCredentialStore } from './credentials';
 import { createSpainAssistExtension } from './extension';
 import type { HostHooks } from './hooks';
-import { IDLE_COMPACTION_MIN_TOKENS, SessionRequests } from './idle-compaction';
 import { hostLog } from './log';
 import { configureModel, LITELLM_PROVIDER_ID, needsPromptCacheKey } from './model';
 import { redactsPages } from './redaction';
@@ -239,9 +238,6 @@ export async function runHost(
             .catch((err: unknown) => hostLog('warn', `voucher spend not sent: ${String(err)}`));
         }
       : undefined;
-  // The session's requests, kept to summarize from the prompt cache (see idle-compaction.ts).
-  let currentSession: { getSessionId(): string } | undefined;
-  const requests = new SessionRequests(modelRuntime, () => currentSession?.getSessionId() ?? '');
   const extension = createSpainAssistExtension({
     tools: agentTools,
     systemPrompt,
@@ -258,13 +254,6 @@ export async function runHost(
             })),
         }
       : {}),
-    idleCompaction: {
-      requests,
-      minTokens: config.idleCompaction?.minTokens ?? IDLE_COMPACTION_MIN_TOKENS,
-      ...(config.idleCompaction?.cacheTtlMs
-        ? { cacheTtlMs: config.idleCompaction.cacheTtlMs }
-        : {}),
-    },
   });
 
   const settingsManager = pi.SettingsManager.inMemory({
@@ -287,7 +276,6 @@ export async function runHost(
 
   const runtime = await pi.createAgentSessionRuntime(
     async (options) => {
-      currentSession = options.sessionManager;
       const services = await pi.createAgentSessionServices({
         cwd: options.cwd,
         agentDir: options.agentDir,

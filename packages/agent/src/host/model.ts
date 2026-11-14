@@ -1,4 +1,4 @@
-import type { Api, Model, ModelPromptCache } from '@earendil-works/pi-ai';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { CUSTOM_MODEL_DEFAULTS } from '@sa/shared';
 import type { ResolvedHostConfig } from '../config';
@@ -48,16 +48,6 @@ export function templateFor(
   }
   return best ?? preferred ?? models[0];
 }
-
-/**
- * Prompt cache lifetimes (seconds) of LiteLLM models by upstream (the id's `vendor/` prefix), for
- * idle compaction. Anthropic: the 5-minute and 1-hour `cache_control` TTLs. OpenAI caches long
- * prefixes by itself for 5 to 10 idle minutes, or 24 hours with `prompt_cache_retention`.
- */
-const LITELLM_PROMPT_CACHE: Readonly<Record<string, ModelPromptCache>> = {
-  anthropic: { short: 300, long: 3600 },
-  openai: { short: 300, long: 86_400 },
-};
 
 function litellmUpstream(id: string): string {
   return id.split('/')[0] ?? '';
@@ -110,7 +100,6 @@ function configureLiteLLM(runtime: ModelRuntime, cfg: ModelConfig): void {
   const maxTokens = cfg.maxTokens
     ? Math.min(cfg.maxTokens, template.maxTokens)
     : template.maxTokens;
-  const promptCache = LITELLM_PROMPT_CACHE[litellmUpstream(cfg.id)];
   runtime.registerProvider(LITELLM_PROVIDER_ID, {
     name: 'Spain Assist (LiteLLM)',
     baseUrl: cfg.baseUrl,
@@ -130,7 +119,6 @@ function configureLiteLLM(runtime: ModelRuntime, cfg: ModelConfig): void {
         cost: template.cost,
         contextWindow: template.contextWindow,
         maxTokens,
-        ...(promptCache ? { promptCache } : {}),
         compat: litellmCompat(template, cfg.id),
       },
     ],

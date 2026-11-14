@@ -5,8 +5,6 @@
  * `buildAgentLaunch` is where the app hands over an agent's config, so it is where the run
  *   - points the model at the meter (`agentBaseUrl(<agent key>)`: `assistant`, `procedure-<id>`),
  *   - strips every research URL and key (the eval host answers web research itself),
- *   - turns idle compaction off (a background model call in the middle of a run would make
- *     replays and costs depend on timing),
  *   - writes this process' `HostEvalConfig` (one file and one net log per host process: `seq`
  *     numbers the records of one process) and launches the eval host bundle with it.
  * `createClient` is where it sees every `AgentEvent`: they are teed to the observers before the
@@ -225,7 +223,6 @@ export class AgentFleet {
       // Only the eval host's research stub exists: no key server, Exa or BOE override, and no
       // access to private hosts.
       research: {},
-      idleCompaction: { minTokens: Number.MAX_SAFE_INTEGER },
     };
     writeHostEvalConfig(identity.configFile, this.hostConfig(identity));
     const evalLaunch = evalHostLaunch(identity.configFile);

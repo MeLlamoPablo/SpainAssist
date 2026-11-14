@@ -166,18 +166,15 @@ describe('agent host over RPC (integration)', () => {
   interface StartOptions {
     role?: AgentHostConfig['role'];
     research?: AgentHostConfig['research'];
-    idleCompaction?: AgentHostConfig['idleCompaction'];
   }
 
   function config(
     model?: AgentHostConfig['model'],
     research?: AgentHostConfig['research'],
     role?: AgentHostConfig['role'],
-    idleCompaction?: AgentHostConfig['idleCompaction'],
   ): AgentHostConfig {
     return {
       ...(role ? { role } : {}),
-      ...(idleCompaction ? { idleCompaction } : {}),
       procedureId: 'p1',
       sessionFile: join(workDir, 'sessions', 'p1.jsonl'),
       language: 'es',
@@ -199,7 +196,7 @@ describe('agent host over RPC (integration)', () => {
         nodeBinary: electron ?? process.execPath,
         electronRunAsNode: electron !== undefined,
         cwd: workDir,
-        config: config(model, options.research, options.role, options.idleCompaction),
+        config: config(model, options.research, options.role),
         bridge: { url: bridge.url, token: bridge.token },
         hostPath,
       }),
@@ -513,97 +510,6 @@ describe('agent host over RPC (integration)', () => {
       'litellm/anthropic/claude-haiku-5.5',
       'thinking medium',
     ]);
-  });
-
-  it('compacts while idle by extending the last request, so the summary reads its cache', async () => {
-    llm.setScenario({
-      rules: [
-        {
-          id: 'summary',
-          when: { lastUser: '^The conversation pauses here' },
-          reply: { text: '## Goal\nRenovar el DNI (resumen).' },
-        },
-        { id: 'resume', when: { lastUser: 'sigues' }, reply: { text: 'Sí, seguimos.' } },
-      ],
-      fallback: { text: 'Vale.' },
-    });
-    // A 15 s cache lifetime: the timer fires 5 s after the last request.
-    const { client, events } = await start(undefined, undefined, {
-      idleCompaction: { minTokens: 0, cacheTtlMs: 15_000 },
-    });
-    // Each over pi's 20k tokens kept verbatim: the first message is summarized, the second kept.
-    await client.prompt(`Mis notas: ${'nota antigua. '.repeat(7_000)}`);
-    await waitFor(events, isRunEnd);
-    let from = events.length;
-    await client.prompt(`Más notas: ${'nota reciente. '.repeat(7_000)}`);
-    await waitFor(events, isRunEnd, { from });
-    from = events.length;
-    await waitFor(events, (e) => e.type === 'log' && e.message.startsWith('compaction summary:'), {
-      from,
-      timeoutMs: 15_000,
-    });
-
-    const bodies = llm.requests().map((request) => request.body as ChatRequest);
-    expect(bodies).toHaveLength(3);
-    const [, turn, summary] = bodies as [ChatRequest, ChatRequest, ChatRequest];
-    const turnMessages = turn.messages ?? [];
-    const summaryMessages = summary.messages ?? [];
-    // Same tools and the same messages first: a prefix of the cached prompt.
-    expect(summary.tools).toEqual(turn.tools);
-    expect(summaryMessages.slice(0, turnMessages.length)).toEqual(turnMessages);
-    expect(summaryMessages.slice(turnMessages.length)).toMatchObject([
-      { role: 'assistant' },
-      { role: 'user' },
-    ]);
-
-    from = events.length;
-    await client.prompt('¿Sigues ahí?');
-    await waitFor(events, isRunEnd, { from });
-    const next = llm.requests().at(-1)?.body as ChatRequest;
-    const texts = (next.messages ?? []).map((m) => JSON.stringify(m.content));
-    expect(texts.some((t) => t.includes('Renovar el DNI (resumen).'))).toBe(true);
-    expect(texts.some((t) => t.includes('nota antigua'))).toBe(false);
-    expect(texts.some((t) => t.includes('nota reciente'))).toBe(true);
-  });
-
-  it('cancels an idle compaction when the user writes again', async () => {
-    llm.setScenario({
-      rules: [
-        {
-          id: 'summary',
-          when: { lastUser: '^The conversation pauses here' },
-          reply: { text: 'Resumen.', delayMs: 10_000 },
-        },
-        { id: 'resume', when: { lastUser: 'sigues' }, reply: { text: 'Sí, seguimos.' } },
-      ],
-      fallback: { text: 'Vale.' },
-    });
-    const { client, events } = await start(undefined, undefined, {
-      idleCompaction: { minTokens: 0, cacheTtlMs: 15_000 },
-    });
-    await client.prompt(`Mis notas: ${'nota antigua. '.repeat(7_000)}`);
-    await waitFor(events, isRunEnd);
-    let from = events.length;
-    await client.prompt(`Más notas: ${'nota reciente. '.repeat(7_000)}`);
-    await waitFor(events, isRunEnd, { from });
-    from = events.length;
-    await waitFor(events, (e) => e.type === 'log' && e.message.startsWith('idle compaction'), {
-      from,
-      timeoutMs: 15_000,
-    });
-
-    const startedAt = Date.now();
-    await client.prompt('¿Sigues ahí?');
-    await waitFor(events, isRunEnd, { from });
-    expect(Date.now() - startedAt).toBeLessThan(5_000);
-    expect(events.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
-      text: 'Sí, seguimos.',
-    });
-    // Not compacted: the next request still has the whole conversation.
-    const next = llm.requests().at(-1)?.body as ChatRequest;
-    expect(
-      (next.messages ?? []).some((m) => JSON.stringify(m.content).includes('nota antigua')),
-    ).toBe(true);
   });
 
   it('aborts promptly while a tool waits for the user, and keeps working afterwards', async () => {

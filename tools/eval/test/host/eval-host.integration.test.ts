@@ -179,8 +179,6 @@ describe('the eval host over RPC', () => {
           language: 'es',
           // The voucher provider at the mock gateway: what voucher runs use, pointed at the meter.
           model: { provider: 'litellm', id: 'anthropic/claude-haiku-5.5', baseUrl: llm.baseUrl },
-          // No background compaction calls in the middle of a test.
-          idleCompaction: { minTokens: 1_000_000_000 },
           ...options.agent,
         },
         bridge: { url: bridge.url, token: bridge.token },

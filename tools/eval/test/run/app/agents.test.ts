@@ -144,11 +144,10 @@ describe('the launch of an agent host', () => {
     expect(procedure.dniePhone).toBe(false);
   });
 
-  it('strips every research URL and key and turns idle compaction off', () => {
+  it('strips every research URL and key', () => {
     const sent = sentConfig(fleet().lib.buildAgentLaunch(options(config())));
     expect(sent.research).toEqual({});
     expect(JSON.stringify(sent)).not.toMatch(/key-server|exa|boe\.example|allowPrivateHosts/);
-    expect(sent.idleCompaction).toEqual({ minTokens: Number.MAX_SAFE_INTEGER });
   });
 
   it('writes the host config of the process: the world, its own net log, the research and the clock', () => {

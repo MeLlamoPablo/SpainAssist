@@ -173,7 +173,6 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 | `research.boeBaseUrl`, `research.exaBaseUrl`, `research.allowPrivateHosts` | Tests / e2e (mock sede on localhost) |
 | `feedback` | `{submit, vote}` when the app has a feedback server: `feedback_search`, plus submit and vote when on |
 | `dniePhone` | The DNIe through the phone app (`dnie-phone` flag) is offered |
-| `idleCompaction` | Compaction while idle, just before the prompt cache expires |
 | `extraTrustedHosts` | Dev/e2e hosts allowed for credentials |
 | `timeZone` | For "today" in the prompt; default `Europe/Madrid` |
 

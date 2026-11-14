@@ -93,17 +93,6 @@ export const AgentHostConfigSchema = z.object({
   certificateRequests: z.boolean().default(false),
   /** Dev/e2e only: extra hosts allowed for credentials (same as the app's SA_EXTRA_TRUSTED_HOSTS). */
   extraTrustedHosts: z.array(z.string()).optional(),
-  /**
-   * Compaction while the agent is idle, just before the prompt cache expires, for contexts of at
-   * least `minTokens` (default IDLE_COMPACTION_MIN_TOKENS). `cacheTtlMs` overrides the cache
-   * lifetime (tests).
-   */
-  idleCompaction: z
-    .object({
-      minTokens: z.number().int().nonnegative().optional(),
-      cacheTtlMs: z.number().int().positive().optional(),
-    })
-    .optional(),
   /** IANA time zone used for "today" in the system prompt. Default Europe/Madrid. */
   timeZone: z.string().optional(),
 });

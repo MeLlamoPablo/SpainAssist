@@ -158,8 +158,8 @@ export class PiRpcClient {
       const data = await this.request<{ disposition?: PromptDisposition }>('prompt', payload);
       return data?.disposition ?? 'started';
     } catch (error) {
-      // An idle compaction is running (see idle-compaction.ts): the user is back before the
-      // prompt cache expired, so it is no longer needed. `abort` cancels it and waits for idle.
+      // A compaction is running: `abort` cancels it and waits for idle; pi compacts again when
+      // the context is still too large.
       if (/while compaction is in progress/i.test((error as Error).message)) {
         await this.request('abort', {}, this.options.abortTimeoutMs ?? 15_000);
         const data = await this.request<{ disposition?: PromptDisposition }>('prompt', payload);

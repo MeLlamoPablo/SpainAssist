@@ -106,7 +106,6 @@ function cacheControls(content: unknown): unknown[] {
 describe('LiteLLM prompt caching', () => {
   it('marks the system prompt, the last tool and the last message of Anthropic models', async () => {
     const { runtime, model } = await litellmModel('anthropic/claude-haiku-5.5');
-    expect(model.promptCache).toEqual({ short: 300, long: 3600 });
     expect(needsPromptCacheKey(model)).toBe(false);
 
     const body = await send(runtime, model);
@@ -124,7 +123,6 @@ describe('LiteLLM prompt caching', () => {
 
   it('sends OpenAI models the session id as prompt_cache_key, without cache_control', async () => {
     const { runtime, model } = await litellmModel('openai/gpt-6.1-sol');
-    expect(model.promptCache).toEqual({ short: 300, long: 86_400 });
     expect(needsPromptCacheKey(model)).toBe(true);
 
     const body = await send(runtime, model, (payload) => withPromptCacheKey(payload, 'session-1'));
@@ -132,9 +130,8 @@ describe('LiteLLM prompt caching', () => {
     expect(JSON.stringify(body)).not.toContain('cache_control');
   });
 
-  it('leaves other upstreams without a cache lifetime', async () => {
+  it('sends other upstreams no prompt_cache_key', async () => {
     const { model } = await litellmModel('google/gemini-3-pro');
-    expect(model.promptCache).toBeUndefined();
     expect(needsPromptCacheKey(model)).toBe(false);
   });
 });
