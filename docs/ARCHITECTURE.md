@@ -163,14 +163,20 @@ agent, logins and signatures see them like any other). Their keys never enter th
   the DNIe's two paths, with an RSA PKCS#1 v1.5 signature from the keychain;
 - finding one needs no consent, using one always asks (policy `ask`, not changeable), and macOS
   may ask once more the first time the app uses a key another program installed;
-- a certificate that is also in the vault shows once, as the vault's. Expired ones aren't listed;
-- Mis datos can't download, delete or change them, and marks them "Externo".
+- a certificate that is also in the vault shows once, as the vault's (`inSystem`). Expired ones
+  aren't listed;
+- Mis datos can't download, delete or change them, and marks them "Externo" with the system's
+  logo.
 
-A vault certificate's menu offers "Mover al sistema operativo" (`vault/certificate-move.ts`): after
+A vault certificate's menu ("Más opciones": download, move, delete) offers "Mover al sistema
+operativo" (`vault/certificate-move.ts`): after
 a dialog that explains it (and Touch ID), main imports a 3DES `.p12` made in memory into the login
 keychain (`SecItemImport`, extractable, so Acceso a Llaveros can still export a backup), and
 deletes the vault's copy only once it has found the certificate there and signed with it. Only
-certificates the app would then find again (FNMT, RSA) can be moved. Windows comes next; research
+certificates the app would then find again (FNMT, RSA) can be moved. One that is already in the
+keychain can be neither moved nor deleted: its menu offers "Usar el del sistema operativo", which
+deletes the vault's copy only after the keychain's has proven to be the same certificate, byte
+for byte, and to sign with its key (`OsCertificates.prove`). Windows comes next; research
 in `docs/research/os-certificate-store.md`. Tests and e2e runs use a throwaway keychain file
 (`SA_OS_KEYCHAIN`), never the user's keychains.
 

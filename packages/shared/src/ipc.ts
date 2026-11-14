@@ -256,7 +256,9 @@ export interface SaMethods {
   /**
    * Moves a vault certificate (`canMoveToSystem`) to the operating system's store (macOS
    * keychain): it leaves the vault once the app can use it from there, and shows as `external`.
-   * Touch ID first, when available. Returns null when the user cancelled.
+   * For one that is already there (`inSystem`) nothing is installed: the vault's copy goes once
+   * the system's is proven to be the same certificate and key. Touch ID first, when available.
+   * Returns null when the user cancelled.
    */
   'vault.moveCertificateToSystem': [[id: string], VaultOverview | null];
   'vault.setCredentialPolicy': [[id: string, policy: CredentialPolicy], CredentialSummary];

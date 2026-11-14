@@ -296,8 +296,10 @@ describe('the vault with external certificates', () => {
     });
     const listed = vault.listCredentials();
     expect(listed).toHaveLength(1);
-    expect(listed[0]).toMatchObject({ id: saved.id, canMoveToSystem: true });
+    expect(listed[0]).toMatchObject({ id: saved.id, inSystem: true });
     expect(listed[0]?.external).toBeUndefined();
+    // Nothing to move: it is already there.
+    expect(listed[0]?.canMoveToSystem).toBeUndefined();
   });
 
   it('tells the renderer when a certificate appears in the OS store', async () => {
@@ -363,6 +365,64 @@ describe('the vault with external certificates', () => {
     await expect(service.moveCertificateToSystem(saved.id)).rejects.toThrow(/solo usa/);
     expect(store.identities).toEqual([]);
     expect(own.listCredentials()).toHaveLength(1);
+  });
+
+  it('drops the vault’s copy of a certificate that is also in the OS store, installing nothing', async () => {
+    const { own, store, os, service, biometric, closed } = await setup();
+    await store.add(demo);
+    await os.refresh();
+    const saved = await own.addCertificate({
+      fileName: 'demo.p12',
+      p12: demo.p12,
+      passphrase: demo.passphrase,
+    });
+    expect(service.overview().credentials).toMatchObject([{ id: saved.id, inSystem: true }]);
+    store.importPkcs12 = async () => {
+      throw new Error('nothing to install');
+    };
+
+    const overview = await service.moveCertificateToSystem(saved.id);
+    expect(biometric.reasons).toEqual(['usar el certificado digital del sistema operativo']);
+    expect(own.listCredentials()).toEqual([]);
+    expect(store.identities).toHaveLength(1);
+    expect(overview?.credentials).toMatchObject([
+      { id: `os-${saved.certificate?.fingerprint}`, external: true },
+    ]);
+    expect(closed()).toBe(1);
+  });
+
+  it('keeps the vault’s copy unless the OS store’s certificate proves to be the same', async () => {
+    const { own, store, os, service } = await setup();
+    await store.add(demo);
+    await os.refresh();
+    const saved = await own.addCertificate({
+      fileName: 'demo.p12',
+      p12: demo.p12,
+      passphrase: demo.passphrase,
+    });
+    const kept = () => expect(own.listCredentials()).toMatchObject([{ id: saved.id }]);
+
+    // The user refuses the system's prompt.
+    store.deny = true;
+    await expect(service.moveCertificateToSystem(saved.id)).rejects.toThrow(
+      'El sistema no ha permitido usar su certificado. El tuyo sigue guardado en Spain Assist.',
+    );
+    kept();
+    store.deny = false;
+
+    // The system's certificate is paired with another key.
+    const key = store.identities[0]!.key;
+    store.identities[0]!.key = (await readPkcs12(person().p12, 'x')).privateKey;
+    await expect(service.moveCertificateToSystem(saved.id)).rejects.toThrow(
+      /No he podido comprobar que el certificado del sistema operativo es el mismo/,
+    );
+    kept();
+    store.identities[0]!.key = key;
+
+    // It left the system between the listing and the click.
+    store.identities.length = 0;
+    await expect(service.moveCertificateToSystem(saved.id)).rejects.toThrow(/es el mismo/);
+    kept();
   });
 });
 

@@ -97,6 +97,14 @@ export class OsCertificates {
     );
   }
 
+  /** Whether the OS store holds a certificate in date with this fingerprint, and its key. */
+  has(fingerprint: string): boolean {
+    const now = this.now();
+    return this.found.some(
+      (c) => c.info.fingerprint === fingerprint && Date.parse(c.info.validTo) > now,
+    );
+  }
+
   /**
    * Reads the OS store again. Resolves true when the certificates changed. Never throws: a
    * store that can't be read keeps the last list.
@@ -232,14 +240,26 @@ export class OsCertificates {
 
   /**
    * Adds a certificate the app holds (`p12`: 3DES, SHA-1 MAC) to the OS store, and resolves only
-   * once the app has found it there and signed with it: after that the app's own copy can go.
+   * once the app has found it there and signed with it (`prove`): after that the app's own copy
+   * can go.
    */
   async install(p12: Uint8Array, passphrase: string, der: Uint8Array): Promise<void> {
     if (!this.eligible(der))
       throw new OsKeyStoreError('failed', 'The app would not find this certificate in the system');
     await this.deps.store.importPkcs12(p12, passphrase);
+    await this.prove(der);
+  }
+
+  /**
+   * Resolves only when the OS store holds this very certificate (the same bytes) and signs with
+   * its private key: the one case in which the app's own copy adds nothing. The OS may ask the
+   * user to let the app use the key.
+   */
+  async prove(der: Uint8Array): Promise<void> {
     await this.refresh();
     const id = `${ID_PREFIX}${this.deps.certificateInfo(der).fingerprint}`;
+    if (!this.require(id).der.equals(der))
+      throw new OsKeyStoreError('failed', 'The system holds a different certificate');
     const digest = randomBytes(32);
     const signature = await this.sign(id, digest, 'sha256');
     // What a PKCS#1 v1.5 signature over a SHA-256 digest holds, as a TLS server would check it.

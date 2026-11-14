@@ -23,6 +23,10 @@ const STRINGS = {
     es: 'mover tu certificado digital al sistema operativo',
     en: 'move your digital certificate to the operating system',
   },
+  touchIdUse: {
+    es: 'usar el certificado digital del sistema operativo',
+    en: 'use the operating system’s digital certificate',
+  },
   unavailable: {
     es: 'Aquí no se puede mover el certificado al sistema operativo.',
     en: 'The certificate can’t be moved to the operating system here.',
@@ -39,6 +43,14 @@ const STRINGS = {
     es: 'No se ha podido mover el certificado. Sigue guardado en Spain Assist.',
     en: 'The certificate couldn’t be moved. It is still saved in Spain Assist.',
   },
+  useDenied: {
+    es: 'El sistema no ha permitido usar su certificado. El tuyo sigue guardado en Spain Assist.',
+    en: 'The system didn’t allow using its certificate. Yours is still saved in Spain Assist.',
+  },
+  notSame: {
+    es: 'No he podido comprobar que el certificado del sistema operativo es el mismo. El tuyo sigue guardado en Spain Assist.',
+    en: 'I couldn’t check that the operating system’s certificate is the same one. Yours is still saved in Spain Assist.',
+  },
 } as const satisfies Record<string, { es: string; en: string }>;
 
 /**
@@ -48,6 +60,10 @@ const STRINGS = {
  * it there and signed with it does the vault's copy go, so a failure leaves everything as it
  * was. From then on it shows as an external certificate. Returns false when the user cancelled
  * Touch ID.
+ *
+ * A certificate that is already in the OS store (`inSystem`, "Usar el del sistema operativo")
+ * has nothing to install: the vault's copy goes only once the system's has proven to be the
+ * same certificate, byte for byte, and to sign with its key.
  */
 export async function moveCertificateToSystem(
   deps: CertificateMoveDeps,
@@ -60,7 +76,10 @@ export async function moveCertificateToSystem(
   const os = deps.osCertificates;
   if (!os) throw new UserError(STRINGS.unavailable[lang], 'unavailable');
 
-  if (!(await deps.biometric.prompt(STRINGS.touchId[lang]))) return false;
+  const inSystem = credential.certificate ? os.has(credential.certificate.fingerprint) : false;
+
+  if (!(await deps.biometric.prompt(STRINGS[inSystem ? 'touchIdUse' : 'touchId'][lang])))
+    return false;
 
   // Only in memory, for the OS import: the 3DES encoding every macOS release reads.
   const passphrase = randomBytes(24).toString('base64url');
@@ -69,13 +88,24 @@ export async function moveCertificateToSystem(
   const der = new X509Certificate((await pkcs12ToPem(p12, passphrase)).cert).raw;
   if (!os.eligible(der)) throw new UserError(STRINGS.notMovable[lang], 'bad_request');
   try {
-    await os.install(p12, passphrase, der);
+    if (inSystem) await os.prove(der);
+    else await os.install(p12, passphrase, der);
   } catch (err) {
     const denied = err instanceof OsKeyStoreError && err.code === 'denied';
-    deps.logger.warn('certificate not moved to the OS store', { error: errorMessage(err) });
-    throw new UserError(STRINGS[denied ? 'denied' : 'failed'][lang], 'unavailable');
+    deps.logger.warn(
+      inSystem
+        ? 'the OS store’s certificate not proven the same'
+        : 'certificate not moved to the OS store',
+      { error: errorMessage(err) },
+    );
+    const message = inSystem
+      ? STRINGS[denied ? 'useDenied' : 'notSame']
+      : STRINGS[denied ? 'denied' : 'failed'];
+    throw new UserError(message[lang], 'unavailable');
   }
   await deps.vault.deleteCredential(id);
-  deps.logger.info('certificate moved to the OS store');
+  deps.logger.info(
+    inSystem ? 'vault certificate dropped for the OS store’s' : 'certificate moved to the OS store',
+  );
   return true;
 }

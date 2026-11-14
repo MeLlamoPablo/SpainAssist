@@ -71,7 +71,8 @@ import {
  * relay_refused: no pairing, the last one ended for that reason; =outdated|outdated_desktop:
  * the paired phone's app, or this one, needs an update; =stalled: the relay can't be reached,
  * "Reintentar" pairs anew) · ?dnieSaved=1|pin (a saved
- * DNI in Mis datos; =pin with its PIN saved).
+ * DNI in Mis datos; =pin with its PIN saved) · ?certificate=inSystem|external (the saved
+ * certificate is also installed in the operating system, or only there).
  */
 
 type Handlers = { [M in SaMethod]: (...args: SaArgs<M>) => SaResult<M> | Promise<SaResult<M>> };
@@ -243,6 +244,16 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       policy: 'ask',
       createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
       hasPin: params.get('dnieSaved') === 'pin',
+    });
+  // The saved certificate is also installed in the operating system, or only there.
+  const certificate = params.get('certificate');
+  if (certificate === 'inSystem' || certificate === 'external')
+    state.credentials = state.credentials.map((c) => {
+      if (c.kind !== 'certificate') return c;
+      const { lastUsedAt: _, canMoveToSystem: __, ...rest } = c;
+      return certificate === 'inSystem'
+        ? { ...rest, inSystem: true }
+        : { ...rest, id: `os-${c.certificate?.fingerprint}`, policy: 'ask', external: true };
     });
   if (params.has('phone')) {
     // The DNI card asks for a phone call instead of its form (the call card's states).
@@ -1486,7 +1497,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       await sleep(900);
       const cred = state.credentials.find((c) => c.id === id && c.kind === 'certificate');
       if (!cred?.certificate) throw new Error(tr('No lo encuentro.', 'Not found.'));
-      const { lastUsedAt: _, canMoveToSystem: __, ...rest } = cred;
+      const { lastUsedAt: _, canMoveToSystem: __, inSystem: ___, ...rest } = cred;
       state.credentials = state.credentials.map((c) =>
         c === cred
           ? { ...rest, id: `os-${cred.certificate?.fingerprint}`, policy: 'ask', external: true }

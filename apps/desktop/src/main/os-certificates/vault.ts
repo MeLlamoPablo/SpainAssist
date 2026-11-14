@@ -8,17 +8,15 @@ import { isOsCredentialId, type OsCertificates } from './service';
  * up credentials (Mis datos, the agent, logins, signatures) sees them as `certificate`
  * credentials marked `external`. They aren't in the vault: nothing about them can be changed,
  * exported or deleted through it. A certificate that is also in the vault shows once, as the
- * vault's.
+ * vault's, marked `inSystem`.
  */
 export function withOsCertificates(vault: VaultPort, os: OsCertificates): VaultPort {
   const credentials = (): CredentialSummary[] => {
-    const own = vault
-      .listCredentials()
-      .map((c) =>
-        c.kind === 'certificate' && c.certificate && os.movable(c.certificate)
-          ? { ...c, canMoveToSystem: true }
-          : c,
-      );
+    const own = vault.listCredentials().map((c) => {
+      if (c.kind !== 'certificate' || !c.certificate) return c;
+      if (os.has(c.certificate.fingerprint)) return { ...c, inSystem: true };
+      return os.movable(c.certificate) ? { ...c, canMoveToSystem: true } : c;
+    });
     const held = new Set(
       own.filter((c) => c.kind === 'certificate').map((c) => c.certificate?.fingerprint),
     );

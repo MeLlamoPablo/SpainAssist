@@ -53,6 +53,23 @@ vi.mock('../../components/ui/dialog', async (original) => ({
     ) : null,
 }));
 
+// The same for a menu: its items show inline, closed or not.
+vi.mock('../../components/ui/menu', () => ({
+  Menu: (props: { children: ReactNode }) => <div>{props.children}</div>,
+  MenuTrigger: (props: { children: ReactNode }) => <>{props.children}</>,
+  MenuContent: (props: { children: ReactNode }) => <div role="menu">{props.children}</div>,
+  MenuItem: (props: { children: ReactNode }) => (
+    <div role="menuitem" tabIndex={-1}>
+      {props.children}
+    </div>
+  ),
+}));
+
+/** The labels of the menu items in a rendered section. */
+function menuItems(html: string): string[] {
+  return [...html.matchAll(/role="menuitem"[^>]*>([^<]*)</g)].map((m) => m[1]!);
+}
+
 const info: AppInfo = {
   name: 'Spain Assist',
   version: '0.0.0-test',
@@ -122,27 +139,65 @@ function dialog(biometric: boolean): string {
 }
 
 describe('Mis datos: exporting a certificate', () => {
-  it('gives each certificate of the app a menu (download, move), never the DNI', () => {
+  it('gives each certificate of the app a menu instead of a bin, never the DNI', () => {
     const html = section([CERTIFICATE, { ...CERTIFICATE, id: 'cred-cert-2' }, DNIE]);
     expect(html.match(/data-testid="certificate-menu"/g)).toHaveLength(2);
     expect(html).toContain('aria-label="Más opciones"');
+    expect(html).not.toContain('Borrar Certificado digital');
     expect(section([DNIE])).not.toContain('Más opciones');
+    expect(section([DNIE])).toContain('aria-label="Borrar DNI con el móvil"');
+  });
+
+  it('offers download and delete, and the move where the app could use it from the system', () => {
+    expect(menuItems(section([CERTIFICATE]))).toEqual(['Descargar .p12', 'Borrar']);
+    expect(menuItems(section([{ ...CERTIFICATE, canMoveToSystem: true }]))).toEqual([
+      'Descargar .p12',
+      'Mover al sistema operativo',
+      'Borrar',
+    ]);
+  });
+
+  it('offers neither move nor delete for one that is also in the system: use the system’s', () => {
+    const html = section([{ ...CERTIFICATE, inSystem: true }]);
+    expect(menuItems(html)).toEqual(['Descargar .p12', 'Usar el del sistema operativo']);
+    expect(html).not.toContain('Externo');
+
+    const dialog = renderToStaticMarkup(
+      <CertificateMoveDialog
+        credentialId={CERTIFICATE.id}
+        inSystem
+        biometric={false}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(dialog).toContain('Usar el certificado de tu Mac');
+    expect(dialog).toContain('Compruebo que es el mismo y borro la copia de Spain Assist.');
+    expect(dialog).toContain('Usar el del sistema');
+    expect(dialog).not.toContain('Mover');
   });
 
   it('marks a certificate installed in the system as external: no menu, bin or policy', () => {
     const html = section([{ ...CERTIFICATE, id: 'os-ab', external: true }]);
     expect(html).toContain('data-testid="certificate-external"');
     expect(html).toContain('Externo');
+    expect(html).toContain('data-testid="system-logo-darwin"');
     expect(html).toContain('CARMEN ESPAÑOLA ESPAÑOLA');
     expect(html).not.toContain('data-testid="certificate-menu"');
-    expect(html).not.toContain('Borrar Certificado digital');
+    expect(menuItems(html)).toEqual([]);
     expect(html).not.toContain('Aún no se ha usado');
     expect(html).not.toContain('Cuándo usarla');
     // The same card, held by the app, has all three.
     const own = section([CERTIFICATE]);
     expect(own).not.toContain('Externo');
-    expect(own).toContain('Borrar Certificado digital');
+    expect(menuItems(own)).toContain('Borrar');
     expect(own).toContain('Cuándo usarla');
+
+    // On Windows the label carries its logo.
+    store.state = { ...store.state, info: { ...info, platform: 'win32' } };
+    const windows = section([{ ...CERTIFICATE, id: 'os-ab', external: true }]);
+    expect(windows).toContain('data-testid="system-logo-win32"');
+    expect(windows).not.toContain('data-testid="system-logo-darwin"');
   });
 
   it('explains the move to the system before doing it', () => {

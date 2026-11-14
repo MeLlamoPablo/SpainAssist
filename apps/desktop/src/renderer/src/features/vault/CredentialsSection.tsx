@@ -43,6 +43,7 @@ import { PairingPanel } from '../companion/PairingPanel';
 import { CertificateMenu } from './CertificateMenu';
 import { CertificateRequestCard } from './CertificateRequestCard';
 import { vaultDict } from './i18n';
+import { SystemLogo } from './SystemLogo';
 import { systemDict, systemName } from './systemI18n';
 import { SectionIntro } from './VaultView';
 
@@ -331,7 +332,6 @@ function CredentialCard({
   warning,
   below,
   actions,
-  badge,
 }: {
   credential: CredentialSummary;
   icon: LucideIcon;
@@ -341,10 +341,11 @@ function CredentialCard({
   warning?: ReactNode;
   /** Shown under the details (e.g. the DNIe's phone pairing). */
   below?: ReactNode;
-  /** Icon buttons before the bin (e.g. a certificate's menu). */
-  actions?: ReactNode;
-  /** Next to the title (e.g. "Externo"). */
-  badge?: ReactNode;
+  /**
+   * What the top right corner holds instead of the bin: a certificate's menu, whose "Borrar"
+   * calls `remove` (it opens the confirmation), or the "Externo" label.
+   */
+  actions?: (remove: () => void) => ReactNode;
 }) {
   const t = useT(vaultDict);
   const tc = useT(common);
@@ -382,10 +383,7 @@ function CredentialCard({
           <Icon size={19} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-[14.5px] font-semibold text-fg">
-            {title}
-            {badge}
-          </p>
+          <p className="text-[14.5px] font-semibold text-fg">{title}</p>
           {/* The app keeps no record of an external certificate's uses. */}
           {c.external ? null : (
             <p className="mt-0.5 text-[12.5px] text-fg-subtle">
@@ -401,9 +399,9 @@ function CredentialCard({
           {below}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {actions}
-          {/* An external certificate isn't the app's to delete. */}
-          {c.external ? null : (
+          {actions ? (
+            actions(() => setConfirm(true))
+          ) : (
             <IconButton
               icon={Trash}
               label={`${t.credentials.remove} ${title}`}
@@ -475,8 +473,8 @@ function CertificateCard({
       icon={FileKey}
       title={t.credentials.cert.title}
       biometric={biometric}
-      actions={c.external ? null : <CertificateMenu credential={c} biometric={biometric} />}
-      badge={
+      // An external certificate isn't the app's to download, move or delete.
+      actions={(remove) =>
         c.external ? (
           <Tooltip content={ts.externalHint(systemName(platform, lang))}>
             <span
@@ -485,10 +483,15 @@ function CertificateCard({
               className="inline-flex rounded-full"
               data-testid="certificate-external"
             >
-              <Pill size="sm">{ts.external}</Pill>
+              <Pill>
+                <SystemLogo platform={platform} size={12} />
+                {ts.external}
+              </Pill>
             </span>
           </Tooltip>
-        ) : null
+        ) : (
+          <CertificateMenu credential={c} biometric={biometric} onDelete={remove} />
+        )
       }
       warning={
         soon && days !== null ? (

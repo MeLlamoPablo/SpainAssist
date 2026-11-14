@@ -36,7 +36,7 @@ test.afterAll(() => {
   }
 });
 
-test('a certificate moves from Mis datos to the keychain and comes back as external, also after a restart', async ({
+test('a certificate moves from Mis datos to the keychain and comes back as external, also after a restart; a copy added again gives way to the keychain’s', async ({
   harness: h,
 }) => {
   await connect(h);
@@ -54,6 +54,7 @@ test('a certificate moves from Mis datos to the keychain and comes back as exter
 
   await card.getByTestId('certificate-menu').click();
   await expect(h.page.getByRole('menuitem', { name: 'Descargar .p12' })).toBeVisible();
+  await expect(h.page.getByRole('menuitem', { name: 'Borrar' })).toBeVisible();
   await h.page.getByRole('menuitem', { name: 'Mover al sistema operativo' }).click();
   await expect(h.page.getByRole('dialog')).toContainText('lo borro de Spain Assist');
   await h.page.getByTestId('certificate-move-submit').click();
@@ -74,4 +75,28 @@ test('a certificate moves from Mis datos to the keychain and comes back as exter
   // A fresh start finds it by itself.
   await h.restart();
   await expect.poll(external).toMatchObject([{ id: `os-${fingerprint}`, external: true }]);
+
+  // Added to the app again, it is in both places: the app's copy can't be moved or deleted,
+  // only dropped for the keychain's, which is checked to be the same.
+  await invoke(h.page, 'vault.addCertificate', {
+    fileName: 'demo.p12',
+    bytes: new Uint8Array(demo.p12),
+    passphrase: demo.passphrase,
+  });
+  await h.page.reload();
+  await h.page.getByTestId('tab-vault').click();
+  await h.page.getByTestId('vault-tab-credentials').click();
+  const again = h.page.getByTestId('credential-certificate');
+  await expect(again).toHaveCount(1);
+  await expect(again.getByTestId('certificate-external')).toHaveCount(0);
+  await again.getByTestId('certificate-menu').click();
+  await expect(h.page.getByRole('menuitem')).toHaveText([
+    'Descargar .p12',
+    'Usar el del sistema operativo',
+  ]);
+  await h.page.getByRole('menuitem', { name: 'Usar el del sistema operativo' }).click();
+  await expect(h.page.getByRole('dialog')).toContainText('Compruebo que es el mismo');
+  await h.page.getByTestId('certificate-move-submit').click();
+  await expect(again.getByTestId('certificate-external')).toBeVisible();
+  expect(await external()).toMatchObject([{ id: `os-${fingerprint}`, external: true }]);
 });

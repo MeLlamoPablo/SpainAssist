@@ -537,6 +537,12 @@ export const CredentialSummary = z.object({
   external: z.boolean().optional(),
   /** A vault certificate that `vault.moveCertificateToSystem` can move to the OS store. */
   canMoveToSystem: z.boolean().optional(),
+  /**
+   * A vault certificate that is also installed in the OS store, with its key: instead of moving
+   * or deleting it, `vault.moveCertificateToSystem` drops the vault's copy once it has checked
+   * that the system's is the same.
+   */
+  inSystem: z.boolean().optional(),
 });
 export type CredentialSummary = z.infer<typeof CredentialSummary>;
 
