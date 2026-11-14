@@ -13,7 +13,8 @@ export interface FixedModel {
  * the lowest) and, on a ChatGPT plan, each research mode. A ChatGPT account runs the first one its
  * plan offers, else the model OpenAI ranks first for it at the first one's effort; vouchers run
  * the first one. `decider`: the OpenRouter id of the scan frame decider (one model: the key
- * server reads it from the same file, and keys allow only that one).
+ * server reads it from the same file, and keys allow only that one). `compaction`: the context
+ * size (tokens) past which a voucher assistant or procedure agent compacts its context.
  */
 export interface ModelLists {
   chatgpt: {
@@ -28,7 +29,14 @@ export interface ModelLists {
     assistant: FixedModel[];
     scanner: FixedModel[];
     decider: string;
+    compaction: CompactionLimits;
   };
+}
+
+/** Context sizes (tokens) past which an agent compacts; missing: near its context window. */
+interface CompactionLimits {
+  assistant?: number;
+  procedures?: number;
 }
 
 /** Format version of the models file this app reads; another version is ignored. */
@@ -56,6 +64,19 @@ function parseId(value: unknown, fallback: string | undefined): string {
   if (typeof value === 'string' && value.trim()) return value.trim();
   if (fallback) return fallback;
   throw new Error('a decider of the models file is missing');
+}
+
+function parseTokens(value: unknown, fallback: number | undefined): number | undefined {
+  return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : fallback;
+}
+
+function parseCompaction(value: unknown, fallback: CompactionLimits | undefined): CompactionLimits {
+  const assistant = parseTokens(field(value, 'assistant'), fallback?.assistant);
+  const procedures = parseTokens(field(value, 'procedures'), fallback?.procedures);
+  return {
+    ...(assistant !== undefined ? { assistant } : {}),
+    ...(procedures !== undefined ? { procedures } : {}),
+  };
 }
 
 const field = (value: unknown, key: string): unknown =>
@@ -92,6 +113,7 @@ export function parseModelLists(json: unknown, fallback?: ModelLists): ModelList
       assistant: parseList(field(voucher, 'assistant'), fallback?.voucher.assistant),
       scanner: parseList(field(voucher, 'scanner'), fallback?.voucher.scanner),
       decider: parseId(field(voucher, 'decider'), fallback?.voucher.decider),
+      compaction: parseCompaction(field(voucher, 'compaction'), fallback?.voucher.compaction),
     },
   };
 }

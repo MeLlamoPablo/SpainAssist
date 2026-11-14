@@ -224,6 +224,9 @@ spend headers.
   per role (`procedures`, `assistant`, the document `scanner`, and on ChatGPT each `research`
   mode), a list of `"<model id>:<reasoning level>"` entries, best first; and per user type the
   scan frame `decider`, one OpenRouter id that the key server also reads so keys allow it.
+  `voucher.compaction` (`assistant`, `procedures`): the context size in tokens past which those
+  agents compact (the host config's `model.compactAtTokens`); pi otherwise compacts near the
+  model's context window.
   `BUNDLED_MODEL_LISTS` is that file as this
   build bundles it; `parseModelLists(json, fallback)` reads a downloaded one (see the desktop app
   below). Only BYOK and custom endpoints keep a user-chosen model, for every role.

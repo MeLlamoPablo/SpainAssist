@@ -15,6 +15,7 @@
     "procedures": ["anthropic/claude-haiku-5.5:high"],
     "assistant": ["anthropic/claude-haiku-5.5:medium"],
     "scanner": ["anthropic/claude-haiku-5.5:low"],
-    "decider": "~perplexity/pplx-decider-flash-latest"
+    "decider": "~perplexity/pplx-decider-flash-latest",
+    "compaction": { "assistant": 184000, "procedures": 368000 }
   }
 }

@@ -46,6 +46,8 @@ export const AgentHostConfigSchema = z.object({
     reasoning: z.boolean().optional(),
     /** Reasoning effort; clamped to the model. Default DEFAULT_THINKING_LEVEL ("medium"). */
     thinkingLevel: ThinkingLevel.optional(),
+    /** Compact the context once it passes this many tokens. Default: near the context window. */
+    compactAtTokens: z.number().int().positive().optional(),
   }),
   research: z
     .object({

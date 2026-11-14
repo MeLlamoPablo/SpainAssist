@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import { BRIDGE_ENV, DEFAULT_THINKING_LEVEL, setExtraTrustedHosts } from '@sa/shared';
 import { BridgeClient } from '../bridge/client';
 import { buildDeclarations } from '../codemode/declarations';
@@ -35,6 +36,17 @@ import { prepareSessionFile, recordSessionSelection } from './session';
  * `hooks` are for harnesses and tests that run the host outside the app (see hooks.ts). The
  * shipped entry (main.ts) passes none, and without them this is exactly the product host.
  */
+/** pi's default: compact once the context is within this many tokens of the window. */
+const PI_RESERVE_TOKENS = 16_384;
+
+/**
+ * pi compacts past `contextWindow - reserveTokens`: the reserve that makes it compact at
+ * `compactAt` tokens, never closer to the window than pi's default.
+ */
+export function reserveTokens(model: Model<Api>, compactAt: number | undefined): number {
+  return Math.max(PI_RESERVE_TOKENS, compactAt ? model.contextWindow - compactAt : 0);
+}
+
 export async function runHost(
   env: NodeJS.ProcessEnv = process.env,
   hooks: HostHooks = {},
@@ -267,7 +279,10 @@ export async function runHost(
     themes: [],
     packages: [],
     retry: { enabled: true, maxRetries: 3 },
-    compaction: { enabled: true },
+    compaction: {
+      enabled: true,
+      reserveTokens: reserveTokens(model, config.model.compactAtTokens),
+    },
     images: { autoResize: true, blockImages: !imagesSupported },
     cacheWarming: 'off',
     quietStartup: true,

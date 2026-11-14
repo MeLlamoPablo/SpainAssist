@@ -724,6 +724,7 @@ export const FAKE_MODEL_LISTS: ModelLists = {
     assistant: [{ id: 'test/voucher-assistant', thinkingLevel: 'high' }],
     scanner: [{ id: 'test/voucher-scanner', thinkingLevel: 'low' }],
     decider: 'test/voucher-decider',
+    compaction: { assistant: 184_000, procedures: 368_000 },
   },
 };
 

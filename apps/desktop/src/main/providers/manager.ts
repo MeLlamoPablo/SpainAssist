@@ -897,11 +897,16 @@ export class ProviderManager {
         const baseUrl = await this.deps.state.voucherBaseUrl();
         if (!baseUrl) throw new NoProviderError();
         const lists = (await this.deps.models.get()).voucher;
+        const compactAtTokens =
+          role === 'scanner'
+            ? undefined
+            : lists.compaction[role === 'procedure' ? 'procedures' : 'assistant'];
         return {
           provider: VOUCHER_PROVIDER,
           ...firstOf(role === 'procedure' ? lists.procedures : lists[role]),
           baseUrl,
           maxTokens: VOUCHER_MAX_TOKENS,
+          ...(compactAtTokens ? { compactAtTokens } : {}),
         };
       }
       case 'byok':

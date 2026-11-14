@@ -51,14 +51,16 @@ describe('ProviderManager', () => {
       thinkingLevel: 'medium',
       baseUrl: 'https://llm.example.test/v1',
       maxTokens: 16_384,
+      compactAtTokens: 368_000,
     });
-    // The assistant (orchestrator) has its own model and effort.
+    // The assistant (orchestrator) has its own model, effort and compaction limit.
     expect(await app.services.providers.agentModel('assistant')).toEqual({
       provider: 'litellm',
       id: 'test/voucher-assistant',
       thinkingLevel: 'high',
       baseUrl: 'https://llm.example.test/v1',
       maxTokens: 16_384,
+      compactAtTokens: 184_000,
     });
     expect(await app.services.providers.credentialFor('litellm')).toEqual({
       type: 'api_key',
@@ -126,6 +128,7 @@ describe('ProviderManager', () => {
       thinkingLevel: 'medium',
       baseUrl: 'http://127.0.0.1:8789/v1',
       maxTokens: 16_384,
+      compactAtTokens: 368_000,
     });
     const status = await app.invoke('providers.status');
     expect(status.credit).toEqual({ usageUsd: 0.5, limitUsd: 5, remainingUsd: 4.5 });

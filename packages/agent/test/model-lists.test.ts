@@ -24,6 +24,7 @@ const fallback: ModelLists = {
     assistant: [{ id: 'fallback/voucher-assistant', thinkingLevel: 'high' }],
     scanner: [{ id: 'fallback/voucher-scanner', thinkingLevel: 'low' }],
     decider: 'fallback/voucher-decider',
+    compaction: { assistant: 1_000, procedures: 2_000 },
   },
 };
 
@@ -111,6 +112,17 @@ describe('the models file', () => {
       },
       voucher: fallback.voucher,
     });
+  });
+
+  it('reads the voucher compaction limits, keeping the fallback for one that is not a token count', () => {
+    const lists = parseModelLists(
+      { version: 1, voucher: { compaction: { assistant: 184_000, procedures: '368k' } } },
+      fallback,
+    );
+    expect(lists.voucher.compaction).toEqual({ assistant: 184_000, procedures: 2_000 });
+    expect(parseModelLists({ version: 1 }, fallback).voucher.compaction).toEqual(
+      fallback.voucher.compaction,
+    );
   });
 
   it('rejects another format version, and an incomplete file without a fallback', () => {
