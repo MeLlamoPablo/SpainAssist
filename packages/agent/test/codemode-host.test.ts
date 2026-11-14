@@ -1,7 +1,6 @@
 import type { BridgeMethod } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import type { BridgeCallOptions, BridgeTransport } from '../src/bridge/client';
-import { pick } from '../src/codemode/classify';
 import { buildDeclarations } from '../src/codemode/declarations';
 import { createHostOps, createImageStore, encodeTarget } from '../src/codemode/host-ops';
 import { buildCodemodePrompt } from '../src/prompt/codemode';
@@ -60,17 +59,6 @@ describe('encodeTarget', () => {
       'loc:[["getByRole","button",{"name":"Enviar"}],["first"]]',
     );
     expect(() => encodeTarget([])).toThrow(/locator or a ref/);
-  });
-});
-
-describe('the classifier’s answer', () => {
-  it('is one of the options, forgiving quotes, case and a sentence around it', () => {
-    const options = ['yes-obligated', 'no-exempt', 'unknown'];
-    expect(pick('no-exempt', options)).toBe('no-exempt');
-    expect(pick('"No-Exempt".', options)).toBe('no-exempt');
-    expect(pick('The answer is yes-obligated', options)).toBe('yes-obligated');
-    expect(pick('yes-obligated or no-exempt', options)).toBeUndefined();
-    expect(pick('maybe', options)).toBeUndefined();
   });
 });
 
@@ -164,7 +152,7 @@ describe('the API declaration', () => {
     expect(d).toContain('interface Api {');
     expect(d).toContain('browser: Browser;');
     expect(d).not.toContain('agents: Agents;');
-    expect(d).toContain('classify<O extends string>');
+    expect(d).not.toContain('classify');
     expect(d).not.toContain('subagents');
     // Measured, not guessed (docs/codemode.md): about 4 characters a token.
     expect(d.length).toBeLessThan(48_000);

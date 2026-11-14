@@ -110,11 +110,11 @@ describe('codemode end to end', () => {
     );
 
     // Model calls: the coordinator starts an agent and says so; the agent writes the workflow and
-    // reports the question; the coordinator relays it; then the classifier, the agent's report and
-    // the coordinator's final answer. Answering the question cost no workflow turn.
+    // reports the question; the coordinator relays it; then the agent's report and the
+    // coordinator's final answer. Answering the question cost no workflow turn.
     const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
-    expect(requests).toHaveLength(8);
-    expect(llm.requests().length - turnsBeforeAnswer).toBe(3);
+    expect(requests).toHaveLength(7);
+    expect(llm.requests().length - turnsBeforeAnswer).toBe(2);
     expect(requests.some((r) => JSON.stringify(r.body).includes('"name":"agent_start"'))).toBe(
       true,
     );

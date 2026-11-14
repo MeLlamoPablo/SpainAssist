@@ -3,9 +3,9 @@ import type { ScenarioInput } from '@sa/mock-llm';
 /**
  * The spec's own example (docs/codemode.md): "¿tengo que presentar este año la declaración de la
  * renta?", which the coordinator hands to an agent, answered by the agent with one workflow: a
- * card, the income question shown at once while the official threshold is read in parallel, a
- * classifier, the card updated. The
- * scripted model writes exactly that workflow; what the test checks is the harness.
+ * card, the income question shown at once while the official threshold is read in parallel, the
+ * income checked against it in code, the card updated. The scripted model writes exactly that
+ * workflow; what the test checks is the harness.
  */
 
 export const RENTA_QUESTION = '¿Tengo que presentar este año la declaración de la renta?';
@@ -45,11 +45,8 @@ export async function main(api) {
   ]);
   if (page.status === 'rejected') throw page.reason;
   if (answer.value.result === 'skipped') throw new Error('The user does not know their income: ask how to find it out.');
-  const verdict = await api.classify({
-    prompt: '<facts><user_income>' + answer.value.income + '</user_income><research>' + page.value.text + '</research></facts><question>Is this user obliged to file the IRPF Modelo 100?</question>',
-    options: ['yes-obligated', 'no-exempt', 'unknown'],
-  });
-  if (verdict === 'unknown') throw new Error('Could not decide: investigate further.');
+  if (!page.value.text.includes('22.000 euros')) throw new Error('The threshold changed: read the page again.');
+  const verdict = answer.value.income > 22000 ? 'yes-obligated' : 'no-exempt';
   await procedure.update({
     status: 'done',
     summary: verdict === 'no-exempt' ? 'No tienes que presentar la declaración de 2025.' : 'Tienes que presentar la declaración de 2025.',
@@ -67,11 +64,6 @@ export function rentaCodemodeScenario(siteUrl: string, llmDelayMs = 0): Scenario
   const agent = "Spain Assist's background agents";
   return {
     rules: [
-      {
-        id: 'classifier',
-        when: { systemPrompt: '^You classify' },
-        reply: { text: 'no-exempt', delayMs: llmDelayMs },
-      },
       {
         id: 'coordinator: final answer',
         when: {

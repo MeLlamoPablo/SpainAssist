@@ -716,7 +716,6 @@ export const KERNEL = String.raw`
       cancel: function (id, reason) { return call('workflows.cancel', { id: id, reason: reason }); },
     },
     search: function (input) { return call('search', typeof input === 'string' ? { prompt: input } : input); },
-    classify: function (input) { return call('classify', input); },
     fetchUrl: function (url, options) { return call('fetchUrl', Object.assign({ url: url }, options || {})); },
     fetch: function (url, init) {
       var i = init || {};

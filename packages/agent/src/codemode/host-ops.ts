@@ -51,8 +51,6 @@ export interface HostOpsDeps {
   procedures(): string[];
   /** Web research as a tool (web_research, or exa_search for BYOK), when configured. */
   research?: { kind: 'web_research' | 'exa'; search: AnyToolDefinition };
-  /** One quick model call that picks one of `options`. */
-  classify?(prompt: string, options: string[], signal: AbortSignal): Promise<string>;
   imagesSupported: boolean;
   allowPrivateHosts?: boolean;
   fetchImpl?: typeof fetch;
@@ -638,18 +636,6 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
         ),
       'user.phoneCall': (a, signal) =>
         bridge.call('prompt.phoneCall', a as never, { signal, procedureId: primary() }),
-      classify: async (a, signal) => {
-        if (!deps.classify)
-          throw new HostOpError('unavailable', 'Classification is not available.', 'not_started');
-        const options = Array.isArray(a.options) ? a.options.map(String).filter(Boolean) : [];
-        if (options.length < 2 || options.length > 50 || new Set(options).size !== options.length)
-          throw new HostOpError(
-            'bad_request',
-            'classify needs 2 to 50 distinct options.',
-            'not_started',
-          );
-        return deps.classify(str(a.prompt, 'prompt', 40_000), options, signal);
-      },
     };
 
   return async (op, args, { signal }) => {

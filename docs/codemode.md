@@ -108,8 +108,7 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
   agent's line on the meter, an ongoing action: "Analizando la página de Correos…"; the
   coordinator sets it in `agent_start` and `agent_message`), `api.output.image(image)`.
 - `api.search`, `api.fetchUrl`, `api.fetch` (public HTTP, the old run_script fetch), `api.boe`,
-  `api.vault`, `api.documents`, `api.feedback`, `api.workflows`, `api.classify({ prompt, options })`
-  (one quick model call that picks an option; decision 16).
+  `api.vault`, `api.documents`, `api.feedback`, `api.workflows`.
 - Agents: `api.browser.currentPage()` → a Playwright-shaped `Page` (locators:
   `getByRole`, `getByLabel`, `getByText`, `locator`, `filter`, `nth`…; actions: `click`, `fill`,
   `selectOption`, `check`, `setInputFiles(documentIds)`; reads: `textContent`, `count`,
@@ -293,7 +292,7 @@ the stale-run, resume and restart paths (`apps/desktop/src/main/codemode/codemod
   under reordering, interfaces with durable state resumed after a restart, handler errors, unknown
   components, the loop guard, `parallelize` limits, locators as data, roles, cancellation.
 - Host (`codemode-host.test.ts`): operations to bridge calls (procedure header, structured results),
-  the classifier's answer matching, the declaration per role and that every declared API exists.
+  the declaration per role and that every declared API exists.
 - Main (`codemode.test.ts`, 14 tests through the real composition root): roles and the procedure
   header, keys and optimistic concurrency, tree validation and map lookups, agents' briefs and
   reports, waking and resuming, restart persistence, stale runs, outcomes delivered later.
@@ -308,7 +307,7 @@ harnesses in the real app, with the real agent hosts, each scripted with the sho
 its prompts call for (classic: the assistant starts a procedure; its agent reads the vault, reads
 the official page, updates the card, asks, decides, reports; the assistant tells the user.
 Codemode: the coordinator starts an agent; the agent's one workflow creates the card, asks while it
-reads the official page, classifies and updates the card; the coordinator relays the agent's two
+reads the official page, checks the income against it and updates the card; the coordinator relays the agent's two
 reports). Every model call takes the same simulated latency.
 
 `node --import tsx tools/eval/scripts/codemode-bench.ts 2500 8000 3` (2.5 s per model call, the user
@@ -387,19 +386,14 @@ flag on. The first comparison (170 runs, 2026-11-09) is in
     comparison subagents cost 45% of codemode's model spend, browsed one step per turn, and lost
     the procedure's structure in their prose answers (appointment slots the user never saw, a
     vehicle report never requested). Agents now drive their pages in multi-step workflows, whose
-    results are only what their code returns. `classify` stays, as `api.classify`.
+    results are only what their code returns.
     [research/codemode-subagents.md](research/codemode-subagents.md).
-16. **`api.classify` is for branching in code**, and every call has an "unknown" option. It exists
-    so a workflow can take deterministic code paths on a non-deterministic judgement: each option
-    is handled in the same workflow. If the model reads the answer back and decides in its next
-    turn, the call is useless, since the model could have judged there. Every call needs an
-    explicit "unknown" with a path of its own (ask the user, stop, research). Without it, an
-    unclear case is forced into a real option, and then no answer can be trusted. In the
-    November runs Haiku never called it. Sol called it 4 times, all as a yes/no in
-    `tasa-790-012`: only the "no" branch ever ran, and the next workflow read `a.reason`, which
-    the "yes" branch never set. The model then typed the fee item into the next workflow by hand
-    (runs of [research/codemode-eval-2026-11.md](research/codemode-eval-2026-11.md)). The
-    declaration the model reads says both rules.
+16. **No `api.classify`** (removed 2026-11-14). It was one quick model call that picked one of
+    several options, so a workflow could branch in code on a judgement, with an "unknown" option
+    of its own. In 625 Haiku codemode runs agents wrote it twice, both before the coordinator
+    stopped asking (2026-11-10), and once only to re-read the value of their own select; Sol's 4
+    calls in `tasa-790-012` ran one branch only. Agents ask in forms and branch on their values,
+    and judge research in their own turn. Bring it back if a workflow needs a judgement in code.
 
 ## Known gaps
 

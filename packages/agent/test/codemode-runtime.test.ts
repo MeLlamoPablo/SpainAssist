@@ -536,12 +536,11 @@ describe('codemode runtime', () => {
   it('gives agents the browser, and no agents of their own', async () => {
     const agent = await startRun(
       `export async function main(api) {
-        try { api.agents.start({}); } catch (e) { return [e.code, typeof api.browser.currentPage, typeof api.classify, 'subagents' in api]; }
+        try { api.agents.start({}); } catch (e) { return [e.code, typeof api.browser.currentPage, 'subagents' in api]; }
       }`,
     ).done;
     expect(agent.status === 'succeeded' && JSON.parse(agent.value ?? '')).toEqual([
       'policy_denied',
-      'function',
       'function',
       false,
     ]);

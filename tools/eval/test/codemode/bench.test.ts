@@ -19,12 +19,13 @@ describe('classic harness vs codemode on "¿tengo que hacer la renta?"', () => {
     const options = { llmDelayMs: 300, thinkMs: 200 };
     const classic = await runRentaBenchmark('classic', options);
     const codemode = await runRentaBenchmark('codemode', options);
-    // The scripted sequences: classic 9 calls (assistant 3, procedure agent 6); codemode 8
-    // (coordinator 3, agent 3, classifier 1 and the agent's report).
+    // The scripted sequences: classic 9 calls (assistant 3, procedure agent 6); codemode 6
+    // (coordinator 3, agent 3). The workflow ends before the coordinator would relay the agent's
+    // first report, so it relays only the last.
     expect(classic.modelCalls).toBe(9);
-    expect(codemode.modelCalls).toBe(8);
+    expect(codemode.modelCalls).toBe(6);
     expect(codemode.timeToQuestionMs).toBeLessThan(classic.timeToQuestionMs);
-    // Both wait for three model calls after the answer (the coordinator only relays).
+    // Codemode waits for two model calls after the answer (the agent's report, relayed).
     expect(codemode.answerToResultMs).toBeLessThan(classic.answerToResultMs + options.llmDelayMs);
   }, 180_000);
 });

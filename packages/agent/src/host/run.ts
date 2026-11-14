@@ -2,7 +2,6 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { BRIDGE_ENV, DEFAULT_THINKING_LEVEL, setExtraTrustedHosts } from '@sa/shared';
 import { BridgeClient } from '../bridge/client';
-import { createClassifier } from '../codemode/classify';
 import { buildDeclarations } from '../codemode/declarations';
 import { WorkflowEngine } from '../codemode/engine';
 import { createImageStore } from '../codemode/host-ops';
@@ -177,7 +176,6 @@ export async function runHost(
             },
           }
         : {}),
-      classify: createClassifier(modelRuntime, model),
       allowPrivateHosts: config.research.allowPrivateHosts ?? false,
       ...(config.research.boeBaseUrl ? { boeBaseUrl: config.research.boeBaseUrl } : {}),
       ...(hooks.egress?.fetch ? { fetchImpl: hooks.egress.fetch } : {}),

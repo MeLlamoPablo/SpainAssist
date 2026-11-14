@@ -65,7 +65,7 @@ tool, `codemode`, which runs a workflow module in QuickJS (`src/codemode/`):
 | `workflow-run.ts` | One run in a fresh QuickJS instance: host calls, CPU slices, cancellation |
 | `host-ops.ts` | What each `api.*` operation does: bridge calls (with the procedure header), research, fetch |
 | `engine.ts` | Runs in the host: begin/end with main, event long-poll, detaching, periodic resume |
-| `tool.ts`, `declarations.ts`, `classify.ts` | The tool, the API's `.d.ts` per role, `api.classify` |
+| `tool.ts`, `declarations.ts` | The tool, the API's `.d.ts` per role |
 
 ## Tools
 
