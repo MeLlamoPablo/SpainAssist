@@ -9,7 +9,7 @@ import {
   randomBytes,
   X509Certificate,
 } from 'node:crypto';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -33,6 +33,7 @@ import { openKeychain } from './keychain';
 import { OsCertificates } from './service';
 import { type OsKeyStore, OsKeyStoreError } from './store';
 import { withOsCertificates } from './vault';
+import { openWindowsStore } from './windows-store';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -539,6 +540,114 @@ describe('the app with an external certificate', () => {
     });
     expect(verification.error).toBeUndefined();
     expect(verification.valid).toBe(true);
+  });
+});
+
+/** A store the app only reads, as on Windows: nothing can be added to it. */
+function readOnly(store: FakeStore): OsKeyStore {
+  return {
+    list: () => store.list(),
+    sign: (certificate, digest, hash) => store.sign(certificate, digest, hash),
+  };
+}
+
+describe('a system store the app only reads (Windows)', () => {
+  it('finds and signs with its certificates, but moves none there', async () => {
+    const store = new FakeStore();
+    const lucia = person();
+    await store.add(lucia);
+    const os = osCertificates(readOnly(store));
+    await os.refresh();
+
+    expect(os.list()).toMatchObject([{ external: true }]);
+    const key = os.signingKey(os.list()[0]?.id ?? '');
+    const data = randomBytes(64);
+    const signature = await key.sign(data, 'sha256');
+    expect(createVerify('sha256').update(data).verify(lucia.certPem, signature)).toBe(true);
+
+    // A vault certificate of the authorities, in date: movable only where the app can add it.
+    const other = person({ dni: '00000002W' });
+    expect(osCertificates(store).movable(info(other.certDer))).toBe(true);
+    expect(os.canInstall).toBe(false);
+    expect(os.movable(info(other.certDer))).toBe(false);
+    await expect(os.install(other.p12, other.passphrase, other.certDer)).rejects.toMatchObject({
+      code: 'failed',
+    });
+    expect(await store.list()).toHaveLength(1);
+    // One that is already there can still be proven the same ("Usar el del sistema operativo").
+    await os.prove(lucia.certDer);
+  });
+});
+
+/**
+ * The real crypt32 and ncrypt calls, against a throwaway store of the current user that
+ * `certutil` fills, never `MY`. Windows keeps the two test keys in the user's profile: this runs
+ * on CI's runner, which is thrown away.
+ */
+describe.skipIf(process.platform !== 'win32')('the Windows certificate store', () => {
+  it('lists the certificates that have a key and signs with them', async () => {
+    const dir = await tempDir();
+    const storeName = `SpainAssistTest${randomBytes(6).toString('hex')}`;
+    const certutil = (...args: string[]) =>
+      execFileSync('certutil.exe', ['-user', ...args], { stdio: 'pipe' });
+    // One key in the older provider `certutil` picks (CAPI), one in CNG's: FNMT certificates
+    // come both ways, depending on the program that installed them.
+    const people = [
+      { identity: person(), csp: [] },
+      {
+        identity: person({ dni: '00000003A' }),
+        csp: ['-csp', 'Microsoft Software Key Storage Provider'],
+      },
+    ];
+    try {
+      for (const [i, { identity, csp }] of people.entries()) {
+        const file = join(dir, `${i}.p12`);
+        await writeFile(file, identity.p12);
+        // NoRoot: its CA never goes to the user's trusted roots.
+        certutil('-f', '-p', identity.passphrase, ...csp, '-importPFX', storeName, file, 'NoRoot');
+      }
+      const store = await openWindowsStore({ storeName });
+      expect(store.importPkcs12).toBeUndefined();
+      const listed = (await store.list()).map((der) => der.toString('hex'));
+      for (const { identity } of people) expect(listed).toContain(identity.certDer.toString('hex'));
+
+      for (const { identity } of people)
+        for (const hash of ['sha1', 'sha256', 'sha384', 'sha512'] as const) {
+          const data = randomBytes(64);
+          const signature = await store.sign(
+            identity.certDer,
+            createHash(hash).update(data).digest(),
+            hash,
+          );
+          expect(createVerify(hash).update(data).verify(identity.certPem, signature)).toBe(true);
+        }
+      await expect(store.sign(demo.certDer, randomBytes(32), 'sha256')).rejects.toMatchObject({
+        code: 'not_found',
+      });
+
+      // The whole flow on the real store: found, usable, and what "Usar el del sistema" checks.
+      const os = osCertificates(store);
+      await os.refresh();
+      expect(os.list()).toHaveLength(2);
+      for (const { identity } of people) await os.prove(identity.certDer);
+    } finally {
+      for (const { identity } of people)
+        try {
+          // By its SHA-1 thumbprint, as Windows names certificates.
+          certutil(
+            '-delstore',
+            storeName,
+            createHash('sha1').update(identity.certDer).digest('hex'),
+          );
+        } catch {
+          // Not imported: nothing to remove.
+        }
+    }
+  });
+
+  it('reads the user’s own store without failing', async () => {
+    const store = await openWindowsStore();
+    expect(Array.isArray(await store.list())).toBe(true);
   });
 });
 

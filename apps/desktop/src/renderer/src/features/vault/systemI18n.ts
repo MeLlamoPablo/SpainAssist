@@ -11,7 +11,8 @@ export function systemName(platform: Platform, lang: 'es' | 'en'): string {
 }
 
 /**
- * Where the system's certificates are exported and deleted: "Acceso a Llaveros en tu Mac". `app`
+ * Where the system's certificates are exported and deleted: "Acceso a Llaveros en tu Mac", "el
+ * administrador de certificados de Windows". `app`
  * is the part of the name that names a program the app can open
  * (`vault.openSystemCertificates`).
  */
@@ -19,13 +20,14 @@ export function systemCertificateManager(
   platform: Platform,
   lang: 'es' | 'en',
 ): { name: string; app?: string } {
-  if (platform === 'win32')
-    return {
-      name:
-        lang === 'es'
-          ? 'el administrador de certificados de Windows'
-          : 'the Windows certificate manager',
-    };
+  if (platform === 'win32') {
+    // certmgr has no name of its own: the whole phrase opens it.
+    const name =
+      lang === 'es'
+        ? 'el administrador de certificados de Windows'
+        : 'the Windows certificate manager';
+    return { name, app: name };
+  }
   if (platform === 'linux') return { name: 'Linux' };
   return lang === 'es'
     ? { name: 'Acceso a Llaveros en tu Mac', app: 'Acceso a Llaveros' }

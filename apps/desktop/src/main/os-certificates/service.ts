@@ -1,5 +1,6 @@
 /**
- * External certificates: FNMT certificates installed in the operating system (macOS keychain),
+ * External certificates: FNMT certificates installed in the operating system (the macOS
+ * keychain, the Windows store of the current user),
  * which the app finds by itself and uses without ever holding their keys. Finding them is silent
  * and needs no consent: nothing is used until the user approves a login or a signature, as with
  * a certificate in the vault. A login signs through the sidecar's remote-key calls and a
@@ -89,9 +90,18 @@ export class OsCertificates {
     return this.issuerOf(der) !== undefined;
   }
 
-  /** Whether a vault certificate looks movable: in date and from one of the authorities. */
+  /** Whether the app can add certificates to the OS store (not on Windows: it only reads). */
+  get canInstall(): boolean {
+    return this.deps.store.importPkcs12 !== undefined;
+  }
+
+  /**
+   * Whether a vault certificate looks movable: in date and from one of the authorities, where
+   * the app can add to the OS store.
+   */
   movable(info: CertificateInfo): boolean {
     return (
+      this.canInstall &&
       Date.parse(info.validTo) > this.now() &&
       this.authorities.some((ca) => ca.subject === info.issuer)
     );
@@ -178,7 +188,8 @@ export class OsCertificates {
   }
 
   /**
-   * Makes the OS ask now, if it is going to (macOS: "Spain Assist quiere firmar con la clave…"),
+   * Makes the OS ask now, if it is going to (macOS: "Spain Assist quiere firmar con la clave…";
+   * Windows: a key with strong protection, a card's PIN),
    * by signing a random digest that is thrown away. Later signatures then answer at once.
    */
   private authorize(id: string): Promise<void> {
@@ -246,7 +257,10 @@ export class OsCertificates {
   async install(p12: Uint8Array, passphrase: string, der: Uint8Array): Promise<void> {
     if (!this.eligible(der))
       throw new OsKeyStoreError('failed', 'The app would not find this certificate in the system');
-    await this.deps.store.importPkcs12(p12, passphrase);
+    const { store } = this.deps;
+    if (!store.importPkcs12)
+      throw new OsKeyStoreError('failed', 'The app can’t add certificates to the system here');
+    await store.importPkcs12(p12, passphrase);
     await this.prove(der);
   }
 

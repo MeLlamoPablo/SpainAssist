@@ -61,6 +61,9 @@ const STRINGS = {
  * was. From then on it shows as an external certificate. Returns false when the user cancelled
  * Touch ID.
  *
+ * Not on Windows, where the app can't add to the system's store: the user imports the
+ * downloaded .p12 there themselves.
+ *
  * A certificate that is already in the OS store (`inSystem`, "Usar el del sistema operativo")
  * has nothing to install: the vault's copy goes only once the system's has proven to be the
  * same certificate, byte for byte, and to sign with its key.
@@ -77,6 +80,8 @@ export async function moveCertificateToSystem(
   if (!os) throw new UserError(STRINGS.unavailable[lang], 'unavailable');
 
   const inSystem = credential.certificate ? os.has(credential.certificate.fingerprint) : false;
+  // Windows: the app reads the system's store but adds nothing to it.
+  if (!inSystem && !os.canInstall) throw new UserError(STRINGS.unavailable[lang], 'unavailable');
 
   if (!(await deps.biometric.prompt(STRINGS[inSystem ? 'touchIdUse' : 'touchId'][lang])))
     return false;

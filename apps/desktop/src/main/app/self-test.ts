@@ -13,6 +13,8 @@
  * - sa-sidecar starts and proxies a request, and every page the browser loads.
  * - On macOS, the keychain library loads (koffi and Security.framework, `os-certificates/`):
  *   a signed build's hardened runtime must accept the native module. Loading it reads nothing.
+ * - On Windows, koffi, crypt32 and ncrypt load and the current user's certificate store can be
+ *   walked (`os-certificates/windows-store.ts`). It reads certificates, never a key.
  *
  * A page that doesn't show in time fails its check with what the browser showed instead (`page`:
  * its URL, title, tabs and the service's notes, where navigation errors land), and a failed
@@ -34,6 +36,8 @@ import { createLogger } from '../core/logger';
 import { errorMessage } from '../core/util';
 import { crlSetFixture, fixtureCrlSetFetch } from '../crlset/fixture';
 import { CrlSetStore } from '../crlset/store';
+import { openKeychain } from '../os-certificates/keychain';
+import { openWindowsStore } from '../os-certificates/windows-store';
 import type { BrowserFactory, BrowserPort } from '../ports';
 
 export const SELF_TEST_FLAG = '--self-test';
@@ -106,14 +110,29 @@ export interface SelfTestOptions {
   sidecarBinary: string;
   browserFactory: BrowserFactory;
   /**
-   * macOS: loads the keychain library (`openKeychain`), without reading the keychain. Omitted
-   * on other systems, where the report has no `keychain` check.
+   * The check of the system's certificate store, which resolves to its detail: `keychain` on
+   * macOS (`loadKeychain`), `certificate-store` on Windows (`loadWindowsStore`). Omitted on
+   * other systems, where the report has neither.
    */
-  keychain?: () => Promise<unknown>;
+  osCertificates?: { name: OsCertificatesCheck; load(): Promise<string> };
   /** Tests only, where there is no display: the self-test checks the headed browser. */
   headless?: boolean;
   /** Tests only: how long a page may take to show (FIRST_PAGE_MS, then PAGE_MS). */
   pageMs?: number;
+}
+
+type OsCertificatesCheck = 'keychain' | 'certificate-store';
+
+/** macOS: loads the keychain library, without reading the keychain. */
+export async function loadKeychain(): Promise<string> {
+  await openKeychain();
+  return 'koffi and Security.framework loaded';
+}
+
+/** Windows: loads the store's libraries and walks the current user's certificates. */
+export async function loadWindowsStore(): Promise<string> {
+  await (await openWindowsStore()).list();
+  return 'koffi, crypt32 and ncrypt loaded, and the store read';
 }
 
 /** The checks, in order: the report fails when one is missing. */
@@ -138,7 +157,7 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
   const checks: SelfTestCheck[] = [];
   const cleanup: (() => Promise<unknown>)[] = [];
   const check = async (
-    name: (typeof CHECKS)[number] | 'keychain',
+    name: (typeof CHECKS)[number] | OsCertificatesCheck,
     run: () => Promise<string | undefined>,
   ) => {
     const started = Date.now();
@@ -199,12 +218,8 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
       return `proxied ${target}`;
     });
     if (sidecar) cleanup.unshift(() => (sidecar as Sidecar).close());
-    const keychain = opts.keychain;
-    if (keychain)
-      await check('keychain', async () => {
-        await keychain();
-        return 'koffi and Security.framework loaded';
-      });
+    const osCertificates = opts.osCertificates;
+    if (osCertificates) await check(osCertificates.name, osCertificates.load);
     if (!component) return report(checks, lines);
 
     const events: BrowserEvent[] = [];

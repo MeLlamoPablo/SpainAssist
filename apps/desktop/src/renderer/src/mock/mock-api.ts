@@ -255,6 +255,9 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         ? { ...rest, inSystem: true }
         : { ...rest, id: `os-${c.certificate?.fingerprint}`, policy: 'ask', external: true };
     });
+  // Windows (the Store build's screens): the app adds nothing to the system's store.
+  if (params.get('store') === '1')
+    state.credentials = state.credentials.map(({ canMoveToSystem: _, ...c }) => c);
   if (params.has('phone')) {
     // The DNI card asks for a phone call instead of its form (the call card's states).
     const item = state.procedures
@@ -1507,7 +1510,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       return overview();
     },
     'vault.openSystemCertificates': () => {
-      toast.info(tr('Acceso a Llaveros de ejemplo', 'Example Keychain Access'));
+      toast.info(tr('Certificados del sistema de ejemplo', 'Example system certificates'));
     },
     'vault.setCredentialPolicy': (id, policy) => {
       const cred = state.credentials.find((c) => c.id === id);

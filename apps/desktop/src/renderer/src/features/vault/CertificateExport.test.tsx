@@ -205,9 +205,15 @@ describe('Mis datos: exporting a certificate', () => {
     const windows = section([{ ...CERTIFICATE, id: 'os-ab', external: true }]);
     expect(windows).toContain('data-testid="system-logo-win32"');
     expect(windows).not.toContain('data-testid="system-logo-darwin"');
-    // Nothing to open there yet: a plain label.
-    expect(windows).toMatch(/<span[^>]*data-testid="certificate-external"/);
-    expect(windows).not.toContain('Abrir');
+    // There it opens the certificate manager.
+    expect(windows).toMatch(
+      /<button[^>]*aria-label="Externo\. Abrir el administrador de certificados de Windows"[^>]*data-testid="certificate-external"/,
+    );
+    // Linux has nothing to open: a plain label.
+    store.state = { ...store.state, info: { ...info, platform: 'linux' } };
+    const linux = section([{ ...CERTIFICATE, id: 'os-ab', external: true }]);
+    expect(linux).toMatch(/<span[^>]*data-testid="certificate-external"/);
+    expect(linux).not.toContain('Abrir');
   });
 
   it('explains the move to the system before doing it', () => {
@@ -228,17 +234,21 @@ describe('Mis datos: exporting a certificate', () => {
     expect(html).toMatch(
       /Aquí ya no podrás exportarlo ni borrarlo, eso se hace desde <button[^>]*data-testid="certificate-move-manager"[^>]*>Acceso a Llaveros<\/button> en tu Mac\./,
     );
+    // Windows has no move, only "Usar el del sistema operativo": the same link there.
     store.state = { ...store.state, info: { ...info, platform: 'win32' } };
     const windows = renderToStaticMarkup(
       <CertificateMoveDialog
         credentialId={CERTIFICATE.id}
         biometric={false}
+        inSystem
         open
         onOpenChange={() => {}}
       />,
     );
-    expect(windows).toContain('eso se hace desde el administrador de certificados de Windows.');
-    expect(windows).not.toContain('certificate-move-manager');
+    expect(windows).toContain('Usar el certificado de Windows');
+    expect(windows).toMatch(
+      /eso se hace desde <button[^>]*data-testid="certificate-move-manager"[^>]*>el administrador de certificados de Windows<\/button>\./,
+    );
     // A copy can also be made from the Mac afterwards: no warning.
     expect(html).not.toContain('copia de seguridad');
     expect(html).not.toContain('automáticamente');

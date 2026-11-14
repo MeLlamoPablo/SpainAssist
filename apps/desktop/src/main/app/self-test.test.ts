@@ -5,9 +5,8 @@ import { type BrowserService, createBrowserService } from '@sa/browser';
 import type { BrowserObservation } from '@sa/shared';
 import { buildSidecar } from '@sa/sidecar/build';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { openKeychain } from '../os-certificates/keychain';
 import type { BrowserFactory } from '../ports';
-import { runSelfTest } from './self-test';
+import { loadKeychain, loadWindowsStore, runSelfTest } from './self-test';
 
 /**
  * The app runs it headed; here it is headed only where a display can show what it's for: Windows,
@@ -19,6 +18,14 @@ const headed =
     (process.platform === 'linux' && !!(process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) ||
     process.env.SA_TEST_HEADED === '1') &&
   process.env.SA_TEST_HEADED !== '0';
+
+/** The check of the system's certificate store, where the app reads one. */
+const osCertificates =
+  process.platform === 'darwin'
+    ? { name: 'keychain' as const, load: loadKeychain }
+    : process.platform === 'win32'
+      ? { name: 'certificate-store' as const, load: loadWindowsStore }
+      : undefined;
 
 let dir: string;
 let sidecarBinary: string;
@@ -64,7 +71,7 @@ it('passes with Playwright Chromium and a freshly built sidecar', {
     sidecarBinary,
     browserFactory: createBrowserService,
     headless: !headed,
-    ...(process.platform === 'darwin' ? { keychain: () => openKeychain() } : {}),
+    ...(osCertificates ? { osCertificates } : {}),
   });
   expect(
     report.checks.filter((c) => !c.ok),
@@ -74,7 +81,7 @@ it('passes with Playwright Chromium and a freshly built sidecar', {
     'browser-executable',
     'crlset',
     'sidecar',
-    ...(process.platform === 'darwin' ? ['keychain'] : []),
+    ...(osCertificates ? [osCertificates.name] : []),
     'browser-launch',
     'browser-survives-without-windows',
     'browser-second-session',

@@ -92,7 +92,8 @@ on Windows). So:
   temporary profile, next to any running copy and with nothing beyond loopback, the bundled
   Chromium must start headed and hidden with a CRLSet, keep running once its windows close, and
   serve a second session; sa-sidecar must proxy; on macOS the keychain library (koffi) must
-  load. A failure stops the GitHub release and the Store
+  load, and on Windows the certificate store's (koffi, crypt32, ncrypt) must load and read the
+  store. A failure stops the GitHub release and the Store
   submission.
 - Not self-tested: the Store's MSIX. That would take signing it with a certificate for its
   publisher trusted on the runner, `Add-AppxPackage`, and an app execution alias (or
@@ -154,19 +155,22 @@ types twice and the app never keeps (Touch ID first when available, then the OS 
 file uses 3DES and a SHA-1 MAC, since older macOS, Windows and Java (AutoFirma) reject AES ones
 (`exportPkcs12` in `@sa/vault`).
 
-**External certificates (macOS).** Main also looks in the keychain for FNMT certificates that have
+**External certificates (macOS, Windows).** Main also looks in the keychain, or on Windows in
+the current user's certificate store (`CurrentUser\My`), for FNMT certificates that have
 a private key (`os-certificates/`), silently: at startup and whenever Mis datos loads. It lists
 them as `certificate` credentials marked `external` (`withOsCertificates` wraps the vault, so the
 agent, logins and signatures see them like any other). Their keys never enter the app:
-- main calls Security.framework in-process through koffi (`keychain.ts`); a login signs each TLS
+- main calls Security.framework in-process through koffi (`keychain.ts`), and on Windows
+  crypt32 and ncrypt (`windows-store.ts`, CNG, which also opens the keys of Microsoft's older
+  CAPI providers); a login signs each TLS
   handshake through the sidecar's remote-key calls and a document through `ExternalSigningKey`,
-  the DNIe's two paths, with an RSA PKCS#1 v1.5 signature from the keychain;
+  the DNIe's two paths, with an RSA PKCS#1 v1.5 signature from the system's key;
 - finding one needs no consent, using one always asks (policy `ask`, not changeable), and macOS
   may ask once more the first time the app uses a key another program installed;
 - a certificate that is also in the vault shows once, as the vault's (`inSystem`). Expired ones
   aren't listed;
 - Mis datos can't download, delete or change them, and marks them "Externo" with the system's
-  logo.
+  logo; the label opens Acceso a Llaveros, or `certmgr.msc` on Windows.
 
 A vault certificate's menu ("Más opciones": download, move, delete) offers "Mover al sistema
 operativo" (`vault/certificate-move.ts`): after
@@ -176,9 +180,16 @@ deletes the vault's copy only once it has found the certificate there and signed
 certificates the app would then find again (FNMT, RSA) can be moved. One that is already in the
 keychain can be neither moved nor deleted: its menu offers "Usar el del sistema operativo", which
 deletes the vault's copy only after the keychain's has proven to be the same certificate, byte
-for byte, and to sign with its key (`OsCertificates.prove`). Windows comes next; research
-in `docs/research/os-certificate-store.md`. Tests and e2e runs use a throwaway keychain file
-(`SA_OS_KEYCHAIN`), never the user's keychains.
+for byte, and to sign with its key (`OsCertificates.prove`).
+
+Windows has everything but the move: the store is only read (`OsKeyStore.importPkcs12` is
+absent, so no certificate is `canMoveToSystem`). The Store build is an MSIX, and Windows keeps
+what a packaged app writes to the user's registry, where that store lives, private to the app:
+no other program would see a moved certificate. The user imports the downloaded `.p12`
+themselves. Reads aren't redirected, so finding, signing and "Usar el del sistema operativo"
+work. Research in `docs/research/os-certificate-store.md`. Tests and e2e runs use a throwaway keychain file
+(`SA_OS_KEYCHAIN`), never the user's keychains; e2e runs on Windows read no store, and the
+Windows unit test fills a throwaway store of its own with `certutil`.
 
 ### Signing (AutoFirma replacement)
 Every page gets an AutoScript shim (`@sa/signer`) before its own scripts. When a site asks

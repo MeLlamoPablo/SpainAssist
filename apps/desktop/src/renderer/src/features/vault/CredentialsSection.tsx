@@ -455,7 +455,8 @@ function CredentialCard({
 
 /**
  * "Externo", with the system's logo, on a certificate installed in the operating system. Where
- * the app can open the program that manages those (macOS: Acceso a Llaveros), it is a button
+ * the app can open the program that manages those (Acceso a Llaveros, Windows' certificate
+ * manager), it is a button
  * that does, marked with an arrow.
  */
 function ExternalLabel() {

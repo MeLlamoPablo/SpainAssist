@@ -56,7 +56,13 @@ import {
   createAppProtocolHandler,
   isAppUrl,
 } from './app/protocol';
-import { runSelfTest, SELF_TEST_FLAG, SELF_TEST_TIMEOUT_MS } from './app/self-test';
+import {
+  loadKeychain,
+  loadWindowsStore,
+  runSelfTest,
+  SELF_TEST_FLAG,
+  SELF_TEST_TIMEOUT_MS,
+} from './app/self-test';
 import { createMainServices, type MainServices } from './app/services';
 import { bundledChromiumPath } from './browser/bundled';
 import { ensurePrivateDir } from './core/fs';
@@ -70,6 +76,7 @@ import { startErrorReports } from './errors/reports';
 import { applyStagedLocalState, defaultUserData, openDataImport } from './migrate/nsis-import';
 import { findNsisUninstaller, launchNsisUninstaller } from './migrate/nsis-install';
 import { openKeychain } from './os-certificates/keychain';
+import { openWindowsStore } from './os-certificates/windows-store';
 import { catastro } from './places/catastro';
 import { noBiometric } from './ports';
 import { chatgptLoginPages } from './providers/login-pages';
@@ -445,16 +452,20 @@ async function main(): Promise<void> {
     ? noBiometric
     : createTouchIdBiometric(systemPreferences, process.platform, log);
 
-  // External certificates: the macOS keychain. E2e runs only look where SA_OS_KEYCHAIN says.
-  const osKeyStore =
+  // External certificates: the macOS keychain, or the Windows store of the current user. E2e
+  // runs only look where SA_OS_KEYCHAIN says, so never in the Windows store.
+  const openOsKeyStore =
     process.platform === 'darwin' && (!env.e2e || env.osKeychain)
-      ? await openKeychain(env.osKeychain ? { keychainPath: env.osKeychain } : {}).catch((err) => {
-          log.warn('the keychain is unavailable: no external certificates', {
-            error: errorMessage(err),
-          });
-          return undefined;
-        })
-      : undefined;
+      ? () => openKeychain(env.osKeychain ? { keychainPath: env.osKeychain } : {})
+      : process.platform === 'win32' && !env.e2e
+        ? () => openWindowsStore()
+        : undefined;
+  const osKeyStore = await openOsKeyStore?.().catch((err) => {
+    log.warn('the system’s certificate store is unavailable: no external certificates', {
+      error: errorMessage(err),
+    });
+    return undefined;
+  });
   const osCertificateAuthorities = env.osCertificateCa
     ? (
         readFileSync(env.osCertificateCa, 'utf8').match(
@@ -565,7 +576,20 @@ async function main(): Promise<void> {
             throw new Error('Keychain Access could not be opened');
           },
         }
-      : {}),
+      : process.platform === 'win32'
+        ? {
+            openSystemCertificates: async () => {
+              // certmgr: the certificates of the current user ("Personal" holds theirs).
+              const console = join(
+                process.env.SystemRoot ?? 'C:\\Windows',
+                'System32',
+                'certmgr.msc',
+              );
+              const error = await shell.openPath(console);
+              if (error) throw new Error(`certmgr could not be opened: ${error}`);
+            },
+          }
+        : {}),
     chooseSavePath: async (request) => {
       const options: SaveDialogOptions = {
         ...request,
@@ -759,7 +783,11 @@ async function selfTestMain(): Promise<void> {
         appPath: app.getAppPath(),
       }),
       browserFactory,
-      ...(process.platform === 'darwin' ? { keychain: () => openKeychain() } : {}),
+      ...(process.platform === 'darwin'
+        ? { osCertificates: { name: 'keychain' as const, load: loadKeychain } }
+        : process.platform === 'win32'
+          ? { osCertificates: { name: 'certificate-store' as const, load: loadWindowsStore } }
+          : {}),
     });
     // Electron's own files may stay (in use until it exits): a few KB in the temp folder.
     await rm(userData, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});

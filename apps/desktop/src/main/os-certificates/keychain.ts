@@ -36,6 +36,7 @@ export interface KeychainOptions {
 }
 
 export interface Keychain extends OsKeyStore {
+  importPkcs12(p12: Uint8Array, passphrase: string): Promise<void>;
   /** The file of the keychain `importPkcs12` adds to. */
   importPath(): string;
 }

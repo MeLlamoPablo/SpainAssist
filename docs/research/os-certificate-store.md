@@ -12,7 +12,10 @@ certificates already in the keychain and uses them in place ("external" certific
 no second copy to track. The key is imported extractable, since the keychain then holds the only
 copy. koffi works with Security.framework from Electron's main process [verified in the
 development build; the notarized build is still to check]. See `docs/ARCHITECTURE.md`,
-"External certificates (macOS)". Windows is next.
+"External certificates (macOS, Windows)". Windows followed the same day, without the move: the
+app only reads `CurrentUser\My` and signs with its keys, because of the MSIX's registry
+virtualization (§3.5), and the user imports the downloaded `.p12` themselves [written on a Mac;
+CI's Windows job runs the crypt32/ncrypt test, a sideloaded MSIX is still to check].
 
 Marks used below:
 
