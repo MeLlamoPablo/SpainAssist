@@ -10,7 +10,7 @@ import { describeFailure, reportUiFailure } from './failures';
 import { codemodeDict } from './i18n';
 import { UiRenderer } from './UiRenderer';
 
-type Entry =
+export type ForYouEntry =
   | { kind: 'prompt'; id: string; at: string; item: PromptItem }
   | { kind: 'ui'; id: string; at: string; workflow: WorkflowInfo; ui: WorkflowUi };
 
@@ -31,11 +31,13 @@ export function ForYou() {
     ),
   );
   const workflows = useCodemodeStore((s) => s.workflows);
-  const entries = useMemo<Entry[]>(() => {
-    const list: Entry[] = [
-      ...prompts.map((item): Entry => ({ kind: 'prompt', id: item.id, at: item.createdAt, item })),
+  const entries = useMemo<ForYouEntry[]>(() => {
+    const list: ForYouEntry[] = [
+      ...prompts.map(
+        (item): ForYouEntry => ({ kind: 'prompt', id: item.id, at: item.createdAt, item }),
+      ),
       ...openInterfaces(workflows).map(
-        ({ workflow, ui }): Entry => ({
+        ({ workflow, ui }): ForYouEntry => ({
           kind: 'ui',
           id: `${workflow.id}/${ui.key}`,
           at: ui.openedAt,
@@ -57,7 +59,8 @@ export function ForYou() {
   );
 }
 
-const ForYouItem = memo(function ForYouItem({ entry }: { entry: Entry }) {
+/** One question's box (the agent playground shows them too). */
+export const ForYouItem = memo(function ForYouItem({ entry }: { entry: ForYouEntry }) {
   const t = useT(codemodeDict);
   return (
     <article

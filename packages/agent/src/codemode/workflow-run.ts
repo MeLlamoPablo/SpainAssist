@@ -231,7 +231,7 @@ export class WorkflowRun {
    */
   private newString(context: QuickJSContext, text: string): QuickJSHandle {
     const size = this.memory?.buffer.byteLength ?? 0;
-    const bytes = Buffer.byteLength(text, 'utf8') + text.length * 2;
+    const bytes = utf8Length(text) + text.length * 2;
     if (Math.max(size * 1.05, size + bytes) + HEAP_SLACK_BYTES > this.maxHeapBytes)
       throw new RangeError(
         `Out of memory (limit ${Math.round(this.limits.memoryBytes / (1024 * 1024))} MB)`,
@@ -539,6 +539,25 @@ function errorInfo(error: unknown, op: string): Record<string, unknown> {
   }
   const message = error instanceof Error ? error.message : String(error);
   return { code: 'internal', message, op, effect: 'unknown', retryable: false };
+}
+
+/** Buffer.byteLength(text, 'utf8') without Node: the agent playground runs it in a browser. */
+function utf8Length(text: string): number {
+  let bytes = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code < 0xdc00 && i + 1 < text.length) {
+      // A surrogate pair: 4 bytes for both halves.
+      const next = text.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next < 0xe000) {
+        bytes += 4;
+        i++;
+      } else bytes += 3;
+    } else bytes += 3;
+  }
+  return bytes;
 }
 
 function messageOf(error: unknown): string {

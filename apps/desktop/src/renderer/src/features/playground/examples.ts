@@ -1,32 +1,66 @@
 import type {
   ChatItem,
+  CodemodeAgentInfo,
+  ConfirmKind,
   DnieSignatureStage,
   DnieUnlock,
-  FormField,
   Language,
   NextAction,
   PhoneCallPrompt,
   Prompt,
   PromptItem,
 } from '@sa/shared';
+import { playgroundWorkflows } from './workflows';
 
-export type ExampleGroup = 'inputs' | 'confirmations' | 'actions' | 'output';
+export type ExampleGroup =
+  | 'interfaces'
+  | 'approvals'
+  | 'actions'
+  | 'dnie'
+  | 'procedures'
+  | 'agents'
+  | 'chat';
 export interface PlaygroundExample {
   id: string;
   group: ExampleGroup;
   label: string;
+  /** What raises it: the workflow API (`api.user.confirm({ kind: "payment" })`) or the item's type. */
   code: string;
+  /** A workflow's source (interfaces), run by the real kernel. */
+  source?: string;
   item?: ChatItem;
   procedureId?: string;
-  /** Starting value of the procedure card's state picker. */
+  /** Starting value of the procedure row's state picker. */
   procedureState?: string;
+  /** The agents on the meter (agents). */
+  agents?: CodemodeAgentInfo[];
 }
 const PLAYGROUND_TIME = '2026-10-04T10:00:00.000Z';
 
-/** Mock-only catalogue. Each interactive example is also registered with the mock API. */
+/** How a workflow raises each approval: `api.user.confirm`, or the app on its own. */
+const CONFIRM_CODE: Record<ConfirmKind, string> = {
+  action: 'api.user.confirm({ kind: "action" })',
+  submission: 'api.user.confirm({ kind: "submission" })',
+  payment: 'api.user.confirm({ kind: "payment" })',
+  credential: 'page.loginClave() · policy "ask"',
+  signature: 'locator.click() · firma',
+  certificate_site: 'page.useCertificate({ origins })',
+};
+
+/**
+ * Mock-only catalogue: workflows (run for real), the host-owned questions codemode still raises,
+ * procedure rows, the agent meter and the coordinator's chat. Each question is also registered
+ * with the mock API.
+ */
 export function playgroundExamples(language: Language): PlaygroundExample[] {
   const t = (es: string, en: string) => (language === 'es' ? es : en);
-  const examples: PlaygroundExample[] = [];
+  const examples: PlaygroundExample[] = playgroundWorkflows(language).map((w) => ({
+    id: w.id,
+    group: 'interfaces',
+    label: w.label,
+    code: w.code,
+    source: w.source,
+  }));
   const addPrompt = (
     id: string,
     group: ExampleGroup,
@@ -48,253 +82,6 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       },
     });
   };
-  const addField = (id: string, label: string, field: FormField) =>
-    addPrompt(id, 'inputs', label, field.type, {
-      kind: 'form',
-      title: label,
-      message: t('Prueba este campo con datos de ejemplo.', 'Try this field with example data.'),
-      fields: [field],
-      allowDismiss: false,
-      submitLabel: t('Continuar', 'Continue'),
-    });
-  const field = (
-    type: FormField['type'],
-    label: string,
-    extra: Partial<FormField> = {},
-  ): FormField => ({ key: 'answer', type, label, required: true, ...extra });
-  addField(
-    'text',
-    t('Texto corto', 'Short text'),
-    field('text', t('Nombre', 'Name'), {
-      placeholder: t('Por ejemplo: Lucía', 'For example: Alex'),
-      vaultKey: 'givenName',
-      defaultValue: '',
-    }),
-  );
-  addPrompt('document-scan', 'inputs', t('Escanear documento', 'Scan document'), 'form · scan', {
-    kind: 'form',
-    title: t('Tus datos para el trámite', 'Your details for the procedure'),
-    message: t(
-      'Escanea un documento o escribe tus datos. Puedes revisar y cambiar los campos antes de continuar.',
-      'Scan a document or enter your details. You can review and change the fields before continuing.',
-    ),
-    allowDismiss: false,
-    submitLabel: t('Continuar', 'Continue'),
-    fields: [
-      field('text', t('Nombre', 'First name'), {
-        key: 'givenName',
-        vaultKey: 'givenName',
-        defaultValue: '',
-      }),
-      field('text', t('Primer apellido', 'First surname'), {
-        key: 'surname1',
-        vaultKey: 'surname1',
-        defaultValue: '',
-      }),
-      field('date', t('Fecha de nacimiento', 'Date of birth'), {
-        key: 'birthDate',
-        vaultKey: 'birthDate',
-        defaultValue: '',
-      }),
-      field('text', t('Número de DNI', 'DNI number'), {
-        key: 'dniNumber',
-        vaultKey: 'dniNumber',
-        defaultValue: '',
-      }),
-      field('province', t('Provincia', 'Province'), {
-        key: 'addressProvince',
-        vaultKey: 'addressProvince',
-        defaultValue: '',
-      }),
-      field('email', t('Correo electrónico', 'Email'), {
-        key: 'email',
-        vaultKey: 'email',
-        defaultValue: 'demo@example.com',
-      }),
-    ],
-  });
-  addField(
-    'passport-scan',
-    t('Escanear Pasaporte', 'Scan passport'),
-    field('text', t('Número de pasaporte', 'Passport number'), {
-      vaultKey: 'passportNumber',
-      defaultValue: '',
-    }),
-  );
-  addField(
-    'driving-licence-scan',
-    t('Escanear Permiso de conducir', 'Scan driving licence'),
-    field('date', t('Validez del permiso de conducir', 'Driving licence expiry'), {
-      vaultKey: 'drivingLicenceExpiry',
-      defaultValue: '',
-    }),
-  );
-  addField(
-    'textarea',
-    t('Texto largo', 'Long text'),
-    field('textarea', t('¿Qué necesitas?', 'What do you need?'), {
-      help: t('Cuéntalo con tus palabras.', 'Tell us in your own words.'),
-    }),
-  );
-  addField(
-    'number',
-    t('Número', 'Number'),
-    field('number', t('Importe (€)', 'Amount (€)'), { placeholder: '12,50' }),
-  );
-  addField('date', t('Fecha', 'Date'), field('date', t('A partir de', 'From')));
-  addField(
-    'email',
-    t('Correo electrónico', 'Email'),
-    field('email', t('Correo electrónico', 'Email'), { placeholder: 'demo@example.com' }),
-  );
-  addField(
-    'phone',
-    t('Teléfono', 'Phone'),
-    field('phone', t('Teléfono', 'Phone'), { placeholder: '+34 600 000 000' }),
-  );
-  const shortOptions = [
-    { value: 'morning', label: t('Mañana', 'Morning') },
-    { value: 'afternoon', label: t('Tarde', 'Afternoon') },
-  ];
-  addField(
-    'select',
-    t('Elegir · botones', 'Choice · buttons'),
-    field('select', t('Horario', 'Time'), { options: shortOptions }),
-  );
-  const options = ['north', 'south', 'east', 'west'].map((value, i) => ({
-    value,
-    label: t(`Oficina de ejemplo ${i + 1}`, `Example office ${i + 1}`),
-  }));
-  addField(
-    'select-dropdown',
-    t('Elegir · desplegable', 'Choice · dropdown'),
-    field('select', t('Oficina', 'Office'), { options }),
-  );
-  addField(
-    'multiselect',
-    t('Elegir varias', 'Multiple choices'),
-    field('multiselect', t('Días disponibles', 'Available days'), {
-      options: ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'].map((es, i) => ({
-        value: String(i),
-        label: t(es, ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][i]),
-      })),
-    }),
-  );
-  addField(
-    'boolean',
-    t('Sí / No', 'Yes / No'),
-    field('boolean', t('¿Tienes cita?', 'Do you have an appointment?')),
-  );
-  addField(
-    'boolean-checkbox',
-    t('Casilla', 'Checkbox'),
-    field('boolean', t('Quiero recibir avisos', 'Send me updates'), {
-      help: t('Puedes cambiarlo después.', 'You can change this later.'),
-    }),
-  );
-  addField('province', t('Provincia', 'Province'), field('province', t('Provincia', 'Province')));
-  addField(
-    'document',
-    t('Documento', 'Document'),
-    field('document', t('Documento que vas a aportar', 'Document to provide')),
-  );
-  addField(
-    'secret',
-    t('Código oculto', 'Masked code'),
-    field('secret', t('Código de un solo uso', 'One-time code'), {
-      placeholder: '000000',
-      help: t('Usa un código inventado.', 'Use an invented code.'),
-    }),
-  );
-  addField(
-    'map-options',
-    t('Lugares en el mapa', 'Places on a map'),
-    field('map-options', t('Centro preferido', 'Preferred centre'), {
-      options: [
-        {
-          value: 'north',
-          label: t('Centro Norte (demo)', 'North centre (demo)'),
-          address: 'Calle de ejemplo 20, Sevilla',
-        },
-        {
-          value: 'south',
-          label: t('Centro Sur (demo)', 'South centre (demo)'),
-          address: 'Avenida de ejemplo 1, Sevilla',
-        },
-        {
-          value: 'east',
-          label: t('Centro Este (demo)', 'East centre (demo)'),
-          address: 'Plaza de ejemplo 3, Sevilla',
-        },
-      ],
-    }),
-  );
-  addField(
-    'appointment',
-    t('Cita previa', 'Appointment'),
-    field(
-      'appointment',
-      t('Cita en la oficina de expedición (demo)', 'Appointment at the issuing office (demo)'),
-      {
-        slots: [
-          '2026-10-06T09:00',
-          '2026-10-06T09:20',
-          '2026-10-06T12:40',
-          '2026-10-07T10:00',
-          '2026-10-09T08:40',
-          '2026-10-09T09:00',
-          '2026-10-09T13:20',
-          '2026-10-13T11:00',
-          '2026-10-14T09:40',
-          '2026-10-14T10:00',
-          '2026-10-16T12:00',
-          '2026-10-20T08:30',
-          '2026-10-20T19:00',
-          '2026-10-22T19:00',
-        ],
-      },
-    ),
-  );
-  addField(
-    'optional',
-    t('Campo opcional', 'Optional field'),
-    field('text', t('Referencia (si la tienes)', 'Reference (if you have one)'), {
-      required: false,
-    }),
-  );
-  addField(
-    'prefilled',
-    t('Dato guardado', 'Saved data'),
-    field('email', t('Correo electrónico', 'Email'), { vaultKey: 'email' }),
-  );
-  addPrompt(
-    'conditional',
-    'inputs',
-    t('Formulario con condiciones', 'Conditional form'),
-    'visibleWhen',
-    {
-      kind: 'form',
-      title: t('¿Cómo quieres recibir el aviso?', 'How would you like the update?'),
-      allowDismiss: false,
-      fields: [
-        field('select', t('Canal', 'Channel'), {
-          key: 'channel',
-          options: [
-            { value: 'email', label: 'Email' },
-            { value: 'sms', label: 'SMS' },
-          ],
-        }),
-        field('email', t('Correo electrónico', 'Email'), {
-          key: 'email',
-          visibleWhen: { field: 'channel', values: ['email'] },
-        }),
-        field('phone', t('Teléfono móvil', 'Mobile phone'), {
-          key: 'phone',
-          visibleWhen: { field: 'channel', values: ['sms'] },
-        }),
-      ],
-    },
-  );
   const confirmations = {
     action: [
       t('Reservar una cita', 'Book an appointment'),
@@ -327,20 +114,26 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     ],
   } as const;
   for (const [confirmKind, [title, message]] of Object.entries(confirmations))
-    addPrompt(`confirm-${confirmKind}`, 'confirmations', title, confirmKind, {
-      kind: 'confirm',
-      confirmKind: confirmKind as keyof typeof confirmations,
+    addPrompt(
+      `confirm-${confirmKind}`,
+      'approvals',
       title,
-      message,
-      details: [
-        {
-          label: t('Trámite', 'Procedure'),
-          value: t('Solicitud de ejemplo', 'Example application'),
-        },
-        { label: t('Importe', 'Amount'), value: confirmKind === 'payment' ? '12 €' : '0 €' },
-      ],
-      biometric: confirmKind === 'credential' || confirmKind === 'signature',
-    });
+      CONFIRM_CODE[confirmKind as ConfirmKind],
+      {
+        kind: 'confirm',
+        confirmKind: confirmKind as keyof typeof confirmations,
+        title,
+        message,
+        details: [
+          {
+            label: t('Trámite', 'Procedure'),
+            value: t('Solicitud de ejemplo', 'Example application'),
+          },
+          { label: t('Importe', 'Amount'), value: confirmKind === 'payment' ? '12 €' : '0 €' },
+        ],
+        biometric: confirmKind === 'credential' || confirmKind === 'signature',
+      },
+    );
   // What main asks before the agent presents a certificate or the DNI (browser_use_certificate).
   const certificateUse = (dnie: boolean): Prompt => ({
     kind: 'confirm',
@@ -368,23 +161,23 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
   });
   addPrompt(
     'confirm-certificate',
-    'confirmations',
+    'approvals',
     t('Usar el certificado', 'Use the certificate'),
-    'credential',
+    'page.useCertificate()',
     certificateUse(false),
   );
   addPrompt(
     'confirm-certificate-dnie',
-    'confirmations',
+    'approvals',
     t('Usar el DNI', 'Use the DNI'),
-    'credential',
+    'page.useCertificate() · DNI',
     certificateUse(true),
   );
   addPrompt(
     'confirm-certificate_site',
-    'confirmations',
+    'approvals',
     t('Web nueva para el certificado', 'New website for the certificate'),
-    'certificate_site',
+    'page.useCertificate({ origins })',
     {
       kind: 'confirm',
       confirmKind: 'certificate_site',
@@ -408,9 +201,9 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
   );
   addPrompt(
     'confirm-danger',
-    'confirmations',
+    'approvals',
     t('Acción irreversible', 'Irreversible action'),
-    'danger',
+    'api.user.confirm({ danger: true })',
     {
       kind: 'confirm',
       confirmKind: 'action',
@@ -460,16 +253,22 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     ],
   } as const;
   for (const [actionKind, [title, message]] of Object.entries(actions))
-    addPrompt(`action-${actionKind}`, 'actions', title, actionKind, {
-      kind: 'user_action',
-      actionKind: actionKind as keyof typeof actions,
+    addPrompt(
+      `action-${actionKind}`,
+      'actions',
       title,
-      message,
-      showBrowser: actionKind !== 'offline',
-      imageId:
-        actionKind === 'qr_scan' || actionKind === 'captcha' ? 'playground-image' : undefined,
-    });
-  addPrompt('credential-clave', 'actions', 'Cl@ve Permanente', 'credential', {
+      `api.user.requestAction({ kind: "${actionKind}" })`,
+      {
+        kind: 'user_action',
+        actionKind: actionKind as keyof typeof actions,
+        title,
+        message,
+        showBrowser: actionKind !== 'offline',
+        imageId:
+          actionKind === 'qr_scan' || actionKind === 'captcha' ? 'playground-image' : undefined,
+      },
+    );
+  addPrompt('credential-clave', 'actions', 'Cl@ve Permanente', 'api.user.requestCredential()', {
     kind: 'credential',
     credential: 'clave_permanente',
     title: t('Añade tu Cl@ve Permanente', 'Add your Cl@ve Permanente'),
@@ -478,27 +277,69 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       'To log in to the example site I need your Cl@ve Permanente. Save it here: I never see the password.',
     ),
   });
-  addPrompt('credential-clave-fix', 'actions', 'Cl@ve Permanente rechazada', 'credential', {
-    kind: 'credential',
-    credential: 'clave_permanente',
-    title: t('Revisa tu Cl@ve Permanente', 'Check your Cl@ve Permanente'),
-    message: t(
-      'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y vuelvo a intentarlo: yo nunca veo la contraseña.',
-      "Cl@ve didn't accept the saved password. Correct it here and I'll try again: I never see the password.",
-    ),
-    replaceId: 'cred-clave',
-  });
-  addPrompt('credential-dnie', 'actions', 'DNI', 'credential', {
-    kind: 'credential',
-    credential: 'dnie',
-    title: t('Añade tu DNI', 'Add your DNI'),
-    message: t(
-      'La sede de ejemplo pide certificado digital. Con tu DNI y el móvil puedo entrar por ti.',
-      'The example site asks for a digital certificate. With your DNI and your phone I can log in for you.',
-    ),
-  });
-  addPrompt('phone-call', 'actions', 'Phone call', 'phone_call', phoneCallExample(t));
-  addPrompt('dnie-login', 'confirmations', t('DNI · Acceso', 'DNI · Login'), 'dnie_signature', {
+  addPrompt(
+    'credential-clave-fix',
+    'actions',
+    'Cl@ve Permanente rechazada',
+    'page.loginClave({ rejected: true })',
+    {
+      kind: 'credential',
+      credential: 'clave_permanente',
+      title: t('Revisa tu Cl@ve Permanente', 'Check your Cl@ve Permanente'),
+      message: t(
+        'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y vuelvo a intentarlo: yo nunca veo la contraseña.',
+        "Cl@ve didn't accept the saved password. Correct it here and I'll try again: I never see the password.",
+      ),
+      replaceId: 'cred-clave',
+    },
+  );
+  addPrompt(
+    'credential-dnie',
+    'actions',
+    'DNI',
+    'api.user.requestCredential({ credential: "dnie" })',
+    {
+      kind: 'credential',
+      credential: 'dnie',
+      title: t('Añade tu DNI', 'Add your DNI'),
+      message: t(
+        'La sede de ejemplo pide certificado digital. Con tu DNI y el móvil puedo entrar por ti.',
+        'The example site asks for a digital certificate. With your DNI and your phone I can log in for you.',
+      ),
+    },
+  );
+  addPrompt(
+    'phone-call',
+    'actions',
+    t('Llamada', 'Phone call'),
+    'api.user.phoneCall()',
+    phoneCallExample(t),
+  );
+  addPrompt(
+    'fill-from-user',
+    'actions',
+    t('Código de un solo uso', 'One-time code'),
+    'page.fillFromUser()',
+    // What main asks for page.fillFromUser: one secret, typed into the page by the app.
+    {
+      kind: 'form',
+      title: t('Código de verificación', 'Verification code'),
+      message: t(
+        'La sede de ejemplo te ha enviado un SMS con un código. Escríbelo aquí y lo pondré en la web.',
+        'The example site sent you a text message with a code. Type it here and I will enter it on the website.',
+      ),
+      fields: [
+        {
+          key: 'value',
+          label: t('Código del SMS', 'Code from the text message'),
+          type: 'secret',
+          required: true,
+        },
+      ],
+      allowDismiss: false,
+    },
+  );
+  addPrompt('dnie-login', 'dnie', t('DNI · Acceso', 'DNI · Login'), 'page.useCertificate() · DNI', {
     kind: 'dnie_signature',
     purpose: 'login',
     title: t('Entrar con el DNI', 'Log in with your DNI'),
@@ -526,29 +367,112 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
   });
   addPrompt(
     'dnie-unlock',
-    'confirmations',
+    'dnie',
     t('DNI · CAN y PIN', 'DNI · CAN and PIN'),
-    'dnie_signature',
+    'dnie_signature · unlock',
     dnieSignature('unlock', { can: true, pin: true }),
   );
   addPrompt(
     'dnie-unlock-wrong-pin',
-    'confirmations',
+    'dnie',
     t('DNI · PIN incorrecto', 'DNI · Wrong PIN'),
-    'dnie_signature',
+    'dnie_signature · unlock',
     dnieSignature('unlock', { can: false, pin: true, refused: 'pin', triesLeft: 2 }),
   );
   for (const stage of ['phone', 'reviewing', 'card', 'reading'] as const)
     addPrompt(
       `dnie-${stage}`,
-      'confirmations',
+      'dnie',
       `DNI · ${stage}`,
-      'dnie_signature',
+      `dnie_signature · ${stage}`,
       dnieSignature(stage),
     );
+  const procedureStates = [
+    ['procedure', t('Trámite', 'Procedure'), 'current'],
+    ['procedure-researching', t('Investigando', 'Researching'), 'researching'],
+    ['procedure-working', t('Un agente trabaja', 'An agent works'), 'working'],
+    ['procedure-appointment', t('Con cita', 'With an appointment'), 'appointment'],
+    [
+      'procedure-waiting',
+      t('Esperando a la administración', 'Waiting for the administration'),
+      'waiting_admin',
+    ],
+    ['procedure-error', t('Con un problema', 'With a problem'), 'error'],
+    ['procedure-done', t('Completado', 'Done'), 'done'],
+  ] as const;
+  for (const [id, label, procedureState] of procedureStates)
+    examples.push({
+      id,
+      group: 'procedures',
+      label,
+      code: `ProcedureRow · ${procedureState}`,
+      procedureId: 'p-dni',
+      procedureState,
+    });
+
+  const agent = (
+    id: string,
+    status: string,
+    activity: CodemodeAgentInfo['activity'],
+    extra: Partial<CodemodeAgentInfo> = {},
+  ): CodemodeAgentInfo => ({
+    id,
+    kind: 'agent',
+    status,
+    activity,
+    procedures: [],
+    createdAt: PLAYGROUND_TIME,
+    updatedAt: PLAYGROUND_TIME,
+    ...extra,
+  });
+  const reading = agent(
+    'a-correos',
+    t('Analizando la página de Correos…', 'Analysing the Correos page…'),
+    'working',
+    { since: PLAYGROUND_TIME },
+  );
+  const waiting = agent(
+    'a-dni',
+    t('Esperando tu respuesta sobre la cita…', 'Waiting for your answer about the appointment…'),
+    'waiting_user',
+  );
+  const failed = agent(
+    'a-padron',
+    t('Pidiendo el volante de empadronamiento', 'Requesting the padrón certificate'),
+    'idle',
+    {
+      error: t(
+        'La sede del ayuntamiento no responde. Lo intento de nuevo en un rato.',
+        'The town hall’s website is not answering. I will try again in a while.',
+      ),
+    },
+  );
+  const more = [
+    agent(
+      'a-hacienda',
+      t('Leyendo tu borrador de la renta…', 'Reading your tax return draft…'),
+      'working',
+      { since: PLAYGROUND_TIME },
+    ),
+    agent(
+      'a-dgt',
+      t('Buscando el informe del vehículo…', 'Looking up the vehicle report…'),
+      'working',
+      { since: PLAYGROUND_TIME },
+    ),
+  ];
+  const agentExamples = [
+    ['agents-working', t('Trabajando', 'Working'), [reading]],
+    ['agents-waiting', t('Esperando al usuario', 'Waiting for the user'), [waiting]],
+    ['agents-error', t('Con un error', 'With an error'), [failed]],
+    ['agents-many', t('Varios a la vez', 'Several at once'), [reading, waiting, failed, ...more]],
+  ] as const;
+  for (const [id, label, agents] of agentExamples)
+    examples.push({ id, group: 'agents', label, code: 'AgentMeter', agents: [...agents] });
+
   examples.push({
     id: 'message',
-    group: 'output',
+    group: 'chat',
     label: t('Mensaje del asistente', 'Assistant message'),
     code: 'assistant',
     item: {
@@ -557,14 +481,14 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       createdAt: PLAYGROUND_TIME,
       status: 'complete',
       text: t(
-        'Ya está listo el plan.\n\n**Necesitas:**\n- Tu documento de identidad.\n- El justificante de ejemplo.\n\n| Paso | Quién |\n| --- | --- |\n| Revisar los datos | Tú |\n| Preparar la solicitud | Asistente |\n\n> Puedes volver a este trámite cuando quieras.',
-        'The plan is ready.\n\n**You need:**\n- Your identity document.\n- The example receipt.\n\n| Step | Who |\n| --- | --- |\n| Review the details | You |\n| Prepare the application | Assistant |\n\n> You can return to this procedure whenever you like.',
+        'Me pongo con la renovación del DNI. Te preguntaré arriba lo que necesite mientras sigo trabajando.\n\n**Necesitas:**\n- Tu DNI actual.\n- Una foto reciente.\n\n| Paso | Quién |\n| --- | --- |\n| Pedir la cita | Asistente |\n| Ir a la comisaría | Tú |',
+        'I am starting on the DNI renewal. I will ask you above whatever I need while I keep working.\n\n**You need:**\n- Your current DNI.\n- A recent photo.\n\n| Step | Who |\n| --- | --- |\n| Book the appointment | Assistant |\n| Go to the police station | You |',
       ),
     },
   });
   examples.push({
     id: 'message-documents',
-    group: 'output',
+    group: 'chat',
     label: t('Mensaje con documentos', 'Message with documents'),
     code: 'assistant · sa:document/<id>',
     item: {
@@ -578,10 +502,37 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       ),
     },
   });
+  // The coordinator's tools, as the chat shows them (it never names agents).
+  const coordinatorTools = [
+    [
+      'agent_start',
+      t('Empieza un trabajo', 'Starts work'),
+      { title: t('Renovar el DNI', 'Renew your DNI') },
+    ],
+    ['agent_message', t('Pasa información', 'Passes information on'), {}],
+    ['agent_list', t('Repasa el trabajo', 'Reviews the work'), {}],
+    ['agent_stop', t('Para un trabajo', 'Stops work'), {}],
+  ] as const;
+  for (const [tool, label, args] of coordinatorTools)
+    examples.push({
+      id: `event-${tool}`,
+      group: 'chat',
+      label,
+      code: tool,
+      item: {
+        id: `playground-event-${tool}`,
+        type: 'activity',
+        createdAt: PLAYGROUND_TIME,
+        tool,
+        toolCallId: `demo-${tool}`,
+        args: { ...args },
+        status: 'done',
+      },
+    });
   for (const level of ['info', 'success', 'warning', 'error'] as const)
     examples.push({
       id: `notice-${level}`,
-      group: 'output',
+      group: 'chat',
       label: t(
         {
           info: 'Aviso informativo',
@@ -609,44 +560,15 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       },
     });
   examples.push({
-    id: 'event',
-    group: 'output',
-    label: t('Novedades de un trámite', 'Procedure update'),
-    code: 'activity',
-    item: {
-      id: 'playground-event',
-      type: 'activity',
-      createdAt: PLAYGROUND_TIME,
-      tool: 'procedure_start',
-      toolCallId: 'demo-call',
-      args: { procedureId: 'p-dni', title: t('Renovar el DNI', 'Renew your DNI') },
-      status: 'done',
-    },
-  });
-  examples.push({
     id: 'failure',
-    group: 'output',
+    group: 'chat',
     label: t('Fallo de una tarea', 'Task failure'),
     code: 'activity.error',
-  });
-  examples.push({
-    id: 'procedure',
-    group: 'output',
-    label: t('Tarjeta de trámite', 'Procedure card'),
-    code: 'procedure',
-    procedureId: 'p-dni',
-  });
-  examples.push({
-    id: 'procedure-appointment',
-    group: 'output',
-    label: t('Tarjeta de trámite con cita', 'Procedure card with an appointment'),
-    code: 'procedure · nextAction.appointment',
-    procedureId: 'p-dni',
-    procedureState: 'appointment',
   });
   return examples;
 }
 
+/** The host-owned questions, registered with the mock API as conversation items. */
 export function examplePromptItems(language: Language): PromptItem[] {
   return playgroundExamples(language).flatMap((example) =>
     example.item?.type === 'prompt' ? [example.item] : [],

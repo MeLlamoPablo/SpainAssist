@@ -9,6 +9,7 @@
     "./host": "./dist/host.js",
     "./host-runtime": "./src/host/runtime.ts",
     "./codex": "./src/providers/codex.ts",
+    "./workflow-run": "./src/codemode/workflow-run.ts",
     "./package.json": "./package.json"
   },
   "scripts": {

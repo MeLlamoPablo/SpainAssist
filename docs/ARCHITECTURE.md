@@ -245,8 +245,12 @@ or rating learnings (searching still works).
 - **Headless app and eval hooks.** `createHeadlessApp` (`@sa/desktop/headless`) runs the app's
   logic without a window or the internet. `HostHooks` let a harness stub the agent host's network.
   The SpainBench eval suite builds on both (`docs/EVAL.md`). Neither ships in the packaged app.
-- **Agent UI playground.** The web preview's `?playground=1` shows every prompt, message and card
-  component against a mock conversation.
+- **Agent playground.** The web preview's `?playground=1` (`corepack pnpm playground`) runs example
+  workflows in the real kernel (QuickJS in the page, main's side played by
+  `features/playground/runner.ts`): their interfaces in the real "Para ti" boxes, editable source,
+  a log of host calls, durable state, and a resume that re-runs from it. It also shows the
+  questions the host still asks (`api.user.*`, certificates, the DNI), procedure rows, the agent
+  meter and the coordinator's chat. Only the web preview allows WebAssembly in its CSP.
 
 ## 7. Security model
 

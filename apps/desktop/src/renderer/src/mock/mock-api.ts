@@ -26,6 +26,7 @@ import {
   type SaMethod,
   type SaResult,
   type Settings,
+  type UiEvent,
   type UpdateStatus,
   type VaultOverview,
 } from '@sa/shared';
@@ -89,10 +90,22 @@ interface PendingAsk {
   onAnswer?: (r: PromptResponse) => PStep[];
 }
 
-let resetPrompt: ((id: string) => void) | undefined;
-/** Preview-only reset; never exists on the real IPC API. */
-export function resetPlaygroundPrompt(id: string): void {
-  resetPrompt?.(id);
+let putItem: ((item: ChatItem) => void) | undefined;
+/** The playground puts its questions in the conversation (or back, to reset one). Preview only. */
+export function putPlaygroundItem(item: ChatItem): void {
+  putItem?.(item);
+}
+
+/** What the playground's workflows answer instead of the demo's. */
+export interface PlaygroundCodemode {
+  uiEvent(workflowId: string, key: string, event: UiEvent): boolean;
+  uiFailed(workflowId: string, key: string, rev: number, detail: string): boolean;
+  stopAgent(agentId: string): void;
+}
+let playgroundCodemode: PlaygroundCodemode | undefined;
+/** The playground runs real workflows (features/playground/runner.ts). Preview only. */
+export function setPlaygroundCodemode(impl: PlaygroundCodemode | undefined): void {
+  playgroundCodemode = impl;
 }
 
 export function createMockApi(params: URLSearchParams = new URLSearchParams()): SaApi {
@@ -278,11 +291,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     emit({ type: 'browser.frame', procedureId, jpeg, width: 1280, height: 800 });
   };
 
-  if (params.has('playground'))
-    resetPrompt = (id) => {
-      const item = examplePromptItems(state.settings.language).find((item) => item.id === id);
-      if (item) putChat(item);
-    };
+  if (params.has('playground')) putItem = putChat;
 
   // The phone pairing for DNI signatures: a fake link that pairs a demo phone after a moment.
   const demoLink = 'https://relay.example.invalid/p#demo';
@@ -1560,12 +1569,21 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         );
       else putChat(next);
     },
-    'codemode.state': () => codemode.state(),
-    'codemode.uiEvent': (workflowId, key, event) => codemode.uiEvent(workflowId, key, event),
-    'codemode.pins': (workflowId, key, addresses) => codemode.pins(workflowId, key, addresses),
+    // The playground's workflows (setPlaygroundCodemode) stand in for the demo's.
+    'codemode.state': () =>
+      params.has('playground') ? { agents: [], workflows: [] } : codemode.state(),
+    'codemode.uiEvent': (workflowId, key, event) =>
+      (playgroundCodemode ?? codemode).uiEvent(workflowId, key, event),
+    'codemode.pins': (workflowId, key, addresses) =>
+      playgroundCodemode
+        ? addresses.map((a) => DEMO_PLACES[a] ?? null)
+        : codemode.pins(workflowId, key, addresses),
     'codemode.agentLog': () => [],
-    'codemode.stopAgent': (agentId) => codemode.stopAgent(agentId),
-    'codemode.uiFailed': (workflowId, key) => codemode.uiFailed(workflowId, key),
+    'codemode.stopAgent': (agentId) => (playgroundCodemode ?? codemode).stopAgent(agentId),
+    'codemode.uiFailed': (workflowId, key, rev, detail) =>
+      playgroundCodemode
+        ? playgroundCodemode.uiFailed(workflowId, key, rev, detail)
+        : codemode.uiFailed(workflowId, key),
     'codemode.cancelWorkflow': (workflowId) => codemode.cancelWorkflow(workflowId),
     'media.get': (id) => state.media.get(id) ?? null,
     'browser.show': () => {

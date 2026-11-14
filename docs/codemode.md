@@ -404,5 +404,3 @@ SpainBench run with real models (`docs/EVAL.md`). The first comparison (170 runs
   stay out on purpose.
 - An agent whose workflows all wait for the user may be stopped as idle; that is safe (they resume
   on the user's next action) but each resume pays a host start (about a second).
-- The agent playground (`?playground=1`) does not show workflow interfaces yet; the web preview
-  does.
