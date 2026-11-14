@@ -170,10 +170,18 @@ test('the development build passes its --self-test', async () => {
   // In CI's log even when it passes: how long the first launch and page took on that runner.
   for (const c of report.checks) console.log(`self-test ${c.name}: ${c.ms} ms, ${c.detail}`);
   expect(report.ok).toBe(true);
+  // The system's certificate store: the keychain on macOS, the user's store on Windows, none on Linux.
+  const osCertificates =
+    process.platform === 'darwin'
+      ? [['keychain', true]]
+      : process.platform === 'win32'
+        ? [['certificate-store', true]]
+        : [];
   expect(report.checks.map((c) => [c.name, c.ok])).toEqual([
     ['browser-executable', true],
     ['crlset', true],
     ['sidecar', true],
+    ...osCertificates,
     ['browser-launch', true],
     ['browser-survives-without-windows', true],
     ['browser-second-session', true],
