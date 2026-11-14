@@ -59,6 +59,17 @@ describe('the coordinator', () => {
       ok: true,
       result: { agents: [] },
     });
+    // Its host checks the documents its messages link: their ids and names, nothing else.
+    const doc = await app.vault.addDocument({
+      name: 'Modelo 790-012.pdf',
+      mimeType: 'application/pdf',
+      bytes: Buffer.from('%PDF'),
+      source: 'download',
+    });
+    expect((await app.rpc('vault.documents', {}, token)).body).toEqual({
+      ok: true,
+      result: { documents: [{ id: doc.id, name: 'Modelo 790-012.pdf' }] },
+    });
     for (const method of [
       'vault.read',
       'browser.snapshot',

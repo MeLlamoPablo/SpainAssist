@@ -213,11 +213,7 @@ export async function runHost(
     // Only the coordinator's messages reach the chat, where document links show as cards.
     ...(coordinator
       ? {
-          savedDocuments: async () =>
-            (await bridge.call('vault.read', { keys: [] })).documents.map(({ id, name }) => ({
-              id,
-              name,
-            })),
+          savedDocuments: async () => (await bridge.call('vault.documents', {})).documents,
         }
       : {}),
   });

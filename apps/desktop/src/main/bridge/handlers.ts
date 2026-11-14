@@ -457,6 +457,12 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       return { saved: items.map((i) => i.key) };
     },
 
+    'vault.documents': async () => ({
+      documents: deps
+        .vault()
+        .listDocuments()
+        .map((d) => ({ id: d.id, name: d.name })),
+    }),
     'vault.document': async (params) => {
       const vault = deps.vault();
       const meta = vault.getDocument(params.documentId);

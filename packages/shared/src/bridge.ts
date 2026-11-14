@@ -188,6 +188,11 @@ export const BridgeParams = {
   'vault.read': z.object({ keys: z.array(z.string()).max(50).optional() }),
   /** Save personal data learned during the conversation. */
   'vault.save': z.object({ items: z.array(PersonalDataInput).min(1).max(30) }),
+  /**
+   * The saved documents' ids and names, nothing else: the coordinator's host checks the documents
+   * its messages link (packages/agent/src/host/document-links.ts).
+   */
+  'vault.documents': z.object({}),
   /** Read the contents of one saved document (procedure agents read it with document_read). */
   'vault.document': z.object({ documentId: z.string().min(1).max(120) }),
 
@@ -462,6 +467,7 @@ export interface BridgeResults {
   'prompt.phoneCall': Extract<PromptResponse, { kind: 'phone_call' }>;
   'vault.read': VaultReadResult;
   'vault.save': { saved: string[] };
+  'vault.documents': { documents: { id: string; name: string }[] };
   'vault.document': { id: string; name: string; mimeType: string; dataBase64: string };
   'downloads.save': { documentId: string; name: string };
   'browser.open': BrowserObservation;
@@ -567,14 +573,20 @@ export type CodemodeBridgeRole = 'orchestrator' | 'agent';
 
 /**
  * What each codemode role may call. The coordinator only delegates: its agents and reading the
- * cards (its tools, packages/agent/src/tools/coordinator.ts). Agents: everything else, workflows,
- * procedures, vault, the browser and the user prompts, but no agents of their own.
+ * cards (its tools, packages/agent/src/tools/coordinator.ts), plus the saved documents' names for
+ * its host's check of the links in its messages. Agents: everything else, workflows, procedures,
+ * vault, the browser and the user prompts, but no agents of their own.
  */
 export function codemodeMayCall(role: CodemodeBridgeRole, method: BridgeMethod): boolean {
   // The coordinator never researches: no Exa key.
   if (method.startsWith('agent.')) return role === 'agent' || method !== 'agent.exaKey';
   if (role === 'orchestrator')
-    return method.startsWith('agents.') || method === 'procs.list' || method === 'procs.get';
+    return (
+      method.startsWith('agents.') ||
+      method === 'procs.list' ||
+      method === 'procs.get' ||
+      method === 'vault.documents'
+    );
   return !method.startsWith('agents.');
 }
 

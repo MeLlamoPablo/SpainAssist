@@ -56,7 +56,7 @@ export interface ActivityContext {
   credentialKind?: (credentialId: string) => CredentialKind | undefined;
 }
 
-export function normalizeTool(tool: string): string {
+function normalizeTool(tool: string): string {
   return tool
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .replace(/[.\-\s/]+/g, '_')

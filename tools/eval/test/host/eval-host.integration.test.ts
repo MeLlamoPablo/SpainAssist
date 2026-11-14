@@ -129,6 +129,7 @@ describe('the eval host over RPC', () => {
         credential: { type: 'api_key', key: 'voucher-key-from-bridge' },
       }),
       'vault.read': () => ({ personal: [], documents: [], credentials: [] }),
+      'vault.documents': () => ({ documents: [] }),
     });
     // An origin that is neither the gateway nor the world: nothing may ever reach it.
     const hits: string[] = [];

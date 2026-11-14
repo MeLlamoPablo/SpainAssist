@@ -279,17 +279,8 @@ describe('agent host over RPC (integration)', () => {
   });
 
   it('has the coordinator write again, once per prompt, a message linking an unsaved document', async () => {
-    bridge.setHandler('vault.read', () => ({
-      personal: [],
-      documents: [
-        {
-          id: '31fd58e9-8e9f-4436-81b6-496c5a011435',
-          name: 'Modelo 790-012.pdf',
-          mimeType: 'application/pdf',
-          createdAt: '2026-11-03T11:47:00Z',
-        },
-      ],
-      credentials: [],
+    bridge.setHandler('vault.documents', () => ({
+      documents: [{ id: '31fd58e9-8e9f-4436-81b6-496c5a011435', name: 'Modelo 790-012.pdf' }],
     }));
     const miscopied = '[Modelo 790-012](sa:document/31fd58e9-8e9f-4436-81b6-4965c0101135)';
     llm.setScenario({
@@ -309,7 +300,8 @@ describe('agent host over RPC (integration)', () => {
     const { client, events } = await start(undefined, undefined, { role: 'orchestrator' });
     await client.prompt('Dame el impreso');
     await waitFor(events, isRunEnd);
-    expect(bridge.callsTo('vault.read').map((call) => call.params)).toEqual([{ keys: [] }]);
+    expect(bridge.callsTo('vault.documents')).toHaveLength(1);
+    expect(bridge.callsTo('vault.read')).toEqual([]);
     const rewrite = llm.requests().at(-1)?.body as ChatRequest;
     expect(rewrite.messages?.at(-1)).toMatchObject({ role: 'user' });
     expect(JSON.stringify(rewrite.messages?.at(-1))).toContain(
