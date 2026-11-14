@@ -28,7 +28,7 @@ export function EmptyProcedures() {
 
   return (
     <div
-      className="flex min-h-full flex-col items-center justify-center px-8 pt-4 pb-30"
+      className="flex flex-1 flex-col items-center justify-center px-8 pt-4 pb-30"
       data-testid="procedures-empty"
     >
       <GhostCards />

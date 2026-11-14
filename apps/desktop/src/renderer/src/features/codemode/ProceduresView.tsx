@@ -34,9 +34,10 @@ export function ProceduresView() {
     );
   }
   if (!active.length && !archived.length) {
-    // A workflow can ask, and agents work, before any procedure exists.
+    // A workflow can ask, and agents work, before any procedure exists. One column filling the
+    // pane, so the meter takes room from the empty state rather than making the pane scroll.
     return (
-      <>
+      <div className="flex min-h-full flex-col">
         <div className="mx-auto w-full max-w-[1040px] px-10 empty:hidden">
           <ForYou />
         </div>
@@ -44,7 +45,7 @@ export function ProceduresView() {
         <div className="mx-auto w-full max-w-[1040px] px-10 empty:hidden">
           <SafeAgentMeter />
         </div>
-      </>
+      </div>
     );
   }
 
