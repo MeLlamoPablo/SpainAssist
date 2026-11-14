@@ -180,7 +180,7 @@ describe('agent playground', () => {
     const form = await until(() => view?.ui[0], 'the form');
     const email = nodes(form.tree ?? '').find((n) => n.props.vaultKey === 'email');
     run.uiEvent('details', {
-      handler: (email?.props.onChange as { $handler: string }).$handler,
+      handler: (email?.props.onChange as { $handler: string } | undefined)?.$handler ?? '',
       rev: form.rev,
       value: 'lucia@example.es',
     });
@@ -193,7 +193,7 @@ describe('agent playground', () => {
       (n) => n.type === 'Button' && n.children.includes('Ahora no'),
     );
     run.uiEvent('details', {
-      handler: (notNow?.props.onClick as { $handler: string }).$handler,
+      handler: (notNow?.props.onClick as { $handler: string } | undefined)?.$handler ?? '',
       rev: typed.rev,
     });
     await until(() => view?.status === 'succeeded', 'the end');
