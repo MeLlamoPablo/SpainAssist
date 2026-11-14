@@ -30,6 +30,9 @@ Installed apps update to it. What changed since 0.3.3.
     the keychain, downloaded as a password-protected .p12, or dropped onto the card as a
     .p12/.pfx file. The move dialog links to Acceso a Llaveros, where the keychain's
     certificates are managed. (6e31e46, ddd32b3, 3d1f45a, 39a9263, 2fbb145)
+  - On Windows, FNMT certificates in the user's certificate store are found and listed as
+    "Externo" too, and the app signs with them there; the label opens the store's manager. A
+    certificate in Mis datos can't be moved there: import its downloaded .p12 instead. (b907520)
   - Signatures carry the certificate's serial number, which Java verifiers require (Correos' voto
     por correo failed after signing), and Correos' certificate login no longer stops at Chromium's
     own certificate picker. (a0b7d05, f898402)

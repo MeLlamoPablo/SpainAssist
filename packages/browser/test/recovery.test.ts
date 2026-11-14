@@ -131,11 +131,20 @@ describe('crash recovery', () => {
       }
     }
     expect(killed).toBeGreaterThan(0);
-    await new Promise((r) => setTimeout(r, 500));
-    const obs = await t.service.snapshot('tab');
+    // Playwright reports the crash a moment later, slowest on Windows: until then a snapshot reads
+    // the dead tab. The first action after the report reloads it.
+    const notes: string[] = [];
+    const obs = await vi.waitFor(
+      async () => {
+        const o = await t.service.snapshot('tab');
+        notes.push(...o.notes);
+        expect(o.snapshot).toContain('Pestaña');
+        return o;
+      },
+      { timeout: 10_000, interval: 250 },
+    );
     expect(obs.url).toBe(`${server.origin}/crash`);
-    expect(obs.snapshot).toContain('Pestaña');
-    expect(obs.notes.join('\n')).toContain('crashed');
+    expect(notes.join('\n')).toContain('crashed');
   });
 });
 
