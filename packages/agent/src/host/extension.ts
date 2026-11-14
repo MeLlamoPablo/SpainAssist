@@ -1,7 +1,6 @@
 import type { ExtensionAPI, ExtensionFactory } from '@earendil-works/pi-coding-agent';
 import type { AnyToolDefinition } from '../tools/common';
 import { registerDocumentLinkCheck, type SavedDocument } from './document-links';
-import { redactOldPages } from './redaction';
 import { registerThinkingCutoffCheck } from './thinking-cutoff';
 
 export interface SpainAssistExtensionOptions {
@@ -12,8 +11,6 @@ export interface SpainAssistExtensionOptions {
   onProviderResponse?: (headers: Record<string, string>) => void;
   /** Send the session id as OpenAI's `prompt_cache_key` (see `needsPromptCacheKey`). */
   promptCacheKey?: boolean;
-  /** Redact old page results before each LLM call (see redaction.ts). */
-  redactPages?: boolean;
   /** The saved documents: final messages that link others are written again (document-links.ts). */
   savedDocuments?: () => Promise<SavedDocument[]>;
 }
@@ -29,10 +26,6 @@ export function createSpainAssistExtension(options: SpainAssistExtensionOptions)
 
     // Replace the whole prompt (pi otherwise appends a <cwd> section that leaks local paths).
     pi.on('before_agent_start', () => ({ systemPrompt: options.systemPrompt() }));
-
-    if (options.redactPages) {
-      pi.on('context', (event) => ({ messages: redactOldPages(event.messages) }));
-    }
 
     if (options.promptCacheKey) {
       pi.on('before_provider_request', (event, ctx) =>

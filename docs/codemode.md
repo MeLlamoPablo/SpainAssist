@@ -1,15 +1,18 @@
 # Codemode
 
-Status: implemented behind the `codemode` feature flag (2026-11-08). With the flag off, the classic
-harness (the assistant and one agent per procedure) runs as before. Research and the options
-considered: [research/codemode.md](research/codemode.md). This page is the design as built, the
-decisions taken without asking (to review, in [Decisions for review](#decisions-for-review)), and
-how it was verified.
+Status: the app's only harness. Built behind a `codemode` feature flag (2026-11-08) and shipped to
+everyone on 2026-11-14, when the flag and the classic harness (an assistant that started one agent
+per procedure, one tool call per step) were removed. Research and the options considered:
+[research/codemode.md](research/codemode.md). This page is the design as built, the decisions taken
+without asking (to review, in [Decisions for review](#decisions-for-review)), and how it was
+verified.
 
-Turn it on: the Unleash flag `codemode`, or `SA_FEATURE_FLAGS=codemode` in development. The web
-preview shows it with `?codemode=1`.
+Profiles from before keep their procedures' cards and the chat the user sees. The classic
+assistant's model context (`assistant/session.jsonl`), the procedures' agent sessions and their
+pending questions are not carried over: the coordinator starts a fresh context with the cards on
+its first message, and a procedure left half done is continued by asking for it in the chat.
 
-## What changes
+## What changed from the classic harness
 
 | Classic harness | Codemode |
 | --- | --- |
@@ -17,7 +20,7 @@ preview shows it with `?codemode=1`.
 | One tool call per step, a model turn after each | One `codemode` tool: a JavaScript module does many steps (in parallel where it can) without a turn in between |
 | A form blocks the agent's turn; every answer costs a turn before the next step | Interfaces are rendered by the workflow itself; the workflow continues after the answer with no turn, and the agent's turn ends while the user answers |
 | The assistant asks before it starts a procedure | The coordinator only delegates (plain tools, no codemode): agents research, ask in interfaces and create the cards once they know the plan; the coordinator never asks ([The coordinator](#the-coordinator)) |
-| A form survives a restart as a prompt; the agent gets a new message | A workflow resumes from its state: memoized steps are not repeated, open interfaces come back with what the user typed |
+| A form survives a restart as a prompt; the agent gets a new message | A workflow resumes from its state: memoized steps are not repeated, open interfaces come back with what the user typed; native prompts (a confirmation, a phone call) are cancelled and the workflow hears it was interrupted |
 | Questions on each card | Every question in one place above the cards ("Para ti", no heading), not tied to any procedure |
 
 Measured on the same task, in the real app (see [Empirical verification](#empirical-verification)):
@@ -145,9 +148,9 @@ agent's report, which the coordinator relays.
   relaying a report there were no user words to pass on, so the model made up an instruction
   for the agent, which then overrode the user for the rest of the session (2026-11-10).
 - **Chat versions.** The chat the user sees (`assistant/transcript.json`) is one for every
-  version of the chat's agent; its model context is not (`CHAT_VERSIONS`, `app/paths.ts`): version
-  1, the classic assistant, keeps `assistant/session.jsonl`; version 2, this coordinator,
-  `assistant/session-v2.jsonl`. A new version starts with a fresh context, so it never reads back
+  version of the chat's agent; its model context is not (`CHAT_VERSION`, `app/paths.ts`): version
+  1, the classic assistant, left `assistant/session.jsonl`, no longer read; version 2, this
+  coordinator, `assistant/session-v2.jsonl`. A new version starts with a fresh context, so it never reads back
   calls of tools it no longer has (the first codemode coordinator's `codemode` calls, in
   `assistant/codemode-session.jsonl`, are left unread). The procedures' cards ride on its first
   message, so it still knows what the user has going.
@@ -184,9 +187,8 @@ The kernel then rejects that interface's `present` with a `CodemodeError` whose 
 can catch it. With no run, main wakes the agent; the resumed run presents the interface again
 and hears the failure then.
 
-**Decision: questions are not tied to procedures** (codemode's design; the classic design keeps
-each procedure's questions on its card). Every interface (and every classic prompt still pending
-from before the flag) appears above the procedure cards, in a section the code calls **"Para ti"** (`ForYou.tsx`) and
+**Decision: questions are not tied to procedures** (the classic design kept each procedure's
+questions on its card). Every interface and native prompt appears above the procedure cards, in a section the code calls **"Para ti"** (`ForYou.tsx`) and
 the screen shows without a heading: the questions' boxes are enough. A question doesn't say which procedure it is
 for, and cards don't point to their questions: the question's own title says what it is about
 ("Cita para renovar el DNI"), which is usually obvious. Workflows still record the procedures they
@@ -201,8 +203,8 @@ question with all of them, and the labels depended on which procedures the model
 The workflow's sandbox builds Playwright locators as data (`["getByRole","button",{"name":"Enviar"}]`)
 and the app replays them on the real page with the real Playwright API
 (`packages/browser/src/locator.ts`), so waiting, strictness and errors are Playwright's. Only the
-listed steps exist; nothing reaches the context, the browser or other procedures. Locator targets
-reuse every secure path of the classic tools (domain allowlists, input type checks, approvals).
+listed steps exist; nothing reaches the context, the browser or other procedures. Locator targets go through the same bridge handlers as every page action (domain allowlists,
+input type checks, approvals).
 
 **`evaluate` and secrets.** Page code is allowed (structured extraction is one of codemode's main
 wins) and runs only in the page: the app gives Playwright a function whose `toString()` is the
@@ -214,11 +216,10 @@ guarantee that model-written code cannot obtain a typed credential.
 ## UI redesign
 
 Follows the three exploration screenshots (a list of cards, a card's requirements popover, a
-completed card with its details open). **Only with the codemode flag** (decision 13): the classic
-harness keeps the previous design, its files unchanged from `master` (`features/procedures`). The
-new one lives in `features/codemode` (`ProceduresView`, `ProcedureRow`, `ProcedureDetails`,
-`OutcomePill`) and reuses the classic card's menu, rename, appointment links and empty state;
-`Shell` picks one by the flag.
+completed card with its details open). It lives in `features/codemode`
+(`ProceduresView`, `ProcedureRow`, `ProcedureDetails`, `OutcomePill`) and reuses the card's menu,
+rename and appointment links (`features/procedures/CardParts.tsx`) and the empty state
+(`EmptyProcedures.tsx`) of the classic design, which was removed with the flag (decision 13).
 
 - **Cards are rows, not boxes:** the procedures are one list separated by thin dividers. Each has
   its title and administration, a status pill only when it ended or stopped ("Completado",
@@ -235,9 +236,7 @@ new one lives in `features/codemode` (`ProceduresView`, `ProcedureRow`, `Procedu
   something missing they are already in the box above).
 - **The agent meter is apart from the cards:** a small panel floating at the bottom of the
   procedures pane while anything works, one row per piece of work ("Empadronarme en Madrid ·
-  Leyendo sede.madrid.es") with a spinner and a round stop button. After three rows it shows "Ver N más". A row's title leads to its card. Cards
-  no longer carry a "Trabajando" mark or the meter's details. In the classic harness the meter
-  lists the procedures whose agent works.
+  Leyendo sede.madrid.es") with a spinner and a round stop button. After three rows it shows "Ver N más". A row's title leads to its card. Cards no longer carry a "Trabajando" mark or the meter's details.
 - **"Para ti"** (see above) stays above the list without a heading, its questions in boxes so
   they stand out from the rows, with no procedure labels. The tab badge counts its interfaces and the cards whose turn is
   the user's.
@@ -302,7 +301,8 @@ the stale-run, resume and restart paths (`apps/desktop/src/main/codemode/codemod
 
 ### Empirical verification
 
-`tools/eval/src/codemode/bench.ts` runs the spec's "¿tengo que presentar la renta?" through both
+Measured before the classic harness was removed (its bench, `tools/eval/src/codemode/bench.ts`,
+went with it): it ran the spec's "¿tengo que presentar la renta?" through both
 harnesses in the real app, with the real agent hosts, each scripted with the shortest tool sequence
 its prompts call for (classic: the assistant starts a procedure; its agent reads the vault, reads
 the official page, updates the card, asks, decides, reports; the assistant tells the user.
@@ -310,8 +310,8 @@ Codemode: the coordinator starts an agent; the agent's one workflow creates the 
 reads the official page, checks the income against it and updates the card; the coordinator relays the agent's two
 reports). Every model call takes the same simulated latency.
 
-`node --import tsx tools/eval/scripts/codemode-bench.ts 2500 8000 3` (2.5 s per model call, the user
-answers in 8 s, medians of 3 runs; the runs varied by under 0.1 s):
+With 2.5 s per model call and the user answering in 8 s (medians of 3 runs; the runs varied by
+under 0.1 s):
 
 | Harness | Model calls | Calls after the answer | Time to the question | Answer → result | Total |
 | --- | --- | --- | --- | --- | --- |
@@ -329,8 +329,7 @@ schemas 3.1 k) against 20.5 k for the classic assistant.
 
 What this does and does not show: it measures the harness (turns, waiting, context), with model
 behaviour held fixed. It does not measure whether real models write good workflows. That needs a
-SpainBench run with real models (`docs/EVAL.md`): `eval run --codemode` runs a fixture with the
-flag on. The first comparison (170 runs, 2026-11-09) is in
+SpainBench run with real models (`docs/EVAL.md`). The first comparison (170 runs, 2026-11-09) is in
 [research/codemode-eval-2026-11.md](research/codemode-eval-2026-11.md).
 
 ## Decisions for review
@@ -339,7 +338,7 @@ flag on. The first comparison (170 runs, 2026-11-09) is in
    (better lifecycle, but model code next to every secret) and a dedicated runner process (more
    plumbing). The agent process already is the least-privileged place, and making main the source
    of truth gives the independence the spec asks for: a replacement agent resumes the same record.
-2. **QuickJS over a V8 isolate or an Electron renderer.** Already shipped and hardened (`run_script`),
+2. **QuickJS over a V8 isolate or an Electron renderer.** Already shipped and hardened (the classic `run_script`),
    portable, engine-level memory and CPU limits, no native builds. React compatibility was not needed:
    the kernel's hooks renderer (`kernel.ts`) produces trees for native components.
 3. **Keyed durability instead of a positional journal**, with re-execution of what is not memoized.
@@ -373,12 +372,11 @@ flag on. The first comparison (170 runs, 2026-11-09) is in
     `page.snapshot()`, or `innerText()` for a part of the page. Actions return a compact result
     (downloads, signatures, notes) instead of `void`, so downloads are not lost.
 12. **Tool results stay in English, the UI in the user's language**, as before.
-13. **The redesign is gated by the codemode flag.** Its main choices answer codemode's decoupling
-    (questions apart from the cards, a meter apart from them), and in the classic harness a question
-    belongs to exactly one procedure, so on its card it sits next to its facts. The classic design
-    stays as on `master`, frozen; it goes away with the flag. The new design is covered by a web
-    e2e test against the preview (`e2e/tests/codemode-ui.spec.ts`); the Electron ones test the
-    classic design.
+13. **The redesign came with codemode.** Its main choices answer codemode's decoupling
+    (questions apart from the cards, a meter apart from them); in the classic harness a question
+    belonged to exactly one procedure, so it sat on its card next to its facts. The classic design
+    was kept, frozen, while the flag existed, and removed with it. The design is covered by a web
+    e2e test against the preview (`e2e/tests/codemode-ui.spec.ts`) and the Electron ones.
 14. **Interrupted workflows are not re-run automatically.** Anything not memoized would repeat;
     the agent decides, told by main.
 15. **No subagents** (removed 2026-11-10 after the SpainBench comparison). Agents could lend their
@@ -404,7 +402,5 @@ flag on. The first comparison (170 runs, 2026-11-09) is in
   stay out on purpose.
 - An agent whose workflows all wait for the user may be stopped as idle; that is safe (they resume
   on the user's next action) but each resume pays a host start (about a second).
-- The agent playground (`?playground=1`) does not show workflow interfaces yet; the web preview's
-  `?codemode=1` does.
-- The e2e Playwright specs were updated for the redesign but not run here (they need an Electron
-  build); CI runs them.
+- The agent playground (`?playground=1`) does not show workflow interfaces yet; the web preview
+  does.

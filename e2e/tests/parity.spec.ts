@@ -2,15 +2,17 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
-import type { ChatItem } from '@sa/shared';
 import { expect, invoke, test } from '../fixtures';
 import {
-  assistantRules,
+  AGENT,
+  agentIdle,
   assistantSaid,
+  codemodeCall,
+  codemodeCalls,
   connect,
-  idle,
-  PROCEDURE,
+  coordinatorRules,
   procedureTitled,
+  theAgent,
 } from '../helpers';
 
 /**
@@ -29,7 +31,7 @@ async function browserLog(userData: string): Promise<string[]> {
   return text.split('\n').filter((line) => line.includes(' [browser] '));
 }
 
-test('the browser outlives its windows: a procedure closes it, waits and browses again', async ({
+test('the browser outlives its windows: an agent closes it, waits and browses again', async ({
   harness: h,
 }) => {
   await connect(h);
@@ -37,55 +39,86 @@ test('the browser outlives its windows: a procedure closes it, waits and browses
   h.llm.setScenario({
     name: 'parity',
     rules: [
-      ...assistantRules('Abrir la sede', 'Abre la sede de prueba.', 'La sede está abierta.'),
-      // 4. Done, after a second tab of the same browser.
+      ...coordinatorRules('Abre la sede de prueba.', 'La sede está abierta.', 'He abierto'),
+      // 3. Done.
       {
         when: {
-          hasTool: PROCEDURE,
-          lastTool: 'browser_open',
-          toolCalled: { name: 'browser_open', atLeast: 3 },
+          hasTool: AGENT,
+          lastTool: 'codemode',
+          toolCalled: { name: 'codemode', atLeast: 2 },
         },
         reply: { text: 'He abierto la sede de prueba.' },
       },
-      // 3. A second tab.
+      // 2. The browser was left with no session window for a while; the site opens again, then
+      // in a second tab of the same browser.
       {
-        when: {
-          hasTool: PROCEDURE,
-          lastTool: 'browser_open',
-          toolCalled: { name: 'browser_close' },
+        when: { hasTool: AGENT, lastTool: 'codemode', lastToolResult: 'succeeded' },
+        reply: {
+          delayMs: 3_000,
+          toolCalls: [
+            codemodeCall({
+              workflow: 'abrir-otra-vez',
+              title: 'Abrir la sede otra vez',
+              source: `export async function main(api) {
+  const [card] = await api.procedures.list();
+  await api.procedures.getOrCreate({ id: card.id, title: card.title });
+  const page = await api.browser.currentPage();
+  await page.goto('${url}');
+  await page.goto('${url}', { newTab: true });
+  return { tabs: (await page.tabs()).length };
+}
+`,
+            }),
+          ],
         },
-        reply: { toolCalls: [{ name: 'browser_open', arguments: { url, newTab: true } }] },
-      },
-      // 2. The browser is left with no session window for a while, then the site opens again.
-      {
-        when: { hasTool: PROCEDURE, lastTool: 'browser_close' },
-        reply: { delayMs: 3_000, toolCalls: [{ name: 'browser_open', arguments: { url } }] },
       },
       // 1. The first page launches the browser (the CRLSet settles first); then its window closes.
       {
-        when: { hasTool: PROCEDURE, lastTool: 'browser_open' },
-        reply: { toolCalls: [{ name: 'browser_close', arguments: {} }] },
-      },
-      {
-        when: { hasTool: PROCEDURE, turn: 0 },
-        reply: { toolCalls: [{ name: 'browser_open', arguments: { url } }] },
+        when: { hasTool: AGENT, turn: 0 },
+        reply: {
+          toolCalls: [
+            codemodeCall({
+              workflow: 'abrir-sede',
+              title: 'Abrir la sede',
+              source: `export async function main(api) {
+  await api.procedures.getOrCreate({ id: 'sede', title: 'Abrir la sede', status: 'researching' });
+  const page = await api.browser.currentPage();
+  await page.goto('${url}');
+  await page.close();
+  return { closed: true };
+}
+`,
+            }),
+          ],
+        },
       },
     ],
   });
   await invoke(h.page, 'chat.send', { text: 'Abre la sede de prueba' });
-  const procedure = await procedureTitled(h, 'Abrir la sede');
-  const log = await idle(h, procedure.id);
-  const calls = log.filter(
-    (i): i is Extract<ChatItem, { type: 'activity' }> =>
-      i.type === 'activity' && i.tool.startsWith('browser_'),
-  );
-  expect(calls.map((i) => [i.tool, i.status])).toEqual([
-    ['browser_open', 'done'],
-    ['browser_close', 'done'],
-    ['browser_open', 'done'],
-    ['browser_open', 'done'],
-  ]);
+  await procedureTitled(h, 'Abrir la sede');
   await assistantSaid(h, 'La sede está abierta.');
+  const agent = await theAgent(h);
+  const log = await agentIdle(h, agent.id);
+  expect(codemodeCalls(log).map((c) => c.status)).toEqual(['done', 'done']);
+  // What the workflows returned, as the agent's model read it.
+  const results = new Set(
+    h.llm
+      .requests()
+      .flatMap(
+        (r) => (r.body as { messages?: { role: string; content?: unknown }[] }).messages ?? [],
+      )
+      .filter((m) => m.role === 'tool')
+      .map((m) =>
+        typeof m.content === 'string'
+          ? m.content
+          : (m.content as { text?: string }[]).map((part) => part.text ?? '').join(''),
+      )
+      .filter((text) => text.startsWith('Workflow "')),
+  );
+  expect([...results]).toEqual([
+    expect.stringContaining('Workflow "abrir-sede" succeeded'),
+    expect.stringMatching(/Workflow "abrir-otra-vez" succeeded[\s\S]*"tabs": 2/),
+  ]);
 
   // One headed launch with the CRLSet, which never went away.
   let lines: string[] = [];

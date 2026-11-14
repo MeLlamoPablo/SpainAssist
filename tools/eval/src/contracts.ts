@@ -436,7 +436,7 @@ export type Condition =
   | { type: 'prose'; from: AgentKind | 'any'; matches: RegExp }
   /**
    * Something a tool returned to the model (the text of a `tool_end`: what the app records of the
-   * result the model received: page snapshots, `document_read`, `fetch_url` bodies...). `ok`
+   * result the model received: what its workflows returned, logged or reported). `ok`
    * limits it to results that did not fail (`true`) or only to failed ones (`false`).
    */
   | { type: 'toolResult'; agent?: AgentKind; tool?: string | RegExp; matches: RegExp; ok?: boolean }
@@ -621,8 +621,8 @@ export type Observation =
     };
 
 /**
- * The `toolCallId` prefix of a codemode agent's bridge call recorded as the classic tool it stands
- * for (`src/run/app/observers.ts`): a step of a workflow, not a tool call of the model.
+ * The `toolCallId` prefix of an agent workflow's bridge call, recorded as a `tool_start` named by
+ * its method (`src/run/app/observers.ts`): a step of a workflow, not a tool call of the model.
  */
 export const BRIDGE_CALL_PREFIX = 'bridge-';
 
@@ -747,11 +747,6 @@ export interface EvalAppSpec {
   now: string;
   /** Record Playwright's HAR, trace and HTML per step under `browser/`. */
   captureBrowser: boolean;
-  /**
-   * The app's `codemode` feature flag (docs/codemode.md): workflow interfaces become prompts of the
-   * simulator, and the agents' bridge calls become observations.
-   */
-  codemode?: boolean;
   /** Restore this profile copy (a checkpoint's `profileDir`) instead of creating one. */
   restoreFrom?: { profileDir: string; browserStateFile?: string };
   /** Aborted by the run: stop everything now, cancel pending model requests. */

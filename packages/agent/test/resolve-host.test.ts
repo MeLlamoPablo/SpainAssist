@@ -5,11 +5,8 @@
  * reaches `fetchImpl` with its real URL.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHostOps, createImageStore } from '../src/codemode/host-ops';
 import { fetchDocument, type HostResolver } from '../src/research/fetch';
-import { fetchUrlTool } from '../src/tools/fetch-url';
-import { runScript, runScriptTool } from '../src/tools/run-script';
-import { createFakeBridge, type FakeBridge } from './helpers/fake-bridge';
-import { textOf, toolHarness } from './helpers/tools';
 
 // The system resolver must never run when a stand-in is given: any call is a leak.
 const system = vi.hoisted(() => ({ lookup: vi.fn() }));
@@ -175,38 +172,32 @@ describe('resolveHost in the fetch guard', () => {
   });
 });
 
-describe('resolveHost in the tools', () => {
-  it('fetch_url reads a page through the stand-in and shows the production guard messages', async () => {
+describe('resolveHost in the host operations', () => {
+  function hostOps(rec: Recorder, allowPrivateHosts?: boolean) {
+    const call = createHostOps({
+      bridge: { call: async () => ({}) as never },
+      images: createImageStore(),
+      runId: () => 'run_1',
+      procedures: () => [],
+      imagesSupported: true,
+      fetchImpl: rec.fetchImpl,
+      resolveHost: rec.resolveHost,
+      ...(allowPrivateHosts !== undefined ? { allowPrivateHosts } : {}),
+    });
+    return (op: string, args: unknown) => call(op, args, { signal: new AbortController().signal });
+  }
+
+  it('api.fetchUrl reads a page through the stand-in and shows the production guard messages', async () => {
     const rec = recorder();
-    const tool = fetchUrlTool({ fetchImpl: rec.fetchImpl, resolveHost: rec.resolveHost });
-    const ok = await tool.execute(
-      'c1',
-      { url: 'https://sede.spain.test/a' },
-      undefined,
-      undefined,
-      {} as never,
-    );
-    expect(textOf(ok)).toContain('URL: https://sede.spain.test/a');
-    expect(textOf(ok)).toContain('Contenido de la sede.');
-    const blocked = await tool.execute(
-      'c2',
-      { url: 'http://127.0.0.1/x' },
-      undefined,
-      undefined,
-      {} as never,
-    );
-    expect(blocked.isError).toBe(true);
-    expect(textOf(blocked)).toBe(
+    const run = hostOps(rec);
+    expect(await run('fetchUrl', { url: 'https://sede.spain.test/a' })).toMatchObject({
+      url: 'https://sede.spain.test/a',
+      text: expect.stringContaining('Contenido de la sede.'),
+    });
+    await expect(run('fetchUrl', { url: 'http://127.0.0.1/x' })).rejects.toThrow(
       'Could not read http://127.0.0.1/x: Blocked: 127.0.0.1 is a private address',
     );
-    const local = await tool.execute(
-      'c3',
-      { url: 'http://localhost:8790/x' },
-      undefined,
-      undefined,
-      {} as never,
-    );
-    expect(textOf(local)).toBe(
+    await expect(run('fetchUrl', { url: 'http://localhost:8790/x' })).rejects.toThrow(
       'Could not read http://localhost:8790/x: Blocked: localhost is a local address',
     );
     expect(rec.urls).toEqual(['https://sede.spain.test/a']);
@@ -214,94 +205,45 @@ describe('resolveHost in the tools', () => {
     expect(system.lookup).not.toHaveBeenCalled();
   });
 
-  it('run_script fetches through the stand-in and the script sees the guard errors', async () => {
+  it('api.fetch goes through the stand-in and reports the guard errors', async () => {
     const rec = recorder(
       () => new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }),
     );
-    const run = await runScript(
-      `
-      const data = await (await fetch('https://api.spain.test/v1/x')).json();
-      let blocked;
-      try { await fetch('http://127.0.0.1:8790/'); } catch (e) { blocked = e.message; }
-      return { data, blocked };
-    `,
-      { fetchImpl: rec.fetchImpl, resolveHost: rec.resolveHost },
-    );
-    expect(run.ok).toBe(true);
-    expect(JSON.parse(run.result ?? '')).toEqual({
-      data: { ok: true },
-      blocked: 'Blocked: 127.0.0.1 is a private address',
+    const run = hostOps(rec);
+    expect(await run('fetch', { url: 'https://api.spain.test/v1/x' })).toMatchObject({
+      status: 200,
+      text: '{"ok":true}',
     });
+    await expect(run('fetch', { url: 'http://127.0.0.1:8790/' })).rejects.toThrow(
+      'Blocked: 127.0.0.1 is a private address',
+    );
     expect(rec.urls).toEqual(['https://api.spain.test/v1/x']);
     expect(rec.resolved).toEqual(['api.spain.test']);
     expect(system.lookup).not.toHaveBeenCalled();
   });
 
-  it('runScriptTool passes the stand-in on to every script', async () => {
-    const rec = recorder(() => new Response('hola'));
-    const tool = runScriptTool({ fetchImpl: rec.fetchImpl, resolveHost: rec.resolveHost });
-    const result = await tool.execute(
-      'c1',
-      { code: `return await (await fetch('https://api.spain.test/')).text();` },
-      undefined,
-      undefined,
-      {} as never,
+  it('api.boe.search takes fetchImpl only (it has no guard)', async () => {
+    const rec = recorder(
+      () =>
+        new Response(JSON.stringify({ status: { code: '200', text: 'ok' }, data: [] }), {
+          headers: { 'content-type': 'application/json' },
+        }),
     );
-    expect(textOf(result)).toContain('hola');
-    expect(rec.resolved).toEqual(['api.spain.test']);
-  });
-});
-
-describe('resolveHost in the tool list (ToolDeps)', () => {
-  let bridge: FakeBridge;
-
-  beforeEach(async () => {
-    bridge = await createFakeBridge();
-  });
-
-  afterEach(async () => {
-    await bridge.close();
-  });
-
-  it('reaches fetch_url and run_script; boe_search takes fetchImpl only (it has no guard)', async () => {
-    const rec = recorder((url) =>
-      url.hostname === 'www.boe.es'
-        ? new Response(JSON.stringify({ status: { code: '200', text: 'ok' }, data: [] }), {
-            headers: { 'content-type': 'application/json' },
-          })
-        : html(),
+    expect(await hostOps(rec)('boe.search', { query: 'documento nacional de identidad' })).toEqual(
+      [],
     );
-    const harness = toolHarness(bridge, {
-      fetchImpl: rec.fetchImpl,
-      resolveHost: rec.resolveHost,
-    });
-    await harness.run('fetch_url', { url: 'https://sede.spain.test/uno' });
-    await harness.run('run_script', {
-      code: `return (await fetch('https://api.spain.test/dos')).status;`,
-    });
-    const boe = await harness.run('boe_search', { query: 'documento nacional de identidad' });
-    expect(textOf(boe)).toContain('No legislation found');
-    expect(rec.urls.map((u) => new URL(u).hostname)).toEqual([
-      'sede.spain.test',
-      'api.spain.test',
-      'www.boe.es',
-    ]);
-    expect(rec.urls[2]).toMatch(
+    expect(rec.urls[0]).toMatch(
       /^https:\/\/www\.boe\.es\/datosabiertos\/api\/legislacion-consolidada\?query=/,
     );
-    expect(rec.resolved).toEqual(['sede.spain.test', 'api.spain.test']);
+    expect(rec.resolved).toEqual([]);
     expect(system.lookup).not.toHaveBeenCalled();
   });
 
   it('leaves allowPrivateHosts false: IP literals stay blocked next to a stand-in', async () => {
     const rec = recorder();
-    const harness = toolHarness(bridge, {
-      fetchImpl: rec.fetchImpl,
-      resolveHost: rec.resolveHost,
-      allowPrivateHosts: false,
-    });
-    const result = await harness.run('fetch_url', { url: 'http://127.0.0.1:8790/' });
-    expect(result.isError).toBe(true);
+    await expect(
+      hostOps(rec, false)('fetchUrl', { url: 'http://127.0.0.1:8790/' }),
+    ).rejects.toThrow('Blocked');
     expect(rec.urls).toEqual([]);
   });
 });

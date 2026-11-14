@@ -20,7 +20,7 @@ import {
 browserSuite('a Codex run', () => {
   let host: Awaited<ReturnType<typeof prepareHostBundle>>;
   let stack: Stack;
-  let procedureId: string;
+  let agentId: string;
   let prompts: PendingPrompt[];
 
   beforeAll(async () => {
@@ -35,7 +35,7 @@ browserSuite('a Codex run', () => {
       if (prompt.kind === 'form') {
         await app.respond(prompt.itemId, {
           kind: 'form',
-          values: { metodo: 'clave_permanente' },
+          values: { metodo_de_identificacion: 'clave_permanente' },
           dismissed: false,
           savedToVault: [],
         });
@@ -44,7 +44,10 @@ browserSuite('a Codex run', () => {
       return false;
     });
     prompts = stack.of('prompt_shown').map((o) => o.prompt);
-    procedureId = prompts[0]?.procedureId as string;
+    agentId = stack
+      .of('tool_end')
+      .map((o) => /Started agent (a_[0-9a-f]+)/.exec(o.text)?.[1])
+      .find(Boolean) as string;
   }, 240_000);
 
   afterAll(async () => {
@@ -57,6 +60,8 @@ browserSuite('a Codex run', () => {
     it('goes through the whole procedure like a voucher run', () => {
       expect(prompts.map((p) => p.kind)).toEqual(['form']);
       expect(stack.of('assistant_message').map((m) => m.agent)).toEqual([
+        'assistant',
+        'procedure',
         'assistant',
         'procedure',
         'assistant',
@@ -84,23 +89,23 @@ browserSuite('a Codex run', () => {
         [...(b.tools ?? []), ...(b.input ?? []).flatMap((item) => item.tools ?? [])].some(
           (t) => t.name === name,
         );
-      const assistant = bodies.filter((b) => declares(b, 'procedure_start'));
-      const procedure = bodies.filter((b) => declares(b, 'procedure_update'));
+      const assistant = bodies.filter((b) => declares(b, 'agent_start'));
+      const procedure = bodies.filter((b) => declares(b, 'codemode'));
       expect(assistant.length).toBeGreaterThan(0);
       expect(procedure.length).toBeGreaterThan(0);
       // Codex runs each list's first model of the models file.
-      const [orchestrator] = BUNDLED_MODEL_LISTS.chatgpt.assistant;
+      const [coordinator] = BUNDLED_MODEL_LISTS.chatgpt.assistant;
       const [agent] = BUNDLED_MODEL_LISTS.chatgpt.procedures;
-      expect(new Set(assistant.map((b) => b.model))).toEqual(new Set([orchestrator?.id]));
+      expect(new Set(assistant.map((b) => b.model))).toEqual(new Set([coordinator?.id]));
       expect(new Set(procedure.map((b) => b.model))).toEqual(new Set([agent?.id]));
       expect(new Set(assistant.map((b) => b.reasoning?.effort))).toEqual(
-        new Set([orchestrator?.thinkingLevel]),
+        new Set([coordinator?.thinkingLevel]),
       );
       expect(new Set(procedure.map((b) => b.reasoning?.effort))).toEqual(
         new Set([agent?.thinkingLevel]),
       );
       // Both agents are metered under their own keys, as for vouchers.
-      expect(stack.run.agentKeys().sort()).toEqual(['assistant', `procedure-${procedureId}`]);
+      expect(stack.run.agentKeys().sort()).toEqual(['assistant', `procedure-${agentId}`]);
     });
 
     it('answers web research with the recording, in the shape of a hosted search', () => {
@@ -110,8 +115,9 @@ browserSuite('a Codex run', () => {
         .find((r) => r.channel === 'web_research');
       expect(research).toMatchObject({ host: 'research.invalid', route: 'mapped', method: 'POST' });
       expect(new URL(research?.url ?? '').pathname).toBe('/v1/responses');
-      const tool = stack.of('tool_end').find((o) => o.tool === 'web_research');
-      expect(tool?.isError).toBe(false);
+      // The workflow read the answer: its result goes on with the rest.
+      const result = stack.of('tool_end').find((o) => o.toolCallId.startsWith('workflow-result-'));
+      expect(result?.text).toMatch(/succeeded\]/);
     });
   });
 });

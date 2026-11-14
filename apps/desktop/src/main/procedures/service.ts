@@ -4,7 +4,6 @@ import {
   type Language,
   type NoticeItem,
   Procedure,
-  type ProcedureBrief,
   type ProcedureListItem,
   type ProcedureRuntime,
   type ProcedureUpdate,
@@ -70,21 +69,6 @@ export class ProcedureService {
     return [...this.procedures.values()]
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map((p) => this.toListItem(p));
-  }
-
-  /** What the assistant sees in `procedures.list`. */
-  briefs(includeArchived: boolean): ProcedureBrief[] {
-    return this.list()
-      .filter((p) => includeArchived || !p.archived)
-      .map((p) => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        activity: p.runtime.activity,
-        ...(p.nextAction ? { nextAction: p.nextAction } : {}),
-        archived: p.archived,
-        updatedAt: p.updatedAt,
-      }));
   }
 
   get(id: string): ProcedureListItem | null {

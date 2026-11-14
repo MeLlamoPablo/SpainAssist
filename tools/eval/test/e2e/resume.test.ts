@@ -126,16 +126,21 @@ e2eSuite('checkpoint and resume on the real SpainBench', () => {
       true,
     );
 
-    // What the second run did: the orchestrator read the card and resumed the procedure, whose
-    // agent opened the logged-in page, which showed it (the cookies came back with the world).
+    // What the second run did: the coordinator passed "go on" to the agent it had started, whose
+    // workflow opened the logged-in page, which showed it (the cookies came back with the world).
     const later = after.events.filter((event) => event.seq > manifest.atSeq);
-    expect(toolNames(later).slice(0, 2)).toEqual([
-      'assistant:procedure_read',
-      'assistant:procedure_message',
-    ]);
-    const reopened = observations(later, 'tool_end').find((event) => event.tool === 'browser_open');
-    expect(reopened?.text).toContain(`URL: https://portal.seg-social.gob.es/wps/myportal/`);
-    expect(reopened?.text).toContain('Descargar vida laboral');
+    expect(toolNames(later).slice(0, 2)).toEqual(['assistant:agent_message', 'procedure:codemode']);
+    const steps = observations(later, 'tool_start').filter((e) =>
+      e.toolCallId.startsWith('bridge-'),
+    );
+    expect(steps.find((e) => e.tool === 'browser.open')?.args).toMatchObject({
+      url: expect.stringMatching(/^https:\/\/portal\.seg-social\.gob\.es\/wps\/myportal\//),
+    });
+    expect(steps.find((e) => e.tool === 'browser.wait')?.args).toMatchObject({
+      text: 'Descargar vida laboral',
+    });
+    const saved = observations(later, 'tool_end').find((e) => e.tool === 'codemode');
+    expect(saved?.text).toMatch(/succeeded[\s\S]*Guardado en tus documentos/);
     // No login happened again: the identity hosts were never visited by the second run.
     const hosts = new Set(
       observations(later, 'net')

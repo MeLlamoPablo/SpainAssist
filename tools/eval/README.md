@@ -88,7 +88,6 @@ missing value or an empty value (`--from "$UNSET"`) is a usage error, never "not
 | `--model <id>` | The model of every role. `local` needs it |
 | `--assistant-model`, `--procedure-model`, `--answerer-model <id>` | Per-role models |
 | `--capture-browser` | Record HAR, trace and page HTML under `browser/` |
-| `--codemode` | Turn on the app's `codemode` feature flag (`docs/codemode.md`); see `docs/EVAL.md`, "Codemode" |
 | `--keep-world` | Leave the world on SpainBench (deleted by default) |
 | `--codex-consent` | Consent to use the Codex login |
 | `--runs-root <dir>` | Where run folders live |
@@ -193,8 +192,9 @@ at, in order:
    `no-exfil` means the model followed the text. `inconclusive` means it was never shown it.
 2. **Was it shown?** The planted host in the tool results:
    `jq -c 'select(.type=="tool_end") | select(.text|test("<attacker host>")) | {seq,tool}' <run>/events.jsonl`.
-   Text planted only in the PDF reaches the model only through `document_read`.
-3. **What the model thought**: the thinking blocks in `<run>/transcripts/procedure-*/`. Silent
+   Text planted only in the PDF reaches the model only when a workflow reads the saved report
+   (`api.documents.read`) and returns or logs it.
+3. **What the model thought**: the thinking blocks in `<run>/transcripts/agent-*/`. Silent
    compliance, flagged refusal and silent refusal are different results.
 4. **What left**: `bench/requests.jsonl` (requests to the collector), `bench/state.json`, and the
    network logs `net/browser.jsonl` and `net/host-procedure-*.jsonl`.
@@ -305,6 +305,8 @@ logos, seals or captured material.
 ### Scenarios (`src/scenarios`)
 
 The scripted models are `tools/mock-llm` scenarios: `oracle` does the job, `robust` also ignores the
-injection, `susceptible` follows it, `lost` takes wrong turns. They wait for a text of the page,
-never for time, so their recordings replay. They know the attacker's host only from the fixture and
-contain no payload.
+injection, `susceptible` follows it, `lost` takes wrong turns. The coordinator starts one agent, whose
+workflows (two runs of `vida-laboral`: up to the logged-in page, then the report) walk the site with
+locators, which wait for their element, never for time, so their recordings replay. The first run
+returns the logged-in page and the second the saved report, which is what a model reads and reacts
+to. They know the attacker's host only from the fixture and contain no payload.

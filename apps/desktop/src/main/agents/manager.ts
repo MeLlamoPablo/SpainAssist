@@ -17,15 +17,15 @@ export interface AgentManagerDeps {
   bridgeUrl(): string;
   /** Host config of an agent. Throws NoProviderError when no provider is configured. */
   buildConfig(agentId: string): Promise<AgentHostConfig>;
-  /** Where an agent's events go (the conversation or a procedure's activity log). */
+  /** Where an agent's events go (the conversation or the agent's activity log). */
   sink(agentId: string): TranscriptSink;
   /** The agent's working directory (empty, app-owned). */
   workDir(agentId: string): string;
   /** A run ended (or the process died during one). Not called for runs of stopped agents. */
   onRunEnd?(agentId: string, result: RunResult): void;
-  /** An agent's process ended: stopped, idle or crashed (codemode: its workflow runs end). */
+  /** An agent's process ended: stopped, idle or crashed (its workflow runs end). */
   onGone?(agentId: string): void;
-  /** Codemode: the agent must not be stopped as idle (one of its workflows runs). */
+  /** The agent must not be stopped as idle (one of its workflows runs). */
   keepAlive?(agentId: string): boolean;
   /** Resolved agent host script (throws if it is not built). */
   hostScript(): string;
@@ -47,16 +47,15 @@ const SUPERSEDED =
 
 export interface SendOptions {
   /**
-   * Cancel the agent's pending prompts once the message is delivered (a correction makes them
-   * obsolete). Delivered first, so the blocked tool's run reads it before its next model call;
-   * prompts asked after it are kept. `'forms'`: only its data forms, since the message takes the
-   * place of their answers; when there are any, it steers instead of following up, or the run
-   * blocked on them would only read it once the user answered.
+   * Cancel the prompts the agent is waiting on once the message is delivered (a correction makes
+   * them obsolete). Delivered first, so the blocked run reads it before its next model call;
+   * prompts asked after it are kept. When there are any, it steers instead of following up, or
+   * the run blocked on them would only read it once the user answered.
    */
-  cancelPrompts?: boolean | 'forms';
+  cancelPrompts?: boolean;
   /**
    * While the agent is running, queue the message until it finishes what it is doing instead of
-   * steering it right away (reports to the assistant, news for a procedure's agent).
+   * steering it right away (reports to the coordinator, news for a background agent).
    */
   followUp?: boolean;
 }
@@ -83,8 +82,8 @@ interface AgentRecord {
 }
 
 /**
- * One agent process per active agent: the assistant (orchestrator) and one per procedure being
- * worked on. Starts them on demand (fresh bridge token each time), prompts, steers or queues
+ * One agent process per active agent: the coordinator and its background agents
+ * (docs/codemode.md). Starts them on demand (fresh bridge token each time), prompts, steers or queues
  * follow-ups, aborts, stops idle ones, restarts transparently after an exit (the pi session file
  * keeps the context), maps their events into transcripts and reports finished runs.
  */
@@ -125,11 +124,7 @@ export class AgentManager {
       const obsolete = opts.cancelPrompts
         ? this.deps.prompts
             .pendingItems()
-            .filter(
-              (p) =>
-                p.owner === agentId &&
-                (opts.cancelPrompts === true || p.item.prompt.kind === 'form'),
-            )
+            .filter((p) => p.asker === agentId)
             .map((p) => p.item.id)
         : [];
       const delivered = await this.deliver(
@@ -304,7 +299,7 @@ export class AgentManager {
   }
 
   /**
-   * Starts the agent's process without a message (codemode: its host resumes the workflows
+   * Starts the agent's process without a message (its host resumes the workflows
    * that wait for the user). A no-op when it runs.
    */
   wake(agentId: string): Promise<void> {

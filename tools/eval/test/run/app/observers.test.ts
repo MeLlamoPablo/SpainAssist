@@ -23,9 +23,8 @@ const PASSWORD = 'Contraseña-Larga-2026!';
 const CODE = 'A1B2C3D4E5F60718';
 
 const procedure: AgentIdentity = {
-  agentKey: 'procedure-p_00000000000000aa',
+  agentKey: 'procedure-a_00000000000000aa',
   agent: 'procedure',
-  procedureId: 'p_00000000000000aa',
   sessionFile: '/dev/null',
   generation: 1,
   netlog: '/dev/null',
@@ -158,7 +157,6 @@ describe('tool calls', () => {
         t: 'now',
         type: 'tool_start',
         agent: 'procedure',
-        procedureId: 'p_00000000000000aa',
         toolCallId: 'c1',
         tool: 'fetch_url',
         args,
@@ -168,7 +166,6 @@ describe('tool calls', () => {
         t: 'now',
         type: 'tool_end',
         agent: 'procedure',
-        procedureId: 'p_00000000000000aa',
         toolCallId: 'c1',
         tool: 'fetch_url',
         isError: false,
@@ -178,7 +175,7 @@ describe('tool calls', () => {
     expect(r.observers.counters()).toEqual({ toolCalls: 1, prompts: 0 });
   });
 
-  it('leaves procedureId out for the assistant, and keeps the error flag, images and text parts in order', () => {
+  it('keeps the error flag, images and text parts in order', () => {
     r.observers.agentEvent(assistant, start('a1', 'vault_read'));
     r.observers.sessionEntry(assistant, {
       type: 'message',
@@ -279,7 +276,6 @@ describe('messages and exits', () => {
       {
         type: 'assistant_message',
         agent: 'procedure',
-        procedureId: 'p_00000000000000aa',
         text: 'Hecho',
       },
     ]);
@@ -300,14 +296,13 @@ describe('messages and exits', () => {
     });
     expect(r.observed).toHaveLength(2);
     const note = r.observed[0] as Extract<Observation, { type: 'note' }>;
-    expect(note.text).toContain('procedure-p_00000000000000aa host exited (code 1');
+    expect(note.text).toContain('procedure-a_00000000000000aa host exited (code 1');
     expect(note.text).toContain(MASK);
     expect(note.text).not.toContain(PASSWORD);
     // The run loop reads the crash as the infrastructure failing, not the agent.
     expect(r.observed[1]).toMatchObject({
       type: 'agent_failure',
       agent: 'procedure',
-      procedureId: 'p_00000000000000aa',
       kind: 'crash',
     });
     expect((r.observed[1] as { message: string }).message).toContain(MASK);
@@ -327,7 +322,6 @@ describe('messages and exits', () => {
       expect.objectContaining({
         type: 'agent_failure',
         agent: 'procedure',
-        procedureId: 'p_00000000000000aa',
         kind: 'auth',
         message: `401 Authentication Error - Expired Key (${MASK})`,
       }),
@@ -337,13 +331,13 @@ describe('messages and exits', () => {
 });
 
 describe('prompts', () => {
-  it('shows each pending prompt once, whoever asked, and counts them', () => {
+  it('shows each pending prompt once, wherever it is kept, and counts them', () => {
     r.observers.appEvent({ type: 'chat.item', item: prompt('q_1') });
     r.observers.appEvent({ type: 'chat.item', item: prompt('q_1') });
     r.observers.appEvent({
       type: 'procedure.log',
       procedureId: 'p_00000000000000aa',
-      item: prompt('q_2'),
+      item: { ...prompt('q_2'), procedureId: 'p_00000000000000aa' },
     });
     r.observers.appEvent({ type: 'chat.item', item: prompt('q_3', 'answered') });
     r.observers.appEvent({ type: 'chat.item', item: prompt('q_4', 'cancelled') });
@@ -352,7 +346,8 @@ describe('prompts', () => {
       item: { id: 'u_1', createdAt: 'x', type: 'user', text: 'hola' },
     });
     expect(r.observed).toMatchObject([
-      { type: 'prompt_shown', prompt: { itemId: 'q_1', agent: 'assistant', kind: 'confirm' } },
+      // Only agents ask: a prompt of an agent with no procedure yet is kept in the conversation.
+      { type: 'prompt_shown', prompt: { itemId: 'q_1', agent: 'procedure', kind: 'confirm' } },
       {
         type: 'prompt_shown',
         prompt: { itemId: 'q_2', agent: 'procedure', procedureId: 'p_00000000000000aa' },
@@ -362,10 +357,7 @@ describe('prompts', () => {
   });
 
   it('announces the prompts a restored profile comes with, once', () => {
-    r.observers.announcePending([
-      { owner: ASSISTANT_AGENT_ID, item: prompt('q_restored') },
-      { owner: 'p_00000000000000aa', item: prompt('q_other') },
-    ]);
+    r.observers.announcePending([{ item: prompt('q_restored') }, { item: prompt('q_other') }]);
     r.observers.appEvent({ type: 'chat.item', item: prompt('q_restored') });
     expect(r.observed.map((o) => (o as { prompt: { itemId: string } }).prompt.itemId)).toEqual([
       'q_restored',
@@ -616,10 +608,10 @@ describe('the leak check', () => {
     });
     r.observers.userMessage(`mi clave es ${PASSWORD}`);
     expect(leaked()).toEqual([
-      'tool arguments of browser_type (procedure-p_00000000000000aa)',
-      'result of browser_type (procedure-p_00000000000000aa)',
+      'tool arguments of browser_type (procedure-a_00000000000000aa)',
+      'result of browser_type (procedure-a_00000000000000aa)',
       'message of assistant',
-      'prompt of assistant',
+      'prompt of an agent',
       'message to the assistant',
     ]);
     expect(r.leaks.list().join('\n')).not.toContain(PASSWORD);
@@ -681,11 +673,10 @@ describe('the leak check', () => {
   });
 });
 
-describe('codemode', () => {
+describe('workflows', () => {
   const agent: AgentIdentity = { ...procedure, agentKey: 'procedure-a_00000000000000bb' };
-  delete (agent as { procedureId?: string }).procedureId;
 
-  it('makes a codemode agent’s bridge calls the classic tool calls they stand for', () => {
+  it('makes an agent’s bridge calls tool starts named by their method', () => {
     r.observers.bridgeCall({
       method: 'browser.loginClave',
       params: { method: 'permanente' },
@@ -713,14 +704,14 @@ describe('codemode', () => {
         o.type === 'tool_start' ? [o.agent, o.procedureId, o.tool, o.args] : o.type,
       ),
     ).toEqual([
-      ['procedure', 'p_00000000000000aa', 'browser_login_clave', { method: 'permanente' }],
-      ['procedure', undefined, 'document_read', { documentId: 'd_1' }],
+      ['procedure', 'p_00000000000000aa', 'browser.loginClave', { method: 'permanente' }],
+      ['procedure', undefined, 'vault.document', { documentId: 'd_1' }],
     ]);
     // Not the model's tool calls: the run's limits count `codemode` calls only.
     expect(r.observers.counters().toolCalls).toBe(0);
   });
 
-  it('names the codemode coordinator’s tools after the classic assistant’s', () => {
+  it('reports the coordinator’s tools under their own names', () => {
     for (const [id, tool] of [
       ['s1', 'agent_start'],
       ['s2', 'agent_message'],
@@ -728,13 +719,13 @@ describe('codemode', () => {
     ] as const)
       r.observers.agentEvent(assistant, { type: 'tool_start', toolCallId: id, tool, args: {} });
     expect(r.observed.map((o) => (o.type === 'tool_start' ? [o.agent, o.tool] : o.type))).toEqual([
-      ['assistant', 'procedure_start'],
-      ['assistant', 'procedure_message'],
+      ['assistant', 'agent_start'],
+      ['assistant', 'agent_message'],
       ['assistant', 'procedure_read'],
     ]);
   });
 
-  it('leaves out the classic agents’ calls, the workflow bookkeeping and the prompts', () => {
+  it('leaves out the workflow bookkeeping, the prompts and the agents’ credentials', () => {
     for (const method of [
       'workflow.memo',
       'workflows.list',
@@ -749,12 +740,6 @@ describe('codemode', () => {
         role: 'agent',
       });
     }
-    r.observers.bridgeCall({
-      method: 'browser.loginClave',
-      params: {},
-      agentId: 'p_00000000000000aa',
-      procedureId: 'p_00000000000000aa',
-    });
     expect(r.observed).toEqual([]);
   });
 

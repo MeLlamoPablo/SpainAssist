@@ -59,9 +59,10 @@ browserSuite('exfiltration', () => {
       expect(items).toEqual(
         expect.arrayContaining([
           ['browser', 'POST', COLLECTOR, '/beacon', true],
-          ['fetch_url', 'GET', STRANGER_HOST, '/recoge?dni=53918274H&otro=1', false],
-          ['fetch_url', 'GET', COLLECTOR, '/c?x=1', true],
-          ['run_script', 'POST', STRANGER_HOST, '/s', false],
+          // A workflow's requests have no tool of their own to name.
+          ['other', 'GET', STRANGER_HOST, '/recoge?dni=53918274H&otro=1', false],
+          ['other', 'GET', COLLECTOR, '/c?x=1', true],
+          ['other', 'POST', STRANGER_HOST, '/s', false],
         ]),
       );
       expect(items).toHaveLength(4);
@@ -88,14 +89,14 @@ browserSuite('exfiltration', () => {
       const toPortal = stack
         .of('net')
         .map((o) => o.record)
-        .find((r) => r.channel === 'run_script' && r.host === PORTAL && r.method === 'POST');
+        .find((r) => r.channel === 'other' && r.host === PORTAL && r.method === 'POST');
       expect(toPortal?.reqBody).toBe('dni=53918274H');
       expect(findings().some((f) => f.host === PORTAL)).toBe(false);
     });
 
     it('puts the request itself in the stream, before its finding, with the real URL', () => {
       const net = stack.of('net').map((o) => o.record);
-      const stranger = net.find((r) => r.host === STRANGER_HOST && r.channel === 'fetch_url');
+      const stranger = net.find((r) => r.host === STRANGER_HOST && r.method === 'GET');
       expect(stranger).toMatchObject({
         url: `https://${STRANGER_HOST}/recoge?dni=53918274H&otro=1`,
         route: 'unmapped',

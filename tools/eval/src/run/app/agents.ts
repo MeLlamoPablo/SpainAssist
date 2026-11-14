@@ -3,13 +3,13 @@
  * the eval host in place of the product's, pointed at the meter, with its own world.
  *
  * `buildAgentLaunch` is where the app hands over an agent's config, so it is where the run
- *   - points the model at the meter (`agentBaseUrl(<agent key>)`: `assistant`, `procedure-<id>`),
+ *   - points the model at the meter (`agentBaseUrl(<agent key>)`: `assistant`, `procedure-<agent id>`),
  *   - strips every research URL and key (the eval host answers web research itself),
  *   - writes this process' `HostEvalConfig` (one file and one net log per host process: `seq`
  *     numbers the records of one process) and launches the eval host bundle with it.
  * `createClient` is where it sees every `AgentEvent`: they are teed to the observers before the
  * app's own handlers run, and the clients are kept so `abort` can stop them all, whatever the app
- * is doing. Agents started later (a procedure's) go through the same two functions.
+ * is doing. Agents started later (the coordinator's) go through the same two functions.
  */
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,10 +39,9 @@ type AgentClientPort = ReturnType<AgentLib['createClient']>;
 
 /** Which agent a host process is, and where its files are. */
 export interface AgentIdentity {
-  /** The meter's key: `assistant`, or `procedure-<procedureId>`. */
+  /** The meter's key: `assistant`, or `procedure-<agent id>`. */
   agentKey: string;
   agent: AgentKind;
-  procedureId?: string;
   /** pi's session file of this agent: the lossless record of what it did. */
   sessionFile: string;
   /** Which launch of this agent this is (1 for the first; a restart is a new process). */
@@ -156,9 +155,9 @@ export class AgentFleet {
 
   private identify(config: AgentHostConfig): AgentIdentity {
     const { runDir } = this.options.spec;
-    // Codemode's coordinator is the chat's agent too; its other agents (`a_…`, `s_…`) are the
-    // procedure agents' counterparts, but their ids are no procedure's.
-    const assistant = config.role === 'assistant' || config.role === 'orchestrator';
+    // The coordinator is the chat's agent; every other agent (`a_…`, `s_…`) is a procedure agent
+    // in the rules' terms, though its id is no procedure's (docs/codemode.md).
+    const assistant = config.role === 'orchestrator';
     const agentKey = agentKeyOf(config.procedureId);
     const generation = (this.generations.get(agentKey) ?? 0) + 1;
     this.generations.set(agentKey, generation);
@@ -166,7 +165,6 @@ export class AgentFleet {
     return {
       agentKey,
       agent: assistant ? 'assistant' : 'procedure',
-      ...(assistant || config.role === 'agent' ? {} : { procedureId: config.procedureId }),
       sessionFile: config.sessionFile,
       generation,
       netlog: join(runDir, 'net', `host-${agentKey}${suffix}.jsonl`),

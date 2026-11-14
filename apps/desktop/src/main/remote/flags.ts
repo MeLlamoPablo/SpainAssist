@@ -35,7 +35,6 @@ export function featuresFromNames(enabled: Iterable<string>): FeatureFlags {
     dniePhone: !has('dniePhone') ? 'off' : dnieVariant === 'prerelease' ? 'prerelease' : 'release',
     mustUpdate: has('mustUpdate'),
     errorReports: has('errorReports'),
-    codemode: has('codemode'),
   };
 }
 

@@ -1,18 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createTestKeyProvider, Vault } from '@sa/vault';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PROCEDURE_HEADER } from '@sa/shared';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createTestApp, type TestApp } from '../testing/harness';
-import { withPersonalOptions } from './handlers';
 
 let app: TestApp;
 let procedureId: string;
+let agentId: string;
+/** An agent's token; `app.rpc` names the procedure it acts on, as a workflow does. */
 let token: string;
 
 beforeEach(async () => {
   app = await createTestApp();
-  ({ procedureId, token } = await app.procedureWithToken());
+  ({ procedureId, agentId, token } = await app.procedureWithToken());
 });
 afterEach(async () => {
   await app.close();
@@ -22,9 +23,9 @@ const CLAVE_LOGIN = 'https://clave-dninbrt.seg-social.gob.es/IPUC2/Login';
 
 describe('bridge: transport, auth and validation', () => {
   it('rejects missing/invalid tokens, browser origins, unknown methods and invalid params', async () => {
-    expect((await app.rpc('procedure.get', {}, undefined)).status).toBe(401);
-    expect((await app.rpc('procedure.get', {}, 'not-a-token')).status).toBe(401);
-    const fromPage = await app.rpc('procedure.get', {}, token, {
+    expect((await app.rpc('procs.get', { id: procedureId }, undefined)).status).toBe(401);
+    expect((await app.rpc('procs.get', { id: procedureId }, 'not-a-token')).status).toBe(401);
+    const fromPage = await app.rpc('procs.get', { id: procedureId }, token, {
       headers: { origin: 'https://evil.example' },
     });
     expect(fromPage.status).toBe(401);
@@ -32,158 +33,40 @@ describe('bridge: transport, auth and validation', () => {
       ok: false,
       error: { code: 'not_found' },
     });
-    const invalid = await app.rpc('procedure.update', { status: 'bogus' }, token);
+    const invalid = await app.rpc('procs.get', { id: 42 }, token);
     expect(invalid.status).toBe(400);
     expect(invalid.body.error?.code).toBe('bad_request');
-    const ok = await app.rpc('procedure.get', {}, token);
+    const ok = await app.rpc('procs.get', { id: procedureId }, token);
     expect(ok).toMatchObject({ status: 200, body: { ok: true, result: { id: procedureId } } });
   });
 
-  it('invalidates the previous token when a new one is issued, and on deletion', async () => {
-    const fresh = app.services.tokens.issue(procedureId);
-    expect((await app.rpc('procedure.get', {}, token)).status).toBe(401);
-    expect((await app.rpc('procedure.get', {}, fresh)).status).toBe(200);
-    await app.invoke('procedures.delete', procedureId);
-    expect((await app.rpc('procedure.get', {}, fresh)).status).toBe(401);
+  it('acts on the procedure the call names, which must exist', async () => {
+    const unknown = await app.rpc('browser.snapshot', {}, token, {
+      headers: { [PROCEDURE_HEADER]: 'p_0000000000000000' },
+    });
+    expect(unknown).toMatchObject({ status: 404, body: { error: { code: 'not_found' } } });
+    const none = await app.rpc('browser.snapshot', {}, token, {
+      headers: { [PROCEDURE_HEADER]: '' },
+    });
+    expect(none).toMatchObject({ status: 400, body: { error: { code: 'bad_request' } } });
+    expect((await app.rpc('browser.snapshot', {}, token)).body.ok).toBe(true);
+    // A procedure is not an agent: a token for its id reaches nothing.
+    const procedureToken = app.services.tokens.issue(procedureId);
+    expect((await app.rpc('procs.get', { id: procedureId }, procedureToken)).status).toBe(401);
   });
 
-  it('procedure.update replaces arrays and pushes the upsert', async () => {
-    const res = await app.rpc(
-      'procedure.update',
-      {
-        title: 'Renovación del DNI',
-        status: 'planned',
-        sources: [
-          { title: 'Sede', url: 'https://sede.policia.gob.es/dni' },
-          { title: 'Foro', url: 'https://foro.example.com/dni' },
-        ],
-      },
-      token,
-    );
-    expect(res.body.result.sources).toEqual([
-      { title: 'Sede', url: 'https://sede.policia.gob.es/dni' },
-      { title: 'Foro', url: 'https://foro.example.com/dni' },
-    ]);
-    expect(app.events.at(-1)).toMatchObject({
-      type: 'procedure.upserted',
-      procedure: { id: procedureId, title: 'Renovación del DNI', status: 'planned' },
-    });
+  it('invalidates the previous token when a new one is issued, and refuses deleted procedures', async () => {
+    const fresh = app.services.tokens.issue(agentId);
+    expect((await app.rpc('procs.get', { id: procedureId }, token)).status).toBe(401);
+    const freshCall = (method: string, params: unknown) =>
+      app.rpc(method, params, fresh, { headers: { [PROCEDURE_HEADER]: procedureId } });
+    expect((await freshCall('procs.get', { id: procedureId })).status).toBe(200);
+    await app.invoke('procedures.delete', procedureId);
+    expect((await freshCall('browser.snapshot', {})).status).toBe(404);
   });
 });
 
 describe('bridge: prompts', () => {
-  it('prompt.form waits for chat.respond and saves opted-in answers to the vault', async () => {
-    const call = app.rpc(
-      'prompt.form',
-      {
-        title: 'Tus datos',
-        fields: [
-          { key: 'name', label: 'Nombre', type: 'text', vaultKey: 'givenName' },
-          { key: 'phone', label: 'Teléfono', type: 'phone', vaultKey: 'phone' },
-          { key: 'ref', label: 'Referencia', type: 'text', vaultKey: 'custom.referencia' },
-        ],
-      },
-      token,
-    );
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    expect(app.services.procedures.get(procedureId)?.runtime.activity).toBe('needs_user');
-    const prompt = app.pendingPrompt(procedureId)!;
-    await app.invoke('chat.respond', prompt.id, {
-      kind: 'form',
-      values: { name: 'Lucía', phone: '600111222', ref: 'ABC123' },
-      dismissed: false,
-      savedToVault: ['name', 'ref'],
-    });
-    const res = await call;
-    expect(res.body).toEqual({
-      ok: true,
-      result: {
-        kind: 'form',
-        values: { name: 'Lucía', phone: '600111222', ref: 'ABC123' },
-        dismissed: false,
-        savedToVault: ['name', 'ref'],
-      },
-    });
-    expect(app.vault.getPersonal('givenName')).toMatchObject({ value: 'Lucía', source: 'form' });
-    expect(app.vault.getPersonal('custom.referencia')).toMatchObject({ label: 'Referencia' });
-    expect(app.vault.getPersonal('phone')).toBeUndefined();
-    const notice = app.services.conversation.transcript().find((i) => i.type === 'notice');
-    expect(notice).toMatchObject({
-      text: 'Guardado en Mis datos: Nombre, Referencia.',
-      procedureId,
-    });
-    expect(app.events.some((e) => e.type === 'vault.changed')).toBe(true);
-  });
-
-  it('prompt.form saves what it can and tells the agent what the vault refused', async () => {
-    const realVault = await Vault.open(
-      join(app.paths.userData, 'form-vault'),
-      createTestKeyProvider('form'),
-    );
-    vi.spyOn(app.vault, 'setPersonal').mockImplementation((items, source) =>
-      realVault.setPersonal(items, source),
-    );
-    const call = app.rpc(
-      'prompt.form',
-      {
-        title: 'Tus datos',
-        fields: [
-          { key: 'name', label: 'Nombre', type: 'text', vaultKey: 'givenName' },
-          { key: 'born', label: 'Nacimiento', type: 'text', vaultKey: 'birthDate' },
-        ],
-      },
-      token,
-    );
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
-      kind: 'form',
-      values: { name: 'Lucía', born: 'ayer' },
-      dismissed: false,
-      savedToVault: ['name', 'born'],
-      // Reported by the form's document scan.
-      vaultErrors: [{ key: 'custom.notes', reason: 'label_required' }],
-    });
-    const res = await call;
-    expect(res.body).toMatchObject({
-      ok: true,
-      result: {
-        values: { name: 'Lucía', born: 'ayer' },
-        savedToVault: ['name'],
-        vaultErrors: [
-          { key: 'custom.notes', reason: 'label_required' },
-          { key: 'birthDate', reason: 'invalid_date' },
-        ],
-      },
-    });
-    expect(realVault.getPersonal('givenName')).toMatchObject({ value: 'Lucía' });
-    expect(realVault.getPersonal('birthDate')).toBeUndefined();
-    const notice = app.services.conversation.transcript().find((i) => i.type === 'notice');
-    expect(notice).toMatchObject({ text: 'Guardado en Mis datos: Nombre.' });
-  });
-
-  it('never returns secret form values to the agent', async () => {
-    const call = app.rpc(
-      'prompt.form',
-      {
-        title: 'Secret',
-        fields: [{ key: 'password', label: 'Password', type: 'secret' }],
-      },
-      token,
-    );
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
-      kind: 'form',
-      values: { password: 'private-password' },
-      dismissed: false,
-      savedToVault: [],
-    });
-    const result = await call;
-    expect(JSON.stringify(result.body)).not.toContain('private-password');
-    expect(JSON.stringify(app.services.conversation.transcript())).not.toContain(
-      'private-password',
-    );
-  });
-
   describe('prompt.credential', () => {
     /** The agent asks for a credential; the renderer answers with `credentialId`. */
     async function askFor(credential: 'dnie', credentialId: string | undefined) {
@@ -229,7 +112,7 @@ describe('bridge: prompts', () => {
     });
   });
 
-  it('stopping the procedure cancels its pending prompt', async () => {
+  it('deleting the procedure cancels its pending prompt', async () => {
     const call = app.rpc(
       'prompt.confirm',
       {
@@ -240,8 +123,8 @@ describe('bridge: prompts', () => {
       token,
     );
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    await app.invoke('procedures.stop', procedureId);
-    expect((await call).body.ok).toBe(false);
+    await app.invoke('procedures.delete', procedureId);
+    expect((await call).body).toMatchObject({ ok: false, error: { code: 'user_rejected' } });
     expect(app.services.prompts.pendingCount(procedureId)).toBe(0);
   });
 
@@ -266,39 +149,6 @@ describe('bridge: prompts', () => {
         .some((i) => i.type === 'prompt' && i.status === 'cancelled'),
     );
     expect(app.services.procedures.get(procedureId)?.runtime.activity).toBe('idle');
-  });
-
-  it('procedures.stop cancels pending prompts and the agent gets user_rejected', async () => {
-    const call = app.rpc(
-      'prompt.userAction',
-      { actionKind: 'captcha', title: 'Captcha', message: 'Resuelve el captcha' },
-      token,
-    );
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    await app.invoke('procedures.stop', procedureId);
-    const res = await call;
-    expect(res).toMatchObject({
-      status: 409,
-      body: { ok: false, error: { code: 'user_rejected' } },
-    });
-  });
-
-  it('saves the browser capture when a procedure is stopped, in capture mode only', async () => {
-    const saved = (a: TestApp, id: string) =>
-      a.browser.calls.some((c) => c.method === 'finishCapture' && c.procedureId === id);
-    await app.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, token);
-    await app.invoke('procedures.stop', procedureId);
-    expect(saved(app, procedureId)).toBe(false);
-
-    const capturing = await createTestApp({ env: { browserCapture: true } });
-    try {
-      const own = await capturing.procedureWithToken();
-      await capturing.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, own.token);
-      await capturing.invoke('procedures.stop', own.procedureId);
-      await capturing.waitFor(() => saved(capturing, own.procedureId));
-    } finally {
-      await capturing.close();
-    }
   });
 
   it('only exposes the browser after the user clicks during a pending help request', async () => {
@@ -338,23 +188,29 @@ describe('bridge: prompts', () => {
 
   it.each([false, true])('cancels help safely (user opened browser: %s)', async (opened) => {
     await app.rpc('browser.open', { url: 'https://pasarela.clave.gob.es/' }, token);
-    const call = app.rpc(
-      'prompt.userAction',
-      {
-        actionKind: 'captcha',
-        title: 'Captcha',
-        message: 'Resuelve el captcha',
-      },
-      token,
-    );
+    // The agent's run is aborted (stopped, or its process ended): its request closes.
+    const controller = new AbortController();
+    const call = app
+      .rpc(
+        'prompt.userAction',
+        {
+          actionKind: 'captcha',
+          title: 'Captcha',
+          message: 'Resuelve el captcha',
+        },
+        token,
+        { signal: controller.signal },
+      )
+      .catch((err: Error) => err);
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
     expect(app.browser.calls.some((c) => c.method === 'show')).toBe(false);
     if (opened) {
       await app.invoke('browser.show', procedureId);
       expect(app.browser.calls.at(-1)?.method).toBe('show');
     }
-    await app.invoke('procedures.stop', procedureId);
-    expect((await call).body.error?.code).toBe('user_rejected');
+    controller.abort();
+    expect(await call).toBeInstanceOf(Error);
+    await app.waitFor(() => !app.pendingPrompt(procedureId));
     expect(app.browser.calls.at(-1)).toMatchObject({ method: 'hide', procedureId });
     await app.invoke('browser.show', procedureId);
     expect(app.browser.calls.at(-1)?.method).toBe('hide');
@@ -418,7 +274,7 @@ describe('bridge: vault', () => {
     });
   });
 
-  it('keeps the DNI CAN from agents: no reading, saving, typing or asking for it', async () => {
+  it('keeps the DNI CAN from agents: no reading, saving or typing it', async () => {
     await app.vault.setPersonal(
       [
         { key: 'dniNumber', value: '12345678Z' },
@@ -446,15 +302,9 @@ describe('bridge: vault', () => {
     expect(app.vault.getPersonal('dniAccessNumber')?.value).toBe('654321');
     await refused('browser.fillFromVault', { ref: 'e1', key: 'dniAccessNumber' });
     expect(app.browser.calls.some((c) => c.method === 'type')).toBe(false);
-    for (const field of [
-      { key: 'can', label: 'CAN', type: 'text', vaultKey: 'dniAccessNumber' },
-      { key: 'dniAccessNumber', label: 'CAN', type: 'text' },
-    ])
-      await refused('prompt.form', { title: 'Tu DNI', fields: [field] });
-    expect(app.pendingPrompt(procedureId)).toBeUndefined();
   });
 
-  it('keeps the DNI PIN from agents: no reading, typing, saving or asking for it', async () => {
+  it('keeps the DNI PIN from agents: no reading, typing or saving it', async () => {
     const dnie = await app.invoke('vault.addDnie');
     // A PIN the user wrote down as personal data (Mis datos allows custom fields) is hidden too.
     await app.vault.setPersonal(
@@ -488,13 +338,6 @@ describe('bridge: vault', () => {
     for (const key of ['custom.pin', 'custom.dnie-pin', 'custom.pin_dnie'])
       await refused('vault.save', { items: [{ key, label: 'PIN', value: '87654321' }] });
     expect(await app.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie' });
-    // Asking: no form field for it.
-    for (const field of [
-      { key: 'pin', label: 'PIN del DNI', type: 'secret' },
-      { key: 'codigo', label: 'PIN', type: 'text', vaultKey: 'custom.pin_dnie' },
-    ])
-      await refused('prompt.form', { title: 'Tu DNI', fields: [field] });
-    expect(app.pendingPrompt(procedureId)).toBeUndefined();
     // Words that merely contain "pin" are fine.
     const saved = await app.rpc(
       'vault.save',
@@ -1314,40 +1157,5 @@ describe('bridge: Touch ID', () => {
     // No paired phone here: the login stops after the consent, never at Touch ID.
     expect((await call).body.error?.code).not.toBe('user_rejected');
     expect(prompts).toBe(0);
-  });
-});
-
-describe('bridge: personal select fields in forms', () => {
-  it('shows marital status as a select of the vault options', () => {
-    const [status, since] = withPersonalOptions(
-      [
-        {
-          key: 'estado',
-          label: 'Estado civil',
-          type: 'text',
-          required: true,
-          vaultKey: 'maritalStatus',
-          defaultValue: 'Casada',
-        },
-        {
-          key: 'boda',
-          label: 'Fecha de la boda',
-          type: 'date',
-          required: true,
-          visibleWhen: { field: 'estado', values: ['casado'] },
-        },
-      ],
-      'es',
-    );
-    expect(status).toMatchObject({ type: 'select', defaultValue: 'married' });
-    expect(status?.options?.map((o) => o.value)).toEqual([
-      'single',
-      'married',
-      'separated',
-      'divorced',
-      'widowed',
-    ]);
-    expect(status?.options?.[0]?.label).toBe('Soltero/a');
-    expect(since?.visibleWhen?.values).toEqual(['married']);
   });
 });

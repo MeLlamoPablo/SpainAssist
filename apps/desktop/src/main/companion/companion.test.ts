@@ -241,7 +241,7 @@ describe('DNI signatures with the phone', () => {
     await a.waitFor(() => received.some((m) => m.type === 'sign.cancel'));
   });
 
-  it('explains a blocked PIN, forgets the saved one, and a procedure stop cancels', async () => {
+  it('explains a blocked PIN, forgets the saved one, and deleting the procedure cancels', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
     await a.invoke('vault.setDniePin', dnie.id, PIN);
     const approval = a.services.browser.approveSignature(procedureId, summary);
@@ -269,7 +269,7 @@ describe('DNI signatures with the phone', () => {
       stage: 'unlock',
       unlock: { can: false, pin: true },
     });
-    await a.invoke('procedures.stop', procedureId);
+    await a.invoke('procedures.delete', procedureId);
     expect(await stopped).toBeNull();
   });
 
@@ -1061,7 +1061,7 @@ describe('without the dnie-phone feature flag', () => {
     expect(a.browser.certificates).toEqual([]);
   });
 
-  it('tells procedure agents the DNI is off (prompt and tools)', async () => {
+  it('tells agents the DNI is off (prompt and tools)', async () => {
     const { app: a } = await setupOff();
     const provider = {
       baseUrl: 'http://127.0.0.1:8789/v1',
@@ -1069,11 +1069,11 @@ describe('without the dnie-phone feature flag', () => {
       model: 'mock-model',
     } as const;
     expect((await a.invoke('providers.setCustom', provider)).ok).toBe(true);
-    const { procedureId } = await a.startProcedure();
-    expect(a.agentFor(procedureId)?.launch.config).toMatchObject({ dniePhone: false });
+    const { agentId } = await a.startProcedure();
+    expect(a.agentFor(agentId)?.launch.config).toMatchObject({ dniePhone: false });
     await a.restart({ dniePhone: 'release' });
     await a.say('Otro trámite');
-    const { procedureId: next } = await a.startProcedure('Otro trámite');
+    const { agentId: next } = await a.startProcedure('Otro trámite');
     expect(a.agentFor(next)?.launch.config).toMatchObject({ dniePhone: true });
   });
 });
@@ -1093,19 +1093,19 @@ describe('in the prerelease of the dnie-phone feature flag', () => {
       model: 'mock-model',
     } as const;
     expect((await a.invoke('providers.setCustom', provider)).ok).toBe(true);
-    const { procedureId } = await a.startProcedure();
-    expect(a.agentFor(procedureId)?.launch.config).toMatchObject({ dniePhone: false });
+    const { agentId } = await a.startProcedure();
+    expect(a.agentFor(agentId)?.launch.config).toMatchObject({ dniePhone: false });
 
     // "Ya tengo la app, habilitar DNI" saves the DNI.
     const dnie = await a.invoke('vault.addDnie');
     expect((await a.invoke('vault.overview')).credentials).toMatchObject([{ id: dnie.id }]);
     await a.say('Otro trámite');
-    const { procedureId: next } = await a.startProcedure('Otro trámite');
+    const { agentId: next } = await a.startProcedure('Otro trámite');
     expect(a.agentFor(next)?.launch.config).toMatchObject({ dniePhone: true });
 
     await a.invoke('vault.deleteCredential', dnie.id);
     await a.say('Un trámite más');
-    const { procedureId: last } = await a.startProcedure('Un trámite más');
+    const { agentId: last } = await a.startProcedure('Un trámite más');
     expect(a.agentFor(last)?.launch.config).toMatchObject({ dniePhone: false });
   });
 });

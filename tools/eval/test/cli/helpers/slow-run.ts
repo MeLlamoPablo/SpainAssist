@@ -1,11 +1,11 @@
 /**
  * `eval` with a scripted model that takes a minute to answer: the stand-in for a long run that
  * `real-run.test.ts` interrupts. Run through tsx like the real entry (`src/cli.ts`); the scenario
- * source is the only difference. With `SA_EVAL_TEST_SLOW=browser` the procedure agent opens the
- * mock's page in Chromium first and then waits: a run interrupted while the browser is up.
+ * source is the only difference. With `SA_EVAL_TEST_SLOW=browser` the agent's workflow opens the
+ * mock's page in Chromium first and then the agent waits: a run interrupted while the browser is up.
  */
 import { main } from '../../../src/cli/main';
-import { INFO_URL } from '../../../src/scenarios/procedure';
+import { AGENT, COORDINATOR, INFO_URL, workflow } from '../../../src/scenarios';
 
 const slow = { name: 'slow', fallback: { text: 'Un momento...', delayMs: 60_000 } };
 
@@ -13,34 +13,45 @@ const browserThenWait = {
   name: 'browser-then-wait',
   rules: [
     {
-      id: 'assistant-starts',
-      when: { hasTool: '^procedure_start$', lastUser: '^sácame', turn: 0 },
+      id: 'coordinator-starts',
+      when: { ...COORDINATOR, lastUser: 'sácame', toolCalled: { name: 'agent_start', atMost: 0 } },
       reply: {
         toolCalls: [
           {
             id: 'call_start',
-            name: 'procedure_start',
-            arguments: { title: 'Vida laboral', brief: 'Saca la vida laboral del usuario.' },
+            name: 'agent_start',
+            arguments: {
+              status: 'Sacando tu vida laboral…',
+              brief: 'Saca la vida laboral del usuario.',
+            },
           },
         ],
       },
     },
     {
-      id: 'assistant-says',
-      when: { hasTool: '^procedure_start$', lastTool: 'procedure_start' },
+      id: 'coordinator-says',
+      when: { ...COORDINATOR, lastTool: 'agent_start' },
       reply: { text: 'Empiezo con tu vida laboral.' },
     },
     {
-      id: 'procedure-opens',
-      when: { hasTool: '^procedure_update$', state: { p: null } },
+      id: 'agent-opens',
+      when: { ...AGENT, state: { p: null } },
       set: { p: 1 },
       reply: {
-        toolCalls: [{ id: 'call_open', name: 'browser_open', arguments: { url: INFO_URL } }],
+        toolCalls: [
+          workflow(
+            'vida-laboral',
+            `  await api.procedures.getOrCreate({ id: 'vida-laboral', title: 'Vida laboral' });
+  const page = await api.browser.currentPage();
+  await page.goto('${INFO_URL}');
+  return 'abierta';`,
+          ),
+        ],
       },
     },
     {
-      id: 'procedure-waits',
-      when: { hasTool: '^procedure_update$', state: { p: 1 } },
+      id: 'agent-waits',
+      when: { ...AGENT, state: { p: 1 } },
       reply: { text: 'Un momento...', delayMs: 60_000 },
     },
   ],

@@ -6,21 +6,14 @@ import {
   type CredentialPrompt,
   type CredentialSummary,
   credentialAllowedOn,
-  type FormField,
-  type FormPrompt,
   type Language,
-  matchPersonalOption,
-  type PersonalDataInput,
-  PersonalFieldKey,
-  type PersonalSaveIssue,
   type PhoneCallPrompt,
   type PromptResponse,
   personalFieldDef,
   type UserActionPrompt,
 } from '@sa/shared';
 import type { BrowserHolder } from '../browser/holder';
-import { type PromptManager, redactResponse } from '../chat/prompts';
-import type { Coordinator } from '../conversation/coordinator';
+import type { PromptManager } from '../chat/prompts';
 import type { ConversationService } from '../conversation/service';
 import { BridgeError, SIGN_IN_ENDED_MESSAGE, SignInEndedError } from '../core/errors';
 import type { EventBus } from '../core/events';
@@ -28,16 +21,11 @@ import { t } from '../core/i18n';
 import { type Logger, truncate } from '../core/logger';
 import { errorMessage, hostOf } from '../core/util';
 import type { MediaStore } from '../media/store';
-import { locateMapForm, type PlaceLookup, type PlaceResults } from '../places/resolve-form';
 import type { Biometric, BrowserPort, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
 import type { ProviderManager } from '../providers/manager';
 import type { FeedbackService } from '../remote/feedback';
-import { setPersonalPartial } from '../vault/partial';
-import type { BridgeContext, ClassicHandlers } from './server';
-
-/** How long a map form that was not shown keeps its lookup results for a retry. */
-const RETRY_PLACES_MS = 10 * 60_000;
+import type { BridgeContext, CapabilityHandlers } from './server';
 
 /** Largest saved document `vault.document` sends to an agent (it travels base64 over the bridge). */
 const MAX_READ_DOCUMENT_BYTES = 25 * 1024 * 1024;
@@ -45,7 +33,6 @@ const MAX_READ_DOCUMENT_BYTES = 25 * 1024 * 1024;
 export interface BridgeHandlerDeps {
   procedures: ProcedureService;
   conversation: ConversationService;
-  coordinator: Pick<Coordinator, 'start' | 'message' | 'stop' | 'cancel'>;
   prompts: PromptManager;
   vault: () => VaultPort;
   browser: BrowserHolder;
@@ -61,7 +48,6 @@ export interface BridgeHandlerDeps {
   certificateOrigins: readonly string[];
   logger: Logger;
   lang: () => Language;
-  placeLookup: PlaceLookup;
   /**
    * DNI with the phone (`dnie-phone` feature flag). Off: agents never see a saved `dnie`
    * credential, and using one fails with an explanation.
@@ -96,102 +82,6 @@ function refuseHiddenKey(key: string | undefined): void {
   );
 }
 
-/**
- * Fields saved under a personal `select` key (sex, marital status) become a select with that
- * key's own options, so the answer is always a value the vault accepts. Lists too long for a
- * form (nationality) stay as the agent wrote them; the vault still matches labels on save.
- */
-export function withPersonalOptions(fields: FormField[], lang: Language): FormField[] {
-  const converted = new Map<string, NonNullable<ReturnType<typeof personalFieldDef>>>();
-  const mapped = fields.map((field) => {
-    const def = field.vaultKey ? personalFieldDef(field.vaultKey) : undefined;
-    if (def?.input !== 'select' || !def.options || def.options.length > 50) return field;
-    if (field.type !== 'text' && field.type !== 'select') return field;
-    converted.set(field.key, def);
-    const defaultValue = field.defaultValue && matchPersonalOption(def, field.defaultValue)?.value;
-    const { defaultValue: _, ...rest } = field;
-    return {
-      ...rest,
-      type: 'select' as const,
-      options: def.options.map((o) => ({ value: o.value, label: o.label[lang] })),
-      ...(defaultValue ? { defaultValue } : {}),
-    };
-  });
-  return mapped.map((field) => {
-    const def = field.visibleWhen && converted.get(field.visibleWhen.field);
-    if (!def || !field.visibleWhen) return field;
-    const values = field.visibleWhen.values.flatMap((v) => {
-      const option = matchPersonalOption(def, v);
-      return option ? [option.value] : [];
-    });
-    return values.length ? { ...field, visibleWhen: { ...field.visibleWhen, values } } : field;
-  });
-}
-
-/**
- * Shared by live bridge requests and forms restored after an app restart. Saves what it can and
- * returns the rejected items, so the agent hears about them instead of a silent failure.
- */
-export async function saveFormAnswers(
-  deps: Pick<BridgeHandlerDeps, 'vault' | 'events' | 'conversation' | 'logger' | 'lang'>,
-  owner: string,
-  prompt: FormPrompt,
-  response: Extract<PromptResponse, { kind: 'form' }>,
-): Promise<PersonalSaveIssue[]> {
-  const items: (PersonalDataInput & { label?: string })[] = [];
-  for (const key of response.savedToVault) {
-    const field = prompt.fields.find((f) => f.key === key);
-    const value = response.values?.[key];
-    if (!field?.vaultKey || typeof value !== 'string' || !value.trim()) continue;
-    if (field.type === 'secret' || field.type === 'document') continue;
-    if (!PersonalFieldKey.safeParse(field.vaultKey).success) continue;
-    items.push({
-      key: field.vaultKey,
-      value: value.trim(),
-      ...(field.vaultKey.startsWith('custom.') ? { label: field.label } : {}),
-    });
-  }
-  if (!items.length) return [];
-  try {
-    const { saved, rejected } = await setPersonalPartial(deps.vault(), items, 'form', deps.logger);
-    if (!saved.length) return rejected;
-    deps.events.emit({ type: 'vault.changed' });
-    const savedKeys = new Set(saved.map((item) => item.key));
-    const labels = items
-      .filter((item) => savedKeys.has(item.key))
-      .map((item) => personalLabel(item.key, deps.lang(), item.label))
-      .join(', ');
-    deps.conversation.addNotice(
-      'info',
-      t(deps.lang(), 'savedToVault', { labels }),
-      owner === ASSISTANT_AGENT_ID ? undefined : owner,
-    );
-    return rejected;
-  } catch (err) {
-    deps.logger.warn('could not save form answers', { error: errorMessage(err) });
-    return items.map((item) => ({ key: item.key, reason: 'save_failed' }));
-  }
-}
-
-/** Adds save failures to a form response; `savedToVault` keeps only what was really saved. */
-export function withVaultErrors(
-  prompt: FormPrompt,
-  response: Extract<PromptResponse, { kind: 'form' }>,
-  errors: PersonalSaveIssue[],
-): Extract<PromptResponse, { kind: 'form' }> {
-  const all = [...(response.vaultErrors ?? []), ...errors].slice(0, 50);
-  if (!all.length) return response;
-  const failed = new Set(errors.map((e) => e.key));
-  return {
-    ...response,
-    savedToVault: response.savedToVault.filter((key) => {
-      const vaultKey = prompt.fields.find((f) => f.key === key)?.vaultKey;
-      return !vaultKey || !failed.has(vaultKey);
-    }),
-    vaultErrors: all,
-  };
-}
-
 function isExpired(c: CredentialSummary): boolean {
   const validTo = c.certificate?.validTo;
   return !!validTo && Date.parse(validTo) < Date.now();
@@ -219,20 +109,13 @@ function certificateSiteBlock(origin: URL): string | null {
  * Implementations of every host-bridge method (see @sa/shared bridge.ts). Each runs for the
  * procedure identified by the caller's token. Secrets never travel back to the agent.
  */
-export function createBridgeHandlers(deps: BridgeHandlerDeps): ClassicHandlers {
+export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandlers {
   const lang = () => deps.lang();
   const approvals = new Map<string, number>();
   /** Per procedure: origins outside the official list where the user allowed certificate logins. */
   const certificateSites = new Map<string, Set<string>>();
   /** "procedureId origin" of unlisted sites the agent tried the DNI on: allowing one says DNI. */
   const dnieSiteRequests = new Set<string>();
-  /**
-   * Lookup results of each procedure's last map form that was not shown (an address not found,
-   * the service down), so the retry only looks up the addresses that changed. Memory only, and
-   * dropped by the next form: Mapbox results may not be stored.
-   */
-  const retryPlaces = new Map<string, { until: number; places: PlaceResults }>();
-
   async function browserCall<T>(fn: (b: BrowserPort) => Promise<T>): Promise<T> {
     try {
       return await fn(deps.browser.get());
@@ -278,13 +161,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): ClassicHandlers {
         'The DNI through the phone is not available in this version of the app. Log in with Cl@ve or a digital certificate (.p12) instead, or tell the user which methods this site accepts.',
       );
     return credential;
-  }
-
-  function requireProcedure(id: string) {
-    const procedure = deps.procedures.get(id);
-    if (!procedure)
-      throw new BridgeError('not_found', 'No such procedure. Call procedure_list to see them.');
-    return procedure;
   }
 
   /**
@@ -457,75 +333,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): ClassicHandlers {
   }
 
   return {
-    // --- procedure ---------------------------------------------------------------------------
-    'procedure.get': async (_params, ctx) =>
-      structuredClone(deps.procedures.require(ctx.procedureId)),
-    'procedure.update': async (params, ctx) =>
-      structuredClone(deps.procedures.applyUpdate(ctx.procedureId, params)),
-
-    // --- procedures (assistant) --------------------------------------------------------------
-    'procedures.list': async (params) => ({
-      procedures: deps.procedures.briefs(params.includeArchived),
-    }),
-    'procedures.read': async (params) => structuredClone(requireProcedure(params.procedureId)),
-    'procedures.start': async (params) => {
-      const procedure = await deps.coordinator.start(params.title, params.brief);
-      return { procedureId: procedure.id, title: procedure.title };
-    },
-    'procedures.message': async (params) => {
-      requireProcedure(params.procedureId);
-      return deps.coordinator.message(params.procedureId, params.message, params.urgent);
-    },
-    'procedures.respond': async (params) => {
-      requireProcedure(params.procedureId);
-      await deps.prompts.respondForProcedure(params.procedureId, params.promptId, params.values);
-      return { answered: params.values !== undefined, dismissed: params.values === undefined };
-    },
-    'procedures.stop': async (params) => {
-      requireProcedure(params.procedureId);
-      await deps.coordinator.stop(params.procedureId);
-      return { stopped: true };
-    },
-    'procedures.cancel': async (params) => {
-      requireProcedure(params.procedureId);
-      return { cancelled: await deps.coordinator.cancel(params.procedureId, params.reason) };
-    },
-
     // --- prompts -----------------------------------------------------------------------------
-    'prompt.form': async (params, ctx) => {
-      for (const field of params.fields) {
-        refuseHiddenKey(field.key);
-        refuseHiddenKey(field.vaultKey);
-      }
-      const prompt: FormPrompt = {
-        kind: 'form',
-        ...params,
-        fields: withPersonalOptions(params.fields, lang()),
-      };
-      const retry = retryPlaces.get(ctx.procedureId);
-      retryPlaces.delete(ctx.procedureId);
-      const places: PlaceResults = retry && retry.until > Date.now() ? retry.places : new Map();
-      let mapPins: Awaited<ReturnType<typeof locateMapForm>>;
-      try {
-        mapPins = await locateMapForm(prompt, deps.placeLookup, ctx.signal, places);
-      } catch (err) {
-        if (places.size && !ctx.signal.aborted)
-          retryPlaces.set(ctx.procedureId, { until: Date.now() + RETRY_PLACES_MS, places });
-        throw err;
-      }
-      if ([...mapPins.values()].includes(null))
-        deps.logger.info('map form shown without a map: lookups used up', {
-          procedureId: ctx.procedureId,
-        });
-      const response = await deps.prompts.ask(ctx.procedureId, prompt, {
-        signal: ctx.signal,
-        mapPins,
-      });
-      if (response.kind !== 'form') throw new BridgeError('internal', 'Unexpected response.');
-      const errors = await saveFormAnswers(deps, ctx.procedureId, prompt, response);
-      return redactResponse(prompt, withVaultErrors(prompt, response, errors)) as typeof response;
-    },
-
     'prompt.confirm': async (params, ctx) => {
       const { site, sources, ...rest } = params;
       if (rest.confirmKind === 'certificate_site') return confirmCertificateSite(ctx, params);

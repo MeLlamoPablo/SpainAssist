@@ -44,13 +44,9 @@ export function createAppPaths(userData: string, tempRoot = tmpdir()): AppPaths 
 export interface ProcedurePaths {
   dir: string;
   procedureFile: string;
-  /** Activity log of the procedure's agent (ChatItem[]). */
+  /** The procedure's questions to the user and notices (ChatItem[]). */
   transcriptFile: string;
-  /** pi session file (JSONL), resumed when the agent restarts. */
-  sessionFile: string;
   mediaDir: string;
-  /** Working directory of the agent process (empty, app-owned). */
-  workDir: string;
 }
 
 export function procedurePaths(proceduresDir: string, id: string): ProcedurePaths {
@@ -59,27 +55,25 @@ export function procedurePaths(proceduresDir: string, id: string): ProcedurePath
     dir,
     procedureFile: join(dir, 'procedure.json'),
     transcriptFile: join(dir, 'transcript.json'),
-    sessionFile: join(dir, 'session.jsonl'),
     mediaDir: join(dir, 'media'),
-    workDir: join(dir, 'work'),
   };
 }
 
 /**
- * Versions of the chat's agent. The chat the user sees (transcript.json) is one for every version;
- * the model's context (its pi session) is not: a new version starts fresh, so an agent never reads
- * back tool calls of tools it no longer has.
- *   1: the classic assistant.
- *   2: the codemode coordinator, which only delegates with plain tools (docs/codemode.md).
+ * The version of the chat's agent. The chat the user sees (transcript.json) is one for every
+ * version; the model's context (its pi session) is not: a new version starts fresh, so an agent
+ * never reads back tool calls of tools it no longer has.
+ *   1: the classic assistant (`session.jsonl`, no longer read).
+ *   2: the coordinator, which only delegates with plain tools (docs/codemode.md).
  */
-export const CHAT_VERSIONS = { classic: 1, codemode: 2 } as const;
+export const CHAT_VERSION = 2;
 
 /** Files of the assistant: assistant/... */
 export function assistantPaths(assistantDir: string) {
   return {
     dir: assistantDir,
     transcriptFile: join(assistantDir, 'transcript.json'),
-    /** The pi session of a version of the chat's agent (`CHAT_VERSIONS`). */
+    /** The pi session of a version of the chat's agent (`CHAT_VERSION`). */
     sessionFile: (version: number) =>
       join(assistantDir, version === 1 ? 'session.jsonl' : `session-v${version}.jsonl`),
     workDir: join(assistantDir, 'work'),

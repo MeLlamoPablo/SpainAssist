@@ -1,6 +1,6 @@
 /**
  * Builds a tiny, valid PDF (Helvetica, WinAnsiEncoding) with one text line per entry, one page
- * per array. Used as the PDF fixture for fetch_url tests. A `{ drawing }` page has only drawing
+ * per array. Used as the PDF fixture for fetchDocument tests. A `{ drawing }` page has only drawing
  * operators and no text, like a scanned page.
  */
 function escapePdfText(text: string): string {

@@ -152,13 +152,6 @@ const RUN_FLAG_OPTIONS: readonly OptionSpec[] = [
       'synthetic accounts only.',
   },
   {
-    name: 'codemode',
-    type: 'boolean',
-    description:
-      "Turn on the app's codemode feature flag (docs/codemode.md): agents write workflows, and " +
-      'the simulated user answers their interfaces.',
-  },
-  {
     name: 'keep-world',
     type: 'boolean',
     description: "Leave the run's world on the SpainBench server (it is deleted by default).",

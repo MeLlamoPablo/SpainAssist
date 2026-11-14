@@ -288,7 +288,7 @@ describe('Exa tools', () => {
 });
 
 describe('web research per provider kind', () => {
-  const base = { procedureId: 'p1', sessionFile: '/tmp/p1.jsonl', language: 'es' };
+  const base = { role: 'agent', procedureId: 'p1', sessionFile: '/tmp/p1.jsonl', language: 'es' };
   const config = (model: Record<string, unknown>, research: Record<string, unknown> = {}) =>
     parseHostConfig({ ...base, model, research });
   const keyServerUrl = 'https://keys.example.org';
@@ -325,14 +325,14 @@ describe('web research per provider kind', () => {
     expect(promptResearch('chatgpt')).toBe(WEB_RESEARCH_TOOL_NAME);
   });
 
-  it('the assistant and providers without research get none', async () => {
-    const assistant = parseHostConfig({
+  it('the coordinator and providers without research get none', async () => {
+    const coordinator = parseHostConfig({
       ...base,
-      role: 'assistant',
+      role: 'orchestrator',
       model: { provider: 'anthropic', id: 'c' },
       research: { exa: true },
     });
-    expect(await researchBackend(assistant, yes)).toBeUndefined();
+    expect(await researchBackend(coordinator, yes)).toBeUndefined();
     expect(await researchBackend(config({ provider: 'openai', id: 'g' }), no)).toBeUndefined();
     expect(await researchBackend(config({ provider: 'anthropic', id: 'c' }), no)).toBeUndefined();
     expect(promptResearch(undefined)).toBeUndefined();

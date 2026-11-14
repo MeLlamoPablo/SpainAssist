@@ -2,7 +2,7 @@
  * `HostHooks` of the eval host (packages/agent/src/host/hooks.ts): what makes the real agent host
  * believe in a world that is a SpainBench mock.
  *
- *   egress       `createWorldFetch` for `fetch_url`, `run_script` and `boe_search`: every mapped host
+ *   egress       `createWorldFetch` for workflows' `api.fetchUrl`, `api.fetch` and `api.boe`: every mapped host
  *                is served by SpainBench with the real URL, `Host` and errors; every other host fails
  *                like a dead domain. DNS for the product's SSRF guard answers a documentation
  *                address for every name, so the guard keeps working and nothing is resolved for real.

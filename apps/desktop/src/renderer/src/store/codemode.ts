@@ -2,8 +2,8 @@ import type { CodemodeAgentInfo, WorkflowInfo } from '@sa/shared';
 import { create } from 'zustand';
 
 /**
- * Codemode (`codemode` flag): the agents behind the progress meter and the workflows whose
- * interfaces wait for the user ("Para ti"). Kept from `codemode.state` and its push events.
+ * Codemode: the agents behind the progress meter and the workflows whose interfaces wait for the
+ * user ("Para ti"). Kept from `codemode.state` and its push events.
  */
 interface CodemodeState {
   agents: Record<string, CodemodeAgentInfo>;

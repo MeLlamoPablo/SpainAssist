@@ -8,29 +8,26 @@ import { WorkflowEngine } from '../codemode/engine';
 import { createImageStore } from '../codemode/host-ops';
 import { codemodeTool } from '../codemode/tool';
 import { parseHostConfig } from '../config';
-import { buildAssistantPrompt } from '../prompt/assistant';
 import { buildCodemodePrompt } from '../prompt/codemode';
 import { buildCoordinatorPrompt } from '../prompt/coordinator';
-import { buildSystemPrompt } from '../prompt/system';
 import { parseLiteLLMSpendHeaders } from '../providers/services';
 import { createChatGPTResearchTool } from '../research/chatgpt-research';
 import { createExaTools } from '../research/exa';
 import { createKeyServerResearchTool } from '../research/key-server-research';
 import type { AnyToolDefinition } from '../tools/common';
-import { createAssistantTools, createCoordinatorTools, createTools } from '../tools/index';
+import { createCoordinatorTools } from '../tools/index';
 import { EXA_TOOL_NAMES, WEB_RESEARCH_TOOL_NAME } from '../tools/names';
 import { BridgeCredentialStore } from './credentials';
 import { createSpainAssistExtension } from './extension';
 import type { HostHooks } from './hooks';
 import { hostLog } from './log';
 import { configureModel, LITELLM_PROVIDER_ID, needsPromptCacheKey } from './model';
-import { redactsPages } from './redaction';
 import { promptResearch, researchBackend } from './research';
 import { prepareSessionFile, recordSessionSelection } from './session';
 
 /**
- * Agent host: one process per active agent (the assistant, or one procedure's agent). Reads its configuration from the environment
- * (see BRIDGE_ENV), builds a pi session with only SpainAssist tools and serves pi's RPC
+ * Agent host: one process per active agent (the coordinator, or a background agent). Reads its
+ * configuration from the environment (see BRIDGE_ENV), builds a pi session with only SpainAssist tools and serves pi's RPC
  * protocol (JSONL) on stdin/stdout via `runRpcMode`. Never returns.
  *
  * `hooks` are for harnesses and tests that run the host outside the app (see hooks.ts). The
@@ -86,40 +83,16 @@ export async function runHost(
   const model = configureModel(modelRuntime, config.model);
   hooks.onModel?.(model, config);
   const imagesSupported = model.input.includes('image');
-  const redactPages = redactsPages(model.id);
 
-  // Codemode (docs/codemode.md): its agents write workflows; its coordinator, the chat's agent,
-  // only delegates to them with a few plain tools.
+  // docs/codemode.md: background agents write workflows; the coordinator, the chat's agent, only
+  // delegates to them with a few plain tools.
   const codemode = config.role === 'agent';
   const coordinator = config.role === 'orchestrator';
-  const assistant = config.role === 'assistant';
-  // The chat's agent: its final messages link documents the user sees.
-  const chatAgent = assistant || coordinator;
-  const tools = codemode
-    ? []
-    : coordinator
-      ? createCoordinatorTools({ bridge })
-      : assistant
-        ? createAssistantTools({ bridge, timeZone: config.timeZone })
-        : createTools({
-            bridge,
-            imagesSupported,
-            allowPrivateHosts: config.research.allowPrivateHosts ?? false,
-            boeBaseUrl: config.research.boeBaseUrl,
-            fetchImpl: hooks.egress?.fetch,
-            resolveHost: hooks.egress?.resolveHost,
-            onBlocked: hooks.egress?.onBlocked,
-            now: hooks.now,
-            feedback: config.feedback,
-            dniePhone: config.dniePhone,
-            redactPages,
-            timeZone: config.timeZone,
-          });
+  const tools = coordinator ? createCoordinatorTools({ bridge }) : [];
   // Web research (see ResearchBackend): vouchers through our key server, ChatGPT plans with
   // OpenAI's hosted web search, BYOK and custom endpoints on Exa's keyless tier. A research
-  // stub (hooks) replaces both the choice and the tools, for procedure agents only (and every
-  // codemode agent). The codemode coordinator never researches.
-  const stub = assistant || coordinator ? undefined : hooks.research;
+  // stub (hooks) replaces both the choice and the tools. The coordinator never researches.
+  const stub = coordinator ? undefined : hooks.research;
   const researchTools: AnyToolDefinition[] = [];
   const keyServerUrl = config.research.keyServerUrl;
   const research = coordinator
@@ -195,8 +168,6 @@ export async function runHost(
       detachAfterMs: 2 * 60_000,
     });
     tools.push(codemodeTool({ engine, images, imagesSupported, language: config.language }));
-  } else {
-    tools.push(...researchTools);
   }
   const declarations = codemode
     ? buildDeclarations({
@@ -218,27 +189,11 @@ export async function runHost(
           certificateRequests: config.certificateRequests,
           declarations,
         })
-      : coordinator
-        ? buildCoordinatorPrompt({
-            language: config.language,
-            timeZone: config.timeZone,
-            now: hooks.now?.(),
-          })
-        : assistant
-          ? buildAssistantPrompt({
-              language: config.language,
-              timeZone: config.timeZone,
-              now: hooks.now?.(),
-            })
-          : buildSystemPrompt({
-              language: config.language,
-              timeZone: config.timeZone,
-              now: hooks.now?.(),
-              research: promptResearch(research),
-              feedback: config.feedback,
-              dniePhone: config.dniePhone,
-              certificateRequests: config.certificateRequests,
-            });
+      : buildCoordinatorPrompt({
+          language: config.language,
+          timeZone: config.timeZone,
+          now: hooks.now?.(),
+        });
   // Voucher keys: LiteLLM reports the key's spend on every call; the app shows it live.
   const onProviderResponse =
     config.model.provider === LITELLM_PROVIDER_ID
@@ -254,10 +209,9 @@ export async function runHost(
     tools: agentTools,
     systemPrompt,
     promptCacheKey: needsPromptCacheKey(model),
-    redactPages,
     ...(onProviderResponse ? { onProviderResponse } : {}),
-    // Only the assistant's messages reach the chat, where document links show as cards.
-    ...(chatAgent
+    // Only the coordinator's messages reach the chat, where document links show as cards.
+    ...(coordinator
       ? {
           savedDocuments: async () =>
             (await bridge.call('vault.read', { keys: [] })).documents.map(({ id, name }) => ({

@@ -374,7 +374,7 @@ describe('summaries', () => {
         type: 'tool_start',
         agent: 'assistant',
         toolCallId: '1',
-        tool: 'procedure_start',
+        tool: 'agent_start',
         args: {},
       },
       {
@@ -410,7 +410,7 @@ describe('summaries', () => {
         '## Activity',
         '',
         '- Observations: 8',
-        '- Tool calls: 3 (assistant 1, procedure 2); most used: browser_click x2, procedure_start x1',
+        '- Tool calls: 3 (assistant 1, procedure 2); most used: browser_click x2, agent_start x1',
         '- Prompts: 1 shown, 2 answered (scripted 1, answerer 0, default 1)',
         '- Network: 0 request(s)',
         '- SpainBench events: download x1',

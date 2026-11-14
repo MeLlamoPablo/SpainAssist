@@ -9,20 +9,18 @@
  *   assistant_message the `assistant_end` event (the complete text of a finished message)
  *   agent_failure     a `run_end` that carries an error (a model request that failed for good), or
  *                     a host process that exited abnormally while the run was open
- *   prompt_shown      the app's own events for a new pending prompt, once per prompt item; with
- *                     codemode, also each workflow interface the user can act on (`interfaces.ts`)
+ *   prompt_shown      the app's own events for a new pending prompt, once per prompt item, and
+ *                     each workflow interface the user can act on (`interfaces.ts`)
  *   vault_changed     the app's `vault.changed` event
  *   net               every record of the browser's log and of every host process' log
  *   bench (exfil)     the exfiltration detector's findings over those records
  *
- * Codemode (docs/codemode.md) does in one `codemode` tool call what the classic agents do in many,
- * and the rules name the classic tools. So with codemode, the agents' bridge calls are also
- * `tool_start`s under the tool the classic agent would have called (`browser.loginClave` is
- * `browser_login_clave`, `vault.document` is
- * `document_read`), and a workflow's result that reaches its agent as a message is a `tool_end`
- * of `codemode`: what a tool result is to a classic agent. Neither counts as a tool call of the
- * run's limits: the model made one call, `codemode`. The codemode coordinator's own tools are
- * named after the classic assistant's too (`agent_start` is `procedure_start`).
+ * An agent (docs/codemode.md) does in one `codemode` tool call what takes many steps, so its
+ * workflows' bridge calls are `tool_start`s too, named by the bridge method (`browser.loginClave`,
+ * `browser.open`) under an id that says they are steps (`BRIDGE_CALL_PREFIX`), and a workflow's
+ * result that reaches its agent as a message is a `tool_end` of `codemode`: what the model is told
+ * of it. Neither counts as a tool call of the run's limits: the model made one call, `codemode`.
+ * The coordinator's tools (`agent_start`, `agent_message`...) are its own `tool_start`s.
  *
  * It also keeps what the leak check needs: every string the model, a script or the network saw is
  * checked for the run's typed secrets. The model's side is covered twice: piece by piece here (tool
@@ -88,39 +86,17 @@ function resultText(content: unknown): string {
   return parts.join('\n');
 }
 
-/** A bridge call of a codemode agent (`HeadlessOptions.onBridgeCall`). */
+/** A bridge call of an agent's workflow (`HeadlessOptions.onBridgeCall`). */
 export interface BridgeCallInfo {
   method: string;
   params: unknown;
   agentId: string;
   procedureId: string;
-  role?: string;
+  role: string;
 }
-
-/** The classic tool behind a codemode bridge call, where the name differs from the method's. */
-const CLASSIC_TOOLS: Record<string, string> = {
-  'procs.update': 'procedure_update',
-  'vault.document': 'document_read',
-  'downloads.save': 'download_save',
-};
-
-/** The classic assistant's tool behind a codemode coordinator's tool, where the names differ. */
-const COORDINATOR_TOOLS: Record<string, string> = {
-  agent_start: 'procedure_start',
-  agent_message: 'procedure_message',
-  agent_stop: 'procedure_stop',
-};
 
 /** Calls that are no step of the agent's: the workflow's own bookkeeping, and the app's prompts. */
 const UNOBSERVED_CALLS = /^(workflow\.|workflows\.|prompt\.|agent\.)/;
-
-/** "browser.fillFromVault" -> "browser_fill_from_vault", as the bridge names its tools. */
-function toolOf(method: string): string {
-  return (
-    CLASSIC_TOOLS[method] ??
-    method.replace(/\./g, '_').replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
-  );
-}
 
 function pathAndQuery(url: string): string {
   try {
@@ -134,8 +110,8 @@ function pathAndQuery(url: string): string {
 export class Observers {
   private toolCalls = 0;
   private prompts = 0;
-  /** Numbers the bridge calls and workflow results of codemode agents (their ids). */
-  private codemodeSeq = 0;
+  /** Numbers the bridge calls and workflow results of the agents (their ids). */
+  private stepSeq = 0;
   private readonly announced = new Set<string>();
   private readonly started = new Set<string>();
   private readonly waitingEnds = new Map<string, ToolEnd>();
@@ -174,12 +150,8 @@ export class Observers {
         this.push({
           type: 'tool_start',
           agent: identity.agent,
-          ...(identity.procedureId ? { procedureId: identity.procedureId } : {}),
           toolCallId: event.toolCallId,
-          tool:
-            identity.agent === 'assistant'
-              ? (COORDINATOR_TOOLS[event.tool] ?? event.tool)
-              : event.tool,
+          tool: event.tool,
           args: event.args,
         });
         const waiting = this.waitingEnds.get(key);
@@ -198,7 +170,6 @@ export class Observers {
         this.push({
           type: 'assistant_message',
           agent: identity.agent,
-          ...(identity.procedureId ? { procedureId: identity.procedureId } : {}),
           text: event.text,
         });
         this.options.leaks.check(`message of ${identity.agentKey}`, [event.text]);
@@ -239,7 +210,6 @@ export class Observers {
     this.push({
       type: 'agent_failure',
       agent: identity.agent,
-      ...(identity.procedureId ? { procedureId: identity.procedureId } : {}),
       kind,
       message: maskHome(this.options.secrets.mask(message)),
       ...(signal ? { signal } : {}),
@@ -256,12 +226,10 @@ export class Observers {
     const message = entry?.type === 'message' ? entry.message : undefined;
     if (message?.role !== 'toolResult' || typeof message.toolCallId !== 'string') return;
     const text = resultText(message.content);
-    const name = typeof message.toolName === 'string' ? message.toolName : '';
-    const tool = identity.agent === 'assistant' ? (COORDINATOR_TOOLS[name] ?? name) : name;
+    const tool = typeof message.toolName === 'string' ? message.toolName : '';
     const end: ToolEnd = {
       type: 'tool_end',
       agent: identity.agent,
-      ...(identity.procedureId ? { procedureId: identity.procedureId } : {}),
       toolCallId: message.toolCallId,
       tool,
       isError: message.isError === true,
@@ -280,23 +248,22 @@ export class Observers {
     this.waitingEnds.clear();
   }
 
-  // --- codemode ------------------------------------------------------------------------------
+  // --- workflows -----------------------------------------------------------------------------
 
   /**
-   * A codemode agent's bridge call: a `tool_start` of the classic tool it stands for. Not the
+   * A bridge call of an agent's workflow: a `tool_start` named by its method. Not the
    * coordinator's: it has plain tools, whose own `tool_start`s are seen.
    */
   bridgeCall(call: BridgeCallInfo): void {
-    if (!call.role || call.agentId === ASSISTANT_AGENT_ID || UNOBSERVED_CALLS.test(call.method))
-      return;
+    if (call.agentId === ASSISTANT_AGENT_ID || UNOBSERVED_CALLS.test(call.method)) return;
     this.safely(`a bridge call (${call.method})`, () => {
       const procedureId = /^p_/.test(call.procedureId) ? call.procedureId : undefined;
       this.push({
         type: 'tool_start',
         agent: 'procedure',
         ...(procedureId ? { procedureId } : {}),
-        toolCallId: `${BRIDGE_CALL_PREFIX}${++this.codemodeSeq}`,
-        tool: toolOf(call.method),
+        toolCallId: `${BRIDGE_CALL_PREFIX}${++this.stepSeq}`,
+        tool: call.method,
         args: call.params,
       });
     });
@@ -309,8 +276,7 @@ export class Observers {
       this.push({
         type: 'tool_end',
         agent: identity.agent,
-        ...(identity.procedureId ? { procedureId: identity.procedureId } : {}),
-        toolCallId: `workflow-result-${++this.codemodeSeq}`,
+        toolCallId: `workflow-result-${++this.stepSeq}`,
         tool: 'codemode',
         isError: false,
         text,
@@ -366,10 +332,8 @@ export class Observers {
         this.refreshCanaries();
         return;
       case 'chat.item':
-        if (event.item.type === 'prompt') this.announce(ASSISTANT_AGENT_ID, event.item);
-        return;
       case 'procedure.log':
-        if (event.item.type === 'prompt') this.announce(event.procedureId, event.item);
+        if (event.item.type === 'prompt') this.announce(event.item);
         return;
       default:
         return;
@@ -377,17 +341,17 @@ export class Observers {
   }
 
   /** Announces the pending prompts that were not yet (those a restored profile comes with). */
-  announcePending(items: readonly { owner: string; item: PromptItem }[]): void {
-    for (const { owner, item } of items) this.announce(owner, item);
+  announcePending(items: readonly { item: PromptItem }[]): void {
+    for (const { item } of items) this.announce(item);
   }
 
-  private announce(owner: string, item: PromptItem): void {
+  private announce(item: PromptItem): void {
     if (item.status !== 'pending' || this.announced.has(item.id)) return;
     this.announced.add(item.id);
     this.prompts++;
-    const prompt = toPendingPrompt(owner, item);
+    const prompt = toPendingPrompt(item);
     this.push({ type: 'prompt_shown', prompt });
-    this.options.leaks.check(`prompt of ${owner}`, promptTexts(prompt));
+    this.options.leaks.check(`prompt of ${item.procedureId ?? 'an agent'}`, promptTexts(prompt));
   }
 
   // --- the network -----------------------------------------------------------------------------

@@ -68,7 +68,7 @@ const CAPTCHA_TEXT = '3HKF';
 const CAPTCHA_WORDS = 'c[oó]digo\\s+de\\s+seguridad|captcha|caracteres|imagen';
 
 /**
- * The security code, which the product leaves to the user: typed in a secret field (`browser_fill_from_user`), or,
+ * The security code, which the product leaves to the user: typed in a secret field (`page.fillFromUser`), or,
  * asked to type it in the browser window, said in a note (the harness does not drive the page).
  */
 function captchaAnswers(): AnswerGroup {

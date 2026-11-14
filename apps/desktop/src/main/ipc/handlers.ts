@@ -10,7 +10,6 @@ import type {
 import type { BrowserHolder } from '../browser/holder';
 import type { ChatService } from '../chat/service';
 import type { CompanionService } from '../companion/service';
-import type { Coordinator } from '../conversation/coordinator';
 import { UserError } from '../core/errors';
 import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
@@ -31,7 +30,6 @@ export interface IpcServices {
   settings: SettingsStore;
   providers: ProviderManager;
   procedures: ProcedureService;
-  coordinator: Pick<Coordinator, 'stop'>;
   chat: ChatService;
   vault: VaultService;
   media: MediaStore;
@@ -60,8 +58,8 @@ export interface IpcServices {
   exportTranscripts(): Promise<string>;
   deleteProcedure(id: string): Promise<void>;
   wipeAll(): Promise<void>;
-  /** The codemode harness (`codemode` flag); absent without it. */
-  codemode?: {
+  /** Agents and their workflows (docs/codemode.md). */
+  codemode: {
     state(): { agents: CodemodeAgentInfo[]; workflows: WorkflowInfo[] };
     uiEvent(workflowId: string, key: string, event: UiEvent): boolean;
     pins(workflowId: string, key: string, addresses: string[]): Promise<(MapPoint | null)[]>;
@@ -157,7 +155,6 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('procedures.archive', S['procedures.archive'], (id, archived) =>
     s.procedures.setArchived(id, archived),
   );
-  router.register('procedures.stop', S['procedures.stop'], (id) => s.coordinator.stop(id));
   router.register('procedures.delete', S['procedures.delete'], (id) => s.deleteProcedure(id));
   router.register('procedures.markRead', S['procedures.markRead'], (id) =>
     s.procedures.markRead(id),
@@ -244,14 +241,8 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
     companion().unlock(itemId, values),
   );
 
-  /** Codemode needs its flag: main refuses what the UI hides. */
-  const codemode = () => {
-    if (!s.codemode) throw new UserError(t(lang(), 'codemodeOff'), 'unavailable');
-    return s.codemode;
-  };
-  router.register('codemode.state', S['codemode.state'], () =>
-    s.codemode ? s.codemode.state() : { agents: [], workflows: [] },
-  );
+  const codemode = () => s.codemode;
+  router.register('codemode.state', S['codemode.state'], () => s.codemode.state());
   router.register('codemode.uiEvent', S['codemode.uiEvent'], (workflowId, key, event) =>
     codemode().uiEvent(workflowId, key, event),
   );

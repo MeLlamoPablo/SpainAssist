@@ -1,7 +1,6 @@
 import {
   APPOINTMENT_MORE,
   ASSISTANT_AGENT_ID,
-  type ChatItem,
   type FormField,
   type FormPrompt,
   type FormValue,
@@ -13,8 +12,8 @@ import {
   visibleFormFields,
 } from '@sa/shared';
 import { currentCaller } from '../bridge/caller';
-import { type ConversationService, promptSurvivesRestart } from '../conversation/service';
-import { BridgeError, PromptCancelledError, UserError } from '../core/errors';
+import type { ConversationService } from '../conversation/service';
+import { PromptCancelledError, UserError } from '../core/errors';
 import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import type { Clock } from '../core/util';
@@ -34,26 +33,24 @@ export interface AskOptions {
 }
 
 interface PendingPrompt {
-  /** The agent that asks: ASSISTANT_AGENT_ID or a procedure id. */
+  /** Where it is stored: the procedure the asking agent acts on, or ASSISTANT_AGENT_ID. */
   owner: string;
-  /** The agent whose bridge call showed it (a codemode agent waits on it); none after a restart. */
+  /** The agent whose bridge call showed it (it waits on the answer). */
   asker?: string;
   item: PromptItem;
   resolve(response: PromptResponse): void;
   reject(err: Error): void;
   cleanup(): void;
-  resume?: (response: PromptResponse) => Promise<void>;
-  responding?: boolean;
   /** Map pins for a form's map fields: in memory only, dropped with the prompt. */
   mapPins?: MapPins;
 }
 
 /**
- * Native prompts (forms, confirmations, manual actions). The assistant's questions are
- * PromptItems in the one conversation; a procedure agent's questions live on its procedure
- * (runtime, shown on the card, and its activity log), never in the conversation. `ask`
- * resolves when the user answers through `chat.respond`: the answer goes straight back to the
- * agent that asked. Secret form fields are never stored: the transcript keeps "••••" instead.
+ * Native prompts (confirmations, manual actions, credentials, phone calls, the app's own forms).
+ * An agent's questions are stored on the procedure it acts on (its runtime and activity log) and
+ * shown above the cards ("Para ti"), never in the conversation. `ask` resolves when the user
+ * answers through `chat.respond`: the answer goes straight back to the agent that asked. Secret
+ * form fields are never stored: the transcript keeps "••••" instead.
  */
 export class PromptManager {
   private readonly pending = new Map<string, PendingPrompt>();
@@ -70,46 +67,9 @@ export class PromptManager {
     },
   ) {}
 
-  /** Rebuild pending forms and phone calls from durable transcripts without starting agents. */
-  restore(
-    resume: (owner: string, item: PromptItem, response: PromptResponse) => Promise<void>,
-  ): void {
-    const restoreItems = (owner: string, items: ChatItem[]) => {
-      for (const item of items) {
-        if (
-          item.type !== 'prompt' ||
-          item.status !== 'pending' ||
-          !promptSurvivesRestart(item.prompt)
-        )
-          continue;
-        this.pending.set(item.id, {
-          owner,
-          item,
-          resolve: () => {},
-          reject: () => {},
-          cleanup: () => {},
-          resume: (response) => resume(owner, item, response),
-        });
-      }
-      this.sync(owner);
-    };
-    restoreItems(ASSISTANT_AGENT_ID, this.deps.conversation.transcript());
-    for (const procedure of this.deps.procedures.list())
-      restoreItems(procedure.id, this.deps.procedures.transcript(procedure.id));
-  }
-
-  /** Detach live requests before shutdown, preserving forms and phone calls for the next launch. */
+  /** Cancels every pending prompt before shutdown: none outlives its agent's bridge call. */
   suspend(): void {
-    for (const [id, entry] of this.pending) {
-      if (!promptSurvivesRestart(entry.item.prompt)) {
-        this.finishCancelled(id);
-        continue;
-      }
-      this.pending.delete(id);
-      entry.cleanup();
-      this.syncAsker(entry.asker);
-      entry.reject(new PromptCancelledError());
-    }
+    for (const id of [...this.pending.keys()]) this.finishCancelled(id);
   }
 
   ask(owner: string, prompt: Prompt, opts: AskOptions = {}): Promise<PromptResponse> {
@@ -159,34 +119,20 @@ export class PromptManager {
   /** Ends a pending prompt with an answer from the app itself (not the user). */
   settle(itemId: string, response: PromptResponse): void {
     const entry = this.pending.get(itemId);
-    if (!entry || entry.responding || response.kind !== entry.item.prompt.kind) return;
+    if (!entry || response.kind !== entry.item.prompt.kind) return;
     this.complete(entry, sanitizeResponse(entry.item.prompt, response, this.deps.lang()));
   }
 
-  respond(itemId: string, response: PromptResponse): void | Promise<void> {
+  respond(itemId: string, response: PromptResponse): void {
     const entry = this.pending.get(itemId);
-    if (!entry || entry.responding)
-      throw new UserError(t(this.deps.lang(), 'promptNotPending'), 'not_pending');
+    if (!entry) throw new UserError(t(this.deps.lang(), 'promptNotPending'), 'not_pending');
     if (
       response.kind !== entry.item.prompt.kind ||
       // Only the app says a DNIe signature is signed or failed; the user can only cancel it.
       (response.kind === 'dnie_signature' && response.outcome !== 'cancelled')
     )
       throw new UserError(t(this.deps.lang(), 'invalidRequest'), 'bad_request');
-    const clean = sanitizeResponse(entry.item.prompt, response, this.deps.lang());
-    if (entry.resume) {
-      entry.responding = true;
-      return entry
-        .resume(clean)
-        .then(() => {
-          if (this.pending.get(itemId) !== entry) return;
-          this.complete(entry, clean);
-        })
-        .finally(() => {
-          entry.responding = false;
-        });
-    }
-    this.complete(entry, clean);
+    this.complete(entry, sanitizeResponse(entry.item.prompt, response, this.deps.lang()));
   }
 
   private complete(entry: PendingPrompt, clean: PromptResponse): void {
@@ -204,80 +150,13 @@ export class PromptManager {
     entry.resolve(clean);
   }
 
-  /** Coordinator answers use the same delivery and persistence path as native forms. */
-  respondForProcedure(
-    owner: string,
-    itemId: string,
-    values?: Record<string, FormValue>,
-  ): void | Promise<void> {
-    const entry = this.pending.get(itemId);
-    if (!entry || entry.owner !== owner)
-      throw new BridgeError('not_found', 'No pending question with that id on this procedure.');
-    const prompt = entry.item.prompt;
-    if (prompt.kind !== 'form')
-      throw new BridgeError('policy_denied', 'The user must resolve this confirmation or action.');
-    if (values) {
-      for (const [key, value] of Object.entries(values)) {
-        const field = prompt.fields.find((field) => field.key === key);
-        if (!field || field.type === 'secret' || field.type === 'document')
-          throw new BridgeError('policy_denied', 'Use the native form for secrets and documents.');
-        const validType =
-          field.type === 'boolean'
-            ? typeof value === 'boolean'
-            : field.type === 'multiselect'
-              ? Array.isArray(value)
-              : typeof value === 'string';
-        const choices = Array.isArray(value) ? value : [value];
-        if (
-          !validType ||
-          ((field.type === 'select' ||
-            field.type === 'map-options' ||
-            field.type === 'multiselect') &&
-            choices.some((choice) => !field.options?.some((option) => option.value === choice))) ||
-          (field.type === 'appointment' && !appointmentAnswer(field, value))
-        )
-          throw new BridgeError('bad_request', `Invalid answer for ${key}.`);
-      }
-      const clean = sanitizeResponse(prompt, {
-        kind: 'form',
-        values,
-        dismissed: false,
-        savedToVault: [],
-      });
-      const answers = clean.kind === 'form' ? (clean.values ?? {}) : {};
-      for (const field of visibleFormFields(prompt.fields, answers)) {
-        const value = answers[field.key];
-        if (
-          field.required &&
-          (value === undefined ||
-            (typeof value === 'string' && !value.trim()) ||
-            (Array.isArray(value) && !value.length))
-        )
-          throw new BridgeError('bad_request', `Missing required answer: ${field.key}.`);
-      }
-    }
-    return this.respond(itemId, {
-      kind: 'form',
-      ...(values ? { values } : {}),
-      dismissed: !values,
-      savedToVault: values
-        ? prompt.fields
-            .filter(
-              (field) =>
-                field.vaultKey &&
-                field.type !== 'secret' &&
-                field.type !== 'document' &&
-                typeof values[field.key] === 'string',
-            )
-            .map((field) => field.key)
-        : [],
-    });
-  }
-
-  /** Cancels every pending prompt of an agent (abort, stop, delete). */
-  cancelAll(owner: string): void {
-    for (const [id, entry] of this.pending) {
-      if (entry.owner === owner) this.finishCancelled(id);
+  /**
+   * Cancels every pending prompt stored under `id` (a deleted procedure) or asked by it (an agent
+   * that stopped, was aborted or crashed).
+   */
+  cancelAll(id: string): void {
+    for (const [itemId, entry] of this.pending) {
+      if (entry.owner === id || entry.asker === id) this.finishCancelled(itemId);
     }
   }
 
@@ -301,8 +180,11 @@ export class PromptManager {
   }
 
   /** Every pending prompt with the agent that asked it, oldest first. */
-  pendingItems(): { owner: string; item: PromptItem }[] {
-    return [...this.pending.values()].map(({ owner, item }) => ({ owner, item }));
+  pendingItems(): { asker?: string; item: PromptItem }[] {
+    return [...this.pending.values()].map(({ asker, item }) => ({
+      ...(asker ? { asker } : {}),
+      item,
+    }));
   }
 
   /** The in-memory map pins of a pending prompt (never part of the saved item). */
@@ -313,9 +195,10 @@ export class PromptManager {
     return entry.mapPins;
   }
 
-  pendingCount(owner: string): number {
+  /** Pending prompts stored under `id` or asked by it. */
+  pendingCount(id: string): number {
     let n = 0;
-    for (const entry of this.pending.values()) if (entry.owner === owner) n++;
+    for (const entry of this.pending.values()) if (entry.owner === id || entry.asker === id) n++;
     return n;
   }
 
@@ -421,7 +304,7 @@ export function sanitizeResponse(
 }
 
 /** What the transcript keeps: secret fields masked. */
-export function redactResponse(prompt: Prompt, response: PromptResponse): PromptResponse {
+function redactResponse(prompt: Prompt, response: PromptResponse): PromptResponse {
   if (prompt.kind !== 'form' || response.kind !== 'form' || !response.values) return response;
   const secretKeys = new Set(
     (prompt as FormPrompt).fields.filter((f) => f.type === 'secret').map((f) => f.key),

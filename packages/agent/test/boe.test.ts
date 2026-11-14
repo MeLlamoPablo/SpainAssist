@@ -1,11 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { BridgeClient } from '../src/bridge/client';
+import { createHostOps, createImageStore } from '../src/codemode/host-ops';
 import { buildBoeQuery, searchBoe } from '../src/research/boe';
-import { researchTools } from '../src/tools/research';
-import { createFakeBridge } from './helpers/fake-bridge';
-import { textOf } from './helpers/tools';
 
 let server: Server;
 let base: string;
@@ -88,38 +85,36 @@ describe('BOE open-data search', () => {
     });
   });
 
-  it('boe_search renders results and reports API errors', async () => {
-    const bridge = await createFakeBridge();
-    const tools = researchTools(new BridgeClient({ url: bridge.url, token: bridge.token }), {
-      baseUrl: base,
-    });
-    const boe = tools.find((t) => t.name === 'boe_search');
-    if (!boe) throw new Error('missing');
+  it('sorts newest first on request and reports API errors', async () => {
     reply = sample;
-    const ok = await boe.execute(
-      'c',
-      { query: 'dni', newestFirst: true },
-      undefined,
-      undefined,
-      {} as never,
-    );
-    expect(textOf(ok as never)).toContain('1. Real Decreto 1553/2005');
-    expect(textOf(ok as never)).toContain('[NO LONGER IN FORCE]');
+    await searchBoe({ query: 'dni', newestFirst: true }, { baseUrl: base });
     expect(JSON.parse(requests.at(-1)?.url.searchParams.get('query') ?? '{}').sort).toEqual([
       { fecha_publicacion: 'desc' },
     ]);
     reply = { status: { code: '400', text: 'Consulta no válida' } };
-    const failed = (await boe.execute(
-      'c',
-      { query: 'dni' },
-      undefined,
-      undefined,
-      {} as never,
-    )) as {
-      isError?: boolean;
-    };
-    expect(failed.isError).toBe(true);
-    expect(textOf(failed as never)).toContain('Consulta no válida');
-    await bridge.close();
+    await expect(searchBoe({ query: 'dni' }, { baseUrl: base })).rejects.toThrow(
+      'Consulta no válida',
+    );
+  });
+
+  it('api.boe.search returns the laws to a workflow', async () => {
+    const call = createHostOps({
+      bridge: { call: async () => ({}) as never },
+      images: createImageStore(),
+      runId: () => 'run_1',
+      procedures: () => [],
+      imagesSupported: true,
+      boeBaseUrl: base,
+    });
+    reply = sample;
+    const laws = (await call(
+      'boe.search',
+      { query: 'dni', field: 'texto' },
+      { signal: new AbortController().signal },
+    )) as { id: string }[];
+    expect(laws.map((law) => law.id)).toEqual(['BOE-A-2005-21163', 'BOE-A-1999-1']);
+    expect(JSON.parse(requests.at(-1)?.url.searchParams.get('query') ?? '{}').query).toEqual({
+      query_string: { query: 'texto:(dni) and vigencia_agotada:N' },
+    });
   });
 });

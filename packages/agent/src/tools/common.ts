@@ -53,8 +53,6 @@ function bridgeErrorText(error: unknown): string {
       return `Blocked by the app's safety policy: ${message}. Do not try to work around it (credentials and certificates only work on the sites allowed for them): only follow the steps this message gives, if any. If this blocks the procedure, tell the user.`;
     case 'not_found':
       return `Not found: ${message}.`;
-    case 'browser_error':
-      return `Browser error: ${message}. Call browser_snapshot to see the current page before trying again.`;
     case 'unavailable':
       return `Service unavailable: ${message}. Try again later or continue without it.`;
     case 'bad_request':
@@ -105,14 +103,4 @@ export function clip(text: string | undefined, max: number): string {
 /** Remove keys whose value is undefined (zod `.optional()` rejects explicit nulls elsewhere). */
 export function compact<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
-}
-
-/** True for an absolute http(s) URL. */
-export function isWebUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
-  } catch {
-    return false;
-  }
 }

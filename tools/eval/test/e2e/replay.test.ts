@@ -110,23 +110,19 @@ e2eSuite('the replay cache on the real SpainBench', () => {
       .filter((message) => message.agent === 'assistant')
       .at(-1)?.text;
     expect(link).toContain(`sa:document/${document?.id}`);
+    // The workflow kept this run's download, not the first run's.
     const downloads = observations(second.events, 'tool_start')
-      .filter((event) => event.tool === 'download_save')
+      .filter((event) => event.tool === 'downloads.save')
       .map((event) => (event.args as { downloadId: string }).downloadId);
-    const shown = idsIn(
-      observations(second.events, 'tool_end')
-        .map((event) => event.text)
-        .join('\n'),
-    );
     expect(downloads).toHaveLength(1);
-    expect(shown.has(downloads[0] as string)).toBe(true);
     const before = idsIn(JSON.stringify(first.events));
     expect(before.has(downloads[0] as string)).toBe(false);
     expect(second.state.downloads).toHaveLength(1);
   }, 360_000);
 
   it('ends a run whose conversation was never recorded as a replay miss: aborted, no score', async () => {
-    // Fixture 2 starts as fixture 1 does and then meets another vault: the recording is not its own.
+    // Fixture 2 starts as fixture 1 does (the coordinator's conversation is the same), and its agent
+    // meets another vault: the recording is not its own.
     const other = 'vida-laboral-con-datos';
     const outcome = await evaluate(space, {
       fixtureId: other,
@@ -140,11 +136,14 @@ e2eSuite('the replay cache on the real SpainBench', () => {
       scoreBeforePenalty: null,
       endedBy: 'replay-miss',
     });
-    expect(outcome.result.notes[0]).toMatch(/^replay-miss \(assistant\): Replay cache miss/);
+    expect(outcome.result.notes[0]).toMatch(
+      /^replay-miss \(procedure-a_[0-9a-f]+\): Replay cache miss/,
+    );
     expect(outcome.result.notes[0]).toContain('differs');
     expect(outcome.result.usage.costUsd).toBe(0);
     const lines = ledger(outcome.runDir);
-    expect(lines.map((line) => line.kind)).toEqual(['replay', 'reject']);
+    expect(lines.map((line) => line.kind).at(-1)).toBe('reject');
+    expect(lines.slice(0, -1).every((line) => line.kind === 'replay')).toBe(true);
     expect(run.events.some((event) => event.type === 'quiescent')).toBe(false);
     expect(outcome.checkpoints).toEqual([]);
   }, 180_000);

@@ -14,14 +14,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { type AgentHostConfig, buildAgentLaunch, PiRpcClient } from '../src/index';
 import { formatToday } from '../src/prompt/system';
 import type { AgentEvent } from '../src/rpc/events';
-import {
-  ASSISTANT_TOOL_NAMES,
-  EXA_TOOL_NAMES,
-  TOOL_NAMES,
-  WEB_RESEARCH_TOOL_NAME,
-} from '../src/tools/names';
-import { createFakeBridge, type FakeBridge } from './helpers/fake-bridge';
-import { RESEARCH_RUN, RESEARCH_TEXT, type TestHooks } from './helpers/hook-host-fixtures';
+import { COORDINATOR_TOOL_NAMES } from '../src/tools/names';
+import { createFakeBridge, type FakeBridge, workflowHandlers } from './helpers/fake-bridge';
+import { RESEARCH_TEXT, type TestHooks } from './helpers/hook-host-fixtures';
 
 const packageRoot = join(import.meta.dirname, '..');
 const hostPath = join(packageRoot, 'dist', `test-hook-host-${process.pid}.js`);
@@ -87,19 +82,7 @@ describe('HostHooks (real host process)', () => {
     llm = await createMockLlm({ scenario: { fallback: { text: 'Hecho.' } }, chunkSize: 16 });
     bridge = await createFakeBridge({
       'agent.credential': () => ({ credential: { type: 'api_key', key: 'llm-key-from-bridge' } }),
-      'procedure.update': (params) => ({
-        id: 'p1',
-        title: 'Trámite',
-        status: 'researching',
-        steps: [],
-        requirements: [],
-        facts: [],
-        sources: [],
-        createdAt: '2026-10-03T00:00:00Z',
-        updatedAt: '2026-10-03T00:00:00Z',
-        archived: false,
-        ...params,
-      }),
+      ...workflowHandlers(),
     });
   });
 
@@ -125,12 +108,13 @@ describe('HostHooks (real host process)', () => {
         electronRunAsNode: false,
         cwd: workDir,
         config: {
+          role: 'agent',
           procedureId: 'p1',
           sessionFile: join(workDir, 'sessions', 'p1.jsonl'),
           language: 'es',
           model: { provider: 'custom', id: 'mock-model', baseUrl: llm.baseUrl },
-          // Community learnings, sharing included, and the DNIe with the phone: the agent has
-          // every tool of TOOL_NAMES.
+          // Community learnings, sharing included, and the DNIe with the phone: the agent's API
+          // has all of it.
           feedback: { submit: true, vote: true },
           dniePhone: true,
           ...options,
@@ -171,14 +155,21 @@ describe('HostHooks (real host process)', () => {
       .filter((m) => m.role === 'tool')
       .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)));
   const script = (scenario: ScenarioInput) => llm.setScenario(scenario);
+  /** A codemode call running `body` as the workflow's main. */
+  const workflow = (workflow: string, body: string, id?: string) => ({
+    ...(id ? { id } : {}),
+    name: 'codemode',
+    arguments: { workflow, source: `export async function main(api) {\n${body}\n}` },
+  });
 
   describe('without hooks', () => {
     it('is the product host: no stub, no wrapper, the real clock', async () => {
       const started = await start({});
       await ask(started, 'Hola');
       const [body] = completions() as [ChatRequest];
-      expect(toolNames(body)).toEqual([...TOOL_NAMES]);
-      expect(systemPrompt(body)).toContain('Web research is not available');
+      expect(toolNames(body)).toEqual(['codemode']);
+      expect(systemPrompt(body)).toContain('Web research is not configured');
+      expect(systemPrompt(body)).not.toContain('search(input: string | SearchInput)');
       const today = (date: Date) => formatToday(date);
       expect([today(new Date()), today(new Date(Date.now() - 60_000))]).toContainEqual(
         systemPrompt(body).match(/Today is (.*)\./)?.[1],
@@ -188,21 +179,20 @@ describe('HostHooks (real host process)', () => {
   });
 
   describe('egress', () => {
-    it('reaches fetch_url, run_script and boe_search, with real URLs and no real DNS', async () => {
+    it('reaches api.fetchUrl, api.fetch and api.boe.search, with real URLs and no real DNS', async () => {
       script({
         rules: [
           {
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                { name: 'fetch_url', arguments: { url: 'https://sede.spain.test/tramite?id=7' } },
-                {
-                  name: 'run_script',
-                  arguments: {
-                    code: `const r = await fetch('https://api.spain.test/v1/datos', { method: 'POST', body: 'x' }); return await r.json();`,
-                  },
-                },
-                { name: 'boe_search', arguments: { query: 'documento nacional de identidad' } },
+                workflow(
+                  'leer',
+                  `const page = await api.fetchUrl('https://sede.spain.test/tramite?id=7');
+const r = await api.fetch('https://api.spain.test/v1/datos', { method: 'POST', body: 'x' });
+const laws = await api.boe.search('documento nacional de identidad');
+return { page: page.text, api: await r.json(), laws };`,
+                ),
               ],
             },
           },
@@ -223,8 +213,8 @@ describe('HostHooks (real host process)', () => {
       ]);
       const byHost = (host: string) =>
         fetches.find((f) => new URL(String(f.url)).hostname === host);
-      // fetch_url and run_script follow redirects by hand (manual) and pass a URL object; the
-      // BOE search relies on the platform default and passes a string.
+      // fetchUrl and fetch follow redirects by hand (manual) and pass a URL object; the BOE
+      // search relies on the platform default and passes a string.
       expect(byHost('sede.spain.test')).toMatchObject({
         inputType: 'URL',
         redirect: 'manual',
@@ -238,24 +228,21 @@ describe('HostHooks (real host process)', () => {
       expect(byHost('www.boe.es')).toMatchObject({ inputType: 'string', method: 'GET' });
       expect(byHost('www.boe.es')?.redirect).toBeUndefined();
 
-      // The guard asked the stand-in resolver (and only it) for the two guarded tools.
+      // The guard asked the stand-in resolver (and only it) for the two guarded operations.
       expect(
         logOf('egress.resolveHost')
           .map((r) => r.host)
           .sort(),
       ).toEqual(['api.spain.test', 'sede.spain.test']);
 
-      // What the model read came from the stand-in, produced by the product tools.
-      const second = completions()[1] as ChatRequest;
-      const results = toolResults(second);
-      expect(results).toHaveLength(3);
-      expect(
-        results.find((r) => r.startsWith('URL: https://sede.spain.test/tramite?id=7')),
-      ).toContain('Texto servido por el egress de prueba.');
-      expect(results.some((r) => r.includes('"path": "/v1/datos"'))).toBe(true);
-      expect(results.some((r) => r.includes('BOE-A-2005-21163'))).toBe(true);
+      // What the model read came from the stand-in, produced by the product operations.
+      const [result] = toolResults(completions()[1] as ChatRequest);
+      expect(result).toContain('Workflow "leer" succeeded');
+      expect(result).toContain('Texto servido por el egress de prueba.');
+      expect(result).toContain('/v1/datos');
+      expect(result).toContain('BOE-A-2005-21163');
       const ends = events.filter((e) => e.type === 'tool_end');
-      expect(ends).toHaveLength(3);
+      expect(ends).toHaveLength(1);
       expect(ends.every((e) => e.type === 'tool_end' && !e.isError)).toBe(true);
     });
 
@@ -266,16 +253,22 @@ describe('HostHooks (real host process)', () => {
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                { name: 'fetch_url', arguments: { url: 'http://127.0.0.1:8790/' } },
-                { name: 'fetch_url', arguments: { url: 'http://localhost:8790/' } },
-                { name: 'fetch_url', arguments: { url: 'https://nada.spain.test/' } },
-                { name: 'fetch_url', arguments: { url: 'http://[::ffff:127.0.0.1]:8790/' } },
-                {
-                  name: 'run_script',
-                  arguments: {
-                    code: `try { await fetch('http://[64:ff9b::7f00:1]/x', { method: 'POST', body: 'a' }); } catch (e) { return e.message; }`,
-                  },
-                },
+                workflow(
+                  'guarda',
+                  `const tries = [
+  () => api.fetchUrl('http://127.0.0.1:8790/'),
+  () => api.fetchUrl('http://localhost:8790/'),
+  () => api.fetchUrl('https://nada.spain.test/'),
+  () => api.fetchUrl('http://[::ffff:127.0.0.1]:8790/'),
+  () => api.fetch('http://[64:ff9b::7f00:1]/x', { method: 'POST', body: 'a' }),
+];
+const errors = [];
+for (const t of tries) {
+  try { await t(); } catch (e) { errors.push(e.message); }
+}
+return errors;`,
+                  'call_g',
+                ),
               ],
             },
           },
@@ -284,94 +277,86 @@ describe('HostHooks (real host process)', () => {
       });
       const started = await start({ egress: true, wrapTool: true });
       await ask(started, 'Prueba');
-      const results = toolResults(completions()[1] as ChatRequest);
-      expect(results).toContain(
+      const [result] = toolResults(completions()[1] as ChatRequest);
+      for (const message of [
+        'Could not read http://127.0.0.1:8790/: Blocked: 127.0.0.1 is a private address',
+        'Could not read http://localhost:8790/: Blocked: localhost is a local address',
+        // A name the egress cannot serve fails like a dead domain, with no address in the text.
+        'Could not read https://nada.spain.test/: Could not fetch nada.spain.test: ENOTFOUND',
         'Could not read http://[::ffff:127.0.0.1]:8790/: Blocked: ::ffff:7f00:1 is a private address',
-      );
-      expect(results.some((r) => r.includes('Blocked: 64:ff9b::7f00:1 is a private address'))).toBe(
-        true,
-      );
+        'Blocked: 64:ff9b::7f00:1 is a private address',
+      ])
+        expect(result).toContain(message);
       // Each refusal is reported to the embedder, inside the call that made it.
       const refused = logOf('egress.onBlocked').map((r) => ({
         url: r.url,
         method: r.method,
         message: r.message,
-        tool: (r.call as { tool: string } | null)?.tool,
+        call: (r.call as { id: string } | null)?.id,
       }));
-      expect(refused).toEqual(
-        expect.arrayContaining([
-          {
-            url: 'http://127.0.0.1:8790/',
-            method: 'GET',
-            message: 'Blocked: 127.0.0.1 is a private address',
-            tool: 'fetch_url',
-          },
-          {
-            url: 'http://localhost:8790/',
-            method: 'GET',
-            message: 'Blocked: localhost is a local address',
-            tool: 'fetch_url',
-          },
-          {
-            url: 'http://[::ffff:7f00:1]:8790/',
-            method: 'GET',
-            message: 'Blocked: ::ffff:7f00:1 is a private address',
-            tool: 'fetch_url',
-          },
-          {
-            url: 'http://[64:ff9b::7f00:1]/x',
-            method: 'POST',
-            message: 'Blocked: 64:ff9b::7f00:1 is a private address',
-            tool: 'run_script',
-          },
-        ]),
-      );
-      expect(refused).toHaveLength(4);
-      expect(results).toContain(
-        'Could not read http://127.0.0.1:8790/: Blocked: 127.0.0.1 is a private address',
-      );
-      expect(results).toContain(
-        'Could not read http://localhost:8790/: Blocked: localhost is a local address',
-      );
-      // A name the egress cannot serve fails like a dead domain, with no address in the text.
-      expect(results).toContain(
-        'Could not read https://nada.spain.test/: Could not fetch nada.spain.test: ENOTFOUND',
-      );
+      expect(refused).toEqual([
+        {
+          url: 'http://127.0.0.1:8790/',
+          method: 'GET',
+          message: 'Blocked: 127.0.0.1 is a private address',
+          call: 'call_g',
+        },
+        {
+          url: 'http://localhost:8790/',
+          method: 'GET',
+          message: 'Blocked: localhost is a local address',
+          call: 'call_g',
+        },
+        {
+          url: 'http://[::ffff:7f00:1]:8790/',
+          method: 'GET',
+          message: 'Blocked: ::ffff:7f00:1 is a private address',
+          call: 'call_g',
+        },
+        {
+          url: 'http://[64:ff9b::7f00:1]/x',
+          method: 'POST',
+          message: 'Blocked: 64:ff9b::7f00:1 is a private address',
+          call: 'call_g',
+        },
+      ]);
       expect(logOf('egress.fetch').map((f) => f.url)).toEqual(['https://nada.spain.test/']);
       expect(logOf('egress.resolveHost').map((r) => r.host)).toEqual(['nada.spain.test']);
     });
 
-    it('does not give the assistant any network tool', async () => {
-      const started = await start({ egress: true }, { role: 'assistant' });
+    it('does not give the coordinator any network tool', async () => {
+      const started = await start({ egress: true }, { role: 'orchestrator' });
       await ask(started, 'Hola');
-      expect(toolNames(completions()[0] as ChatRequest)).toEqual([...ASSISTANT_TOOL_NAMES]);
+      expect(toolNames(completions()[0] as ChatRequest)).toEqual([...COORDINATOR_TOOL_NAMES]);
     });
   });
 
   describe('research stub', () => {
-    const userAsksResearch: ScenarioInput = {
-      rules: [
-        {
-          when: { turn: 0 },
-          reply: {
-            toolCalls: [
-              { name: 'web_research', arguments: { query: 'renovar NIE', mode: 'balanced' } },
-            ],
-          },
-        },
-      ],
-      fallback: { text: 'Hecho.' },
-    };
-
     it('replaces the backend and the tools: the real tool over a stand-in transport', async () => {
-      script(userAsksResearch);
-      // A custom endpoint: without the stub it has no web_research at all.
+      script({
+        rules: [
+          {
+            when: { turn: 0 },
+            reply: {
+              toolCalls: [
+                workflow(
+                  'investigar',
+                  `return await api.search({ prompt: 'renovar NIE', mode: 'balanced' });`,
+                ),
+              ],
+            },
+          },
+        ],
+        fallback: { text: 'Hecho.' },
+      });
+      // A custom endpoint: without the stub it has no web research at all.
       const started = await start({ research: 'key-server' });
       await ask(started, 'Quiero renovar el NIE');
       const [first, second] = completions() as [ChatRequest, ChatRequest];
-      expect(toolNames(first).sort()).toEqual([...TOOL_NAMES, WEB_RESEARCH_TOOL_NAME].sort());
-      expect(systemPrompt(first)).toContain('call web_research once');
-      expect(systemPrompt(first)).not.toContain('Web research is not available');
+      expect(toolNames(first)).toEqual(['codemode']);
+      expect(systemPrompt(first)).toContain('Research with api.search (one well-built');
+      expect(systemPrompt(first)).toContain('search(input: string | SearchInput)');
+      expect(systemPrompt(first)).not.toContain('Web research is not configured');
 
       const requests = logOf('research.fetch');
       expect(requests).toHaveLength(1);
@@ -379,15 +364,9 @@ describe('HostHooks (real host process)', () => {
         url: 'https://research.spain.test/v1/research',
         body: { input: 'renovar NIE', mode: 'balanced' },
       });
-      // The model reads exactly what the product tool produces for this stream.
+      // The workflow reads the answer the product tool produces for this stream.
       expect(toolResults(second)).toEqual([
-        JSON.stringify({
-          success: true,
-          id: RESEARCH_RUN,
-          status: 'completed',
-          outputReady: true,
-          output: { type: 'text', content: RESEARCH_TEXT, basis: [] },
-        }),
+        `Workflow "investigar" succeeded.\n\nResult:\n${RESEARCH_TEXT}`,
       ]);
     });
 
@@ -395,24 +374,25 @@ describe('HostHooks (real host process)', () => {
       const started = await start({ research: 'exa' });
       await ask(started, 'Hola');
       const [body] = completions() as [ChatRequest];
-      expect(toolNames(body).sort()).toEqual([...TOOL_NAMES, ...EXA_TOOL_NAMES].sort());
-      expect(systemPrompt(body)).toContain('research the procedure with exa_search');
-      expect(systemPrompt(body)).not.toContain('web_research');
+      expect(toolNames(body)).toEqual(['codemode']);
+      expect(systemPrompt(body)).toContain('Research with api.search (Exa:');
+      expect(systemPrompt(body)).not.toContain('Web research is not configured');
     });
 
     it('can remove web research that the config would give', async () => {
       const started = await start({ research: 'none' }, { research: { exa: true } });
       await ask(started, 'Hola');
       const [body] = completions() as [ChatRequest];
-      expect(toolNames(body)).toEqual([...TOOL_NAMES]);
-      expect(systemPrompt(body)).toContain('Web research is not available');
+      expect(toolNames(body)).toEqual(['codemode']);
+      expect(systemPrompt(body)).toContain('Web research is not configured');
+      expect(systemPrompt(body)).not.toContain('search(input: string | SearchInput)');
     });
 
-    it('does not apply to the assistant, which never researches', async () => {
-      const started = await start({ research: 'key-server' }, { role: 'assistant' });
+    it('does not apply to the coordinator, which never researches', async () => {
+      const started = await start({ research: 'key-server' }, { role: 'orchestrator' });
       await ask(started, 'Hola');
       const [body] = completions() as [ChatRequest];
-      expect(toolNames(body)).toEqual([...ASSISTANT_TOOL_NAMES]);
+      expect(toolNames(body)).toEqual([...COORDINATOR_TOOL_NAMES]);
       expect(logOf('research.fetch')).toEqual([]);
     });
   });
@@ -425,30 +405,22 @@ describe('HostHooks (real host process)', () => {
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                {
-                  id: 'call_a',
-                  name: 'run_script',
-                  arguments: {
-                    code: `return await (await fetch('https://api.spain.test/a')).json();`,
-                  },
-                },
-                {
-                  id: 'call_b',
-                  name: 'run_script',
-                  arguments: {
-                    code: `return await (await fetch('https://api.spain.test/b')).json();`,
-                  },
-                },
-                {
-                  id: 'call_c',
-                  name: 'fetch_url',
-                  arguments: { url: 'https://sede.spain.test/c' },
-                },
-                {
-                  id: 'call_d',
-                  name: 'web_research',
-                  arguments: { query: 'renovar NIE', mode: 'fast' },
-                },
+                workflow(
+                  'uno',
+                  `return await (await api.fetch('https://api.spain.test/a')).json();`,
+                  'call_a',
+                ),
+                workflow(
+                  'dos',
+                  `return await (await api.fetch('https://api.spain.test/b')).json();`,
+                  'call_b',
+                ),
+                workflow(
+                  'tres',
+                  `const page = await api.fetchUrl('https://sede.spain.test/c');
+return await api.search({ prompt: 'renovar NIE', mode: 'fast' });`,
+                  'call_c',
+                ),
               ],
             },
           },
@@ -463,18 +435,13 @@ describe('HostHooks (real host process)', () => {
         'call_a',
         'call_b',
         'call_c',
-        'call_d',
       ]);
+      // The research tool behind api.search is wrapped too, inside the call that used it.
       expect(
         logOf('wrapTool.start')
           .map((e) => `${e.id}:${e.tool}`)
           .sort(),
-      ).toEqual([
-        'call_a:run_script',
-        'call_b:run_script',
-        'call_c:fetch_url',
-        'call_d:web_research',
-      ]);
+      ).toEqual(['call_a:codemode', 'call_b:codemode', 'call_c:codemode', 'codemode:web_research']);
       expect(logOf('wrapTool.end')).toHaveLength(4);
 
       // Each request is attributed to the call that made it (AsyncLocalStorage over the hook).
@@ -488,21 +455,21 @@ describe('HostHooks (real host process)', () => {
       });
     });
 
-    it('wraps the tools of the assistant too', async () => {
+    it('wraps the tools of the coordinator too', async () => {
       llm.setScenario({
         rules: [
           {
             when: { turn: 0 },
-            reply: { toolCalls: [{ id: 'call_v', name: 'vault_read', arguments: {} }] },
+            reply: { toolCalls: [{ id: 'call_l', name: 'agent_list', arguments: {} }] },
           },
         ],
         fallback: { text: 'Hecho.' },
       });
-      bridge.setHandler('vault.read', () => ({ personal: [], documents: [], credentials: [] }));
-      const started = await start({ wrapTool: true }, { role: 'assistant' });
+      bridge.setHandler('agents.list', () => ({ agents: [] }));
+      const started = await start({ wrapTool: true }, { role: 'orchestrator' });
       await ask(started, 'Hola');
       expect(logOf('wrapTool.start')).toEqual([
-        { hook: 'wrapTool.start', tool: 'vault_read', id: 'call_v' },
+        { hook: 'wrapTool.start', tool: 'agent_list', id: 'call_l' },
       ]);
     });
 
@@ -514,7 +481,7 @@ describe('HostHooks (real host process)', () => {
   });
 
   describe('onModel', () => {
-    it.each(['procedure', 'assistant'] as const)(
+    it.each(['agent', 'orchestrator'] as const)(
       'sees the configured model before the first LLM request (%s)',
       async (role) => {
         const started = await start({ onModel: 'global-fetch' }, { role });
@@ -537,7 +504,7 @@ describe('HostHooks (real host process)', () => {
   });
 
   describe('now', () => {
-    it.each(['procedure', 'assistant'] as const)(
+    it.each(['agent', 'orchestrator'] as const)(
       'pins "Today is" in the %s prompt, read on every turn',
       async (role) => {
         const clockFile = join(workDir, 'now.txt');

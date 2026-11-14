@@ -3,29 +3,26 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHostOps, createImageStore } from '../src/codemode/host-ops';
 import {
   decodeBody,
-  FetchError,
   fetchDocument,
   htmlToMarkdown,
   isPrivateAddress,
   sliceText,
 } from '../src/research/fetch';
-import { fetchUrlTool } from '../src/tools/fetch-url';
-import { FIXTURES, textOf } from './helpers/tools';
 
+const FIXTURES = join(import.meta.dirname, 'fixtures');
 const article = readFileSync(join(FIXTURES, 'html', 'article.html'), 'utf8');
 const legacy = readFileSync(join(FIXTURES, 'html', 'legacy.html'), 'utf8');
 const pdf = readFileSync(join(FIXTURES, 'pdf', 'tasas.pdf'));
 
 let server: Server;
 let base: string;
-let hits: Record<string, number> = {};
 
 beforeAll(async () => {
   server = createServer((req, res) => {
     const path = req.url ?? '/';
-    hits[path] = (hits[path] ?? 0) + 1;
     const send = (status: number, type: string, body: Buffer | string, headers = {}) => {
       res.writeHead(status, { 'content-type': type, ...headers });
       res.end(body);
@@ -206,47 +203,35 @@ describe('helpers', () => {
   });
 });
 
-describe('fetch_url tool', () => {
-  it('renders a page header, the untrusted marker and paging hints', async () => {
-    const tool = fetchUrlTool({ allowPrivateHosts: true });
-    const result = await tool.execute(
-      'c1',
-      { url: `${base}/article.html`, maxChars: 300 },
-      undefined,
-      undefined,
-      {} as never,
-    );
-    const text = textOf(result as never);
-    expect(text).toContain(`URL: ${base}/article.html`);
-    expect(text).toContain('Untrusted page content');
-    expect(text).toMatch(/More: call fetch_url again with offset \d+/);
+describe('api.fetchUrl', () => {
+  const fetchUrl = (allowPrivateHosts: boolean, args: Record<string, unknown>) =>
+    createHostOps({
+      bridge: { call: async () => ({}) as never },
+      images: createImageStore(),
+      runId: () => 'run_1',
+      procedures: () => [],
+      imagesSupported: true,
+      allowPrivateHosts,
+    })('fetchUrl', args, { signal: new AbortController().signal });
+
+  it('returns the page with its title and paging', async () => {
+    const page = (await fetchUrl(true, { url: `${base}/article.html`, maxChars: 300 })) as {
+      url: string;
+      kind: string;
+      text: string;
+      truncated: boolean;
+      nextOffset?: number;
+    };
+    expect(page).toMatchObject({ url: `${base}/article.html`, kind: 'html', truncated: true });
+    expect(page.text.length).toBeLessThanOrEqual(300);
+    expect(page.nextOffset).toBeGreaterThan(0);
   });
 
-  it('serves pages from a short cache when paging', async () => {
-    const tool = fetchUrlTool({ allowPrivateHosts: true });
-    hits = {};
-    await tool.execute('c1', { url: `${base}/doc.pdf` }, undefined, undefined, {} as never);
-    await tool.execute(
-      'c2',
-      { url: `${base}/doc.pdf`, offset: 10 },
-      undefined,
-      undefined,
-      {} as never,
-    );
-    expect(hits['/doc.pdf']).toBe(1);
-  });
-
-  it('returns tool errors instead of throwing', async () => {
-    const tool = fetchUrlTool();
-    const result = (await tool.execute(
-      'c1',
-      { url: `${base}/article.html` },
-      undefined,
-      undefined,
-      {} as never,
-    )) as { isError?: boolean };
-    expect(result.isError).toBe(true);
-    expect(textOf(result as never)).toContain('Blocked');
-    expect(FetchError).toBeDefined();
+  it('fails with a host error instead of reaching private hosts', async () => {
+    await expect(fetchUrl(false, { url: `${base}/article.html` })).rejects.toMatchObject({
+      name: 'HostOpError',
+      code: 'unavailable',
+      message: expect.stringContaining('Blocked'),
+    });
   });
 });

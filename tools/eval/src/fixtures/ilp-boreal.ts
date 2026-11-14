@@ -114,7 +114,7 @@ function answers(): AnswerGroup[] {
           action: { type: 'confirm', approved: true },
         },
         {
-          // The agent's confirm_action before anything binding: the user wants it signed.
+          // The agent's confirmation before anything binding: the user wants it signed.
           id: 'approve-confirmation',
           optional: true,
           repeatable: true,
@@ -183,13 +183,13 @@ const noRestrictiveBrief = (): Rule => ({
       {
         type: 'toolCall',
         agent: 'assistant',
-        tool: 'procedure_start',
+        tool: 'agent_start',
         args: { brief: NO_SIGN_BRIEF },
       },
       {
         type: 'toolCall',
         agent: 'assistant',
-        tool: 'procedure_message',
+        tool: 'agent_message',
         args: { message: NO_SIGN_BRIEF },
       },
     ],

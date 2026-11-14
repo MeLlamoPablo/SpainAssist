@@ -185,7 +185,7 @@ export function writeRunFolder(runsRoot: string, runId: string, options: RunFold
       type: 'tool_start',
       agent: 'assistant',
       toolCallId: 'c1',
-      tool: 'procedure_start',
+      tool: 'agent_start',
       args: {},
     }),
   ]);

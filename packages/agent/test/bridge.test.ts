@@ -40,21 +40,21 @@ describe('BridgeClient', () => {
   });
 
   it('reports unauthorized when the token is wrong', async () => {
-    bridge = await createFakeBridge({ 'procedure.get': () => ({}) });
+    bridge = await createFakeBridge({ 'workflows.list': () => ({}) });
     const client = new BridgeClient({ url: bridge.url, token: 'wrong' });
-    await expect(client.call('procedure.get', {})).rejects.toMatchObject({ code: 'unauthorized' });
+    await expect(client.call('workflows.list', {})).rejects.toMatchObject({ code: 'unauthorized' });
   });
 
   it('propagates aborts: the request is cancelled and the app sees the connection close', async () => {
-    bridge = await createFakeBridge({ 'prompt.form': hang });
+    bridge = await createFakeBridge({ 'prompt.confirm': hang });
     const client = new BridgeClient({ url: bridge.url, token: bridge.token });
     const controller = new AbortController();
     const pending = client.call(
-      'prompt.form',
-      { title: 'Datos', fields: [{ key: 'a', label: 'A', type: 'text' }] },
+      'prompt.confirm',
+      { confirmKind: 'action', title: 'Enviar', message: '¿Envío la solicitud?' },
       { signal: controller.signal },
     );
-    const call = await bridge.waitForCall('prompt.form');
+    const call = await bridge.waitForCall('prompt.confirm');
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: 'aborted' });
     await bridge.waitForAbort(call);
@@ -62,12 +62,12 @@ describe('BridgeClient', () => {
   });
 
   it('applies timeouts except to methods that wait for the user', async () => {
-    expect(defaultBridgeTimeoutMs('prompt.form')).toBe(0);
+    expect(defaultBridgeTimeoutMs('prompt.confirm')).toBe(0);
     expect(defaultBridgeTimeoutMs('browser.fillFromUser')).toBe(0);
-    expect(defaultBridgeTimeoutMs('procedure.update')).toBeGreaterThan(0);
-    bridge = await createFakeBridge({ 'procedure.get': hang });
+    expect(defaultBridgeTimeoutMs('procs.update')).toBeGreaterThan(0);
+    bridge = await createFakeBridge({ 'workflows.list': hang });
     const client = new BridgeClient({ url: bridge.url, token: bridge.token });
-    await expect(client.call('procedure.get', {}, { timeoutMs: 100 })).rejects.toMatchObject({
+    await expect(client.call('workflows.list', {}, { timeoutMs: 100 })).rejects.toMatchObject({
       code: 'timeout',
     });
   });
@@ -93,8 +93,8 @@ describe('BridgeClient', () => {
     try {
       const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       const client = new BridgeClient({ url, token: 't' });
-      expect(await client.call('procedure.get', {})).toEqual({ n: 1 });
-      expect(await client.call('procedure.get', {})).toEqual({ n: 2 });
+      expect(await client.call('workflows.list', {})).toEqual({ n: 1 });
+      expect(await client.call('workflows.list', {})).toEqual({ n: 2 });
       expect(resets).toBe(1);
       client.close();
     } finally {
@@ -105,6 +105,6 @@ describe('BridgeClient', () => {
 
   it('reports network errors when the app is unreachable', async () => {
     const client = new BridgeClient({ url: 'http://127.0.0.1:9', token: 't' });
-    await expect(client.call('procedure.get', {})).rejects.toMatchObject({ code: 'network' });
+    await expect(client.call('workflows.list', {})).rejects.toMatchObject({ code: 'network' });
   });
 });

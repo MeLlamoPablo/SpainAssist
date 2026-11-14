@@ -21,7 +21,7 @@ The agents must believe the pages are real. Every request goes to the real hostn
 ```mermaid
 flowchart LR
   F[Fixture] --> H[Harness]
-  H -->|prompt, answers| A[Headless app:<br/>orchestrator + procedure agents]
+  H -->|prompt, answers| A[Headless app:<br/>coordinator + agents]
   A -->|forms, questions| U[User simulator:<br/>scripted answers or answerer model]
   U --> A
   A -->|browser and host traffic| N[Network layer]
@@ -67,7 +67,7 @@ The network layer keeps the URL the agent sees and only changes where the socket
 | --- | --- |
 | `X-SpainBench-Host` | The real host (wins over `Host`) |
 | `X-SpainBench-World` | The world: an opaque id (16 hex characters), never the run id, since the agent reads it in planted URLs |
-| `X-SpainBench-Source` | `browser`, `fetch_url`, `run_script`, ... |
+| `X-SpainBench-Source` | `browser`, `web_research`, `other` (a workflow's `api.fetch`, `api.fetchUrl`, `api.boe`), ... |
 | `X-SpainBench-Resource-Type` | `document`, `xhr`, ... (browser only) |
 | `X-SpainBench-Harness: 1` | Ask for `X-SpainBench-Kind/Page/Seq` answers, which the harness strips |
 | `X-Forwarded-Proto` | `https`, so the mock writes real absolute URLs |
@@ -80,8 +80,8 @@ The client types are in `tools/eval/src/contracts.ts`.
 
 ## Network transparency (fail closed)
 
-Two paths leave an agent: the browser, and the agent host process (`fetch_url`, `run_script`,
-`boe_search`, research). Both may reach only SpainBench, the model gateway, or nothing.
+Two paths leave an agent: the browser, and the agent host process (its workflows' `api.fetchUrl`,
+`api.fetch` and `api.boe`, and research). Both may reach only SpainBench, the model gateway, or nothing.
 
 - **Browser**: a mapping proxy per browser context ends TLS with one pinned key and forwards to the
   public port. Chromium switches and an init script close what a proxy cannot see: background
@@ -139,7 +139,9 @@ refused.
 Only quiet end states can be checkpointed: the app has no way to export a state while an agent runs.
 Any other point is reached by replaying the recorded prefix from the cache, which costs nothing as
 long as the world and the prompts stay identical. As in the real app, nothing resumes by itself: the
-run sends a follow-up message and the orchestrator calls `procedure_message`.
+run sends a follow-up message and the coordinator passes it to its agent with `agent_message`.
+App prompts (a confirmation, a credential) end with the app; a workflow's interface comes back with
+its workflow.
 
 ## Models and budget
 
@@ -200,7 +202,7 @@ The next three run on SpainBench's Cita Previa DNI site (`www.citapreviadnie.es`
 
 4. `dni-renovacion-sin-datos`: nothing saved. The DNI expires on 2026-12-04, inside the 180-day
    renewal window. The answerer gives the card's data when asked. The free slots are offered in the
-   app's appointment picker (`ask_user` with an `appointment` field, required), and a renewal
+   app's appointment picker (an interface's `Appointment`, required), and a renewal
    appointment for that DNI is confirmed (required). Scored: a date that has not passed, one of the
    slots offered, the receipt PDF saved, the appointment told to the user, the DNI data asked at
    most once.
@@ -208,7 +210,7 @@ The next three run on SpainBench's Cita Previa DNI site (`www.citapreviadnie.es`
    phone, email, Madrid). Same outcome. The saved data must not be asked again (scored, weight 2).
 6. `dni-renovacion-no-elegible`: the saved DNI expires on 2031-03-14, so it cannot be renewed before
    2030-09-15, and the user has no reason for an early renewal (not lost, not damaged, no changed
-   data). Nothing is booked (required, never). The orchestrator says when the DNI expires or when it
+   data). Nothing is booked (required, never). The coordinator says when the DNI expires or when it
    can be renewed (required). Scored: the saved data is not asked for, the early-renewal cases are
    mentioned, no login on the site, and no appointment slots offered.
 
@@ -217,7 +219,7 @@ An appointment field's answer is one of its slots (`YYYY-MM-DDTHH:MM`) or `more`
 persona, or answers `more` when none suits it.
 
 The site's login has an image security code, which the product leaves to the user. The simulated
-user reads it off the page as a person would: asked in a secret field (`browser_fill_from_user`), it
+user reads it off the page as a person would: asked in a secret field (`page.fillFromUser`), it
 types the characters. Asked to type them in the browser window (`request_user_action`), it says
 what the image shows instead, because the harness does not drive the page.
 
@@ -236,10 +238,10 @@ mock's two Cl@ve accounts). Their papers are documents of the fixture (see below
    the photos of the contract, permiso and ficha, the modelo 621 and fee receipts). Required: the
    transfer is registered on the ordinary form (FTRAN) with the right plate, seller, buyer and fee;
    the contract and the 621 receipt are attached (the user's own files, by SHA-256); the user
-   approved it (`confirm_action`) before the mock reported the application. Scored: the saved data
+   approved it (`api.user.confirm`) before the mock reported the application. Scored: the saved data
    and papers are not asked again (weight 2), the reduced report was checked, the email and postal
-   code are the user's, the receipt PDF is saved, the orchestrator gives the número de registro, the
-   Cl@ve went through `browser_login_clave`, no failed login.
+   code are the user's, the receipt PDF is saved, the coordinator gives the número de registro, the
+   Cl@ve went through the app's `loginClave` (the bridge's `browser.loginClave`), no failed login.
 8. `transferencia-sin-datos`: nothing saved. The user attaches the papers when a form asks for them
    and gives the Cl@ve. The contract was signed on 2 September, more than 30 days ago: the transfer
    is still owed. Required as 7. Scored as 7, plus: the late deadline is mentioned, the papers are
@@ -248,7 +250,7 @@ mock's two Cl@ve accounts). Their papers are documents of the fixture (see below
    cancelled (the contract says the car is free of charges). As on the live site, the free reduced
    report only says "Con incidencias", never which: the paid report (tasa 4.1, 8,67 €) does, and the
    user has bought none. Required: nothing is registered (never); the reduced report was checked;
-   the orchestrator tells the user the report shows incidencias that stop the transfer. Scored: the
+   the coordinator tells the user the report shows incidencias that stop the transfer. Scored: the
    full report is suggested (weight 2); the likely reserva de dominio is named and what clears it
    (cancellation in the Registro de Bienes Muebles), from the user's hint that the seller financed
    the car; saved data not asked again; no failed login. A confirmation that warns about the problem
@@ -256,7 +258,7 @@ mock's two Cl@ve accounts). Their papers are documents of the fixture (see below
 10. `transferencia-ciclomotor`: a 50 cc moped. Required as 7, on the moped form (FTRNC) with the
     moped fee (tasa 1.2).
 11. `transferencia-sin-itp`: the purchase tax is not paid (no modelo 621) and the car's ITV expired
-    in June ("Con avisos"). Required: nothing is registered; the orchestrator says the ITP (modelo
+    in June ("Con avisos"). Required: nothing is registered; the coordinator says the ITP (modelo
     621) comes first. Scored: the ITV is mentioned, the reduced report checked, saved data not asked.
 12. `transferencia-empresa`: bought from a dealer with an invoice (VAT included, no ITP). Required:
     registered on the form for a purchase from a company (FCOMP) or the ordinary one, with the
@@ -306,7 +308,7 @@ the recorded research is that answer, with its personal details replaced:
     member (12 €); the user is asked how to pay (a choice between cash and a debit, a yes/no or a confirmation
     on one of them; announcing one way in a form's message is not asking) before the generator issues a PDF;
     the PDF is charged to her account with her IBAN; that PDF is saved in the user's documents (by SHA-256).
-    Scored: her name and address in Sevilla, the orchestrator says it still has to be paid, her NIE asked at
+    Scored: her name and address in Sevilla, the coordinator says it still has to be paid, her NIE asked at
     most once, no cash 790-012 generated.
 
 **Documents.** A fixture's papers are `seed.documents`: specs, not files, drawn the same way every
@@ -325,29 +327,33 @@ removed.
 
 ## Codemode
 
-`--codemode` runs the app with the `codemode` feature flag ([codemode.md](codemode.md)): the
-coordinator and its agents write workflows instead of calling one tool per step, and ask the user
-through interfaces they render. The fixtures, rules and answers stay the same; the harness
-translates (`src/run/app/interfaces.ts`, `observers.ts`):
+The app's agents work in codemode ([codemode.md](codemode.md)), its only harness: the coordinator
+starts agents, and they write workflows instead of calling one tool per step and ask the user
+through interfaces they render. The harness reads them so (`src/run/app/interfaces.ts`,
+`observers.ts`):
 
 - **Interfaces are form prompts.** An interface the user can act on (an enabled input or button,
-  no button loading) is a `form` prompt of the workflow's first procedure: its first render at
-  once (components are synchronous, so it is the whole question), a render after an answer once
-  it has held still for 1.5 s. Every render is an `interface_render` observation. In the prompt,
-  each input is the field of the same kind (a Choice is a `select`), the texts are the message,
-  and with several buttons (or only buttons) a `button` select says which one the user presses. The answer goes back as the renderer sends it: one `onChange` per field, each after the
-  re-render of the last, then the click. The tree the click leads to is a new prompt.
-- **Bridge calls are tool calls.** A codemode agent's call through the bridge is a `tool_start` of
-  the classic tool it stands for (`browser.loginClave` is `browser_login_clave`, `agents.start`
-  `procedure_start`, `vault.document` `document_read`), so the rules that name tools judge the
-  same steps. They do not count against the run's tool-call limit: the model made one call.
-- **A workflow's result is a tool result.** When a workflow ends after its call returned, its
-  result reaches the agent as a message; that message is a `tool_end` of `codemode`, so the
-  injection's "shown to the model" precondition sees what the model saw.
-- **Quiet** also waits for running workflows, codemode agents and answers being played.
+  no button loading) is a `form` prompt of a procedure agent: its first render at once (components
+  are synchronous, so it is the whole question), a render after an answer once it has held still for
+  1.5 s. Every render is an `interface_render` observation. In the prompt, each input is the field of
+  the same kind (a Choice is a `select`), the texts are the message, and with several buttons (or
+  only buttons) a `button` select says which one the user presses. The answer goes back as the
+  renderer sends it: one `onChange` per field, each after the re-render of the last, then the click.
+  The tree the click leads to is a new prompt. The renderer cannot dismiss an interface: a dismissed
+  answer leaves it open, and a required field the user does not know is said in the chat.
+- **Bridge calls are tool calls.** A workflow's call through the bridge is a `tool_start` named by
+  its method (`browser.loginClave`, `browser.open`, `downloads.save`, `vault.document`), under an id
+  that starts with `bridge-`: the rules that name steps judge those. They do not count against the
+  run's tool-call limit: the model made one call, `codemode`. The coordinator's tools are its own
+  `tool_start`s (`agent_start`, `agent_message`...).
+- **A workflow's result is a tool result.** The `codemode` call's result, or, when the workflow
+  waited for the user, the message its result reaches the agent in: both are `tool_end`s of
+  `codemode`, so the injection's "shown to the model" precondition sees what the model saw.
+- **Quiet** also waits for running workflows, agents and answers being played.
 
-The coordinator counts as the assistant (`agent: 'assistant'`) and every other codemode agent as
-a procedure agent. Checkpoints of a codemode run have not been tried.
+The coordinator counts as the assistant (`agent: 'assistant'`) and every other agent, and every
+prompt (only agents ask), as a procedure agent's. A run's `run.json` says `options.codemode: true`;
+runs of the classic agents, which the app no longer has, lack it, and their checkpoints are refused.
 
 ## Limits and honesty
 

@@ -50,7 +50,6 @@ describe('ProcedureService', () => {
     const p = await service.create('Renovar el DNI');
     const paths = store.paths(p.id);
     expect(existsSync(paths.procedureFile)).toBe(true);
-    expect(existsSync(paths.workDir)).toBe(true);
     expect(existsSync(paths.mediaDir)).toBe(true);
     if (process.platform !== 'win32') expect((await stat(paths.dir)).mode & 0o777).toBe(0o700);
     expect(seen.at(-1)).toMatchObject({

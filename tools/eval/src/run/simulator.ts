@@ -291,7 +291,7 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
         return;
       }
       case 'typed': {
-        // The form's secret field (what `browser_fill_from_user` asks for), else its only text field.
+        // The form's secret field (what `page.fillFromUser` asks for), else its only text field.
         const fields = (prompt.fields ?? []).filter((field) => field.type !== 'document');
         const secret = fields.find((field) => field.secret || field.type === 'secret');
         const texts = fields.filter((field) => field.type === 'text');

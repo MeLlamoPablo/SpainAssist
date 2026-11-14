@@ -40,5 +40,5 @@ export {
   ToolCalledSpec,
   ToolCallSpec,
 } from './scenario';
-export { BUILTIN_SCENARIOS, builtinScenario } from './scenarios';
+export { BUILTIN_SCENARIOS, builtinScenario, DEMO_WORKFLOW } from './scenarios';
 export { createMockLlm, type MockLlm, type MockLlmOptions, type RecordedRequest } from './server';

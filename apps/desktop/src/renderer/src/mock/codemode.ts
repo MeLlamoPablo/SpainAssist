@@ -8,7 +8,7 @@ import type {
 } from '@sa/shared';
 
 /**
- * The codemode harness in the web preview (`?codemode=1`): two workflows waiting for the user,
+ * The codemode harness in the web preview: two workflows waiting for the user,
  * rendered from local state the way a workflow's sandbox would (a tree per render, handlers by
  * id), and the agents of the progress meter. No sandbox and no model: the trees are built here.
  */

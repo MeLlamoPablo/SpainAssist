@@ -8,13 +8,11 @@ import { z } from 'zod';
  */
 export const AgentHostConfigSchema = z.object({
   /**
-   * "assistant": the orchestrator behind the single chat (delegates everything);
-   * "procedure": the agent of one procedure (does the work).
-   * Codemode (`codemode` flag, docs/codemode.md): "orchestrator" (the chat) and "agent"
-   * (background work, any procedures); one tool, `codemode`.
+   * "orchestrator": the coordinator behind the single chat (only delegates); "agent": background
+   * work on any procedures, with one tool, `codemode` (docs/codemode.md).
    */
-  role: z.enum(['assistant', 'procedure', 'orchestrator', 'agent']).default('procedure'),
-  /** The procedure this agent works on, or ASSISTANT_AGENT_ID for the assistant. */
+  role: z.enum(['orchestrator', 'agent']),
+  /** The agent's id, or ASSISTANT_AGENT_ID for the coordinator. */
   procedureId: z.string().min(1),
   /** pi session file of this agent (JSONL). Created if missing, resumed otherwise. */
   sessionFile: z.string().min(1),
@@ -73,7 +71,7 @@ export const AgentHostConfigSchema = z.object({
       exaBaseUrl: z.string().url().optional(),
       /** BOE open-data API base URL override (tests). */
       boeBaseUrl: z.string().url().optional(),
-      /** Dev/e2e only: fetch_url and run_script may reach localhost / private nets (mock sede). */
+      /** Dev/e2e only: api.fetchUrl and api.fetch may reach localhost / private nets (mock sede). */
       allowPrivateHosts: z.boolean().optional(),
     })
     .default({}),
@@ -85,7 +83,7 @@ export const AgentHostConfigSchema = z.object({
   feedback: z.object({ submit: z.boolean(), vote: z.boolean() }).optional(),
   /**
    * The DNIe through the phone app (`dnie-phone` feature flag): the system prompt and
-   * browser_use_certificate offer it. Off by default.
+   * `page.useCertificate` offer it. Off by default.
    */
   dniePhone: z.boolean().default(false),
   /**

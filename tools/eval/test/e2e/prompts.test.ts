@@ -53,17 +53,18 @@ e2eSuite('a question nobody scripted, on the real SpainBench', () => {
     const prompts = observations(run.events, 'prompt_shown').map((e) => e.prompt);
     expect(prompts.map((prompt) => prompt.title)).toEqual([
       '¿Cómo te identificas?',
-      '¿En qué provincia vives?',
       'Añade tu Cl@ve Permanente',
+      '¿En qué provincia vives?',
     ]);
     const answers = observations(run.events, 'prompt_answered');
     expect(answers.map((answer) => [answer.answerId ?? null, answer.by])).toEqual([
       ['choose-clave-permanente', 'structured'],
-      [null, 'answerer'],
       ['clave-permanente-credential', 'structured'],
+      [null, 'answerer'],
     ]);
 
-    // The answerer saw the persona and the question, and said it did not know: the form was dismissed.
+    // The answerer saw the persona and the question, and said it did not know: the interface was
+    // left as it was (the renderer cannot dismiss one), and the run went quiet all the same.
     const folder = join(outcome.runDir, 'answerer');
     expect(readdirSync(folder)).toEqual(['001-1.json']);
     const call = readJson<{
@@ -78,10 +79,9 @@ e2eSuite('a question nobody scripted, on the real SpainBench', () => {
     expect(call.request.messages[0]?.text).toContain('¿En qué provincia vives?');
     expect(call.response.text).toBe('{"provincia": null}');
     expect(call.parsed).toEqual({ type: 'values', values: {}, skipped: ['provincia'] });
-    const asked = observations(run.events, 'tool_end').find(
-      (event) => event.tool === 'ask_user' && event.agent === 'procedure',
+    expect(observations(run.events, 'note').map((note) => note.text)).toContain(
+      `interface ${prompts[2]?.itemId} was left unanswered (dismissed)`,
     );
-    expect(asked?.text).toBe('The user dismissed the form without answering.');
 
     // It went through the same meter as the agents, under its own key.
     const agents = readLines<{ agent: string }>(join(outcome.runDir, 'llm', 'meter.jsonl')).map(
@@ -116,16 +116,12 @@ e2eSuite('a question nobody scripted, on the real SpainBench', () => {
     expect(outcome.result.notes[0]).toBe(
       `unexpected-prompt:${province?.itemId}: unexpected prompt: procedure form "¿En qué provincia vives?"`,
     );
-    // The prompt was left unanswered, the run did not go on to the credential, and the answerer
-    // was never asked.
+    // The prompt was left unanswered and the answerer was never asked.
     expect(
       observations(run.events, 'prompt_answered').map((answer) => answer.answerId ?? null),
-    ).toEqual(['choose-clave-permanente']);
-    expect(shown.map((prompt) => prompt.kind)).toEqual(['form', 'form']);
+    ).toEqual(['choose-clave-permanente', 'clave-permanente-credential']);
+    expect(shown.map((prompt) => prompt.kind)).toEqual(['form', 'credential', 'form']);
     expect(existsSync(join(outcome.runDir, 'answerer'))).toBe(false);
-    expect(outcome.result.rules.find((rule) => rule.ruleId === 'pdf-saved-complete')?.matched).toBe(
-      false,
-    );
     expect(outcome.checkpoints).toEqual([]);
     expect(await leftovers(known)).toEqual([]);
   }, 240_000);

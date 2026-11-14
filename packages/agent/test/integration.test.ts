@@ -7,23 +7,24 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ChatRequest, createMockLlm, type MockLlm, type ScenarioInput } from '@sa/mock-llm';
-import type { Procedure } from '@sa/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type AgentHostConfig, buildAgentLaunch, PiRpcClient } from '../src/index';
 import type { AgentEvent } from '../src/rpc/events';
-import {
-  ASSISTANT_TOOL_NAMES,
-  COORDINATOR_TOOL_NAMES,
-  EXA_TOOL_NAMES,
-  TOOL_NAMES,
-  WEB_RESEARCH_TOOL_NAME,
-} from '../src/tools/names';
+import { COORDINATOR_TOOL_NAMES } from '../src/tools/names';
 import { EVAL_MARKERS } from './helpers/eval-markers';
-import { createFakeBridge, type FakeBridge, hang } from './helpers/fake-bridge';
+import { createFakeBridge, type FakeBridge, hang, workflowHandlers } from './helpers/fake-bridge';
 import { createFakeSse, sseEvent } from './helpers/fake-sse';
 
 const packageRoot = join(import.meta.dirname, '..');
 const hostPath = join(packageRoot, 'dist', 'host.js');
+
+/** A codemode call running `body` as the workflow's main. */
+function workflow(id: string, body: string) {
+  return {
+    name: 'codemode',
+    arguments: { workflow: id, source: `export async function main(api) {\n${body}\n}` },
+  };
+}
 
 const scenario: ScenarioInput = {
   name: 'integration',
@@ -34,64 +35,25 @@ const scenario: ScenarioInput = {
       reply: {
         text: 'Te ayudo a renovar el DNI. Apunto el plan.',
         toolCalls: [
-          {
-            name: 'procedure_update',
-            arguments: {
-              title: 'Renovar el DNI',
-              status: 'researching',
-              steps: [{ id: 'cita', title: 'Pedir cita previa', status: 'current', owner: 'user' }],
-            },
-          },
-        ],
-      },
-    },
-    {
-      id: 'ask',
-      when: { lastTool: 'procedure_update', lastToolResult: 'Status: researching' },
-      reply: {
-        toolCalls: [
-          {
-            name: 'ask_user',
-            arguments: {
-              title: 'Un dato para la cita',
-              fields: [
-                {
-                  key: 'addressProvince',
-                  label: '¿Provincia?',
-                  type: 'text',
-                  vaultKey: 'addressProvince',
-                },
-              ],
-            },
-          },
+          workflow(
+            'renovar-dni',
+            `const vault = await api.vault.read({ keys: ['addressProvince'] });
+const province = vault.personal[0].value;
+const approved = await api.user.confirm({ title: 'Pedir cita', message: 'Pido cita en ' + province });
+return { province, approved };`,
+          ),
         ],
       },
     },
     {
       id: 'answer',
-      when: { lastTool: 'ask_user', lastToolResult: '\\(addressProvince\\): (?<province>[^\\n]+)' },
+      when: { lastTool: 'codemode', lastToolResult: '"province": "(?<province>[^"]+)"' },
       reply: { text: 'Perfecto: pide cita en {{province}}.' },
     },
     { id: 'resume', when: { lastUser: 'sigues' }, reply: { text: 'Sí, seguimos con tu DNI.' } },
   ],
   fallback: { text: 'fallback' },
 };
-
-function procedure(patch: Record<string, unknown>): Procedure {
-  return {
-    id: 'p1',
-    title: 'Trámite',
-    status: 'researching',
-    steps: [],
-    requirements: [],
-    facts: [],
-    sources: [],
-    createdAt: '2026-10-03T00:00:00Z',
-    updatedAt: '2026-10-03T00:00:00Z',
-    archived: false,
-    ...patch,
-  } as Procedure;
-}
 
 async function waitFor(
   events: AgentEvent[],
@@ -145,13 +107,13 @@ describe('agent host over RPC (integration)', () => {
     llm = await createMockLlm({ scenario, chunkSize: 7 });
     bridge = await createFakeBridge({
       'agent.credential': () => ({ credential: { type: 'api_key', key: 'llm-key-from-bridge' } }),
-      'procedure.update': (params) => procedure(params),
-      'prompt.form': () => ({
-        kind: 'form',
-        values: { addressProvince: 'Madrid' },
-        dismissed: false,
-        savedToVault: ['addressProvince'],
+      ...workflowHandlers(),
+      'vault.read': () => ({
+        personal: [{ key: 'addressProvince', label: 'Provincia', value: 'Madrid' }],
+        documents: [],
+        credentials: [],
       }),
+      'prompt.confirm': () => ({ kind: 'confirm', approved: true }),
     });
   });
 
@@ -174,13 +136,13 @@ describe('agent host over RPC (integration)', () => {
     role?: AgentHostConfig['role'],
   ): AgentHostConfig {
     return {
-      ...(role ? { role } : {}),
+      role: role ?? 'agent',
       procedureId: 'p1',
       sessionFile: join(workDir, 'sessions', 'p1.jsonl'),
       language: 'es',
       model: model ?? { provider: 'custom', id: 'mock-model', baseUrl: llm.baseUrl },
       ...(research ? { research } : {}),
-      // Community learnings, sharing included: the agent has both feedback tools.
+      // Community learnings, sharing included: the agent's API has both feedback calls.
       feedback: { submit: true, vote: true },
       dniePhone: true,
     };
@@ -208,7 +170,7 @@ describe('agent host over RPC (integration)', () => {
     return { client, events, info };
   }
 
-  it('runs a full turn: plan update, a form answered by the user, final answer', async () => {
+  it('runs a full turn: a workflow that reads the vault and asks the user, final answer', async () => {
     const { client, events, info } = await start();
     expect(info.model).toEqual({ provider: 'custom', id: 'mock-model' });
     expect(await client.prompt('Hola, quiero renovar el DNI')).toBe('started');
@@ -223,11 +185,7 @@ describe('agent host over RPC (integration)', () => {
       'run_start',
       'assistant_start',
       'assistant_end',
-      'tool_start:procedure_update',
-      'tool_end',
-      'assistant_start',
-      'assistant_end',
-      'tool_start:ask_user',
+      'tool_start:codemode',
       'tool_end',
       'assistant_start',
       'assistant_end',
@@ -240,41 +198,40 @@ describe('agent host over RPC (integration)', () => {
     expect(deltas.length).toBeGreaterThan(3);
     const toolEnds = events.filter((e) => e.type === 'tool_end');
     expect(toolEnds[0]).toMatchObject({
-      tool: 'procedure_update',
+      tool: 'codemode',
       isError: false,
-      details: { status: 'researching' },
+      details: { workflowId: 'renovar-dni', status: 'succeeded' },
     });
-    expect(toolEnds[0]?.type === 'tool_end' && toolEnds[0].summary).toContain(
-      'Status: researching',
-    );
-    expect(toolEnds[1]).toMatchObject({ tool: 'ask_user', isError: false });
     expect(events.some((e) => e.type === 'usage' && e.inputTokens > 0)).toBe(true);
     expect(events.some((e) => e.type === 'log' && e.message.startsWith('ready:'))).toBe(true);
 
-    // The app received the tool calls.
-    expect(bridge.callsTo('procedure.update')[0]?.params).toMatchObject({
-      title: 'Renovar el DNI',
-      status: 'researching',
+    // The app received the workflow's calls, and its outcome.
+    expect(bridge.callsTo('workflow.begin')[0]?.params).toMatchObject({
+      workflowId: 'renovar-dni',
     });
-    expect(bridge.callsTo('prompt.form')[0]?.params).toMatchObject({
-      title: 'Un dato para la cita',
-      allowDismiss: false,
+    expect(bridge.callsTo('vault.read')[0]?.params).toEqual({ keys: ['addressProvince'] });
+    expect(bridge.callsTo('prompt.confirm')[0]?.params).toMatchObject({
+      title: 'Pedir cita',
+      message: 'Pido cita en Madrid',
+    });
+    expect(bridge.callsTo('workflow.end')[0]?.params).toMatchObject({
+      outcome: { status: 'succeeded' },
     });
     expect(bridge.calls.every((c) => c.authorization === `Bearer ${bridge.token}`)).toBe(true);
 
     // What the model saw: our key, exactly our tools, exactly our prompt, no bridge secrets.
     const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(2);
     for (const request of requests) {
       expect(request.headers.authorization).toBe('Bearer llm-key-from-bridge');
       expect(JSON.stringify(request.body)).not.toContain(bridge.token);
       expect(JSON.stringify(request)).not.toContain(workDir);
     }
     const body = requests[0]?.body as ChatRequest;
-    expect((body.tools ?? []).map((t) => t.function?.name)).toEqual([...TOOL_NAMES]);
+    expect((body.tools ?? []).map((t) => t.function?.name)).toEqual(['codemode']);
     const system = String(body.messages?.[0]?.content ?? '');
     expect(body.messages?.[0]?.role).toBe('system');
-    expect(system.startsWith("You are one of Spain Assist's procedure agents")).toBe(true);
+    expect(system.startsWith("You are one of Spain Assist's background agents")).toBe(true);
     expect(system).not.toContain('<cwd>');
     expect(system).toContain('Write for the user in Spanish');
 
@@ -284,11 +241,8 @@ describe('agent host over RPC (integration)', () => {
     expect(readFileSync(sessionFile, 'utf8')).toContain('Hola, quiero renovar el DNI');
   });
 
-  it('runs the assistant with only its own tools and prompt, delegating through the bridge', async () => {
-    bridge.setHandler('procedures.start', (params) => ({
-      procedureId: 'p_0123456789abcdef',
-      title: params.title,
-    }));
+  it('runs the coordinator with only its own tools and prompt, delegating through the bridge', async () => {
+    bridge.setHandler('agents.start', () => ({ agentId: 'a_1' }));
     llm.setScenario({
       rules: [
         {
@@ -296,32 +250,35 @@ describe('agent host over RPC (integration)', () => {
           reply: {
             toolCalls: [
               {
-                name: 'procedure_start',
-                arguments: { title: 'Renovar el DNI', brief: 'Caduca pronto; vive en Madrid.' },
+                name: 'agent_start',
+                arguments: {
+                  status: 'Buscando cómo renovar el DNI…',
+                  brief: 'Renovar el DNI: caduca pronto; vive en Madrid.',
+                },
               },
             ],
           },
         },
-        { when: { lastTool: 'procedure_start' }, reply: { text: 'Me pongo con ello.' } },
+        { when: { lastTool: 'agent_start' }, reply: { text: 'Me pongo con ello.' } },
       ],
     });
-    const { client, events } = await start(undefined, undefined, { role: 'assistant' });
+    const { client, events } = await start(undefined, undefined, { role: 'orchestrator' });
     await client.prompt('Quiero renovar el DNI');
     await waitFor(events, isRunEnd);
-    expect(bridge.callsTo('procedures.start')[0]?.params).toEqual({
-      title: 'Renovar el DNI',
-      brief: 'Caduca pronto; vive en Madrid.',
+    expect(bridge.callsTo('agents.start')[0]?.params).toEqual({
+      status: 'Buscando cómo renovar el DNI…',
+      brief: 'Renovar el DNI: caduca pronto; vive en Madrid.',
     });
     const body = llm.requests().filter((r) => r.path.endsWith('/chat/completions'))[0]
       ?.body as ChatRequest;
-    // No research or browser tools: everything goes through procedure agents.
-    expect((body.tools ?? []).map((t) => t.function?.name)).toEqual([...ASSISTANT_TOOL_NAMES]);
+    // No research, browser or workflows: everything goes through background agents.
+    expect((body.tools ?? []).map((t) => t.function?.name)).toEqual([...COORDINATOR_TOOL_NAMES]);
     expect(String(body.messages?.[0]?.content).startsWith('You are Spain Assist.')).toBe(true);
     const toolResult = llm.requests().at(-1)?.body as ChatRequest;
-    expect(JSON.stringify(toolResult.messages)).toContain('Started p_0123456789abcdef');
+    expect(JSON.stringify(toolResult.messages)).toContain('Started agent a_1');
   });
 
-  it('has the assistant write again, once per prompt, a message linking an unsaved document', async () => {
+  it('has the coordinator write again, once per prompt, a message linking an unsaved document', async () => {
     bridge.setHandler('vault.read', () => ({
       personal: [],
       documents: [
@@ -349,7 +306,7 @@ describe('agent host over RPC (integration)', () => {
         },
       ],
     });
-    const { client, events } = await start(undefined, undefined, { role: 'assistant' });
+    const { client, events } = await start(undefined, undefined, { role: 'orchestrator' });
     await client.prompt('Dame el impreso');
     await waitFor(events, isRunEnd);
     expect(bridge.callsTo('vault.read').map((call) => call.params)).toEqual([{ keys: [] }]);
@@ -432,8 +389,8 @@ describe('agent host over RPC (integration)', () => {
     await client.prompt('¿Sigues ahí?');
     await waitFor(events, isRunEnd);
     const body = llm.requests().at(-1)?.body as ChatRequest;
-    expect((body.tools ?? []).map((t) => t.function?.name)).toEqual([...TOOL_NAMES]);
-    expect(String(body.messages?.[0]?.content)).toContain('Web research is not available');
+    expect((body.tools ?? []).map((t) => t.function?.name)).toEqual(['codemode']);
+    expect(String(body.messages?.[0]?.content)).toContain('Web research is not configured');
   });
 
   it('resumes the session file after a restart', async () => {
@@ -461,7 +418,7 @@ describe('agent host over RPC (integration)', () => {
     // Exactly one system prompt, the current one.
     expect(messages.filter((m) => m.role === 'system' || m.role === 'developer')).toHaveLength(1);
     expect(String(messages[0]?.content)).toContain(
-      "You are one of Spain Assist's procedure agents",
+      "You are one of Spain Assist's background agents",
     );
   });
 
@@ -513,10 +470,10 @@ describe('agent host over RPC (integration)', () => {
   });
 
   it('aborts promptly while a tool waits for the user, and keeps working afterwards', async () => {
-    bridge.setHandler('prompt.form', hang);
+    bridge.setHandler('prompt.confirm', hang);
     const { client, events } = await start();
     await client.prompt('Hola, quiero renovar el DNI');
-    const call = await bridge.waitForCall('prompt.form', 30_000);
+    const call = await bridge.waitForCall('prompt.confirm', 30_000);
     expect(client.running).toBe(true);
     const startedAt = Date.now();
     await client.abort();
@@ -532,10 +489,10 @@ describe('agent host over RPC (integration)', () => {
   });
 
   it('stopping the host mid-run ends the run as aborted', async () => {
-    bridge.setHandler('prompt.form', hang);
+    bridge.setHandler('prompt.confirm', hang);
     const { client, events } = await start();
     await client.prompt('Hola, quiero renovar el DNI');
-    await bridge.waitForCall('prompt.form', 30_000);
+    await bridge.waitForCall('prompt.confirm', 30_000);
     await client.stop();
     expect(events.find(isRunEnd)).toMatchObject({ type: 'run_end', aborted: true });
     expect(events.at(-1)).toMatchObject({ type: 'process_exit' });
@@ -550,15 +507,10 @@ describe('agent host over RPC (integration)', () => {
           when: { turn: 0, lastUser: '^Descarga el documento$' },
           reply: {
             toolCalls: [
-              {
-                name: 'request_user_action',
-                arguments: {
-                  title: 'Confirma el acceso',
-                  message: 'Escanea el QR',
-                  actionKind: 'qr_scan',
-                  showBrowser: false,
-                },
-              },
+              workflow(
+                'descargar',
+                `return await api.user.requestAction({ kind: 'qr_scan', title: 'Confirma el acceso', message: 'Escanea el QR', showBrowser: false });`,
+              ),
             ],
           },
         },
@@ -607,31 +559,6 @@ describe('agent host over RPC (integration)', () => {
     await client.prompt('¿Sigues ahí?');
     await waitFor(events, isRunEnd);
     expect(llm.requests().at(-1)?.headers.authorization).toBe('Bearer sa-no-key');
-  });
-
-  it('plays the mock LLM "demo" scenario end to end with the real tools', async () => {
-    llm.setScenario('demo');
-    bridge.setHandler('feedback.search', () => ({ results: [] }));
-    const { client, events } = await start();
-    await client.prompt('Hola, quiero renovar el DNI');
-    expect(await waitFor(events, isRunEnd)).toEqual({ type: 'run_end' });
-    const tools = events
-      .filter((e) => e.type === 'tool_end')
-      .map((e) => (e.type === 'tool_end' ? `${e.tool}:${e.isError}` : ''));
-    // Without a voucher, this demo uses scripted offline research.
-    expect(tools).toEqual([
-      'feedback_search:false',
-      'procedure_update:false',
-      'ask_user:false',
-      'procedure_update:false',
-    ]);
-    expect(bridge.callsTo('procedure.update').map((c) => c.params.status)).toEqual([
-      'researching',
-      'planned',
-    ]);
-    expect(events.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
-      text: expect.stringContaining('Pide cita previa'),
-    });
   });
 
   // Optional: SA_TEST_ELECTRON=<path to the Electron binary> runs the host the way the app does.
@@ -700,12 +627,15 @@ describe('agent host over RPC (integration)', () => {
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                { name: 'web_research', arguments: { query: 'renovar NIE', mode: 'balanced' } },
+                workflow(
+                  'investigar',
+                  `return await api.search({ prompt: 'renovar NIE', mode: 'balanced' });`,
+                ),
               ],
             },
           },
           {
-            when: { lastTool: 'web_research', lastToolResult: 'Research complete' },
+            when: { lastTool: 'codemode', lastToolResult: 'Research complete' },
             reply: { text: 'Hecho.' },
           },
         ],
@@ -729,12 +659,10 @@ describe('agent host over RPC (integration)', () => {
       });
       const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
       const body = requests[0]?.body as ChatRequest;
-      expect((body.tools ?? []).map((t) => t.function?.name).sort()).toEqual(
-        [...TOOL_NAMES, WEB_RESEARCH_TOOL_NAME].sort(),
-      );
+      expect((body.tools ?? []).map((t) => t.function?.name)).toEqual(['codemode']);
       const prompt = String(body.messages?.[0]?.content);
-      expect(prompt).toContain('call web_research once');
-      expect(prompt).not.toContain('Web research is not available');
+      expect(prompt).toContain('Research with api.search (one well-built');
+      expect(prompt).not.toContain('Web research is not configured');
       // The voucher key reaches only the key server: never the model or the session file.
       for (const request of requests) {
         const { headers: _headers, ...rest } = request;
@@ -748,7 +676,7 @@ describe('agent host over RPC (integration)', () => {
     }
   });
 
-  it('BYOK and custom endpoints research with the Exa tools and the user key, not web_research', async () => {
+  it('BYOK and custom endpoints research with Exa and the user key, not the key server', async () => {
     const exa = await createFakeSse({
       frames: [
         sseEvent('message', {
@@ -779,10 +707,12 @@ describe('agent host over RPC (integration)', () => {
         rules: [
           {
             when: { turn: 0 },
-            reply: { toolCalls: [{ name: 'exa_search', arguments: { query: 'renovar NIE' } }] },
+            reply: {
+              toolCalls: [workflow('investigar', `return await api.search('renovar NIE');`)],
+            },
           },
           {
-            when: { lastTool: 'exa_search', lastToolResult: 'Research complete' },
+            when: { lastTool: 'codemode', lastToolResult: 'Research complete' },
             reply: { text: 'Hecho.' },
           },
         ],
@@ -810,12 +740,9 @@ describe('agent host over RPC (integration)', () => {
       });
       const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
       const body = requests[0]?.body as ChatRequest;
-      expect((body.tools ?? []).map((t) => t.function?.name).sort()).toEqual(
-        [...TOOL_NAMES, ...EXA_TOOL_NAMES].sort(),
-      );
+      expect((body.tools ?? []).map((t) => t.function?.name)).toEqual(['codemode']);
       const prompt = String(body.messages?.[0]?.content);
-      expect(prompt).toContain('research the procedure with exa_search');
-      expect(prompt).not.toContain('web_research');
+      expect(prompt).toContain('Research with api.search (Exa:');
       // The Exa key reaches only Exa: never the model or the session file.
       for (const request of requests) {
         expect(JSON.stringify(request)).not.toContain('exa-user-key');

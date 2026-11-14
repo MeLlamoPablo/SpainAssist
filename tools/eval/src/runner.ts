@@ -71,8 +71,6 @@ export interface EvaluationRequest {
   /** Overrides of the meter's caps. */
   meterLimits?: MeterLimitsInput;
   captureBrowser?: boolean;
-  /** The app's `codemode` feature flag (docs/codemode.md). */
-  codemode?: boolean;
   keepWorld?: boolean;
   runsRoot?: string;
   runId?: string;
@@ -468,7 +466,6 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
       ...(request.limits ? { limits: request.limits } : {}),
       ...(request.cacheVariant ? { cacheVariant: request.cacheVariant } : {}),
       ...(request.captureBrowser !== undefined ? { captureBrowser: request.captureBrowser } : {}),
-      ...(request.codemode ? { codemode: true } : {}),
       ...(request.from ? { from: request.from } : {}),
       ...(request.allowFixtureChange ? { allowFixtureChange: true } : {}),
       ...(request.keepWorld !== undefined ? { keepWorld: request.keepWorld } : {}),

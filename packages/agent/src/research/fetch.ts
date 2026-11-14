@@ -10,9 +10,9 @@ import { Agent, fetch as undiciFetch } from 'undici';
 import { extractText, getDocumentProxy } from 'unpdf';
 
 /**
- * fetch_url core: download a page or PDF and turn it into compact Markdown/text for the model.
+ * `api.fetchUrl` core: download a page or PDF and turn it into compact Markdown/text for the model.
  * - http(s) only, private/local hosts blocked (unless allowed for dev/e2e), manual redirects
- *   (each hop re-checked), timeouts and byte caps. run_script's fetch shares the host checks and
+ *   (each hop re-checked), timeouts and byte caps. `api.fetch` shares the host checks and
  *   redirects (`fetchPublic`).
  * - Explicit charset decoding (header, BOM, <meta>, XML declaration; heuristic fallback to
  *   windows-1252, which many Spanish government sites still serve as ISO-8859-1).
@@ -20,7 +20,7 @@ import { extractText, getDocumentProxy } from 'unpdf';
  *   their structure as GFM tables. PDF: text per page via unpdf.
  */
 
-export type FetchErrorCode =
+type FetchErrorCode =
   | 'invalid_url'
   | 'blocked'
   | 'network'
@@ -31,7 +31,7 @@ export type FetchErrorCode =
   | 'unsupported'
   | 'parse';
 
-export class FetchError extends Error {
+class FetchError extends Error {
   readonly code: FetchErrorCode;
   readonly status?: number;
   constructor(code: FetchErrorCode, message: string, status?: number) {

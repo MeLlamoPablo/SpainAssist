@@ -62,6 +62,7 @@ browserSuite('checkpoints', () => {
     let second: Stack | undefined;
     let checkpointDir: string;
     let procedureId: string;
+    let agentId: string;
     let taken: { profileDir: string; browserStateFile?: string };
     const fixture = testFixture('vida-laboral-con-datos');
 
@@ -74,10 +75,11 @@ browserSuite('checkpoints', () => {
       });
       await first.app.send('sácame la vida laboral');
       expect(await first.app.untilIdle({ timeoutMs: 90_000 })).toBe(true);
-      procedureId = first
+      agentId = first
         .of('tool_end')
-        .map((o) => /Started (p_[0-9a-f]+)/.exec(o.text)?.[1])
+        .map((o) => /Started agent (a_[0-9a-f]+)/.exec(o.text)?.[1])
         .find(Boolean) as string;
+      procedureId = first.of('tool_start').find((o) => o.procedureId)?.procedureId as string;
       checkpointDir = mkdtempSync(join(tmpdir(), 'sa-eval-checkpoint-'));
     }, 180_000);
 
@@ -110,14 +112,16 @@ browserSuite('checkpoints', () => {
       expect(taken.profileDir).toBe(join(checkpointDir, 'profile'));
       expect(taken.browserStateFile).toBe(join(checkpointDir, 'browser-state.json'));
 
-      // The state of the app: the procedure with its card and session, the orchestrator's session.
+      // The state of the app: the card, the agent with its session and its workflow, the
+      // coordinator's session.
       for (const file of [
         'settings.json',
-        'assistant/session.jsonl',
+        'assistant/session-v2.jsonl',
         'assistant/transcript.json',
         `procedures/${procedureId}/procedure.json`,
-        `procedures/${procedureId}/session.jsonl`,
-        `procedures/${procedureId}/transcript.json`,
+        `agents/${agentId}/agent.json`,
+        `agents/${agentId}/session.jsonl`,
+        'workflows/vida-laboral.json',
         'vault/vault.bin',
         'vault/key.bin',
       ]) {
@@ -159,11 +163,11 @@ browserSuite('checkpoints', () => {
       });
     });
 
-    it('restores everything in a new run, which resumes the procedure from its own session', async () => {
+    it('restores everything in a new run, whose agent goes on from its own session', async () => {
       await first.app.close();
       second = await startStack({
         hostBundle: host.bundle,
-        scenario: resumeScenario(procedureId),
+        scenario: resumeScenario(procedureId, agentId),
         fixture,
         credentials,
         restoreFrom: taken,
@@ -178,27 +182,27 @@ browserSuite('checkpoints', () => {
       expect(await app.untilIdle({ timeoutMs: 90_000 })).toBe(true);
       const observed = second;
 
-      // The card the first run left (read by the orchestrator through the app) and the vault.
+      // The card the first run left (read by the coordinator through the app).
       const ended = (tool: string) =>
         observed.of('tool_end').find((o) => o.tool === tool)?.text ?? '';
       expect(ended('procedure_read')).toContain('Esperando a que el usuario confirme');
-      expect(ended('vault_read')).toContain('givenName');
-      expect(ended('vault_read')).toContain('clave_permanente');
 
-      // The browser's cookies came back: the portal sees them on a fresh page load.
+      // The browser's cookies came back: the portal sees them on a fresh page load. The vault too.
       const whoami = observed
         .of('tool_end')
-        .find((o) => o.agent === 'procedure' && o.tool === 'browser_open');
+        .find((o) => o.agent === 'procedure' && o.tool === 'codemode');
       expect(whoami?.text).toContain('host_only=1');
       expect(whoami?.text).toContain('shared=2');
       expect(whoami?.text).toContain('third=3');
+      expect(whoami?.text).toContain('givenName');
+      expect(whoami?.text).toContain('clave_permanente');
 
-      // The procedure agent started from its session: its first request has what it did before.
+      // The agent started from its session: its first request has what it did before.
       const completions = observed.llm
         .requests()
         .filter((r) => r.path.endsWith('/chat/completions'))
         .map((r) => r.body as ChatRequest)
-        .filter((b) => (b.tools ?? []).some((t) => t.function?.name === 'procedure_update'));
+        .filter((b) => (b.tools ?? []).some((t) => t.function?.name === 'codemode'));
       const history = JSON.stringify(completions[0]?.messages);
       expect(history).toContain('cookies set');
       expect(history).toContain('Esperando a que el usuario confirme');
@@ -234,7 +238,7 @@ browserSuite('checkpoints', () => {
   });
 
   describe('a profile with a question pending', () => {
-    it('brings the question back, announces it, and wakes the agent when it is answered', async () => {
+    it('brings the interface back, announces it, and resumes the workflow when it is answered', async () => {
       const fixture = testFixture('vida-laboral-con-datos');
       const first = await startStack({
         hostBundle: host.bundle,
@@ -246,7 +250,7 @@ browserSuite('checkpoints', () => {
       try {
         await first.app.send('sácame la vida laboral');
         const asked = await waitFor(() => first.app.pendingPrompts()[0], 'the question');
-        // A checkpoint needs an idle app; a restart does not: the form stays in the transcript.
+        // A checkpoint needs an idle app; a restart does not: the workflow keeps its interface.
         await first.app.close();
         copy = mkdtempSync(join(tmpdir(), 'sa-eval-pending-'));
         await copyProfile(join(first.runDir, 'profile'), copy);
@@ -258,6 +262,8 @@ browserSuite('checkpoints', () => {
           restoreFrom: { profileDir: copy },
         });
         const { app } = second;
+        // The workflow's interface, as the restored app shows it (no process runs the workflow).
+        await waitFor(() => app.pendingPrompts()[0], 'the interface to come back');
         expect(app.pendingPrompts()).toEqual([asked]);
         expect(app.idle()).toBe(false);
         expect(second.of('prompt_shown').map((o) => o.prompt)).toEqual([asked]);
@@ -265,7 +271,7 @@ browserSuite('checkpoints', () => {
 
         await app.respond(asked.itemId, {
           kind: 'form',
-          values: { provincia: 'Sevilla' },
+          values: { [asked.fields?.[0]?.key ?? 'provincia']: 'Sevilla' },
           dismissed: false,
           savedToVault: [],
         });

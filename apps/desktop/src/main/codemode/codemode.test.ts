@@ -33,7 +33,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-async function open(options: { codemode?: boolean; userData?: string; clock?: () => Date } = {}) {
+async function open(options: { userData?: string; clock?: () => Date } = {}) {
   const hostScript = join(root, 'host.js');
   await writeFile(hostScript, '');
   const agentLib = createFakeAgentLib();
@@ -44,7 +44,6 @@ async function open(options: { codemode?: boolean; userData?: string; clock?: ()
     agentLib,
     browserFactory: () => browser,
     hostScript,
-    features: { codemode: options.codemode ?? true },
     ...(options.clock ? { clock: options.clock } : {}),
     places: {
       place: async (address: string) =>
@@ -165,19 +164,6 @@ describe('the coordinator', () => {
     expect(clientOf(agentLib, ASSISTANT_AGENT_ID)?.prompts[0]?.text).toBe(
       '[Procedures: none yet]\n\n¿Tengo que hacer la renta?',
     );
-  });
-
-  it('keeps the classic harness without the flag', async () => {
-    const { app, agentLib } = await open({ codemode: false });
-    await app.invoke('chat.send', { text: 'Hola' });
-    await vi.waitFor(() => expect(clientOf(agentLib, ASSISTANT_AGENT_ID)?.prompts.length).toBe(1));
-    expect(
-      JSON.parse(clientOf(agentLib, ASSISTANT_AGENT_ID)?.launch.env.SA_AGENT_CONFIG ?? '{}').role,
-    ).toBe('assistant');
-    const token = app.services.tokens.issue(ASSISTANT_AGENT_ID);
-    expect(
-      (await call(app, token, 'workflow.begin', { workflowId: 'x', source: 'x' })).error?.code,
-    ).toBe('policy_denied');
   });
 });
 
@@ -456,10 +442,9 @@ describe('roles', () => {
     expect((await call(app, agent, 'agents.start', { status: 'x', brief: 'y' })).error?.code).toBe(
       'policy_denied',
     );
-    // The classic agents never reach codemode methods.
-    const classic = await app.services.procedures.create('Clásico');
-    const procedureToken = app.services.tokens.issue(classic.id);
-    expect((await call(app, procedureToken, 'procs.list', {})).error?.code).toBe('policy_denied');
+    // A procedure is not an agent: a token for its id reaches nothing.
+    const procedureToken = app.services.tokens.issue(p.result.id);
+    expect((await call(app, procedureToken, 'procs.list', {})).error?.code).toBe('unauthorized');
   });
 });
 

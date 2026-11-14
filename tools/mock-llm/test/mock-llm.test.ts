@@ -3,6 +3,7 @@ import {
   type ChatMessage,
   type ChatRequest,
   createMockLlm,
+  DEMO_WORKFLOW,
   type MockLlm,
   type RecordedRequest,
   type ScenarioInput,
@@ -283,58 +284,95 @@ describe('mock LLM', () => {
     expect(await json(await fetch(`${llm.url}/__requests`))).toEqual([]);
   });
 
-  it('runs the demo scenario end to end', async () => {
-    const history: ChatMessage[] = [user('Hola, quiero renovar el DNI')];
-    let callId = 0;
-    const step = async (toolResults: (name: string) => string) => {
-      const out = await readStream(await chat(llm, history));
-      const calls = out.toolCalls.map((call) => ({ ...call, id: `t${++callId}` }));
-      history.push({
-        role: 'assistant',
-        content: out.text,
-        tool_calls: calls.map((c) => ({
-          id: c.id,
-          function: { name: c.name, arguments: c.arguments },
-        })),
-      });
-      for (const call of calls) {
-        history.push({ role: 'tool', tool_call_id: call.id, content: toolResults(call.name) });
-      }
-      return { out, calls };
-    };
-    const results = (name: string) =>
-      ({
-        feedback_search: 'No community learnings found.',
-        ask_user: 'The user answered: addressProvince = Madrid; documentExpiry = 2026-12-01',
-      })[name] ?? '';
+  it('plays a codemode agent in the demo scenario: one workflow, then its report', async () => {
+    const tools = { tools: [{ type: 'function', function: { name: 'codemode' } }] };
+    const brief = user(
+      '[Procedures: none yet]\n\n[Brief from the coordinator]\nEl usuario quiere renovar el DNI.',
+    );
+    const start = await readStream(await chat(llm, [brief], tools));
+    expect(start.toolCalls.map((c) => c.name)).toEqual(['codemode']);
+    const args = JSON.parse(start.toolCalls[0]?.arguments ?? '{}') as Record<string, string>;
+    expect(args.workflow).toBe('renovar-dni');
+    expect(args.source).toBe(DEMO_WORKFLOW);
+    expect(args.source).toContain("api.ui.present('datos'");
+    expect(args.source).toContain("id: 'renovar-dni'");
 
-    const s1 = await step(results);
-    expect(s1.calls.map((c) => c.name)).toEqual(['feedback_search']);
-    const s3 = await step(() => 'Procedure updated. Status: researching. Steps: 3.');
-    expect(s3.calls[0]?.name).toBe('procedure_update');
-    expect(JSON.parse(s3.calls[0]?.arguments ?? '{}').steps).toHaveLength(3);
-    const s4 = await step(results);
-    expect(s4.calls[0]?.name).toBe('ask_user');
-    const s5 = await step(() => 'Procedure updated. Status: planned.');
-    expect(s5.calls[0]?.name).toBe('procedure_update');
-    const s6 = await step(results);
-    expect(s6.calls).toHaveLength(0);
-    expect(s6.out.text).toContain('cita previa');
+    const history: ChatMessage[] = [
+      brief,
+      {
+        role: 'assistant',
+        content: start.text,
+        tool_calls: [
+          { id: 't1', function: { name: 'codemode', arguments: start.toolCalls[0]?.arguments } },
+        ],
+      },
+      {
+        role: 'tool',
+        tool_call_id: 't1',
+        content: 'Workflow "renovar-dni" is waiting for the user (interface: datos).',
+      },
+    ];
+    const waiting = await readStream(await chat(llm, history, tools));
+    expect(waiting.toolCalls).toHaveLength(0);
+    expect(waiting.text).toContain('provincia');
+
+    const done = await readStream(
+      await chat(
+        llm,
+        [
+          ...history,
+          { role: 'assistant', content: waiting.text },
+          user(
+            '[Workflow "renovar-dni" (Renovar el DNI) succeeded]\nResult:\n{"province":"Madrid","expiry":null}',
+          ),
+        ],
+        tools,
+      ),
+    );
+    expect(done.toolCalls).toHaveLength(0);
+    expect(done.text).toContain('Pedir cita previa');
+
+    const skipped = await readStream(
+      await chat(
+        llm,
+        [user('[Workflow "renovar-dni" (Renovar el DNI) succeeded]\nResult:\n{"skipped":true}')],
+        tools,
+      ),
+    );
+    expect(skipped.text).toContain('a la espera');
   });
 
-  it('plays the assistant in the demo scenario: starts the procedure, relays its report', async () => {
-    const tools = { tools: [{ type: 'function', function: { name: 'procedure_start' } }] };
-    const start = await readStream(await chat(llm, [user('Quiero renovar el DNI')], tools));
-    expect(start.toolCalls.map((c) => c.name)).toEqual(['procedure_start']);
-    expect(JSON.parse(start.toolCalls[0]?.arguments ?? '{}').title).toBe('Renovar el DNI');
+  it('plays the coordinator in the demo scenario: starts an agent, relays its reports', async () => {
+    const tools = { tools: [{ type: 'function', function: { name: 'agent_start' } }] };
+    const start = await readStream(
+      await chat(llm, [user('[Procedures: none yet]\n\nQuiero renovar el DNI')], tools),
+    );
+    expect(start.toolCalls.map((c) => c.name)).toEqual(['agent_start']);
+    expect(JSON.parse(start.toolCalls[0]?.arguments ?? '{}').brief).toContain('renovar el DNI');
+    const waiting = await readStream(
+      await chat(
+        llm,
+        [user('[Report from agent a_1 "Mirando cómo renovar el DNI…"]\nLe he preguntado.')],
+        tools,
+      ),
+    );
+    expect(waiting.text).toContain('preguntas');
     const report = await readStream(
       await chat(
         llm,
-        [user('[Report from procedure p_1 "Renovar el DNI" · status: planned]\nOk')],
+        [
+          user(
+            '[Report from agent a_1 "Mirando cómo renovar el DNI…" · procedures: p_1 "Renovar el DNI" (planned)]\nListo. Esto es lo que tiene que hacer: pedir cita.',
+          ),
+        ],
         tools,
       ),
     );
     expect(report.toolCalls).toHaveLength(0);
     expect(report.text).toContain('pedir cita previa');
+    // Without a request about the DNI, the coordinator only explains the demo.
+    const other = await readStream(await chat(llm, [user('Hola')], tools));
+    expect(other.toolCalls).toHaveLength(0);
+    expect(other.text).toContain('modelo de demostración');
   });
 });

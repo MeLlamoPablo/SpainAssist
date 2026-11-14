@@ -1,5 +1,5 @@
 /**
- * Quiescence across a hand-over: a procedure's report goes to the orchestrator, whose host may have
+ * Quiescence across a hand-over: an agent's report goes to the coordinator, whose host may have
  * to start for it. In that gap no agent is running and nothing is pending, yet the run is not over.
  */
 import { existsSync } from 'node:fs';
@@ -9,7 +9,8 @@ import type { ScenarioInput } from '@sa/mock-llm';
 import { ASSISTANT_AGENT_ID } from '@sa/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createEvalAppWith } from '../../../src/run/app';
-import { assistantRules } from './scripts';
+import { AGENT, COORDINATOR } from '../../../src/scenarios/kit';
+import { coordinatorRules } from './scripts';
 import { expectNoEgress, prepareHostBundle, removeRunDir, startWorld, waitFor } from './support';
 
 let host: Awaited<ReturnType<typeof prepareHostBundle>>;
@@ -19,23 +20,21 @@ beforeAll(async () => {
 afterAll(() => host?.cleanup());
 afterAll(expectNoEgress);
 
-const procedure = { hasTool: '^procedure_update$' };
-
 const scenario: ScenarioInput = {
   rules: [
     {
-      when: { hasTool: '^procedure_start$', lastUser: 'Report from procedure' },
+      when: { ...COORDINATOR, lastUser: 'Report from agent' },
       reply: { text: 'Informe recibido.' },
     },
-    ...assistantRules,
-    // The procedure takes its time: the orchestrator's host is stopped meanwhile.
-    { when: procedure, reply: { text: 'Terminado.', delayMs: 2500 } },
+    ...coordinatorRules,
+    // The agent takes its time: the coordinator's host is stopped meanwhile.
+    { when: AGENT, reply: { text: 'Terminado.', delayMs: 2500 } },
   ],
   fallback: { text: 'Hecho.' },
 };
 
-describe("a report that needs the orchestrator's host to start again", () => {
-  it('is not idle until the orchestrator has answered it', async () => {
+describe("a report that needs the coordinator's host to start again", () => {
+  it('is not idle until the coordinator has answered it', async () => {
     const world = await startWorld({ hostBundle: host.bundle, scenario });
     let headless: HeadlessApp | undefined;
     const app = await createEvalAppWith(world.spec, world.deps, {
@@ -53,12 +52,12 @@ describe("a report that needs the orchestrator's host to start again", () => {
             .some(
               (o) => o.type === 'assistant_message' && o.text === 'Empiezo con tu vida laboral.',
             ),
-        'the orchestrator to start the procedure',
+        'the coordinator to start the agent',
       );
-      // The orchestrator is done and its host is gone (an app does this after ten idle minutes).
+      // The coordinator is done and its host is gone (an app does this after ten idle minutes).
       await waitFor(
         () => !(headless as HeadlessApp).services.agents.isRunning(ASSISTANT_AGENT_ID),
-        'the orchestrator to finish its run',
+        'the coordinator to finish its run',
       );
       await (headless as HeadlessApp).services.agents.stop(ASSISTANT_AGENT_ID);
       expect(app.idle()).toBe(false);

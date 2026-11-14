@@ -158,7 +158,7 @@ describe('writeCheckpoint', () => {
     expect(existsSync(join(s.paths.dir, 'checkpoints'))).toBe(false);
   });
 
-  it.each(['confirm', 'credential', 'user_action'] as const)(
+  it.each(['confirm', 'credential', 'user_action', 'phone_call'] as const)(
     'is refused while a %s prompt is pending: the app cannot restore it',
     async (kind) => {
       const s = source({ pending: [prompt({ kind })] });
@@ -171,13 +171,10 @@ describe('writeCheckpoint', () => {
     },
   );
 
-  it.each(['form', 'phone_call'] as const)(
-    'allows a pending %s: the app restores it',
-    async (kind) => {
-      const s = source({ pending: [prompt({ kind })] });
-      expect((await writeCheckpoint(s.input)).written).toBe(true);
-    },
-  );
+  it('allows a pending form: a workflow brings its interface back', async () => {
+    const s = source({ pending: [prompt({ kind: 'form' })] });
+    expect((await writeCheckpoint(s.input)).written).toBe(true);
+  });
 
   it('is dropped when the run moved on while it was written', async () => {
     const s = source({
@@ -497,6 +494,16 @@ describe('readCheckpoint', () => {
     expect(() => readCheckpoint(ref, expected)).toThrow(/says it is checkpoint 2/);
     writeFileSync(file, JSON.stringify({ ...manifest, runId: 'someone-else' }));
     expect(() => readCheckpoint(ref, expected)).toThrow(/belongs to run someone-else/);
+  });
+
+  it('refuses a checkpoint of the classic agents: the app no longer has them', async () => {
+    const { ref } = await finished();
+    const file = join(ref.runDir, 'run.json');
+    const run = readJson<{ options: Record<string, unknown> }>(file);
+    expect(run.options.codemode).toBe(true);
+    delete run.options.codemode;
+    writeFileSync(file, JSON.stringify(run));
+    expect(() => readCheckpoint(ref, expected)).toThrow(/classic agents.*Start a new run/);
   });
 
   it('refuses a folder that is not a run', async () => {

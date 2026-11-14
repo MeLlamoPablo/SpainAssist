@@ -1,4 +1,4 @@
-import { ASSISTANT_AGENT_ID, type Prompt, type PromptItem } from '@sa/shared';
+import type { Prompt, PromptItem } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import { matchesPrompt } from '../../../src/answers/matcher';
 import { promptTexts, toPendingPrompt } from '../../../src/run/app/prompts';
@@ -13,7 +13,7 @@ const item = (prompt: Prompt, procedureId?: string): PromptItem => ({
 });
 
 describe('toPendingPrompt', () => {
-  it('tells which agent asked: the assistant, or a procedure by its id', () => {
+  it('is an agent’s, of its procedure when the item is kept on one', () => {
     const prompt: Prompt = {
       kind: 'user_action',
       actionKind: 'captcha',
@@ -21,24 +21,21 @@ describe('toPendingPrompt', () => {
       message: 'Hazlo en la ventana.',
       showBrowser: true,
     };
-    expect(toPendingPrompt(ASSISTANT_AGENT_ID, item(prompt))).toEqual({
+    expect(toPendingPrompt(item(prompt))).toEqual({
       itemId: 'q_0123456789abcdef',
-      agent: 'assistant',
+      agent: 'procedure',
       kind: 'user_action',
       title: 'Resuelve el captcha',
       message: 'Hazlo en la ventana.',
     });
-    expect(toPendingPrompt('p_00000000000000aa', item(prompt, 'p_00000000000000aa'))).toMatchObject(
-      {
-        agent: 'procedure',
-        procedureId: 'p_00000000000000aa',
-      },
-    );
+    expect(toPendingPrompt(item(prompt, 'p_00000000000000aa'))).toMatchObject({
+      agent: 'procedure',
+      procedureId: 'p_00000000000000aa',
+    });
   });
 
   it('keeps the fields of a form with their options, and flags a secret one', () => {
     const pending = toPendingPrompt(
-      'p_00000000000000aa',
       item({
         kind: 'form',
         title: 'Datos',
@@ -117,7 +114,6 @@ describe('toPendingPrompt', () => {
 
   it('puts what a confirmation shows to the user in its message, details included', () => {
     const pending = toPendingPrompt(
-      'p_00000000000000aa',
       item({
         kind: 'confirm',
         confirmKind: 'action',
@@ -139,7 +135,6 @@ describe('toPendingPrompt', () => {
 
   it('names the credential a credential prompt asks for', () => {
     const pending = toPendingPrompt(
-      'p_00000000000000aa',
       item({
         kind: 'credential',
         credential: 'clave_permanente',
@@ -155,7 +150,6 @@ describe('toPendingPrompt', () => {
 
   it('describes a phone call by who, why and what to ask', () => {
     const pending = toPendingPrompt(
-      'p_00000000000000aa',
       item({
         kind: 'phone_call',
         title: 'Llama a EMASESA',
@@ -174,7 +168,6 @@ describe('toPendingPrompt', () => {
 
   it('treats a DNIe signature (which a run never has) as a manual action', () => {
     const pending = toPendingPrompt(
-      'p_00000000000000aa',
       item({
         kind: 'dnie_signature',
         purpose: 'login',
@@ -190,7 +183,6 @@ describe('toPendingPrompt', () => {
 describe('promptTexts', () => {
   it('lists every string of a prompt', () => {
     const pending = toPendingPrompt(
-      'p_00000000000000aa',
       item({
         kind: 'form',
         title: 'Título',

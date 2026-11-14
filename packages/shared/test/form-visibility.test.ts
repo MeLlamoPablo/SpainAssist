@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { BridgeParams } from '../src/bridge';
 import { FormPrompt, visibleFormFields } from '../src/chat';
 
 const prompt = {
@@ -25,9 +24,9 @@ const prompt = {
 };
 
 describe('form visibility contracts', () => {
-  it('accepts legacy forms and preserves conditional rules through bridge schemas', () => {
+  it('accepts forms without conditions and preserves conditional rules', () => {
     expect(FormPrompt.parse({ ...prompt, fields: [prompt.fields[0]] }).fields).toHaveLength(1);
-    expect(BridgeParams['prompt.form'].parse(prompt).fields[1]?.visibleWhen).toEqual({
+    expect(FormPrompt.parse(prompt).fields[1]?.visibleWhen).toEqual({
       field: 'access',
       values: ['sms'],
     });

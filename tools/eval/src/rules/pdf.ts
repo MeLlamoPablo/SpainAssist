@@ -5,7 +5,7 @@ import { stripDiacritics } from '../answers/text';
 /** Larger PDFs are not read: a vault document may be up to 50 MB, the reports are far smaller. */
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
-/** The text of every page of a PDF, extracted with unpdf like the agent's `document_read`. */
+/** The text of every page of a PDF, extracted with unpdf like the agent's `api.documents.read`. */
 export async function extractPdfText(bytes: Uint8Array): Promise<string> {
   if (bytes.byteLength > MAX_PDF_BYTES) {
     throw new Error(`the PDF is larger than ${MAX_PDF_BYTES / 1024 / 1024} MB`);

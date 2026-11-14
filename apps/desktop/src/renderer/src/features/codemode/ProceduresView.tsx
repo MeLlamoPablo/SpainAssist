@@ -7,18 +7,17 @@ import { Skeleton } from '../../components/ui/misc';
 import { useT } from '../../i18n';
 import { useAppStore } from '../../store/app';
 import { orderProcedures, useProcedureStore } from '../../store/procedures';
+import { EmptyProcedures } from '../procedures/EmptyProcedures';
 import { procedureDict } from '../procedures/i18n';
-import { EmptyProcedures } from '../procedures/ProceduresView';
 import { AgentMeter } from './AgentMeter';
 import { ForYou } from './ForYou';
 import { ProcedureRow } from './ProcedureRow';
 
 /**
- * "Mis trámites" with the codemode flag on (docs/codemode.md, "UI redesign"): questions above a
- * list of procedure rows, the agent meter floating at the bottom. The classic harness keeps the
- * previous design (features/procedures/ProceduresView.tsx).
+ * "Mis trámites" (docs/codemode.md, "UI redesign"): questions above a list of procedure rows, the
+ * agent meter floating at the bottom.
  */
-export function CodemodeProceduresView() {
+export function ProceduresView() {
   const t = useT(procedureDict);
   const loaded = useProcedureStore((s) => s.loaded);
   const procedures = useProcedureStore(useShallow((s) => Object.values(s.byId)));

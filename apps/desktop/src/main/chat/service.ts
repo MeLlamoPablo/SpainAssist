@@ -29,12 +29,12 @@ export interface ChatServiceDeps {
   logger: Logger;
   clock: Clock;
   lang: () => Language;
-  /** Codemode: what the coordinator reads with each message (the procedures, when they changed). */
-  decorate?: (text: string) => string;
+  /** What the coordinator reads with each message (the procedures, when they changed). */
+  decorate: (text: string) => string;
 }
 
 /**
- * `chat.*`: the user's messages go to the assistant (started on demand); errors become notices.
+ * `chat.*`: the user's messages go to the coordinator (started on demand); errors become notices.
  * Answers to prompts go to whichever agent asked.
  */
 export class ChatService {
@@ -51,10 +51,8 @@ export class ChatService {
   }
 
   /**
-   * Appends the user's message and hands it to the assistant in the background (starting it
-   * takes a moment; progress and errors arrive as chat events). The assistant's own pending
-   * questions are dropped: the user answered with a message instead. Questions from procedure
-   * agents stay.
+   * Appends the user's message and hands it to the coordinator in the background (starting it
+   * takes a moment; progress and errors arrive as chat events). Questions from agents stay.
    */
   async send(input: SendMessageInput): Promise<void> {
     const { conversation } = this.deps;
@@ -62,7 +60,6 @@ export class ChatService {
     const attachments = this.resolveAttachments(input.attachments ?? []);
     if (!text && attachments.length === 0)
       throw new UserError(t(this.deps.lang(), 'emptyMessage'), 'bad_request');
-    this.deps.prompts.cancelAll(ASSISTANT_AGENT_ID);
     conversation.upsertItem({
       id: conversation.newItemId('u'),
       createdAt: this.deps.clock().toISOString(),
@@ -71,7 +68,7 @@ export class ChatService {
       ...(attachments.length ? { attachments } : {}),
     });
     conversation.setError(undefined);
-    // Show "working" right away: starting the assistant takes a moment.
+    // Show "working" right away: starting the coordinator takes a moment.
     conversation.setRunning(true);
     const delivery = this.deliver(text, attachments).finally(() =>
       this.deliveries.delete(delivery),
@@ -100,7 +97,7 @@ export class ChatService {
       const { promptText, images } = await this.buildPrompt(text, attachments);
       await this.deps.agents.send(
         ASSISTANT_AGENT_ID,
-        this.deps.decorate ? this.deps.decorate(promptText) : promptText,
+        this.deps.decorate(promptText),
         images.length ? images : undefined,
       );
     } catch (err) {
@@ -144,7 +141,7 @@ export class ChatService {
     };
   }
 
-  /** Stops the assistant's reply. Procedure agents keep working. */
+  /** Stops the coordinator's reply. Background agents keep working. */
   async abort(): Promise<void> {
     await this.deps.agents.abort(ASSISTANT_AGENT_ID);
   }

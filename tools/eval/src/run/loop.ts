@@ -103,8 +103,6 @@ export interface RunOptions {
   /** Independent samples of the same conversation in the replay cache. */
   cacheVariant?: string;
   captureBrowser?: boolean;
-  /** The app's `codemode` feature flag (docs/codemode.md). */
-  codemode?: boolean;
   /** Continue a checkpoint of an earlier run of the same fixture. */
   from?: CheckpointRef;
   /**
@@ -187,7 +185,7 @@ const JUDGED_AFTER_CUT = new Set([...CUT_SHORT_ENDINGS, 'decided']);
 const MAX_TIMER_MS = 2 ** 31 - 1;
 /**
  * What the user says after a restore: the real app resumes no agent by itself, so a resumed run
- * asks the orchestrator to carry on (it continues the procedure with `procedure_message`).
+ * asks the coordinator to carry on (it passes it on to the agent with `agent_message`).
  */
 const DEFAULT_RESUME_PROMPT = 'Sigue donde lo dejaste, por favor.';
 const DEFAULT_SETTLE_TIMEOUT_MS = 120_000;
@@ -434,7 +432,7 @@ class FixtureRun {
       limits: this.limits,
       options: {
         captureBrowser: options.captureBrowser ?? false,
-        ...(options.codemode ? { codemode: true } : {}),
+        codemode: true,
         settleTimeoutMs: this.settleTimeoutMs,
         evaluateIntervalMs: this.evaluateIntervalMs,
         checkpoint: this.checkpointEnabled,
@@ -527,7 +525,6 @@ class FixtureRun {
             },
             now: frozenNow(today, this.startedAt),
             captureBrowser: options.captureBrowser ?? false,
-            codemode: options.codemode ?? false,
             ...(restoreFrom ? { restoreFrom } : {}),
             signal: this.controller.signal,
           },

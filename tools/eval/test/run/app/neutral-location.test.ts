@@ -57,7 +57,7 @@ describe('where the app runs', () => {
     }
     // pi's session of the agent says where it worked: in the neutral folder, not in the run's.
     const copied = readFileSync(
-      join(stack.runDir, 'transcripts', 'assistant', 'session.jsonl'),
+      join(stack.runDir, 'transcripts', 'assistant', 'session-v2.jsonl'),
       'utf8',
     );
     const cwd = (JSON.parse(copied.split('\n')[0] ?? '{}') as { cwd?: string }).cwd ?? '';
@@ -90,7 +90,7 @@ describe('where the app runs', () => {
     }
     const profile = join(stack.runDir, 'profile');
     expect(existsSync(join(profile, 'vault'))).toBe(true);
-    expect(existsSync(join(profile, 'assistant', 'session.jsonl'))).toBe(true);
+    expect(existsSync(join(profile, 'assistant', 'session-v2.jsonl'))).toBe(true);
     expect(existsSync(join(profile, 'logs'))).toBe(false);
     // The neutral folder is gone.
     expect(existsSync(dirname(userData))).toBe(false);
@@ -110,7 +110,7 @@ describe('where the app runs', () => {
       expect(taken.profileDir).toBe(join(dir, 'profile'));
       expect(existsSync(join(taken.profileDir, 'vault'))).toBe(true);
       expect(existsSync(join(stack.runDir, 'profile', 'vault'))).toBe(true);
-      expect(existsSync(join(stack.runDir, 'profile', 'assistant', 'session.jsonl'))).toBe(true);
+      expect(existsSync(join(stack.runDir, 'profile', 'assistant', 'session-v2.jsonl'))).toBe(true);
     } finally {
       await stack.close();
     }

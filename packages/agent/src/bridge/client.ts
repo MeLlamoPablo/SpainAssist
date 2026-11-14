@@ -49,7 +49,6 @@ export interface BridgeCallOptions {
 
 /** Methods that may wait for the user (no timeout). */
 const WAITS_FOR_USER: ReadonlySet<string> = new Set([
-  'prompt.form',
   'prompt.confirm',
   'prompt.userAction',
   'prompt.credential',

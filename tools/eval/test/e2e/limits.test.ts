@@ -33,11 +33,11 @@ afterAll(() => {
 
 const FIXTURE = 'vida-laboral-con-datos';
 
-/** A model that never stops asking for the saved data. */
+/** A model that never stops asking for the agents it has. */
 const LOOP: ScenarioInput = {
   name: 'loop',
   rules: [],
-  fallback: { toolCalls: [{ id: 'again', name: 'vault_read', arguments: {} }] },
+  fallback: { toolCalls: [{ id: 'again', name: 'agent_list', arguments: {} }] },
 };
 
 /** The files every run leaves, however it ended. */
@@ -51,7 +51,7 @@ const ALWAYS = [
   'llm/meter.jsonl',
   'net/browser.jsonl',
   'logs/main.log',
-  'transcripts/assistant/session.jsonl',
+  'transcripts/assistant/session-v2.jsonl',
 ];
 
 e2eSuite('runs that are cut off, on the real SpainBench', () => {
@@ -134,7 +134,7 @@ e2eSuite('runs that are cut off, on the real SpainBench', () => {
         rules: [],
         fallback: {
           delayMs: 1500,
-          toolCalls: [{ id: 'again', name: 'vault_read', arguments: {} }],
+          toolCalls: [{ id: 'again', name: 'agent_list', arguments: {} }],
         },
       },
       limits: { wallClockMs: 4000 },
@@ -198,7 +198,7 @@ e2eSuite('runs that are cut off, on the real SpainBench', () => {
     await until(
       () =>
         existsSync(eventsFile) &&
-        readFileSync(eventsFile, 'utf8').includes('"tool":"browser_click"'),
+        readFileSync(eventsFile, 'utf8').includes('"tool":"browser.click"'),
       'the agent to be in the browser',
     );
     controller.abort();

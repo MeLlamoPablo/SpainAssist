@@ -2,8 +2,6 @@ import { z } from 'zod';
 import {
   ConfirmPrompt,
   CredentialPrompt,
-  FormPrompt,
-  FormValue,
   PhoneCallPrompt,
   type PromptResponse,
   UserActionPrompt,
@@ -17,16 +15,17 @@ import { PersonalDataInput } from './vault';
  * Host bridge: the contract between the pi extension (running inside the agent child process)
  * and the Electron main process.
  *
- * Two kinds of agents use it:
- *   - the assistant (ASSISTANT_AGENT_ID): the orchestrator behind the single chat. It starts and
- *     briefs one agent per procedure (`procedures.*`) and may ask the user / use their data;
- *   - one agent per procedure: does all the work for it (research, browser, plan card).
- * Each method is available to one kind or both (see ASSISTANT_METHODS / PROCEDURE_METHODS).
+ * Two kinds of agents use it (docs/codemode.md):
+ *   - the coordinator (ASSISTANT_AGENT_ID): the chat's agent. It only delegates to background
+ *     agents (`agents.*`) and reads the procedures' cards;
+ *   - background agents: they write workflows (`workflow.*`) that do the work: research, the
+ *     browser, the user's questions, the procedures' cards.
+ * What each may call: codemodeMayCall.
  *
  * Transport: HTTP on 127.0.0.1 (random port). The agent process receives:
  *   SA_BRIDGE_URL      e.g. http://127.0.0.1:53123
  *   SA_BRIDGE_TOKEN    per-agent bearer token (also identifies the agent)
- *   SA_PROCEDURE_ID    the procedure this agent works on, or ASSISTANT_AGENT_ID
+ *   SA_PROCEDURE_ID    the agent's id (ASSISTANT_AGENT_ID for the coordinator)
  *
  * Request:  POST {SA_BRIDGE_URL}/rpc/{method}
  *           Authorization: Bearer {SA_BRIDGE_TOKEN}
@@ -112,8 +111,6 @@ const Ref = z
 /** Agent id of the assistant (orchestrator). Procedure ids never take this value. */
 export const ASSISTANT_AGENT_ID = 'assistant';
 
-const ProcedureRef = z.string().min(1).max(64).describe('Procedure id, e.g. "p_0123456789abcdef"');
-
 const ProcedureId = z.string().min(1).max(64);
 const RunId = z.string().min(1).max(64);
 const AgentId = z.string().min(1).max(64);
@@ -133,50 +130,7 @@ export const WORKING_CONTEXT_MAX_BYTES = 64 * 1024;
 export const PROCEDURE_HEADER = 'x-sa-procedure';
 
 export const BridgeParams = {
-  // --- procedure (its own agent) ---------------------------------------------------------------
-  'procedure.get': z.object({}),
-  'procedure.update': ProcedureUpdate,
-
-  // --- procedures (assistant only) -----------------------------------------------------------
-  /** Short list of every procedure (archived ones only when asked). */
-  'procedures.list': z.object({ includeArchived: z.boolean().default(false) }),
-  /** One procedure's card, as the user sees it. */
-  'procedures.read': z.object({ procedureId: ProcedureRef }),
-  /**
-   * Create a procedure and start its agent with a brief. Returns right away: the procedure's
-   * agent works on its own and its report reaches the assistant when it finishes a run.
-   */
-  'procedures.start': z.object({
-    title: z.string().min(1).max(160),
-    brief: z.string().min(1).max(4000),
-  }),
-  /**
-   * Pass a message (new information, a decision, a request) to a procedure's agent: after its
-   * current run, or right after its current tool calls when it answers a pending data form
-   * (cancelled) or is `urgent` (a correction, cancelling all its pending requests). Never aborts
-   * the run.
-   */
-  'procedures.message': z.object({
-    procedureId: ProcedureRef,
-    message: z.string().min(1).max(4000),
-    urgent: z.boolean().optional(),
-  }),
-  /** Answer or dismiss a pending data form; never approves protected actions. */
-  'procedures.respond': z.object({
-    procedureId: ProcedureRef,
-    promptId: z.string().min(1).max(128),
-    values: z.record(z.string().max(64), FormValue).optional(),
-  }),
-  /** Interrupt a procedure's current run without cancelling the procedure (assistant only). */
-  'procedures.stop': z.object({ procedureId: ProcedureRef }),
-  /** Stop a procedure's agent and mark the procedure cancelled. */
-  'procedures.cancel': z.object({
-    procedureId: ProcedureRef,
-    reason: z.string().max(300).optional(),
-  }),
-
   // --- prompts (block until the user answers) ------------------------------------------------
-  'prompt.form': FormPrompt.omit({ kind: true }),
   /**
    * `certificate_site` asks the user to allow certificate logins on `site`, an https origin
    * outside the official list, after the agent checked it in `sources`. The app writes that
@@ -301,7 +255,7 @@ export const BridgeParams = {
   /** Rates a learning from feedback.search (by its id). */
   'feedback.vote': z.object({ id: z.string().min(1).max(64), vote: FeedbackVote }),
 
-  // --- codemode (the `codemode` feature flag; docs/codemode.md) ------------------------------
+  // --- workflows (docs/codemode.md) ------------------------------------------------------------
   /**
    * Starts a run of a workflow: creates its record, or resumes it with its durable state when the
    * id exists (another live run of it is refused with `conflict`). Returns the run's id.
@@ -376,7 +330,7 @@ export const BridgeParams = {
   'procs.context': z.object({ id: ProcedureId }),
   'procs.setContext': z.object({ id: ProcedureId, context: WorkingContext.partial() }),
 
-  /** The coordinator's background agents (codemode only). */
+  /** The coordinator's background agents. */
   'agents.start': z.object({
     status: z.string().min(1).max(120),
     brief: z.string().min(1).max(8000),
@@ -472,29 +426,7 @@ export interface VaultReadResult {
   }[];
 }
 
-/** A procedure as the assistant sees it in `procedures.list`: enough to pick one, no more. */
-export interface ProcedureBrief {
-  id: string;
-  title: string;
-  status: import('./procedure').ProcedureStatus;
-  /** The procedure's agent: working, waiting for the user, or idle. */
-  activity: import('./procedure').ProcedureActivity;
-  nextAction?: import('./procedure').NextAction;
-  archived: boolean;
-  updatedAt: string;
-}
-
 export interface BridgeResults {
-  'procedure.get': import('./procedure').Procedure;
-  'procedure.update': import('./procedure').Procedure;
-  'procedures.list': { procedures: ProcedureBrief[] };
-  'procedures.read': import('./procedure').ProcedureListItem;
-  'procedures.start': { procedureId: string; title: string };
-  'procedures.message': { delivered: 'started' | 'queued'; cancelledPrompts: number };
-  'procedures.respond': { answered: boolean; dismissed: boolean };
-  'procedures.stop': { stopped: boolean };
-  'procedures.cancel': { cancelled: boolean };
-  'prompt.form': Extract<PromptResponse, { kind: 'form' }>;
   'prompt.confirm': Extract<PromptResponse, { kind: 'confirm' }>;
   'prompt.userAction': Extract<PromptResponse, { kind: 'user_action' }>;
   'prompt.credential': Extract<PromptResponse, { kind: 'credential' }>;
@@ -600,42 +532,6 @@ export interface BridgeResults {
 /** A procedure card as codemode agents read it (no runtime state, no private context). */
 export type VersionedProcedure = import('./procedure').Procedure;
 
-/** Methods only the assistant may call. */
-export const ASSISTANT_METHODS: ReadonlySet<BridgeMethod> = new Set<BridgeMethod>([
-  'procedures.list',
-  'procedures.read',
-  'procedures.start',
-  'procedures.message',
-  'procedures.respond',
-  'procedures.stop',
-  'procedures.cancel',
-  'prompt.form',
-  'vault.read',
-  'vault.save',
-  'agent.credential',
-  'agent.refreshCredential',
-  'agent.voucherSpend',
-]);
-
-/** Codemode methods (`codemode` flag): no legacy agent may call them. */
-const CODEMODE_PREFIXES = ['workflow.', 'workflows.', 'procs.', 'agents.'] as const;
-const CODEMODE_BROWSER: ReadonlySet<BridgeMethod> = new Set<BridgeMethod>([
-  'browser.query',
-  'browser.reload',
-  'browser.info',
-]);
-
-export function isCodemodeMethod(method: BridgeMethod): boolean {
-  return (
-    CODEMODE_PREFIXES.some((prefix) => method.startsWith(prefix)) || CODEMODE_BROWSER.has(method)
-  );
-}
-
-/** Methods a procedure's agent may call: everything except the assistant's and codemode's. */
-export function procedureMayCall(method: BridgeMethod): boolean {
-  return !method.startsWith('procedures.') && !isCodemodeMethod(method);
-}
-
 /** The roles of the codemode harness. */
 export type CodemodeBridgeRole = 'orchestrator' | 'agent';
 
@@ -645,8 +541,8 @@ export type CodemodeBridgeRole = 'orchestrator' | 'agent';
  * procedures, vault, the browser and the user prompts, but no agents of their own.
  */
 export function codemodeMayCall(role: CodemodeBridgeRole, method: BridgeMethod): boolean {
-  if (method.startsWith('procedures.') || method.startsWith('procedure.')) return false;
-  if (method.startsWith('agent.')) return true;
+  // The coordinator never researches: no Exa key.
+  if (method.startsWith('agent.')) return role === 'agent' || method !== 'agent.exaKey';
   if (role === 'orchestrator')
     return method.startsWith('agents.') || method === 'procs.list' || method === 'procs.get';
   return !method.startsWith('agents.');

@@ -16,22 +16,22 @@ import type { ResearchBackend } from './research';
 /** Where the host's own HTTP requests go. */
 export interface HostEgress {
   /**
-   * All outbound HTTP of `fetch_url`, `run_script` (its `fetch`) and `boe_search`. Receives the
-   * real URL the agent asked for (a `URL` object from the first two, a string from BOE) and the
+   * All outbound HTTP of workflows' `api.fetchUrl`, `api.fetch` and `api.boe.search`. Receives
+   * the real URL the agent asked for (a `URL` object from the first two, a string from BOE) and the
    * init the tool built (`redirect: 'manual'` from the first two: they follow redirects
    * themselves; BOE relies on the platform default).
    */
   fetch: typeof fetch;
   /**
-   * DNS for the SSRF guard of `fetch_url` and `run_script`. The guard keeps blocking IP literals
+   * DNS for the SSRF guard of `api.fetchUrl` and `api.fetch`. The guard keeps blocking IP literals
    * and `localhost` as in production, and resolves every other name through this function
    * before it calls `fetch`: without it a name that does not exist in real DNS never reaches
    * `fetch`, and the guard's lookup would leave the machine. Must not touch the network.
    */
   resolveHost?: HostResolver;
   /**
-   * Told about each request the SSRF guard of `fetch_url` and `run_script` refuses (an IP literal,
-   * `localhost`, a name that resolves to a private address): those never reach `fetch`, so this
+   * Told about each request the SSRF guard of `api.fetchUrl` and `api.fetch` refuses (an IP
+   * literal, `localhost`, a name that resolves to a private address): those never reach `fetch`, so this
    * is the only place an offline harness can see them. Called inside the tool call that made it.
    */
   onBlocked?: (request: BlockedRequest) => void;

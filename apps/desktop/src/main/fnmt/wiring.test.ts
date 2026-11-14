@@ -20,9 +20,9 @@ it('gives FNMT pages the shim and the agent its prompt line', async () => {
   app = await createTestApp({ signer: signerLib(silentLogger) });
   expect((await app.invoke('providers.setCustom', PROVIDER)).ok).toBe(true);
   app.services.browser.get();
-  const { procedureId } = await app.startProcedure();
+  const { agentId } = await app.startProcedure();
   const options = app.browserOptions.at(-1);
   expect(options?.fnmt?.shimSource).toContain('FnmtCertRequest');
   expect(options?.afirma).toBeDefined();
-  expect(app.agentFor(procedureId)?.launch.config).toMatchObject({ certificateRequests: true });
+  expect(app.agentFor(agentId)?.launch.config).toMatchObject({ certificateRequests: true });
 });

@@ -4,31 +4,46 @@
  * end-to-end tests run them through `runEvaluation`, and `eval run --provider mock --scenario <name>`
  * shows what the suite does with each.
  *
- * A scenario is plain data (`ScenarioInput`): the orchestrator's turns, the procedure agent's
- * turns (it walks SpainBench's Seguridad Social site the way its README describes) and a default
+ * A scenario is plain data (`ScenarioInput`): the coordinator's turns, the agent's turns (its
+ * workflows walk SpainBench's Seguridad Social site the way its README describes) and a default
  * for the user simulator's model. A scripted model is not a real one: it proves that the harness
  * measures what it should, not how a model behaves.
  */
 import type { ScenarioInput } from '@sa/mock-llm';
 import { findFixture, INYECCION_ID, UnknownFixtureError } from '../fixtures';
 import { answererRules } from './answerer';
+import { coordinatorRules } from './coordinator';
 import { robustRules, susceptibleRules } from './injection';
-import { PROCEDURE_AGENT, type Rule, sequence } from './kit';
-import { orchestratorRules } from './orchestrator';
-import { type ProcedureOptions, procedureStages } from './procedure';
+import { AGENT, type Rule, sequence } from './kit';
+import { type AgentOptions, agentStages } from './vida-laboral';
 
 export { answererRules } from './answerer';
+export { coordinatorRules, VIDA_LABORAL_BRIEF } from './coordinator';
 export { linkTo } from './injection';
-export { ORCHESTRATOR, PROCEDURE_AGENT, type Rule, sequence, waitForText } from './kit';
-export { orchestratorRules, REPORT_PREFIX } from './orchestrator';
 export {
+  AGENT,
+  COORDINATOR,
+  REPORT_PREFIX,
+  type Rule,
+  resultMatches,
+  type Stage,
+  sequence,
+  WAITS_TEXT,
+  workflow,
+} from './kit';
+export {
+  agentStages,
   DECOY_URLS,
+  fromDownload,
   INFO_URL,
-  procedureStages,
+  REPORT_TEXT,
+  SAVED,
   stagesFromDownload,
   stagesUntilLogin,
+  untilLogin,
   VIDA_LABORAL_URL,
-} from './procedure';
+  WORKFLOW_ID,
+} from './vida-laboral';
 
 /**
  * - `oracle`: knows the way and does the job (the best a run can score).
@@ -64,13 +79,13 @@ export function flowOf(fixtureId: string): Flow | undefined {
   return undefined;
 }
 
-/** The rules of a scenario that follow the way of `flow`, with the procedure's options. */
-function rulesFor(flow: Flow, procedure: ProcedureOptions, before: Rule[] = []): Rule[] {
+/** The rules of a scenario that follow the way of `flow`, with the agent's options. */
+function rulesFor(flow: Flow, agent: AgentOptions, before: Rule[] = []): Rule[] {
   return [
     ...answererRules(),
     ...before,
-    ...orchestratorRules({ askMethod: flow.fromScratch }),
-    ...sequence(PROCEDURE_AGENT, 'p', procedureStages(procedure)),
+    ...coordinatorRules(),
+    ...sequence(AGENT, 'p', agentStages({ ...agent, askMethod: flow.fromScratch })),
   ];
 }
 

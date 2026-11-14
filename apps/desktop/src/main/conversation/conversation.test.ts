@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EventBus } from '../core/events';
 import { silentLogger } from '../core/logger';
 import { newId } from '../core/util';
-import { clipReport, MAX_REPORT_CHARS } from './coordinator';
 import { ConversationService, MAX_CONVERSATION_ITEMS } from './service';
 
 let dir: string;
@@ -48,13 +47,43 @@ describe('ConversationService', () => {
     });
     a.appendDelta('m1', 'la');
     a.addNotice('info', 'Guardado', 'p_1');
+    // No question outlives a restart, not even a form or a phone call: the workflow that asked
+    // resumes from its state and asks again.
+    a.upsertItem({
+      id: 'q1',
+      createdAt: '2026-10-03T09:00:02Z',
+      type: 'prompt',
+      prompt: {
+        kind: 'form',
+        title: 'Tu nombre',
+        fields: [{ key: 'name', label: 'Nombre', type: 'text', required: true }],
+        allowDismiss: false,
+      },
+      status: 'pending',
+    });
+    a.upsertItem({
+      id: 'q2',
+      createdAt: '2026-10-03T09:00:03Z',
+      type: 'prompt',
+      prompt: {
+        kind: 'phone_call',
+        title: 'Llama a EMASESA',
+        organization: 'EMASESA',
+        phoneNumber: '+34 955 01 00 10',
+        purpose: 'Dar de alta el agua.',
+        questions: ['¿Qué documentos piden?'],
+      },
+      status: 'pending',
+    });
     await a.flush();
     const raw = JSON.parse(await readFile(join(dir, 'transcript.json'), 'utf8'));
-    expect(raw).toHaveLength(3);
+    expect(raw).toHaveLength(5);
     expect(events.map((e) => e.type)).toEqual([
       'chat.item',
       'chat.item',
       'chat.delta',
+      'chat.item',
+      'chat.item',
       'chat.item',
     ]);
 
@@ -64,6 +93,8 @@ describe('ConversationService', () => {
       expect.objectContaining({ id: 'u1' }),
       expect.objectContaining({ id: 'm1', text: 'Hola', status: 'aborted' }),
       expect.objectContaining({ type: 'notice', procedureId: 'p_1' }),
+      expect.objectContaining({ id: 'q1', status: 'cancelled' }),
+      expect.objectContaining({ id: 'q2', status: 'cancelled' }),
     ]);
   });
 
@@ -87,14 +118,5 @@ describe('ConversationService', () => {
       { type: 'chat.state', state: { activity: 'idle' } },
     ]);
     await c.flush();
-  });
-});
-
-describe('reports', () => {
-  it('are clipped so the assistant context stays small', () => {
-    expect(clipReport('  Hecho.\n\n\n\nSiguiente: cita.  ')).toBe('Hecho.\n\nSiguiente: cita.');
-    const long = clipReport('x'.repeat(5000));
-    expect(long).toHaveLength(MAX_REPORT_CHARS);
-    expect(long.endsWith('…')).toBe(true);
   });
 });

@@ -4,7 +4,6 @@
  * records about it (`describeBench`). Pure: they read a `BenchVersion` and nothing else.
  */
 import { type BenchVersion, type Fixture, SUPPORTED_SCORING_API } from '../contracts';
-import { drawsOnPdfPage, PDF_PAGE_VARIANTS } from '../fixtures/plant-points';
 import { BenchVersionError } from './errors';
 
 /**
@@ -72,19 +71,9 @@ export function runnable(fixture: Fixture, version: BenchVersion): Runnable {
   const injection = fixture.world.injection;
   if (injection) {
     const variants = version.injections.map((entry) => entry.id);
-    const entry = version.injections.find((candidate) => candidate.id === injection.variant);
-    if (!entry) {
+    if (!variants.includes(injection.variant)) {
       problems.push(
         `the server does not list injection variant "${injection.variant}" (it lists ${list(variants)})`,
-      );
-    } else if (
-      entry.points &&
-      drawsOnPdfPage(entry.points) !== PDF_PAGE_VARIANTS.has(injection.variant)
-    ) {
-      // The plant-shown precondition counts a PDF page image as shown for exactly these variants.
-      problems.push(
-        `injection variant "${injection.variant}" is planted at ${list(entry.points)}, which ` +
-          'src/fixtures/plant-points.ts does not expect (update PDF_PAGE_VARIANTS)',
       );
     }
   }

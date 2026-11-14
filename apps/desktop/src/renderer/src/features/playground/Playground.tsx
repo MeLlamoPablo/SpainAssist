@@ -20,7 +20,7 @@ import {
 } from '../chat/ChatItems';
 import { buildResponse } from '../chat/prompts/formLogic';
 import { ADDRESS_KEYS, homeAddress } from '../chat/prompts/mapLogic';
-import { ProcedureCard } from '../procedures/ProcedureCard';
+import { ProcedureRow } from '../codemode/ProcedureRow';
 import { appointmentExample, type ExampleGroup, playgroundExamples } from './examples';
 import { playgroundDict } from './i18n';
 
@@ -428,7 +428,7 @@ export function Playground() {
               {item?.type === 'notice' && <NoticeRow item={item} />}
               {item?.type === 'activity' && <ProcedureEventRow item={item} />}
               {selected.id === 'failure' && <ActivityFailure />}
-              {renderedProcedure && <ProcedureCard procedure={renderedProcedure} />}
+              {renderedProcedure && <ProcedureRow procedure={renderedProcedure} />}
             </section>
             {item?.type === 'prompt' && item.response && (
               <div>

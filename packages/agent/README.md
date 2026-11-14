@@ -1,9 +1,10 @@
 # @sa/agent
 
 Everything pi-specific in SpainAssist: the **agent host** (one process per active agent: the
-assistant behind the chat, or one procedure's agent), the **tools** the model can call, the
-**system prompts**, the **RPC client** the desktop app uses to drive a host, and **provider
-helpers** (Sign in with ChatGPT, vouchers, BYOK, credit).
+coordinator behind the chat, or a background agent), the **tools** the model can call (the
+coordinator's, and the background agents' `codemode` with its workflow API), the **system
+prompts**, the **RPC client** the desktop app uses to drive a host, and **provider helpers**
+(Sign in with ChatGPT, vouchers, BYOK, credit).
 
 Background: [`docs/research/pi.md`](../../docs/research/pi.md) (pi 1.x facts),
 [`docs/research/providers-and-research.md`](../../docs/research/providers-and-research.md),
@@ -16,12 +17,12 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
      ▲   │                                     │  pi SDK: ModelRuntime + AgentSession + runRpcMode
      │   └── PiRpcClient ◄── stdio JSONL ─────►│  inline extension: the tools + exact system prompt
      │                                         │
-     └──── host bridge (HTTP, bearer token) ◄──┘  procedure agents: procedure/prompts/vault/
-                                                  browser/search/feedback; the assistant:
-                                                  procedures.*, ask_user, vault (role in config);
+     └──── host bridge (HTTP, bearer token) ◄──┘  background agents: workflow.*, procs.*,
+                                                  prompts/vault/browser/feedback; the
+                                                  coordinator: agents.*, procs.* (role in config);
                                                   credentials (agent.credential)
                                                ──► LLM provider (direct)
-                                               ──► fetch_url, run_script fetch, BOE open-data API (direct)
+                                               ──► api.fetchUrl, api.fetch, BOE open-data API (direct)
 ```
 
 - `src/host/` — the host. Reads `SA_AGENT_CONFIG` (JSON, non-secret), `SA_BRIDGE_URL`,
@@ -34,18 +35,20 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
   files, and an inline extension that registers the tools, returns the exact system prompt from
   `before_agent_start` (no `<cwd>` leak), blocks pi's `bash` RPC command and any unknown tool.
   Then `runRpcMode`.
-- Roles (`config.role`): `assistant` gets `createAssistantTools()` (delegation, `ask_user`,
-  vault) and `buildAssistantPrompt()`, and its final messages are checked: one that links a
-  document the vault does not have gets an error and is written again, once per prompt
-  (`host/document-links.ts`); `procedure` gets `createTools()` (everything else, plus
-  `web_research` for voucher users and ChatGPT plans, or `exa_search`/`exa_fetch` for BYOK and
-  custom endpoints, see `host/research.ts`) and `buildSystemPrompt()`, whose final message per
-  run is a short report for the assistant.
-- `src/tools/` — tool definitions (TypeBox schemas, English model-facing text). Bridge-backed
-  tools pass the tool's `AbortSignal` to the HTTP request, so aborting a run cancels a pending
-  form/confirmation in the app (no abort deadlock).
-- `src/research/` — `fetch_url` core (Readability + linkedom → Turndown/GFM, unpdf, charset
-  handling, SSRF guard), BOE client, web research (key server, ChatGPT, Exa).
+- Roles (`config.role`, required; `docs/codemode.md`): `orchestrator` is the coordinator, the
+  chat's agent. It gets `createCoordinatorTools()` (delegation only, see "Tools") and
+  `buildCoordinatorPrompt()`, and its final messages are checked: one that links a document the
+  vault does not have gets an error and is written again, once per prompt
+  (`host/document-links.ts`). `agent` is a background agent: its only tool is `codemode` (see
+  "Codemode"), with web research behind `api.search` (`web_research` for voucher users and
+  ChatGPT plans, or Exa for BYOK and custom endpoints, see `host/research.ts`), and
+  `buildCodemodePrompt()`, whose final message per run is a short report for the coordinator.
+- `src/tools/` — the coordinator's tools (TypeBox schemas, English model-facing text). Bridge
+  calls pass the tool's `AbortSignal` to the HTTP request, so aborting a run cancels a pending
+  request in the app (no abort deadlock).
+- `src/research/` — the core of `api.fetchUrl` (Readability + linkedom → Turndown/GFM, unpdf,
+  charset handling, SSRF guard, also behind `api.fetch`), BOE client, web research (key server,
+  ChatGPT, Exa).
 - `src/rpc/` — `PiRpcClient`, JSONL framing, event normalization, pluggable transport.
 - `src/providers/` — ChatGPT OAuth, refresh, model lists/defaults, BYOK catalogue, key server,
   LiteLLM gateway credit and models (vouchers).
@@ -55,8 +58,12 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 
 ## Codemode
 
-Behind the `codemode` flag (`docs/codemode.md`), roles `orchestrator` and `agent` have one
-tool, `codemode`, which runs a workflow module in QuickJS (`src/codemode/`):
+Background agents (role `agent`, `docs/codemode.md`) have one tool, `codemode`, which runs a
+workflow module in QuickJS (`src/codemode/`). Everything they do is a call of the workflow API
+(`api.*`, declared in the system prompt): research (`api.search`, `api.fetchUrl`, `api.fetch`,
+`api.boe.search`), procedures, vault and documents, the browser, the user's prompts and
+interfaces, community learnings. A workflow that waits for the user detaches: the tool returns,
+and the run's outcome reaches the agent as a message through the app.
 
 | File | What |
 | --- | --- |
@@ -69,36 +76,18 @@ tool, `codemode`, which runs a workflow module in QuickJS (`src/codemode/`):
 
 ## Tools
 
-The names are in `src/tools/names.ts`. The assistant has `procedure_list`, `procedure_read`,
-`procedure_start`, `procedure_message`, `procedure_respond`,
-`procedure_stop` and `procedure_cancel` (bridge `procedures.*`: it delegates every online step),
-plus `ask_user`, `vault_read` and `vault_save`. Procedure agents have the rest:
+The names are in `src/tools/names.ts`. Background agents have only `codemode`; the coordinator
+has these, and delegates every request to background agents:
 
 | Tool | Backed by | Notes |
 | --- | --- | --- |
-| `procedure_update` | `procedure.update` | Arrays replace the previous list (send complete lists); `clearNextAction` → `nextAction: null`. `nextAction.appointment` (address + local `startsAt`) gets Maps/Calendar buttons on the card. Result includes `Status: <status>` |
-| `ask_user` | `prompt.form` | Structured fields, `vaultKey` answers are always saved to my data; `secret` fields are not exposed to the model |
-| `confirm_action` | `prompt.confirm` | `confirmKind`: action / submission / payment |
-| `request_user_action` | `prompt.userAction` | captcha, qr_scan, phone_approval, manual_step, offline |
-| `request_credential` | `prompt.credential` | Only with `dniePhone`: the user adds their DNIe in the app; returns the credential id |
-| `request_phone_call` | `prompt.phoneCall` | The user phones an office; the app can record and transcribe the call. Returns the outcome, transcript and notes |
-| `vault_read`, `vault_save` | `vault.read`, `vault.save` | Values of personal data; credential summaries only |
-| `document_read` | `vault.document` | A saved document as text, image or PDF text plus page images (paged) |
-| `download_save` | `downloads.save` | Moves a temporary browser download into the vault under a readable name (extension kept) |
-| `browser_open`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_check`, `browser_press`, `browser_wait`, `browser_back`, `browser_upload` | `browser.*` | Result = compact observation text (URL, tabs, downloads, signatures, dialogs, page script errors, notes, then the snapshot). `details.imageId` carries the UI screenshot id |
-| `browser_fill_from_vault` | `browser.fillFromVault` | Saved personal data (`key`) typed by the app |
-| `browser_login_clave` | `browser.loginClave` | Cl@ve Permanente login: types the saved DNI/NIE and password and submits; asks the user in the app's own form when none is saved, or to correct it with `rejected` |
-| `browser_fill_from_user` | `browser.fillFromUser` | One-time codes and passwords of sites other than Cl@ve, typed by the app and never saved; refused on Cl@ve password fields. The model never sees them |
-| `browser_tabs`, `browser_screenshot`, `browser_use_certificate`, `browser_close` | `browser.*` | Screenshot returns an image block (refused when the model has no vision) |
-| `web_research` | Vouchers: key server `POST /v1/research`, paid from the voucher; `mode` picks the Parallel processor: `fast` → `lite` ($0.005), `balanced` → `core` ($0.025), `deep` → `pro` ($0.10). ChatGPT plans (`openai`/`openai-codex` with OAuth): one Responses request with OpenAI's hosted `web_search` on the plan; `mode` picks model and effort from the models file's `chatgpt.research` lists (`research.chatgptModels`, picked by the app from the plan's models; default each list's first) | One request stays open until completion; progress goes to the app, no model polling turns. Abort closes it; failures never start a replacement run. |
-| `exa_search`, `exa_fetch` | local (Exa's hosted MCP server, `mcp.exa.ai`): keyless free tier, or the user's optional key from `agent.exaKey` for higher limits | BYOK and custom endpoints only, instead of `web_research`. `exa_search`: `userLocation: "ES"`, `sources` `official` (default, `includeDomains` of Spanish administrations) or `any`, ≤ 10 results. `exa_fetch`: ≤ 5 URLs, 12,000 (≤ 30,000) characters each. A rejected key gives a research-blocker result that tells the user to fix or remove it |
-| `feedback_search`, `feedback_submit`, `feedback_vote` | `feedback.*` | Submit text must be PII-free (the app scrubs again); votes rate a search result by id |
-| `fetch_url` | local | 20 s timeout, 6 MB (HTML) / 25 MB (PDF) cap, ≤ 5 redirects (each re-checked), private hosts blocked, `offset`/`maxChars` paging, `mode: full`, 10-minute cache |
-| `boe_search` | local (BOE open data) | `legislacion-consolidada` search, in-force by default |
-| `run_script` | local (QuickJS in WebAssembly) | Model-written JavaScript, fresh engine per call, 30 s (≤ 120 s) and 64 MB caps, no Node APIs; `fetch` to public URLs (any method/headers/body, text or binary; no localhost or private networks, each redirect re-checked like `fetch_url`; responses ≤ 10 MB, ≤ 50 requests), plus URL, URLSearchParams, TextEncoder/TextDecoder and atob/btoa (`src/tools/run-script-prelude.ts`); returns logs + JSON result (≤ 30k chars) |
+| `agent_start` | `agents.start` | A background agent for a new request, with the user's words as its brief and its first status line. Returns right away; its report reaches the coordinator as a message |
+| `agent_message` | `agents.message` | The user's news, answers or corrections to a working agent; `urgent` only for corrections |
+| `agent_stop` | `agents.stop` | Only when the user asks to stop or pause |
+| `agent_list` | `agents.list` | The agents and what each is doing |
+| `procedure_list`, `procedure_read` | `procs.list`, `procs.get` | The user's procedures as the user sees them |
 
-Browser, prompt, plan and vault-write tools run sequentially (`executionMode`); research tools
-may run in parallel.
+`agent_start`, `agent_message` and `agent_stop` run sequentially (`executionMode`).
 
 ## Using it from the desktop main process
 
@@ -112,12 +101,13 @@ const client = new PiRpcClient(
     cwd: procedureWorkDir,                 // empty, app-owned directory
     hostPath: resourcesHostJs,             // dist/host.js shipped with the app (see Packaging)
     config: {
-      procedureId: p.id,
-      sessionFile: join(appData, 'sessions', `${p.id}.jsonl`),
+      role: 'agent',                       // or 'orchestrator' for the chat's coordinator
+      procedureId: agent.id,
+      sessionFile: join(appData, 'sessions', `${agent.id}.jsonl`),
       language: settings.language,
       model: { provider: 'litellm', ...BUNDLED_MODEL_LISTS.voucher.procedures[0], baseUrl: voucherBaseUrl, maxTokens: 8192 },
     },
-    bridge: { url: bridgeUrl, token: perProcedureToken },
+    bridge: { url: bridgeUrl, token: perAgentToken },
   }),
 );
 client.on((event: AgentEvent) => mapToChatItems(event));
@@ -137,12 +127,12 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
   provider, crash, unknown.
 - **Prompts while running.** `prompt()` steers by default when a run is active. If the agent is
   blocked on a `prompt.*` request, the steering message waits until the user answers that
-  prompt or the run is aborted (the app cancels the assistant's own questions when the user
-  types in the chat).
+  prompt or the run is aborted.
 - **Abort.** The bridge connection of a pending `prompt.*` / `browser.*` request is closed: mark
   the PromptItem cancelled.
 - **Bridge timeouts (host side).** None for `prompt.*`, `browser.loginClave`,
-  `browser.fillFromUser` and `browser.useCertificate` (they may wait for the user); 3 min for
+  `browser.fillFromUser`, `browser.useCertificate` and `workflow.events` (they may wait for the
+  user); 3 min for
   other `browser.*` calls (so a click must not block on a signature approval); 60 s for
   research/feedback; 30 s otherwise. Requests use plain `node:http` (no undici 300 s limits).
 - **Credentials.** `agent.credential {providerId}` → `{credential}` in pi-ai shape or `null`.
@@ -160,18 +150,18 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 
 | Field | Meaning |
 | --- | --- |
-| `role` | `procedure` (default) or `assistant` |
+| `role` | `orchestrator` (the coordinator) or `agent` (a background agent); required |
 | `procedureId`, `sessionFile`, `language` | Session file is created if missing and resumed otherwise |
 | `model.provider`, `model.id` | `openai` (ChatGPT OAuth), `litellm` (vouchers), any pi provider (BYOK), or `custom` |
 | `model.baseUrl` | Required for `custom` and `litellm`; for built-in providers overrides the endpoint (dev/e2e: → mock LLM). Unknown ids are cloned from a sibling catalog model |
 | `model.api`, `supportsImages`, `contextWindow`, `reasoning` | `custom` only (`openai-completions` uses `max_tokens`, `system` role, no `store`) |
 | `model.maxTokens` | Output cap (capped voucher keys) |
 | `model.thinkingLevel` | Default `medium`, clamped to the model |
-| `research.keyServerUrl` | Our key server: vouchers' `web_research` |
+| `research.keyServerUrl` | Our key server: vouchers' web research (`web_research` behind `api.search`) |
 | `research.chatgptModels` | ChatGPT plans: model and effort of each `web_research` mode (`fast`, `balanced`, `deep`); default each mode's first bundled model |
-| `research.exa` | BYOK and custom endpoints: `exa_search`/`exa_fetch` instead of `web_research` (the optional key comes from the app at call time) |
+| `research.exa` | BYOK and custom endpoints: `api.search` on Exa instead of `web_research` (the optional key comes from the app at call time) |
 | `research.boeBaseUrl`, `research.exaBaseUrl`, `research.allowPrivateHosts` | Tests / e2e (mock sede on localhost) |
-| `feedback` | `{submit, vote}` when the app has a feedback server: `feedback_search`, plus submit and vote when on |
+| `feedback` | `{submit, vote}` when the app has a feedback server: `api.feedback.search`, plus submit and vote when on |
 | `dniePhone` | The DNIe through the phone app (`dnie-phone` flag) is offered |
 | `extraTrustedHosts` | Dev/e2e hosts allowed for credentials |
 | `timeZone` | For "today" in the prompt; default `Europe/Madrid` |
@@ -188,10 +178,10 @@ call without them is the product host.
 
 | Hook | What it does |
 | --- | --- |
-| `egress.fetch` | All outbound HTTP of `fetch_url`, `run_script` and `boe_search` (`ToolDeps.fetchImpl`), with the real URL the agent asked for |
-| `egress.resolveHost` | DNS stand-in for the SSRF guard (`ToolDeps.resolveHost`, `HostResolver` in `research/fetch.ts`). The guard still blocks IP literals, `localhost` and private answers with the production messages; every other name resolves through it, so nothing touches real DNS before `egress.fetch` is called |
-| `research` | Replaces the web research backend (`researchBackend()`: which prompt text and tool shape the agent gets) and its tools. Procedure agents only: the assistant never researches |
-| `wrapTool` | Wraps every tool, research ones included, once at startup (an `AsyncLocalStorage` per tool call, logging). The wrapper must keep `tool.name` (checked) |
+| `egress.fetch` | All outbound HTTP of `api.fetchUrl`, `api.fetch` and `api.boe.search` (`HostOpsDeps.fetchImpl`), with the real URL the agent asked for |
+| `egress.resolveHost` | DNS stand-in for the SSRF guard (`HostOpsDeps.resolveHost`, `HostResolver` in `research/fetch.ts`). The guard still blocks IP literals, `localhost` and private answers with the production messages; every other name resolves through it, so nothing touches real DNS before `egress.fetch` is called |
+| `research` | Replaces the web research backend (`researchBackend()`: which prompt text and `api.search` the agent gets) and its tools. Background agents only: the coordinator never researches |
+| `wrapTool` | Wraps every tool once at startup, the research tool behind `api.search` included (an `AsyncLocalStorage` per tool call, logging). The wrapper must keep `tool.name` (checked) |
 | `onModel` | Called with the configured model right after `configureModel`, before the host talks to anything: install guards that need the gateway's origin |
 | `now` | Clock of "Today is …" in both system prompts, read on every turn |
 
@@ -221,7 +211,8 @@ spend headers.
   `manualRedirectUrl` (the URL the user pastes).
 - `refreshOAuthCredential('openai', credential)`, `credentialNeedsRefresh(credential)`.
 - The models of ChatGPT, Codex and vouchers live in the repository's `models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`:
-  per role (`procedures`, `assistant`, the document `scanner`, and on ChatGPT each `research`
+  per role (`procedures` for background agents, `assistant` for the coordinator, the document
+  `scanner`, and on ChatGPT each `research`
   mode), a list of `"<model id>:<reasoning level>"` entries, best first; and per user type the
   scan frame `decider`, one OpenRouter id that the key server also reads so keys allow it.
   `voucher.compaction` (`assistant`, `procedures`): the context size in tokens past which those
@@ -264,31 +255,18 @@ corepack pnpm --filter @sa/agent test        # unit + integration (spawns real h
 SA_TEST_ELECTRON=<path to Electron binary> corepack pnpm --filter @sa/agent test   # + Electron-as-Node run
 ```
 
-### Run the host by hand against the mock LLM
-
-```sh
-corepack pnpm --filter @sa/mock-llm start -- --port 8789          # demo scenario by default
-corepack pnpm --filter @sa/agent build
-corepack pnpm --filter @sa/agent dev:chat                         # then type: Quiero renovar el DNI
-# a real model with your own key (served through the fake bridge, never in the host env):
-corepack pnpm --filter @sa/agent dev:chat -- --provider openrouter \
-  --model moonshotai/kimi-k2.6 --key-env OPENROUTER_API_KEY
-```
-
-`scripts/dev-chat.ts` spawns the real host with a fake bridge: the plan card is printed, forms
-and confirmations are asked in the terminal, the vault is in memory, browser and web search are
-unavailable. Ctrl+C aborts the run.
-
 ### Debugging tips
 
 - Host logs go to **stderr** as `[sa-host] <level> …` (stdout is the protocol) and arrive as
   `log` events; `process_exit.stderrTail` keeps the last 8 KiB.
 - The session file is the source of truth: one JSONL entry per message/tool result; delete it to
   start over. Screenshots are stored there as base64 (the file is private, not encrypted).
-- `GET http://127.0.0.1:8789/__requests` shows exactly what the model received (system prompt,
-  tool schemas, auth header); `POST /__scenario` swaps the script at runtime.
+- With the mock LLM (`tools/mock-llm`, e.g. on port 8789), `GET http://127.0.0.1:8789/__requests`
+  shows exactly what the model received (system prompt, tool schemas, auth header);
+  `POST /__scenario` swaps the script at runtime.
 - `node --inspect dist/host.js` works with the same environment (`buildAgentLaunch(...).env`).
-- A tool returning `Could not reach the Spain Assist app` means the bridge URL/token is wrong.
+- A coordinator tool returning `Could not reach the Spain Assist app` means the bridge URL/token
+  is wrong.
 
 ## Packaging notes
 

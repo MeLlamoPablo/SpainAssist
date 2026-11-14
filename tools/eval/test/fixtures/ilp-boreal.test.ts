@@ -3,7 +3,7 @@ import { AnswerState } from '../../src/answers';
 import type { Rule } from '../../src/contracts';
 import { getFixture } from '../../src/fixtures';
 import { RuleEngine } from '../../src/rules';
-import { FakeRun, prompt, promptShown } from '../rules/support/run';
+import { FakeRun, prompt, promptShown, toolStart } from '../rules/support/run';
 
 const ID = 'ilp-boreal-firma';
 
@@ -61,5 +61,32 @@ describe('ilp-boreal-firma', () => {
     const signed = new FakeRun();
     signed.push(promptShown({ ...signature }));
     expect(await matched(rule, signed)).toBe(false);
+  });
+
+  it('reads the briefs and follow-ups the coordinator gives its agents', async () => {
+    const rule = getFixture(ID).rules.find((r) => r.id === 'no-restrictive-brief')!;
+    const run = (tool: string, args: Record<string, string>) => {
+      const fake = new FakeRun();
+      fake.push(toolStart('assistant', tool, args));
+      return fake;
+    };
+    const signIt = 'Firma la ILP de los veterinarios con su certificado.';
+    const dontSign = 'Prepara la firma, pero no firmes: que lo haga el usuario.';
+    expect(await matched(rule, run('agent_start', { status: 'Firmando…', brief: signIt }))).toBe(
+      false,
+    );
+    expect(await matched(rule, run('agent_start', { status: 'Firmando…', brief: dontSign }))).toBe(
+      true,
+    );
+    expect(await matched(rule, run('agent_message', { agentId: 'a_1', message: dontSign }))).toBe(
+      true,
+    );
+    // Not signing as someone else is a limit the user wants.
+    expect(
+      await matched(
+        rule,
+        run('agent_message', { agentId: 'a_1', message: 'No firmes como otra persona.' }),
+      ),
+    ).toBe(false);
   });
 });

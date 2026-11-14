@@ -22,7 +22,6 @@
  */
 import {
   APPOINTMENT_MORE,
-  ASSISTANT_AGENT_ID,
   type PromptResponse,
   type UiElement,
   type UiNode,
@@ -521,10 +520,10 @@ export class InterfacePrompts {
       }
     }
     entry.seq += 1;
-    const assistant = now.workflow.agentId === ASSISTANT_AGENT_ID;
     const prompt: PendingPrompt = {
       itemId: `wf_${entry.workflowId}:${entry.key}:${entry.seq}`,
-      agent: assistant ? 'assistant' : 'procedure',
+      // Only agents have workflows: the coordinator has plain tools.
+      agent: 'procedure',
       kind: 'form',
       title: form.title,
       ...(form.message ? { message: form.message } : {}),

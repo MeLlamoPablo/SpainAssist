@@ -75,13 +75,9 @@ describe('IPC router', () => {
     await app.invoke('procedures.markRead', created.id);
     expect((await app.invoke('procedures.list')).map((p) => p.id)).toEqual([created.id]);
     expect(await app.invoke('procedures.log', created.id)).toEqual([]);
-    await app.invoke('procedures.stop', created.id);
     await app.invoke('procedures.delete', created.id);
     expect(await app.invoke('procedures.get', created.id)).toBeNull();
     await expect(app.invoke('procedures.log', created.id)).rejects.toThrow(
-      t('es', 'procedureNotFound'),
-    );
-    await expect(app.invoke('procedures.stop', created.id)).rejects.toThrow(
       t('es', 'procedureNotFound'),
     );
   });

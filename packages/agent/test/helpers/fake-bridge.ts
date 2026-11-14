@@ -151,3 +151,25 @@ export async function createFakeBridge(
       }),
   };
 }
+
+/**
+ * What the app answers a codemode agent's workflows with (bridge `workflow.*`): each run starts
+ * fresh, stores nothing and gets no user events.
+ */
+export function workflowHandlers(): Record<string, FakeBridgeHandler> {
+  let runs = 0;
+  return {
+    'workflow.begin': () => ({
+      runId: `run_${++runs}`,
+      resumed: false,
+      procedures: [],
+      state: { memo: {}, ui: {} },
+    }),
+    'workflow.memo': () => ({}),
+    'workflow.ui': () => ({}),
+    'workflow.setStatus': () => ({}),
+    'workflow.events': hang,
+    'workflow.end': () => ({}),
+    'workflow.resumable': () => ({ workflows: [] }),
+  };
+}

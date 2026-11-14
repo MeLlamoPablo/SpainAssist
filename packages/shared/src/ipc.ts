@@ -206,8 +206,6 @@ export interface SaMethods {
   'procedures.log': [[id: string], ChatItem[]];
   'procedures.rename': [[id: string, title: string], ProcedureListItem];
   'procedures.archive': [[id: string, archived: boolean], ProcedureListItem];
-  /** Stops the procedure's agent (its pending prompts are cancelled). */
-  'procedures.stop': [[id: string], void];
   'procedures.delete': [[id: string], void];
   'procedures.markRead': [[id: string], void];
 
@@ -288,8 +286,8 @@ export interface SaMethods {
   'companion.unlock': [[promptItemId: string, values: DnieUnlockValues], void];
 
   /**
-   * Codemode (`codemode` flag): the agents (the progress meter) and the workflows with open
-   * interfaces or still running.
+   * Codemode: the agents (the progress meter) and the workflows with open interfaces or still
+   * running.
    */
   'codemode.state': [[], { agents: CodemodeAgentInfo[]; workflows: WorkflowInfo[] }];
   /** The user acted on a workflow's interface. False when it is no longer open. */

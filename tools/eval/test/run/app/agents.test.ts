@@ -71,9 +71,9 @@ function fleet(over: { now?: string; origin?: string } = {}): AgentFleet {
 }
 
 const config = (over: Partial<AgentHostConfig> = {}): AgentHostConfig => ({
-  role: 'procedure',
-  procedureId: 'p_00000000000000aa',
-  sessionFile: join(root, 'procedures', 'p_00000000000000aa', 'session.jsonl'),
+  role: 'agent',
+  procedureId: 'a_00000000000000aa',
+  sessionFile: join(root, 'agents', 'a_00000000000000aa', 'session.jsonl'),
   language: 'es',
   model: {
     provider: 'litellm',
@@ -121,14 +121,14 @@ describe('the launch of an agent host', () => {
     expect(procedure.model).toEqual({
       provider: 'litellm',
       id: 'anthropic/claude-haiku-5.5',
-      baseUrl: 'http://127.0.0.1:4000/r/tok/a/procedure-p_00000000000000aa/v1',
+      baseUrl: 'http://127.0.0.1:4000/r/tok/a/procedure-a_00000000000000aa/v1',
       maxTokens: 8192,
     });
     const assistant = sentConfig(
       f.lib.buildAgentLaunch(
         options(
           config({
-            role: 'assistant',
+            role: 'orchestrator',
             procedureId: 'assistant',
             model: { provider: 'litellm', id: 'm', baseUrl: 'https://g/v1', thinkingLevel: 'high' },
           }),
@@ -139,7 +139,7 @@ describe('the launch of an agent host', () => {
       baseUrl: 'http://127.0.0.1:4000/r/tok/a/assistant/v1',
       thinkingLevel: 'high',
     });
-    expect(assistant.role).toBe('assistant');
+    expect(assistant.role).toBe('orchestrator');
     expect(procedure.language).toBe('es');
     expect(procedure.dniePhone).toBe(false);
   });
@@ -152,7 +152,7 @@ describe('the launch of an agent host', () => {
 
   it('writes the host config of the process: the world, its own net log, the research and the clock', () => {
     const launch = fleet().lib.buildAgentLaunch(options(config()));
-    const file = join(root, 'host', 'procedure-p_00000000000000aa.json');
+    const file = join(root, 'host', 'procedure-a_00000000000000aa.json');
     expect(launch.env.SA_EVAL_CONFIG).toBe(file);
     const written = JSON.parse(readFileSync(file, 'utf8')) as HostEvalConfig;
     expect(written).toEqual({
@@ -161,16 +161,15 @@ describe('the launch of an agent host', () => {
       scoringOrigin: 'http://127.0.0.1:4020',
       routes: [PORTAL, IDP, COLLECTOR],
       unmapped: { mode: 'enotfound' },
-      netlog: join(root, 'net', 'host-procedure-p_00000000000000aa.jsonl'),
+      netlog: join(root, 'net', 'host-procedure-a_00000000000000aa.jsonl'),
       llm: { extraAllowOrigins: [] },
       research: { shape: 'auto', answers: [research] },
       now: '2026-10-16T10:00:00+02:00',
     });
     expect(launched).toEqual([
       {
-        agentKey: 'procedure-p_00000000000000aa',
+        agentKey: 'procedure-a_00000000000000aa',
         agent: 'procedure',
-        procedureId: 'p_00000000000000aa',
         sessionFile: config().sessionFile,
         generation: 1,
         netlog: written.netlog,
@@ -191,22 +190,22 @@ describe('the launch of an agent host', () => {
         l.configFile.split('/').at(-1),
       ]),
     ).toEqual([
-      [1, 'host-procedure-p_00000000000000aa.jsonl', 'procedure-p_00000000000000aa.json'],
-      [2, 'host-procedure-p_00000000000000aa-2.jsonl', 'procedure-p_00000000000000aa-2.json'],
-      [3, 'host-procedure-p_00000000000000aa-3.jsonl', 'procedure-p_00000000000000aa-3.json'],
+      [1, 'host-procedure-a_00000000000000aa.jsonl', 'procedure-a_00000000000000aa.json'],
+      [2, 'host-procedure-a_00000000000000aa-2.jsonl', 'procedure-a_00000000000000aa-2.json'],
+      [3, 'host-procedure-a_00000000000000aa-3.jsonl', 'procedure-a_00000000000000aa-3.json'],
     ]);
     // Another agent starts at 1.
-    f.lib.buildAgentLaunch(options(config({ role: 'assistant', procedureId: 'assistant' })));
+    f.lib.buildAgentLaunch(options(config({ role: 'orchestrator', procedureId: 'assistant' })));
     expect(launched.at(-1)).toMatchObject({ agentKey: 'assistant', generation: 1 });
   });
 
-  it("counts codemode's coordinator as the assistant and its agents as procedure agents with no procedure", () => {
+  it('counts the coordinator as the assistant and every other agent as a procedure agent', () => {
     const f = fleet();
     f.lib.buildAgentLaunch(options(config({ role: 'orchestrator', procedureId: 'assistant' })));
     f.lib.buildAgentLaunch(options(config({ role: 'agent', procedureId: 'a_00000000000000bb' })));
-    expect(launched.map((l) => [l.agentKey, l.agent, l.procedureId])).toEqual([
-      ['assistant', 'assistant', undefined],
-      ['procedure-a_00000000000000bb', 'procedure', undefined],
+    expect(launched.map((l) => [l.agentKey, l.agent])).toEqual([
+      ['assistant', 'assistant'],
+      ['procedure-a_00000000000000bb', 'procedure'],
     ]);
   });
 
@@ -259,6 +258,6 @@ describe('validate', () => {
 describe('agentKeyOf', () => {
   it('is the key the meter knows an agent by', () => {
     expect(agentKeyOf('assistant')).toBe('assistant');
-    expect(agentKeyOf('p_00000000000000aa')).toBe('procedure-p_00000000000000aa');
+    expect(agentKeyOf('a_00000000000000aa')).toBe('procedure-a_00000000000000aa');
   });
 });

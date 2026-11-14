@@ -189,7 +189,7 @@ export class CodemodeCoordinator {
   private send(
     agentId: string,
     text: string,
-    options: { followUp?: boolean; cancelPrompts?: boolean | 'forms' },
+    options: { followUp?: boolean; cancelPrompts?: boolean },
   ): Promise<Delivery> {
     return this.deps.agents.send(agentId, text, undefined, options).catch((err) => {
       const lang = this.deps.lang();

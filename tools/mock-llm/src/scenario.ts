@@ -10,8 +10,8 @@ import { z } from 'zod';
  * in string values of tool-call arguments (`{{name|untag}}` decodes Unicode tag characters). Built-in
  * variables: `{{lastUser}}`, `{{turn}}`, `{{date}}` (YYYY-MM-DD).
  *
- * Deeper matching (all optional, all backward compatible): `systemPrompt` tells the assistant,
- * the procedure agents, the answerer and the research model apart; `toolCalled` looks at the
+ * Deeper matching (all optional, all backward compatible): `systemPrompt` tells the coordinator,
+ * its agents, the answerer and the research model apart; `toolCalled` looks at the
  * whole history (which tool was called, with which arguments, with which result, how many
  * times) and its named groups feed the templates like any other capture; `hasImage`,
  * `lastToolResultNot`, `anyOf` and `not` combine conditions; `state` and a rule's `set` make

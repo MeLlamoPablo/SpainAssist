@@ -2,8 +2,7 @@ import { useEffect } from 'react';
 import { ErrorBoundary, UnshowablePart } from '../../components/ErrorBoundary';
 import { useAppStore, type View } from '../../store/app';
 import { ChatPanel } from '../chat/ChatPanel';
-import { CodemodeProceduresView } from '../codemode/ProceduresView';
-import { ProceduresView } from '../procedures/ProceduresView';
+import { ProceduresView } from '../codemode/ProceduresView';
 import { SettingsView } from '../settings/SettingsView';
 import { VaultView } from '../vault/VaultView';
 import { TopBar } from './TopBar';
@@ -14,8 +13,6 @@ import { TopBar } from './TopBar';
  */
 export function Shell() {
   const view = useAppStore((s) => s.view);
-  // The codemode flag also brings its own design of "Mis trámites" (docs/codemode.md).
-  const codemode = useAppStore((s) => s.info?.features.codemode ?? false);
   useShortcuts();
 
   return (
@@ -28,13 +25,7 @@ export function Shell() {
         <TopBar />
         <div className="min-h-0 flex-1 overflow-y-auto" id="pane-scroll" data-scroll-stable>
           <ErrorBoundary resetKeys={[view]} fallback={(retry) => <UnshowablePart retry={retry} />}>
-            {view.kind === 'procedures' ? (
-              codemode ? (
-                <CodemodeProceduresView />
-              ) : (
-                <ProceduresView />
-              )
-            ) : null}
+            {view.kind === 'procedures' ? <ProceduresView /> : null}
             {view.kind === 'vault' ? <VaultView initialTab={view.tab} /> : null}
             {view.kind === 'settings' ? <SettingsView section={view.section} /> : null}
           </ErrorBoundary>

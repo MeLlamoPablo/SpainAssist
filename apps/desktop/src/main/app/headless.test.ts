@@ -10,8 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BrowserServiceOptions } from '@sa/browser';
 import {
-  ASSISTANT_AGENT_ID,
   credentialAllowedOn,
+  PROCEDURE_HEADER,
   PRODUCTION_SERVICES,
   type SaEvent,
   setExtraTrustedHosts,
@@ -20,6 +20,7 @@ import type { Sidecar } from '@sa/sidecar';
 import { createTestKeyProvider, Vault } from '@sa/vault';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { silentLogger } from '../core/logger';
+import { MapQuotaError } from '../places/maps';
 import { createFakeAgentLib, FakeBrowser } from '../testing/fakes';
 import { createFakeFetch, jsonResponse } from '../testing/harness';
 import { parseEnv } from './env';
@@ -70,14 +71,39 @@ async function openWithProvider(options: Partial<HeadlessOptions> = {}) {
   return opened;
 }
 
-/** One bridge call as an agent would make it (the bearer token identifies the agent). */
-async function bridge(app: HeadlessApp, method: string, params: unknown, token: string) {
+/**
+ * One bridge call as an agent would make it (the bearer token identifies the agent; a workflow
+ * names the procedure it acts on).
+ */
+async function bridge(
+  app: HeadlessApp,
+  method: string,
+  params: unknown,
+  token: string,
+  procedureId?: string,
+) {
   const res = await fetch(`${app.services.bridge.url()}/rpc/${method}`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+      ...(procedureId ? { [PROCEDURE_HEADER]: procedureId } : {}),
+    },
     body: JSON.stringify(params),
   });
-  return (await res.json()) as { ok: boolean; result?: unknown; error?: { code: string } };
+  // biome-ignore lint/suspicious/noExplicitAny: the tests read results of many methods by path
+  return (await res.json()) as { ok: boolean; result?: any; error?: { code: string } };
+}
+
+/** A background agent (its process not started) and a procedure it works on. */
+async function anAgent(app: HeadlessApp) {
+  const procedure = await app.services.procedures.create('Trámite');
+  const agent = await app.services.codemode.directory.create({
+    status: 'Trámite',
+    brief: 'b',
+    procedures: [procedure.id],
+  });
+  return { token: app.services.tokens.issue(agent.id), procedureId: procedure.id };
 }
 
 describe('defaults', () => {
@@ -94,7 +120,6 @@ describe('defaults', () => {
         dniePhone: 'off',
         mustUpdate: false,
         errorReports: false,
-        codemode: false,
       },
       errorReports: false,
     });
@@ -147,7 +172,6 @@ describe('defaults', () => {
       dniePhone: 'off',
       mustUpdate: false,
       errorReports: false,
-      codemode: false,
     });
     expect(credentialAllowedOn('clave_permanente', 'https://localhost/')).toBe(false);
     expect(existsSync(join(root, 'elsewhere'))).toBe(false);
@@ -314,57 +338,59 @@ describe('the profile and the vault', () => {
 });
 
 describe('answering prompts as the user', () => {
-  it('lists the pending prompt and answers it through chat.respond, saving what the UI saves', async () => {
+  it('lists the pending prompt and answers it through chat.respond, back to the agent that asked', async () => {
     const { app } = await open();
-    const token = app.services.tokens.issue(ASSISTANT_AGENT_ID);
-    const asked = fetch(`${app.services.bridge.url()}/rpc/prompt.form`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Tu nombre',
-        fields: [
-          { key: 'name', label: 'Nombre', type: 'text', required: true, vaultKey: 'givenName' },
-        ],
-      }),
-    }).then((res) => res.json() as Promise<{ ok: boolean; result?: unknown }>);
+    const { token, procedureId } = await anAgent(app);
+    const asked = bridge(
+      app,
+      'prompt.confirm',
+      { confirmKind: 'action', title: '¿Enviamos la solicitud?', message: 'Se enviará.' },
+      token,
+      procedureId,
+    );
     await vi.waitFor(() => expect(app.services.prompts.pendingItems()).toHaveLength(1));
 
     const [pending] = app.services.prompts.pendingItems();
     expect(pending).toMatchObject({
-      owner: ASSISTANT_AGENT_ID,
-      item: { status: 'pending', prompt: { kind: 'form', title: 'Tu nombre' } },
+      item: { status: 'pending', procedureId, prompt: { kind: 'confirm' } },
     });
-    await app.invoke('chat.respond', pending?.item.id ?? '', {
-      kind: 'form',
-      values: { name: 'Lucía' },
-      dismissed: false,
-      savedToVault: ['name'],
-    });
-    expect(await asked).toMatchObject({ ok: true, result: { values: { name: 'Lucía' } } });
+    expect(pending?.asker).toMatch(/^a_/);
+    await app.invoke('chat.respond', pending?.item.id ?? '', { kind: 'confirm', approved: true });
+    expect(await asked).toMatchObject({ ok: true, result: { approved: true } });
     expect(app.services.prompts.pendingItems()).toEqual([]);
-    expect(
-      (await app.invoke('vault.overview')).personal.find((p) => p.key === 'givenName')?.value,
-    ).toBe('Lucía');
   });
 });
 
 describe('the services behind the options', () => {
-  const mapForm = {
-    title: 'Elige un centro',
-    fields: [
+  const mapUi = {
+    type: 'Root',
+    props: {},
+    children: [
       {
-        key: 'centre',
-        label: 'Centro',
-        type: 'map-options',
-        options: [{ value: 'one', label: 'Centro uno', address: 'Calle Falsa 1, Sevilla' }],
+        type: 'Map',
+        props: {
+          options: [{ value: 'one', label: 'Centro uno', address: 'Calle Falsa 1, Sevilla' }],
+        },
+        children: [],
       },
     ],
   };
 
-  it('looks map forms up with the given places, and has none otherwise', async () => {
+  /** Opens an interface with a map, as a workflow does. */
+  async function presentMap(app: HeadlessApp) {
+    const { token } = await anAgent(app);
+    const begun = await bridge(app, 'workflow.begin', { workflowId: 'w', source: 's' }, token);
+    return bridge(
+      app,
+      'workflow.ui',
+      { runId: begun.result.runId, action: 'open', key: 'm', rev: 1, tree: mapUi },
+      token,
+    );
+  }
+
+  it('looks map addresses up with the given places, and has none otherwise', async () => {
     const plain = await open();
-    const token = plain.app.services.tokens.issue(ASSISTANT_AGENT_ID);
-    expect(await bridge(plain.app, 'prompt.form', mapForm, token)).toMatchObject({
+    expect(await presentMap(plain.app)).toMatchObject({
       ok: false,
       error: { code: 'unavailable' },
     });
@@ -374,22 +400,26 @@ describe('the services behind the options', () => {
       userDataDir: join(root, 'places'),
       places: { place, home: async () => null },
     });
-    const asked = bridge(
-      app,
-      'prompt.form',
-      mapForm,
-      app.services.tokens.issue(ASSISTANT_AGENT_ID),
-    );
-    await vi.waitFor(() => expect(app.services.prompts.pendingItems()).toHaveLength(1));
+    expect(await presentMap(app)).toMatchObject({ ok: true });
     expect(place).toHaveBeenCalledWith('Calle Falsa 1, Sevilla', expect.anything());
-    const [pending] = app.services.prompts.pendingItems();
-    await app.invoke('chat.respond', pending?.item.id ?? '', {
-      kind: 'form',
-      values: { centre: 'one' },
-      dismissed: false,
-      savedToVault: [],
+    expect(await app.invoke('codemode.pins', 'w', 'm', ['Calle Falsa 1, Sevilla'])).toEqual([
+      { latitude: 37.38, longitude: -5.98 },
+    ]);
+
+    // Lookups used up: the interface shows its list, without pins.
+    const quota = await open({
+      userDataDir: join(root, 'quota'),
+      places: {
+        place: async () => {
+          throw new MapQuotaError();
+        },
+        home: async () => null,
+      },
     });
-    expect(await asked).toMatchObject({ ok: true, result: { values: { centre: 'one' } } });
+    expect(await presentMap(quota.app)).toMatchObject({ ok: true });
+    expect(await quota.app.invoke('codemode.pins', 'w', 'm', ['Calle Falsa 1, Sevilla'])).toEqual([
+      null,
+    ]);
   });
 
   it('builds the browser headless, accepting invalid certificates, recording only when asked', async () => {
@@ -399,13 +429,13 @@ describe('the services behind the options', () => {
       return new FakeBrowser();
     };
     const open1 = await open({ browserFactory });
-    const procedure = await open1.app.services.procedures.create('Trámite');
-    const token = open1.app.services.tokens.issue(procedure.id);
+    const agent = await anAgent(open1.app);
     const opened = await bridge(
       open1.app,
       'browser.open',
       { url: 'https://sede.example.gob.es/' },
-      token,
+      agent.token,
+      agent.procedureId,
     );
     expect(opened.ok).toBe(true);
     expect(seen[0]).toMatchObject({ headless: true, ignoreHTTPSErrors: true });
@@ -417,15 +447,16 @@ describe('the services behind the options', () => {
       browserFactory,
       capture: true,
     });
-    const recorded = await recording.app.services.procedures.create('Trámite');
+    const recorded = await anAgent(recording.app);
     await bridge(
       recording.app,
       'browser.open',
       { url: 'https://sede.example.gob.es/' },
-      recording.app.services.tokens.issue(recorded.id),
+      recorded.token,
+      recorded.procedureId,
     );
-    expect(seen[1]?.capture?.dir(recorded.id)).toBe(
-      join(recording.app.paths.proceduresDir, recorded.id, 'capture'),
+    expect(seen[1]?.capture?.dir(recorded.procedureId)).toBe(
+      join(recording.app.paths.proceduresDir, recorded.procedureId, 'capture'),
     );
   });
 });
@@ -523,7 +554,7 @@ describe('the app around it', () => {
       nodeBinary: process.execPath,
       electronRunAsNode: false,
       hostPath: hostScript,
-      config: { role: 'assistant', extraTrustedHosts: [] },
+      config: { role: 'orchestrator', extraTrustedHosts: [] },
     });
     expect(agentLib.launches[0]?.cwd.startsWith(join(root, 'userData'))).toBe(true);
   });

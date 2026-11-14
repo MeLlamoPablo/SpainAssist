@@ -11,11 +11,12 @@ import { linkedDocumentIds, unknownDocumentsMessage } from '../src/host/document
 import { templateFor } from '../src/host/model';
 import { prepareSessionFile } from '../src/host/session';
 import { agentHostPath, buildAgentLaunch } from '../src/launch';
-import { buildAssistantPrompt, REPORT_PREFIX } from '../src/prompt/assistant';
-import { buildSystemPrompt, formatToday } from '../src/prompt/system';
+import { buildCoordinatorPrompt } from '../src/prompt/coordinator';
+import { formatToday } from '../src/prompt/system';
 import { createFakeBridge, type FakeBridge } from './helpers/fake-bridge';
 
 const config = {
+  role: 'agent' as const,
   procedureId: 'p1',
   sessionFile: '/tmp/sa/sessions/p1.jsonl',
   language: 'es' as const,
@@ -143,146 +144,24 @@ describe('model templates for unknown ids', () => {
 });
 
 describe('system prompt', () => {
-  it('injects the date (Madrid time) and the language', () => {
+  it('dates the prompt in Madrid time and names the language', () => {
     const now = new Date('2026-10-03T23:30:00Z'); // already the 4th in Madrid
-    const es = buildSystemPrompt({
-      language: 'es',
-      now,
-      feedback: { submit: true, vote: true },
-      dniePhone: true,
-    });
-    expect(es).toContain('Today is Sunday 2026-10-04 (Europe/Madrid).');
-    expect(es).toContain('Write for the user in Spanish');
-    expect(buildSystemPrompt({ language: 'en', now })).toContain('Write for the user in English');
-    const assistant = buildAssistantPrompt({ language: 'es', now });
-    expect(assistant).toContain('Today is Sunday 2026-10-04 (Europe/Madrid).');
-    expect(assistant).toContain('Answer in Spanish');
-    for (const tool of ['procedure_start', 'procedure_message', 'procedure_read', REPORT_PREFIX])
-      expect(assistant).toContain(tool);
-    expect(assistant).toContain("# Acting in the user's name");
+    const prompt = buildCoordinatorPrompt({ language: 'es', now });
+    expect(prompt).toContain('Today is Sunday 2026-10-04 (Europe/Madrid).');
+    expect(prompt).toContain('Write for the user in Spanish');
+    expect(buildCoordinatorPrompt({ language: 'en', now })).toContain(
+      'Write for the user in English',
+    );
     expect(formatToday(now, 'Not/AZone')).toContain('Europe/Madrid');
-    for (const rule of [
-      'procedure_update',
-      'confirm_action',
-      'browser_login_clave',
-      'feedback_submit',
-      'request_phone_call',
-      'untrusted',
-    ]) {
-      expect(es).toContain(rule);
-    }
-    expect(es).not.toContain('<cwd>');
-    expect(es.length).toBeLessThan(11_900);
-  });
-});
-
-describe('community learnings prompt', () => {
-  it('mentions the feedback tools only when they are available', () => {
-    const on = buildSystemPrompt({
-      language: 'en',
-      research: 'web_research',
-      feedback: { submit: true, vote: true },
-    });
-    expect(on).toContain('Consult feedback_search');
-    expect(on).toContain('call feedback_submit');
-    expect(on).toContain('feedback_vote');
-    const voteOnly = buildSystemPrompt({
-      language: 'en',
-      research: 'web_research',
-      feedback: { submit: false, vote: true },
-    });
-    expect(voteOnly).toContain('call feedback_vote');
-    expect(voteOnly).not.toContain('feedback_submit');
-    const readOnly = buildSystemPrompt({
-      language: 'en',
-      research: 'web_research',
-      feedback: { submit: false, vote: false },
-    });
-    expect(readOnly).toContain('Consult feedback_search');
-    expect(readOnly).not.toContain('feedback_submit');
-    expect(readOnly).not.toContain('feedback_vote');
-    const off = buildSystemPrompt({ language: 'en', research: 'web_research' });
-    expect(off).not.toContain('feedback_search');
-    expect(off).not.toContain('feedback_submit');
-  });
-});
-
-describe('DNI prompt', () => {
-  it('offers the DNI through the phone only with its feature flag', () => {
-    const on = buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: true });
-    expect(on).toContain('DNI logs in and signs through the phone.');
-    expect(on).toContain('request_credential with credential dnie');
-    for (const off of [
-      buildSystemPrompt({ language: 'en', research: 'web_research' }),
-      buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: false }),
-    ]) {
-      expect(off).not.toContain('DNI logs in and signs through the phone.');
-      expect(off).not.toContain('request_credential with credential dnie');
-      expect(off).toContain('Cl@ve Permanente and Cl@ve Móvil are different capabilities');
-      expect(off).toContain('browser_use_certificate is only for logins where the browser asks');
-    }
   });
 
-  it('tells TLS client-certificate logins apart from AutoFirma logins', () => {
-    const prompt = buildSystemPrompt({ language: 'en', research: 'web_research', dniePhone: true });
-    expect(prompt).toContain('Signatures and AutoFirma logins are the app');
-    expect(prompt).toContain('browser asks for a client certificate (TLS)');
-  });
-
-  it("explains FNMT certificate requests only when the app replaces FNMT's Configurador", () => {
-    const on = buildSystemPrompt({ language: 'es', certificateRequests: true });
-    expect(on).toContain("the app replaces FNMT's Configurador");
-    expect(on).toContain('never in another browser or computer');
-    expect(buildSystemPrompt({ language: 'es' })).not.toContain('Configurador');
-  });
-});
-
-describe('identity prompt', () => {
-  it('names whose identity confirm_action sends', () => {
-    const procedure = buildSystemPrompt({ language: 'es', research: 'web_research' });
-    expect(procedure).toContain('If it sends identity data, say whose');
-  });
-});
-
-describe('saved data and physical-place prompts', () => {
-  it('reuses known locations and checks incomplete filtered reads on resumed runs', () => {
-    const procedure = buildSystemPrompt({ language: 'es', research: 'web_research' });
-    expect(procedure).toContain('including on resumed runs');
-    expect(procedure).toContain('call vault_read without keys');
-    expect(procedure).toContain('never ask to reconfirm known data, even as prefilled fields');
-    const assistant = buildAssistantPrompt({ language: 'es' });
-    expect(assistant).toContain('reuse saved province/municipality');
-    expect(assistant).toContain('do not prescribe redundant location forms');
-  });
-
-  it('has the assistant speak as one assistant, never of agents', () => {
-    const assistant = buildAssistantPrompt({ language: 'es' });
-    expect(assistant).toContain('To the user there is only you');
-    expect(assistant).toContain('Never mention agents');
-    expect(assistant).toContain('Starting a procedure is you getting to work, not a fallback');
-  });
-
-  it('teaches the assistant only app links the app opens', () => {
-    const assistant = buildAssistantPrompt({ language: 'es' });
-    const links = [...assistant.matchAll(/\((sa:[^)\s]+)\)/g)].map((m) => m[1]);
+  it('teaches the coordinator only app links the app opens', () => {
+    const prompt = buildCoordinatorPrompt({ language: 'es' });
+    const links = [...prompt.matchAll(/\((sa:[^)\s]+)\)/g)].map((m) => m[1]);
     expect(links).toContain('sa:vault/documents');
     expect(links).toContain('sa:document/<id>');
     for (const link of links)
       expect(parseAppLink(link.replace('<id>', 'p_0123456789abcdef')), link).not.toBeNull();
-  });
-
-  it('lets the app locate public places', () => {
-    const procedure = buildSystemPrompt({ language: 'en', research: 'web_research' });
-    expect(procedure).toContain('type: "map-options"');
-    expect(procedure).toContain('a provincial list may include other towns');
-    expect(procedure).toContain('its street address with number and municipality (address)');
-    expect(procedure).toContain('every address can be found in Spain before showing the form');
-    expect(procedure).toContain("the user's choice comes back as the option value");
-    expect(procedure).toContain('give the user plenty of options');
-    expect(procedure).toContain('The app sorts them by closest to the user.');
-    expect(buildAssistantPrompt({ language: 'en' })).toContain(
-      'map-options with place names and street addresses',
-    );
   });
 });
 
@@ -323,74 +202,6 @@ describe('session file', () => {
     writeFileSync(existing, '{}\n', { mode: 0o644 });
     prepareSessionFile(existing);
     if (posix) expect(statSync(existing).mode & 0o777).toBe(0o600);
-  });
-});
-
-describe('procedure research workflow', () => {
-  it('requires web research, then refinement, then a clear plan before questions or execution', () => {
-    const prompt = buildSystemPrompt({ language: 'es', research: 'web_research' });
-    expect(prompt).toContain('call web_research once');
-    expect(prompt).toContain('refine it with fetch_url, boe_search');
-    expect(prompt).toContain('Only after this research completes may you refine it');
-    expect(prompt).toContain(
-      'Formulate the complete plan before collecting user information or executing any step',
-    );
-    expect(prompt).toContain('no unresolved research uncertainties');
-    expect(prompt).toContain('first research the relevant branches');
-    // Doubts are settled from published sources, never by writing to the administration.
-    expect(prompt).toContain(
-      'unless the user explicitly asks, never write to the administration to ask',
-    );
-    // Anonymized user context goes into the research; identifying data never does.
-    expect(prompt).toContain('after vault_read, call web_research once');
-    expect(prompt).toContain('anonymized: age, municipality, nationality or residence status');
-    expect(prompt).toContain('issue/expiry dates');
-    expect(prompt).toContain(
-      'Never names, ID numbers, street addresses, contact details, birth dates',
-    );
-    // No guidance on which research mode to use.
-    expect(prompt).not.toMatch(/\b(fast|balanced|deep)\b/i);
-  });
-
-  it('reports a research blocker without web research before collecting information or executing', () => {
-    const prompt = buildSystemPrompt({ language: 'en' });
-    expect(prompt).toContain('Web research is not available');
-    expect(prompt).toContain('Do not ask the user for information or execute the procedure');
-    expect(prompt).not.toContain('call web_research');
-    expect(prompt).not.toContain('exa_');
-  });
-
-  it('BYOK and custom endpoints: research first with the Exa tools, never web_research', () => {
-    const prompt = buildSystemPrompt({
-      language: 'es',
-      research: 'exa',
-      feedback: { submit: false, vote: false },
-    });
-    expect(prompt).not.toContain('web_research');
-    expect(prompt).not.toContain('Web research is not available');
-    expect(prompt).toContain('after vault_read, research the procedure with exa_search');
-    expect(prompt).toContain('or with exa_fetch when fetch_url can');
-    expect(prompt).toContain('official sources first');
-    expect(prompt).toContain('Only after this research is done may you refine it');
-    expect(prompt).toContain('Consult feedback_search for community learnings');
-    expect(prompt).toContain(
-      'Formulate the complete plan before collecting user information or executing any step',
-    );
-    // Queries leave the device: anonymized, no identifying data.
-    expect(prompt).toContain('Search queries leave the device');
-    expect(prompt).toContain(
-      'never put names, ID numbers, street addresses, contact details, birth dates',
-    );
-    // A broken optional key: the blocker, and where the user fixes it.
-    expect(prompt).toContain('the user replaces or removes their Exa key');
-    expect(prompt).not.toContain("spends the user's own Exa credit");
-    expect(prompt).toContain('Ajustes → Proveedor de IA');
-    expect(prompt).toContain(
-      'do not ask the user for information or execute the procedure until the research can be completed',
-    );
-    expect(buildSystemPrompt({ language: 'en', research: 'exa' })).toContain(
-      'Settings → AI provider',
-    );
   });
 });
 

@@ -1,56 +1,9 @@
-import { Archive, ArrowUpRight, FileBadge, House, IdCard, type LucideIcon } from 'lucide-react';
-import { useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { Skeleton } from '../../components/ui/misc';
+import { ArrowUpRight, FileBadge, House, IdCard, type LucideIcon } from 'lucide-react';
 import { useT } from '../../i18n';
 import { api, errorMessage } from '../../lib/api';
 import { useAppStore } from '../../store/app';
-import { orderProcedures, useProcedureStore } from '../../store/procedures';
 import { toast } from '../../store/toast';
 import { procedureDict } from './i18n';
-import { ProcedureCard } from './ProcedureCard';
-
-export function ProceduresView() {
-  const t = useT(procedureDict);
-  const loaded = useProcedureStore((s) => s.loaded);
-  const procedures = useProcedureStore(useShallow((s) => Object.values(s.byId)));
-  const { active, archived } = useMemo(() => orderProcedures(procedures), [procedures]);
-  const showArchived = useAppStore((s) => s.showArchived);
-  const setShowArchived = useAppStore((s) => s.setShowArchived);
-
-  if (!loaded) {
-    return (
-      <div className="flex flex-col gap-4 px-8 pt-2">
-        <Skeleton className="h-48 rounded-2xl" />
-        <Skeleton className="h-48 rounded-2xl" />
-      </div>
-    );
-  }
-  if (!active.length && !archived.length) return <EmptyProcedures />;
-
-  return (
-    <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-4 px-8 pt-2 pb-12">
-      <h1 className="sr-only">{t.title}</h1>
-      {active.map((p) => (
-        <ProcedureCard key={p.id} procedure={p} />
-      ))}
-      {archived.length ? (
-        <div className="flex flex-col gap-4">
-          <button
-            type="button"
-            onClick={() => setShowArchived(!showArchived)}
-            aria-expanded={showArchived}
-            className="flex h-8 items-center gap-2 self-start rounded-lg px-2.5 text-[12.5px] font-medium text-fg-subtle hover:bg-surface-3/70 hover:text-fg-muted"
-          >
-            <Archive size={14} aria-hidden />
-            {showArchived ? t.hideArchived : t.showArchived(archived.length)}
-          </button>
-          {showArchived ? archived.map((p) => <ProcedureCard key={p.id} procedure={p} />) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 const SUGGESTION_ICONS: LucideIcon[] = [IdCard, House, FileBadge];
 

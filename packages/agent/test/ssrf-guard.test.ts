@@ -1,6 +1,6 @@
 /**
- * The SSRF guard of fetch_url and run_script (`research/fetch.ts`): which addresses it refuses, in
- * every spelling a URL, a resolver or an attacker can produce. WHATWG URL turns
+ * The SSRF guard of api.fetchUrl and api.fetch (`research/fetch.ts`): which addresses it refuses,
+ * in every spelling a URL, a resolver or an attacker can produce. WHATWG URL turns
  * `[::ffff:127.0.0.1]` into `[::ffff:7f00:1]`, so the dotted spelling alone is not enough, and
  * IPv6 has several other ways to carry an IPv4 address (NAT64, 6to4, IPv4-compatible, SIIT).
  */
@@ -226,7 +226,7 @@ describe('the guard on real requests', () => {
     expect(hits).toEqual([]);
   });
 
-  it('refuses a POST to a mapped loopback address through fetchPublic (run_script)', async () => {
+  it('refuses a POST to a mapped loopback address through fetchPublic (api.fetch)', async () => {
     const url = new URL(`http://[::ffff:127.0.0.1]:${port}/admin`);
     await expect(
       fetchPublic(url, {

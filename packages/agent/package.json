@@ -14,8 +14,7 @@
   "scripts": {
     "build": "node scripts/build-host.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "dev:chat": "tsx scripts/dev-chat.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^1.4.0",

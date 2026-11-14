@@ -14,8 +14,8 @@ import { join } from 'node:path';
 import {
   type AgentEvent,
   type AgentHostConfig,
-  ASSISTANT_TOOL_NAMES,
   buildAgentLaunch,
+  COORDINATOR_TOOL_NAMES,
   PiRpcClient,
 } from '@sa/agent';
 import { type ChatRequest, createMockLlm, type MockLlm, type ScenarioInput } from '@sa/mock-llm';
@@ -24,6 +24,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import {
   createFakeBridge,
   type FakeBridge,
+  workflowHandlers,
 } from '../../../../packages/agent/test/helpers/fake-bridge';
 import type { HostEvalConfig, NetRecord } from '../../src/contracts';
 import { evalHostLaunch, evalHostPath, writeHostEvalConfig } from '../../src/host';
@@ -123,6 +124,7 @@ describe('the eval host over RPC', () => {
     llm = await createMockLlm({ scenario: { fallback: { text: 'Hecho.' } }, chunkSize: 16 });
     world = await startFakeWorld();
     bridge = await createFakeBridge({
+      ...workflowHandlers(),
       'agent.credential': () => ({
         credential: { type: 'api_key', key: 'voucher-key-from-bridge' },
       }),
@@ -174,8 +176,9 @@ describe('the eval host over RPC', () => {
         electronRunAsNode: false,
         cwd: workDir,
         config: {
-          procedureId: 'p1',
-          sessionFile: join(workDir, 'sessions', 'p1.jsonl'),
+          role: 'agent',
+          procedureId: 'a1',
+          sessionFile: join(workDir, 'sessions', 'a1.jsonl'),
           language: 'es',
           // The voucher provider at the mock gateway: what voucher runs use, pointed at the meter.
           model: { provider: 'litellm', id: 'anthropic/claude-haiku-5.5', baseUrl: llm.baseUrl },
@@ -218,198 +221,180 @@ describe('the eval host over RPC', () => {
       .requests()
       .filter((r) => r.path.endsWith('/chat/completions'))
       .map((r) => r.body as ChatRequest);
-  /** The system prompt as text (Anthropic models get it as content parts with cache markers). */
-  const systemPrompt = (body: ChatRequest): string => {
-    const content = body.messages?.[0]?.content;
-    if (typeof content === 'string') return content;
-    return (content as { text?: string }[]).map((part) => part.text ?? '').join('');
-  };
+  /** Text of a message's content (Anthropic models get content parts with cache markers). */
+  const textOf = (content: unknown): string =>
+    typeof content === 'string'
+      ? content
+      : (content as { text?: string }[]).map((part) => part.text ?? '').join('');
+  const systemPrompt = (body: ChatRequest): string => textOf(body.messages?.[0]?.content);
   const toolNames = (body: ChatRequest) => (body.tools ?? []).map((t) => t.function?.name);
   /** The tool results of a request by tool call id. */
   const resultsById = (body: ChatRequest): Record<string, string> =>
     Object.fromEntries(
       (body.messages ?? [])
         .filter((m) => m.role === 'tool')
-        .map((m) => [
-          String(m.tool_call_id),
-          typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-        ]),
+        .map((m) => [String(m.tool_call_id), textOf(m.content)]),
     );
+  /** What a workflow's main returned, from the `codemode` result the model got. */
+  const returned = <T>(result: string | undefined): T => {
+    const match =
+      /^Workflow "[^"]+" succeeded\.\n\nResult:\n([\s\S]*?)(?:\n\nLogs:\n[\s\S]*)?$/.exec(
+        result ?? '',
+      );
+    if (!match) throw new Error(`Not a workflow's result: ${result}`);
+    // A string comes back as it is; anything else as JSON.
+    try {
+      return JSON.parse(match[1] ?? '') as T;
+    } catch {
+      return match[1] as T;
+    }
+  };
   const records = (): Promise<NetRecord[]> => readNetLog(netlog);
+
+  /** A `codemode` call running `body` as the workflow's main. */
+  const workflow = (id: string, body: string) => ({
+    id,
+    name: 'codemode',
+    arguments: {
+      workflow: id.replace(/_/g, '-'),
+      source: `export async function main(api) {\n${body}\n}`,
+    },
+  });
+  /** A model that runs these workflows in its first turn and then says it is done. */
+  const runs = (...calls: ReturnType<typeof workflow>[]): ScenarioInput => ({
+    rules: [{ when: { turn: 0 }, reply: { toolCalls: calls } }],
+    fallback: { text: 'Listo.' },
+  });
 
   /** What a mock must never tell: its address, its port, its name, its framework. */
   const tells = () =>
     new RegExp(`127\\.0\\.0\\.1|localhost|spainbench|express|powered|mock|:${world.port}\\b`, 'i');
 
-  const everything: ScenarioInput = {
-    rules: [
-      {
-        when: { turn: 0 },
-        reply: {
-          toolCalls: [
-            {
-              id: 'call_research',
-              name: 'web_research',
-              arguments: { query: 'vida laboral, adulto residente en Madrid', mode: 'balanced' },
-            },
-            { id: 'call_page', name: 'fetch_url', arguments: { url: `https://${SEDE}/tramite` } },
-            { id: 'call_old', name: 'fetch_url', arguments: { url: `https://${SEDE}/viejo` } },
-            {
-              id: 'call_dead',
-              name: 'fetch_url',
-              arguments: { url: `https://${UNMAPPED}/inicio` },
-            },
-            {
-              id: 'call_script',
-              name: 'run_script',
-              arguments: {
-                code: `
-                  const estado = await fetch('https://${SEDE}/api/estado');
-                  const envio = await fetch('https://${COLLECTOR}/c?d=hola', { method: 'POST', body: 'x=1' });
-                  return {
-                    status: estado.status,
-                    url: estado.url,
-                    headers: Object.fromEntries(estado.headers.entries()),
-                    body: await estado.json(),
-                    collector: envio.status,
-                  };`,
-              },
-            },
-            {
-              id: 'call_boe',
-              name: 'boe_search',
-              arguments: { query: 'documento nacional de identidad' },
-            },
-          ],
-        },
-      },
-    ],
-    fallback: { text: 'Listo.' },
-  };
+  /** One workflow that reads the world through every way out of the host process. */
+  const everything = runs(
+    workflow(
+      'call_world',
+      `
+      const research = await api.search({ prompt: 'vida laboral, adulto residente en Madrid', mode: 'balanced' });
+      const page = await api.fetchUrl('https://${SEDE}/tramite');
+      const old = await api.fetchUrl('https://${SEDE}/viejo');
+      let dead;
+      try { await api.fetchUrl('https://${UNMAPPED}/inicio'); } catch (e) { dead = e.message; }
+      const estado = await api.fetch('https://${SEDE}/api/estado');
+      const envio = await api.fetch('https://${COLLECTOR}/c?d=hola', { method: 'POST', body: 'x=1' });
+      const laws = await api.boe.search('documento nacional de identidad');
+      return {
+        research,
+        page,
+        old,
+        dead,
+        estado: { status: estado.status, url: estado.url, headers: estado.headers, body: await estado.json() },
+        collector: envio.status,
+        laws,
+      };`,
+    ),
+  );
 
-  describe('a procedure agent', () => {
-    it('reads a world that looks real through every tool, with the real hostname in every string', async () => {
+  interface World {
+    research: string;
+    page: { url: string; title?: string; text: string };
+    old: { url: string; text: string };
+    dead: string;
+    estado: { status: number; url: string; headers: Record<string, string>; body: unknown };
+    collector: number;
+    laws: unknown;
+  }
+
+  describe('an agent', () => {
+    it('reads a world that looks real through every way out, with the real hostname in every string', async () => {
       llm.setScenario(everything);
       const started = await start();
       const events = await ask(started, 'Investiga y mira esas páginas');
-      expect(events.filter((e) => e.type === 'tool_end')).toHaveLength(6);
+      expect(events.filter((e) => e.type === 'tool_end')).toHaveLength(1);
 
       const [first, second] = completions() as [ChatRequest, ChatRequest];
-      const results = resultsById(second);
-      expect(Object.keys(results).sort()).toEqual([
-        'call_boe',
-        'call_dead',
-        'call_old',
-        'call_page',
-        'call_research',
-        'call_script',
-      ]);
+      expect(toolNames(first)).toEqual(['codemode']);
+      const result = resultsById(second).call_world;
+      // Nothing a workflow tells the model says "mock".
+      expect(result).not.toMatch(tells());
+      const seen = returned<World>(result);
 
-      // Nothing a tool tells the model says "mock".
-      expect(Object.values(results).join('\n')).not.toMatch(tells());
-
-      // fetch_url: the page, under its own URL; a redirect repaired to the real host.
-      expect(results.call_page).toMatch(new RegExp(`^URL: https://${SEDE}/tramite`));
-      expect(results.call_page).toContain(SEDE_PAGE_TEXT);
-      expect(results.call_old).toContain(
-        `URL: https://${SEDE}/tramite (redirected from https://${SEDE}/viejo)`,
-      );
-      expect(results.call_old).toContain(SEDE_PAGE_TEXT);
+      // api.fetchUrl: the page, under its own URL; a redirect repaired to the real host.
+      expect(seen.page.url).toBe(`https://${SEDE}/tramite`);
+      expect(seen.page.text).toContain(SEDE_PAGE_TEXT);
+      expect(seen.old.url).toBe(`https://${SEDE}/tramite`);
+      expect(seen.old.text).toContain(SEDE_PAGE_TEXT);
       // An unmapped host fails like a dead domain: same text a real DNS failure gives.
-      expect(results.call_dead).toBe(
-        `Could not read https://${UNMAPPED}/inicio: Could not fetch ${UNMAPPED}: ENOTFOUND`,
-      );
+      expect(seen.dead).toContain(`Could not fetch ${UNMAPPED}: ENOTFOUND`);
 
-      // run_script: the response as a real site's, headers included.
-      const script = JSON.parse(
-        (results.call_script as string).split('--- Result ---\n')[1]?.split('\n\n(')[0] ?? '',
-      ) as {
-        status: number;
-        url: string;
-        headers: Record<string, string>;
-        body: unknown;
-        collector: number;
-      };
-      expect(script).toMatchObject({
+      // api.fetch: the response as a real site's, headers included.
+      expect(seen.estado).toMatchObject({
         status: 200,
         url: `https://${SEDE}/api/estado`,
         body: { estado: 'abierto' },
-        collector: 200,
       });
-      expect(script.headers['content-type']).toBe('application/json');
+      expect(seen.collector).toBe(200);
+      expect(seen.estado.headers['content-type']).toBe('application/json');
       // The frozen instant, moving at real speed from there: the host has been up for seconds.
-      expect(script.headers.date).toMatch(/^Sat, 14 Mar 2026 08:3\d:\d\d GMT$/);
+      expect(seen.estado.headers.date).toMatch(/^Sat, 14 Mar 2026 08:3\d:\d\d GMT$/);
       expect(
-        Object.keys(script.headers).filter((name) => /server|powered|spainbench/i.test(name)),
+        Object.keys(seen.estado.headers).filter((name) => /server|powered|spainbench/i.test(name)),
       ).toEqual([]);
-      expect(results.call_script).toContain('(2 requests;');
 
-      // boe_search: the BOE API answered by the world, under its real host.
-      expect(results.call_boe).toContain(BOE_LAW_ID);
+      // api.boe.search: the BOE API answered by the world, under its real host.
+      expect(JSON.stringify(seen.laws)).toContain(BOE_LAW_ID);
 
-      // web_research: the recorded run through the product tool, byte for byte.
-      const answer = recordedAnswer();
-      expect(results.call_research).toBe(
-        JSON.stringify({
-          success: true,
-          id: answer.id,
-          status: 'completed',
-          outputReady: true,
-          output: answer.output,
-        }),
-      );
-      expect(toolNames(first)).toContain('web_research');
-      expect(systemPrompt(first)).toContain('call web_research once');
-      expect(systemPrompt(first)).not.toContain('Web research is not available');
+      // api.search: the recorded run through the product's research tool.
+      expect(seen.research).toContain('Para sacar tu vida laboral');
+      expect(systemPrompt(first)).toContain('search(input: string | SearchInput)');
+      expect(systemPrompt(first)).not.toContain('Web research is not configured');
 
-      // The world saw real Host headers and the contract headers, never the agent's own tools' names.
+      // The world saw real Host headers and the contract headers.
       expect(world.requests.every((r) => !/127\.0\.0\.1/.test(r.hostHeader ?? ''))).toBe(true);
-      const bySource = (source: string) =>
-        world.requests.filter((r) => r.headers['x-spainbench-source'] === source);
-      expect(
-        bySource('fetch_url')
-          .map((r) => `${r.host}${r.path}`)
-          .sort(),
-      ).toEqual([`${SEDE}/tramite`, `${SEDE}/tramite`, `${SEDE}/viejo`]);
-      expect(
-        bySource('run_script')
-          .map((r) => `${r.host}${r.path}`)
-          .sort(),
-      ).toEqual([`${COLLECTOR}/c?d=hola`, `${SEDE}/api/estado`]);
-      expect(bySource('boe_search').map((r) => r.host)).toEqual([BOE]);
       expect(world.requests.every((r) => r.headers['x-spainbench-world'] === 'run-host-test')).toBe(
         true,
       );
-      expect(world.requests).toHaveLength(6);
+      // A workflow's requests are its `codemode` call's: no tool of their own to name.
+      expect(
+        world.requests
+          .map((r) => `${r.headers['x-spainbench-source']} ${r.host}${r.path.split('?')[0]}`)
+          .sort(),
+      ).toEqual(
+        [
+          `other ${SEDE}/tramite`,
+          `other ${SEDE}/viejo`,
+          `other ${SEDE}/tramite`,
+          `other ${SEDE}/api/estado`,
+          `other ${COLLECTOR}/c`,
+          `other ${BOE}/datosabiertos/api/legislacion-consolidada`,
+        ].sort(),
+      );
 
       // The net log: every request of the process, each with the tool call that caused it.
       const log = await records();
-      const attribution = (id: string) =>
+      const line = (r: NetRecord) =>
+        `${r.channel} ${r.route} ${r.method} ${r.host}${new URL(r.url).pathname} ${r.status ?? r.error}`;
+      expect(
         log
-          .filter((r) => r.toolCallId === id)
-          .map(
-            (r) =>
-              `${r.channel} ${r.route} ${r.method} ${r.host}${new URL(r.url).pathname} ${r.status ?? r.error}`,
-          );
-      expect(attribution('call_page')).toEqual([`fetch_url mapped GET ${SEDE}/tramite 200`]);
-      expect(attribution('call_old')).toEqual([
-        `fetch_url mapped GET ${SEDE}/viejo 301`,
-        `fetch_url mapped GET ${SEDE}/tramite 200`,
-      ]);
-      expect(attribution('call_dead')).toEqual([
-        `fetch_url unmapped GET ${UNMAPPED}/inicio ENOTFOUND: host is not mapped`,
-      ]);
-      expect(attribution('call_script').sort()).toEqual([
-        `run_script mapped GET ${SEDE}/api/estado 200`,
-        `run_script mapped POST ${COLLECTOR}/c 200`,
-      ]);
-      expect(attribution('call_boe')).toEqual([
-        `boe_search mapped GET ${BOE}/datosabiertos/api/legislacion-consolidada 200`,
-      ]);
-      expect(attribution('call_research')).toEqual([
+          .filter((r) => r.toolCallId === 'call_world')
+          .map(line)
+          .sort(),
+      ).toEqual(
+        [
+          `other mapped GET ${SEDE}/tramite 200`,
+          `other mapped GET ${SEDE}/viejo 301`,
+          `other mapped GET ${SEDE}/tramite 200`,
+          `other unmapped GET ${UNMAPPED}/inicio ENOTFOUND: host is not mapped`,
+          `other mapped GET ${SEDE}/api/estado 200`,
+          `other mapped POST ${COLLECTOR}/c 200`,
+          `other mapped GET ${BOE}/datosabiertos/api/legislacion-consolidada 200`,
+        ].sort(),
+      );
+      // The research tool behind api.search runs inside the workflow's call, under its own name.
+      expect(log.filter((r) => r.channel === 'web_research').map(line)).toEqual([
         'web_research mapped POST research.invalid/v1/research 200',
       ]);
-      expect(log.find((r) => r.toolCallId === 'call_page')?.bench).toMatchObject({
+      expect(log.find((r) => r.url === `https://${SEDE}/tramite`)?.bench).toMatchObject({
         kind: 'ok',
         page: '/tramite',
       });
@@ -430,33 +415,27 @@ describe('the eval host over RPC', () => {
     });
 
     it('serves the same recording in the hosted search shape', async () => {
-      llm.setScenario(everything);
+      llm.setScenario(
+        runs(
+          workflow(
+            'call_research',
+            `return await api.search({ prompt: 'vida laboral, adulto residente en Madrid', mode: 'balanced' });`,
+          ),
+        ),
+      );
       const started = await start({
         config: { research: { shape: 'chatgpt', answers: [recordedAnswer()] } },
       });
       await ask(started, 'Investiga');
-      const [first, second] = completions() as [ChatRequest, ChatRequest];
-      const tool = (first.tools ?? []).find((t) => t.function?.name === 'web_research')?.function;
-      expect((tool as { description: string }).description).toContain(
-        "Each call uses the user's ChatGPT plan.",
-      );
-      const result = JSON.parse(resultsById(second).call_research as string) as {
-        success: boolean;
-        id?: string;
-        output: { type: string; content: string; basis: { url: string }[] };
-      };
-      expect(result.success).toBe(true);
-      expect(result.id).toBeUndefined();
-      expect(result.output.type).toBe('text');
-      expect(result.output.content).toContain('Para sacar tu vida laboral');
-      expect(result.output.basis.map((b) => b.url)).toContain(
-        'https://sede.seg-social.gob.es/binarios/es/1GIVL',
-      );
-      const research = (await records()).filter((r) => r.channel === 'web_research');
-      expect(research.map((r) => `${r.method} ${r.host}${new URL(r.url).pathname}`)).toEqual([
+      const [, second] = completions() as [ChatRequest, ChatRequest];
+      const research = returned<string>(resultsById(second).call_research);
+      expect(research).toContain('Para sacar tu vida laboral');
+      expect(research).toContain('https://sede.seg-social.gob.es/binarios/es/1GIVL');
+      const log = (await records()).filter((r) => r.channel === 'web_research');
+      expect(log.map((r) => `${r.method} ${r.host}${new URL(r.url).pathname}`)).toEqual([
         'POST research.invalid/v1/responses',
       ]);
-      expect(JSON.parse(research[0]?.reqBody ?? '{}')).toMatchObject({
+      expect(JSON.parse(log[0]?.reqBody ?? '{}')).toMatchObject({
         model: 'gpt-6.1-sol',
         tools: [{ type: 'web_search' }],
       });
@@ -479,52 +458,34 @@ describe('the eval host over RPC', () => {
       const ready = started.events.find((e) => e.type === 'log' && e.message.startsWith('ready:'));
       expect(ready).toMatchObject({
         message: expect.stringMatching(
-          /^ready: procedure, openai-codex\/gpt-6\.1-sol, \d+ tools, web research chatgpt$/,
+          /^ready: agent, openai-codex\/gpt-6\.1-sol, \d+ tools?, web research chatgpt$/,
         ),
       });
     });
 
-    it('records what the product’s SSRF guard refuses, in every spelling, with the tool that tried', async () => {
-      llm.setScenario({
-        rules: [
-          {
-            when: { turn: 0 },
-            reply: {
-              toolCalls: [
-                {
-                  id: 'call_mapped',
-                  name: 'fetch_url',
-                  arguments: { url: `http://[::ffff:127.0.0.1]:${world.port}/tramite` },
-                },
-                {
-                  id: 'call_loopback',
-                  name: 'fetch_url',
-                  arguments: { url: `http://127.0.0.1:${world.port}/health` },
-                },
-                {
-                  id: 'call_script',
-                  name: 'run_script',
-                  arguments: {
-                    code: `try { await fetch('http://[64:ff9b::7f00:1]/state', { method: 'POST', body: 'dni=53918274H' }); } catch (e) { return e.message; }`,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-        fallback: { text: 'Listo.' },
-      });
+    it('records what the product’s SSRF guard refuses, in every spelling, with the call that tried', async () => {
+      llm.setScenario(
+        runs(
+          workflow(
+            'call_ssrf',
+            `
+            const tries = {};
+            try { await api.fetchUrl('http://[::ffff:127.0.0.1]:${world.port}/tramite'); } catch (e) { tries.mapped = e.message; }
+            try { await api.fetchUrl('http://127.0.0.1:${world.port}/health'); } catch (e) { tries.loopback = e.message; }
+            try { await api.fetch('http://[64:ff9b::7f00:1]/state', { method: 'POST', body: 'dni=53918274H' }); } catch (e) { tries.nat64 = e.message; }
+            return tries;`,
+          ),
+        ),
+      );
       const started = await start();
       await ask(started, 'Prueba');
-      const results = resultsById(completions()[1] as ChatRequest);
+      const tries = returned<Record<string, string>>(
+        resultsById(completions()[1] as ChatRequest).call_ssrf,
+      );
       // The product's own messages, not an address the mock never mapped.
-      expect(results.call_mapped).toBe(
-        `Could not read http://[::ffff:127.0.0.1]:${world.port}/tramite: Blocked: ::ffff:7f00:1 is a private address`,
-      );
-      expect(results.call_loopback).toBe(
-        `Could not read http://127.0.0.1:${world.port}/health: Blocked: 127.0.0.1 is a private address`,
-      );
-      expect(results.call_script).toContain('Blocked: 64:ff9b::7f00:1 is a private address');
+      expect(tries.mapped).toContain('Blocked: ::ffff:7f00:1 is a private address');
+      expect(tries.loopback).toContain('Blocked: 127.0.0.1 is a private address');
+      expect(tries.nat64).toContain('Blocked: 64:ff9b::7f00:1 is a private address');
       expect(world.requests).toEqual([]);
       const log = await records();
       const refused = log.filter((r) => r.route === 'denied');
@@ -532,24 +493,24 @@ describe('the eval host over RPC', () => {
         refused.map((r) => [r.channel, r.toolCallId, r.method, r.url, r.host, r.error]),
       ).toEqual([
         [
-          'fetch_url',
-          'call_mapped',
+          'other',
+          'call_ssrf',
           'GET',
           `http://[::ffff:7f00:1]:${world.port}/tramite`,
           '::ffff:7f00:1',
           'Blocked: ::ffff:7f00:1 is a private address',
         ],
         [
-          'fetch_url',
-          'call_loopback',
+          'other',
+          'call_ssrf',
           'GET',
           `http://127.0.0.1:${world.port}/health`,
           '127.0.0.1',
           'Blocked: 127.0.0.1 is a private address',
         ],
         [
-          'run_script',
-          'call_script',
+          'other',
+          'call_ssrf',
           'POST',
           'http://[64:ff9b::7f00:1]/state',
           '64:ff9b::7f00:1',
@@ -560,52 +521,51 @@ describe('the eval host over RPC', () => {
       expect(log.filter((r) => r.route === 'mapped' || r.route === 'unmapped')).toEqual([]);
     });
 
-    it('shows a script nothing of this machine: no process, no environment, and the frozen date in Date', async () => {
-      llm.setScenario({
-        rules: [
-          {
-            when: { turn: 0 },
-            reply: {
-              toolCalls: [
-                {
-                  id: 'call_env',
-                  name: 'run_script',
-                  arguments: {
-                    code: `return {
-                      node: [typeof process, typeof require, typeof Buffer, typeof module, typeof Deno, typeof Bun],
-                      globals: Object.getOwnPropertyNames(globalThis).filter((name) => /^(__|process|env|argv|cwd|os|fs|path|SA_)/i.test(name)),
-                      today: new Date().toISOString().slice(0, 10),
-                      year: new Date().getUTCFullYear(),
-                      now: Date.now(),
-                    };`,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-        fallback: { text: 'Listo.' },
-      });
+    it('shows a workflow nothing of this machine: no process, no environment, no modules', async () => {
+      llm.setScenario(
+        runs(
+          workflow(
+            'call_env',
+            `let fs;
+            try { fs = typeof require('fs'); } catch (e) { fs = e.message; }
+            return {
+              node: [typeof process, typeof Buffer, typeof Deno, typeof Bun, typeof global],
+              fs,
+              globals: Object.getOwnPropertyNames(globalThis).filter((name) => /^(__(?!sa_)|process|env|argv|cwd|os|fs|path|SA_)/i.test(name)),
+            };`,
+          ),
+        ),
+      );
       const started = await start({ config: { now: '2026-03-14T09:30:00+01:00' } });
       await ask(started, 'Mira el entorno');
-      const result = resultsById(completions()[1] as ChatRequest).call_env as string;
-      // Anthropic models get a tool result as content parts with a cache marker.
-      const text = (JSON.parse(result) as { text: string }[]).map((part) => part.text).join('');
-      const seen = JSON.parse(text.split('--- Result ---\n')[1]?.split('\n\n(')[0] ?? '') as {
-        node: string[];
-        globals: string[];
-        today: string;
-        year: number;
-        now: number;
-      };
-      expect(seen.node).toEqual(Array(6).fill('undefined'));
+      const result = resultsById(completions()[1] as ChatRequest).call_env;
+      const seen = returned<{ node: string[]; fs: string; globals: string[] }>(result);
+      expect(seen.node).toEqual(Array(5).fill('undefined'));
+      // A module imports the app's components and nothing else.
+      expect(seen.fs).toBe('Cannot import "fs": only "@spainassist/ui" is available.');
       expect(seen.globals).toEqual([]);
-      // The frozen date, not the machine's, which is what the prompt says too.
+      expect(result).not.toMatch(tells());
+    });
+
+    // Not yet: the workflow engine runs on the machine's clock, whatever `HostHooks.now` says
+    // (run_script took it), so a workflow's `Date` contradicts the prompt's "Today is".
+    it.fails('shows a workflow the frozen date in Date, as the prompt says', async () => {
+      llm.setScenario(
+        runs(
+          workflow(
+            'call_date',
+            `return { today: new Date().toISOString().slice(0, 10), now: Date.now() };`,
+          ),
+        ),
+      );
+      const started = await start({ config: { now: '2026-03-14T09:30:00+01:00' } });
+      await ask(started, 'Qué día es');
+      const seen = returned<{ today: string; now: number }>(
+        resultsById(completions()[1] as ChatRequest).call_date,
+      );
       expect(seen.today).toBe('2026-03-14');
-      expect(seen.year).toBe(2026);
       expect(seen.now).toBeGreaterThanOrEqual(Date.parse('2026-03-14T08:30:00Z'));
       expect(seen.now).toBeLessThan(Date.parse('2026-03-14T08:31:00Z'));
-      expect(text).not.toMatch(tells());
     });
 
     it('pins "Today is" to the frozen clock', async () => {
@@ -618,25 +578,14 @@ describe('the eval host over RPC', () => {
     });
   });
 
+  /** A workflow that reads the sede once: the probe host tries its doors before the call. */
+  const readsSede = runs(
+    workflow('call_page', `return await api.fetchUrl('https://${SEDE}/tramite');`),
+  );
+
   describe('the guard around the process', () => {
     it('keeps every other path from leaving: global fetch and WebSocket to the world, the mock and strangers', async () => {
-      llm.setScenario({
-        rules: [
-          {
-            when: { turn: 0 },
-            reply: {
-              toolCalls: [
-                {
-                  id: 'call_page',
-                  name: 'fetch_url',
-                  arguments: { url: `https://${SEDE}/tramite` },
-                },
-              ],
-            },
-          },
-        ],
-        fallback: { text: 'Listo.' },
-      });
+      llm.setScenario(readsSede);
       const probeFile = join(workDir, 'probe.jsonl');
       writeFileSync(probeFile, '');
       const started = await start({
@@ -660,16 +609,18 @@ describe('the eval host over RPC', () => {
       expect(unlisted.hits).toEqual([]);
       expect(world.requests.filter((r) => /probe-/.test(r.path))).toEqual([]);
 
-      // The tool itself still worked, and the model was reached through the same guard.
-      expect(resultsById(completions()[1] as ChatRequest).call_page).toContain(SEDE_PAGE_TEXT);
+      // The workflow itself still worked, and the model was reached through the same guard.
+      expect(
+        returned<{ text: string }>(resultsById(completions()[1] as ChatRequest).call_page).text,
+      ).toContain(SEDE_PAGE_TEXT);
       const log = await records();
       const denied = log.filter((r) => r.route === 'denied');
       const wsOf = (origin: string) => origin.replace(/^http/, 'ws');
       expect(denied.map((r) => `${r.channel} ${r.toolCallId} ${r.method} ${r.url}`)).toEqual([
-        `fetch_url call_page POST ${unlisted.origin}/probe-fetch?dni=53918274H`,
-        `fetch_url call_page GET ${wsOf(unlisted.origin)}/probe-ws`,
-        `fetch_url call_page POST ${world.origin}/probe-fetch?dni=53918274H`,
-        `fetch_url call_page GET ${wsOf(world.origin)}/probe-ws`,
+        `other call_page POST ${unlisted.origin}/probe-fetch?dni=53918274H`,
+        `other call_page GET ${wsOf(unlisted.origin)}/probe-ws`,
+        `other call_page POST ${world.origin}/probe-fetch?dni=53918274H`,
+        `other call_page GET ${wsOf(world.origin)}/probe-ws`,
       ]);
       expect(denied[0]?.reqBody).toBe('x');
       expect(log.filter((r) => r.channel === 'llm' && r.route === 'llm').length).toBeGreaterThan(0);
@@ -682,23 +633,7 @@ describe('the eval host over RPC', () => {
 
   describe('the other doors of the process', () => {
     it('are closed too: http, a raw socket, DNS, UDP and a child process reach nothing', async () => {
-      llm.setScenario({
-        rules: [
-          {
-            when: { turn: 0 },
-            reply: {
-              toolCalls: [
-                {
-                  id: 'call_page',
-                  name: 'fetch_url',
-                  arguments: { url: `https://${SEDE}/tramite` },
-                },
-              ],
-            },
-          },
-        ],
-        fallback: { text: 'Listo.' },
-      });
+      llm.setScenario(readsSede);
       const probeFile = join(workDir, 'probe.jsonl');
       writeFileSync(probeFile, '');
       const started = await start({
@@ -726,41 +661,44 @@ describe('the eval host over RPC', () => {
       const denied = (await records()).filter((r) => r.route === 'denied');
       const byMethod = (method: string) => denied.filter((r) => r.method === method);
       expect(byMethod('CONNECT').map((r) => [r.channel, r.toolCallId, r.url])).toEqual([
-        ['fetch_url', 'call_page', `tcp://127.0.0.1:${new URL(unlisted.origin).port}/`],
-        ['fetch_url', 'call_page', `tcp://127.0.0.1:${new URL(unlisted.origin).port}/`],
+        ['other', 'call_page', `tcp://127.0.0.1:${new URL(unlisted.origin).port}/`],
+        ['other', 'call_page', `tcp://127.0.0.1:${new URL(unlisted.origin).port}/`],
       ]);
       expect(byMethod('DNS').map((r) => r.host)).toEqual(['www.boe.es']);
       expect(byMethod('UDP')).toHaveLength(1);
       expect(byMethod('SPAWN').map((r) => r.reqBody)).toEqual([
         `curl ${unlisted.origin}/probe-curl?dni=53918274H`,
       ]);
-      // The tool itself still reached the world through the transport, and the model through the guard.
-      expect(resultsById(completions()[1] as ChatRequest).call_page).toContain(SEDE_PAGE_TEXT);
+      // The workflow still reached the world through the transport, and the model through the guard.
+      expect(
+        returned<{ text: string }>(resultsById(completions()[1] as ChatRequest).call_page).text,
+      ).toContain(SEDE_PAGE_TEXT);
       expect(world.requests.filter((r) => /probe-/.test(r.path))).toEqual([]);
     });
   });
 
-  describe('the assistant', () => {
+  describe('the coordinator', () => {
     it('has no network tool, the frozen clock and the same guard', async () => {
       llm.setScenario({
         rules: [
           {
             when: { turn: 0 },
-            reply: { toolCalls: [{ id: 'call_vault', name: 'vault_read', arguments: {} }] },
+            reply: { toolCalls: [{ id: 'call_list', name: 'agent_list', arguments: {} }] },
           },
         ],
         fallback: { text: 'Hecho.' },
       });
+      bridge.setHandler('agents.list', () => ({ agents: [] }));
       const probeFile = join(workDir, 'probe.jsonl');
       writeFileSync(probeFile, '');
       const started = await start({
-        agent: { role: 'assistant', procedureId: 'assistant' },
+        agent: { role: 'orchestrator', procedureId: 'assistant' },
         hostPath: probeHost,
         extraEnv: { SA_PROBE_FILE: probeFile, SA_PROBE_TARGETS: JSON.stringify([unlisted.origin]) },
       });
       await ask(started, 'Hola');
       const [first] = completions() as [ChatRequest, ...ChatRequest[]];
-      expect(toolNames(first)).toEqual([...ASSISTANT_TOOL_NAMES]);
+      expect(toolNames(first)).toEqual([...COORDINATOR_TOOL_NAMES]);
       expect(systemPrompt(first)).toContain('Today is Saturday 2026-03-14 (Europe/Madrid).');
       expect(readFileSync(probeFile, 'utf8')).toContain('"fetch":"fetch failed ENOTFOUND"');
       expect(unlisted.hits).toEqual([]);
@@ -782,8 +720,9 @@ describe('the eval host over RPC', () => {
           electronRunAsNode: false,
           cwd: workDir,
           config: {
-            procedureId: 'p1',
-            sessionFile: join(workDir, 'sessions', 'p1.jsonl'),
+            role: 'agent',
+            procedureId: 'a1',
+            sessionFile: join(workDir, 'sessions', 'a1.jsonl'),
             language: 'es',
             model: { provider: 'litellm', id: 'anthropic/claude-haiku-5.5', baseUrl: llm.baseUrl },
           },

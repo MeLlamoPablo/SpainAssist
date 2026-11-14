@@ -3,13 +3,11 @@ import { CircleCheck, CircleSlash, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useT } from '../../../i18n';
 import { cn } from '../../../lib/cn';
-import { useAppStore } from '../../../store/app';
-import { useProcedure } from '../../../store/procedures';
 import { chatDict } from '../i18n';
 
 /**
  * Common frame of the three prompt cards. Pending prompts glow amber ("te necesito"). Embedded
- * (a procedure's question on its card), the card is the frame: no border, no kicker.
+ * (a question in "Para ti"), the box around it is the frame: no border, no kicker.
  */
 export function PromptShell({
   item,
@@ -33,11 +31,6 @@ export function PromptShell({
   const t = useT(chatDict);
   const pending = item.status === 'pending';
   const headingId = `prompt-${item.id}`;
-  // Questions from a procedure's agent say which procedure asks (and link to its card). Not with
-  // codemode, where questions are not tied to procedures (docs/codemode.md, decision 5).
-  const codemode = useAppStore((s) => s.info?.features.codemode ?? false);
-  const procedure = useProcedure(codemode ? undefined : item.procedureId);
-  const focusProcedure = useAppStore((s) => s.focusProcedure);
 
   if (!pending) {
     const cancelled = item.status === 'cancelled';
@@ -140,18 +133,7 @@ export function PromptShell({
               )}
               aria-hidden
             />
-            {procedure ? (
-              <button
-                type="button"
-                onClick={() => focusProcedure(procedure.id)}
-                className="min-w-0 truncate hover:underline"
-                data-testid="prompt-procedure"
-              >
-                {procedure.title}
-              </button>
-            ) : (
-              kicker
-            )}
+            {kicker}
           </p>
           <h3
             id={headingId}

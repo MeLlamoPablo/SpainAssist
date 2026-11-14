@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ChatRequest, ScenarioInput } from '@sa/mock-llm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AGENT, COORDINATOR } from '../../../src/scenarios/kit';
 import {
   expectNoEgress,
   prepareHostBundle,
@@ -37,30 +38,30 @@ function hostProcesses(): number[] {
   }
 }
 
-const assistant = { hasTool: '^procedure_start$' };
-const procedure = { hasTool: '^procedure_update$' };
+const assistant = COORDINATOR;
+const agent = AGENT;
 
-/** The orchestrator starts a procedure at once; the model of the procedure agent takes its time. */
+/** The coordinator starts an agent at once; the model of the agent takes its time. */
 const slowProcedure: ScenarioInput = {
   rules: [
     {
-      when: { ...assistant, lastUser: '^empieza', turn: 0 },
+      when: { ...assistant, lastUser: '(?:^|\\n)empieza', turn: 0 },
       reply: {
         toolCalls: [
           {
             id: 'call_start',
-            name: 'procedure_start',
-            arguments: { title: 'Lento', brief: 'Tarda.' },
+            name: 'agent_start',
+            arguments: { status: 'Tardando…', brief: 'Tarda.' },
           },
         ],
       },
     },
-    { when: { ...assistant, lastTool: 'procedure_start' }, reply: { text: 'Empezado.' } },
+    { when: { ...assistant, lastTool: 'agent_start' }, reply: { text: 'Empezado.' } },
     {
-      when: { ...assistant, lastUser: 'Report from procedure' },
+      when: { ...assistant, lastUser: 'Report from agent' },
       reply: { text: 'No debería llegar.' },
     },
-    { when: procedure, reply: { text: 'Tarde, pero hecho.', delayMs: SLOW_MS } },
+    { when: agent, reply: { text: 'Tarde, pero hecho.', delayMs: SLOW_MS } },
   ],
   fallback: { text: 'Hecho.' },
 };
@@ -72,7 +73,7 @@ const slowAssistant: ScenarioInput = {
 
 async function afterwards(stack: Stack, requestsBefore: number): Promise<void> {
   // Nothing may call the meter again, whatever the app wanted to do next (a report to the
-  // orchestrator, a retry).
+  // coordinator, a retry).
   await sleep(2000);
   expect(stack.llm.requests().length).toBe(requestsBefore);
   await waitFor(
@@ -84,7 +85,7 @@ async function afterwards(stack: Stack, requestsBefore: number): Promise<void> {
 }
 
 describe('abort', () => {
-  it('while the orchestrator waits for the model: no more meter requests, no process left', async () => {
+  it('while the coordinator waits for the model: no more meter requests, no process left', async () => {
     const stack = await startStack({ hostBundle: host.bundle, scenario: slowAssistant });
     try {
       await stack.app.send('hola');
@@ -121,22 +122,20 @@ describe('abort', () => {
     }
   }, 120_000);
 
-  it('while a procedure agent waits: its death is not reported to the orchestrator', async () => {
+  it('while an agent waits: its death is not reported to the coordinator', async () => {
     const stack = await startStack({ hostBundle: host.bundle, scenario: slowProcedure });
     try {
       await stack.app.send('empieza');
-      // The orchestrator has answered and the procedure's first request is waiting.
+      // The coordinator has answered and the agent's first request is waiting.
       await waitFor(
         () =>
           stack.run.summary().inflight === 1 &&
           stack.llm
             .requests()
             .some((r) =>
-              ((r.body as ChatRequest).tools ?? []).some(
-                (t) => t.function?.name === 'procedure_update',
-              ),
+              ((r.body as ChatRequest).tools ?? []).some((t) => t.function?.name === 'codemode'),
             ),
-        'the procedure agent to wait for the model',
+        'the agent to wait for the model',
       );
       const assistantRequests = stack.run.agentUsage('assistant').requests;
       const requests = stack.llm.requests().length;

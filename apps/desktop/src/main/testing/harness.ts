@@ -11,6 +11,7 @@ import {
   ASSISTANT_AGENT_ID,
   type BridgeMethod,
   type FeatureFlags,
+  PROCEDURE_HEADER,
   type PromptItem,
   type SaArgs,
   type SaEvent,
@@ -157,7 +158,6 @@ export async function createTestApp(opts: TestAppOptions = {}) {
         dniePhone: 'release',
         mustUpdate: false,
         errorReports: false,
-        codemode: false,
         ...opts.features,
       },
       errorReports: false,
@@ -210,17 +210,26 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     }) as Promise<SaResult<M>>;
   }
 
+  /** The procedure each agent token acts on (sent as the procedure header, as workflows do). */
+  const tokenProcedures = new Map<string, string>();
+
+  /**
+   * One bridge call as an agent host makes it. A token from `procedureWithToken` or
+   * `startProcedure` names its procedure (`x-sa-procedure`) unless `init.headers` sets it.
+   */
   async function rpc(
     method: BridgeMethod | string,
     params: unknown,
     token: string | undefined,
     init: { signal?: AbortSignal; headers?: Record<string, string> } = {},
   ): Promise<{ status: number; body: RpcBody }> {
+    const procedureId = token ? tokenProcedures.get(token) : undefined;
     const res = await fetch(`${services.bridge.url()}/rpc/${method}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(procedureId ? { [PROCEDURE_HEADER]: procedureId } : {}),
         ...init.headers,
       },
       body: JSON.stringify(params),
@@ -229,11 +238,20 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     return { status: res.status, body: (await res.json()) as RpcBody };
   }
 
-  /** Creates a procedure without starting an agent and issues a bridge token for it. */
+  /**
+   * Creates a procedure and a codemode agent working on it, without starting the agent's
+   * process, and issues a bridge token for the agent. `rpc` with that token names the procedure.
+   */
   async function procedureWithToken(title = 'Trámite de prueba') {
     const procedure = await services.procedures.create(title);
-    const token = services.tokens.issue(procedure.id);
-    return { procedureId: procedure.id, token };
+    const agent = await services.codemode.directory.create({
+      status: title,
+      brief: title,
+      procedures: [procedure.id],
+    });
+    const token = services.tokens.issue(agent.id);
+    tokenProcedures.set(token, procedure.id);
+    return { procedureId: procedure.id, agentId: agent.id, token };
   }
 
   /** Waits until `predicate` holds (polling), for async background work. */
@@ -277,16 +295,22 @@ export async function createTestApp(opts: TestAppOptions = {}) {
   }
 
   /**
-   * Starts a procedure the way the assistant does (bridge `procedures.start` with the
-   * assistant's token) and waits until its agent got the brief.
+   * Starts a background agent the way the coordinator does (bridge `agents.start` with the
+   * coordinator's token), waits until its process got the brief, and creates a procedure for it
+   * as its workflow would (`procs.getOrCreate`). `rpc` with the agent's token names the procedure.
    */
   async function startProcedure(title = 'Renovar el DNI', brief = 'Quiere renovar el DNI.') {
-    const assistant = agentFor(ASSISTANT_AGENT_ID) ?? (await say('Hola'));
-    const res = await rpc('procedures.start', { title, brief }, assistant.token);
-    if (!res.body.ok) throw new Error(`procedures.start failed: ${res.body.error?.message}`);
-    const procedureId: string = res.body.result.procedureId;
-    await services.coordinator.settled();
-    return { procedureId, assistant, agent: agentFor(procedureId) };
+    const coordinator = services.tokens.issue(ASSISTANT_AGENT_ID);
+    const started = await rpc('agents.start', { status: title, brief }, coordinator);
+    if (!started.body.ok) throw new Error(`agents.start failed: ${started.body.error?.message}`);
+    const agentId: string = started.body.result.agentId;
+    await waitFor(() => !!agentFor(agentId)?.client.prompts.length);
+    const agent = agentFor(agentId);
+    if (!agent) throw new Error('The agent did not start');
+    const procedure = await services.procedures.create(title);
+    services.codemode.directory.touchProcedure(agentId, procedure.id);
+    tokenProcedures.set(agent.token, procedure.id);
+    return { procedureId: procedure.id, agentId, agent };
   }
 
   async function close() {

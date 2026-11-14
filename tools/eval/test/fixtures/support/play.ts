@@ -1,4 +1,9 @@
-import type { Fixture, PendingPrompt, RunResult } from '../../../src/contracts';
+import {
+  BRIDGE_CALL_PREFIX,
+  type Fixture,
+  type PendingPrompt,
+  type RunResult,
+} from '../../../src/contracts';
 import { RuleEngine } from '../../../src/rules/engine';
 import { sha256 } from '../../../src/rules/pdf';
 import { assembleRunResult, emptyMeterUsage } from '../../../src/scoring';
@@ -67,7 +72,12 @@ export class Scenario {
       bytes,
     });
     await this.feed(
-      toolStart('procedure', 'download_save', { downloadId: 'dl_1', name: 'Vida laboral' }),
+      toolStart(
+        'procedure',
+        'downloads.save',
+        { downloadId: 'dl_1', name: 'Vida laboral' },
+        `${BRIDGE_CALL_PREFIX}save`,
+      ),
       { type: 'vault_changed' },
     );
   }
@@ -76,14 +86,14 @@ export class Scenario {
     this.wrongTurns++;
   }
 
-  /** The tool call of the procedure agent that logs in with the vault credential. */
+  /** The bridge call of the agent's workflow that logs in with the vault credential. */
   async loginWithClave(): Promise<void> {
     await this.feed(
       toolStart(
         'procedure',
-        'browser_login_clave',
-        { usernameRef: 'e5', passwordRef: 'e6' },
-        'login-1',
+        'browser.loginClave',
+        { username: 'e5', password: 'e6' },
+        `${BRIDGE_CALL_PREFIX}login`,
       ),
     );
   }

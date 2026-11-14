@@ -788,7 +788,7 @@ describe('eval run: live progress from the run folder', () => {
           type: 'tool_start',
           agent: 'assistant',
           toolCallId: 'a',
-          tool: 'procedure_start',
+          tool: 'agent_start',
           args: { secret: 'S3CR3T-ARGUMENT' },
         },
         {
@@ -849,7 +849,7 @@ describe('eval run: live progress from the run folder', () => {
       'live',
     );
     const err = cli.err();
-    expect(err).toContain('[+1 s] assistant: procedure_start\n');
+    expect(err).toContain('[+1 s] assistant: agent_start\n');
     expect(err).toContain('[+2 s] procedure p1: browser_navigate\n');
     expect(err).toContain('[+3 s] prompt (form): Elige cómo identificarte\n');
     expect(err).toContain('[+3 s] prompt answered (structured)\n');

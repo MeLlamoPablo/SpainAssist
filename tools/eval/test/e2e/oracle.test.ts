@@ -33,7 +33,7 @@ const RAW_WORLD = /^checkpoints\/\d+\/bench-snapshot\.json$/;
 e2eSuite('the oracle on the real SpainBench', () => {
   const space = workspace();
 
-  it('fixture 1 (nothing saved): asks how to log in, takes the credential, saves the report: score 1', async () => {
+  it('fixture 1 (nothing saved): the agent asks how to log in, the login takes the credential, the report is saved: score 1', async () => {
     const outcome = await evaluate(space, {
       fixtureId: 'vida-laboral-sin-datos',
       scenario: mockScenario('vida-laboral-sin-datos', 'oracle'),
@@ -64,13 +64,14 @@ e2eSuite('the oracle on the real SpainBench', () => {
     ]);
     expect(run.result.rules.filter((rule) => !rule.passed)).toEqual([]);
 
-    // The authentication options were offered in a form with Cl@ve Permanente among them, and the
-    // simulated user chose it and added the credential through the answers of the fixture.
+    // The authentication options were offered in the agent's interface with Cl@ve Permanente among
+    // them, and the simulated user chose it and added the credential through the fixture's answers.
     const prompts = observations(run.events, 'prompt_shown').map((event) => event.prompt);
     expect(prompts.map((prompt) => [prompt.agent, prompt.kind])).toEqual([
-      ['assistant', 'form'],
+      ['procedure', 'form'],
       ['procedure', 'credential'],
     ]);
+    expect(prompts[0]?.itemId).toMatch(/^wf_vida-laboral:metodo:/);
     const labels = prompts[0]?.fields?.[0]?.options?.map((option) => option.label) ?? [];
     expect(labels).toEqual(expect.arrayContaining(['Cl@ve Permanente', 'Cl@ve Móvil']));
     expect(prompts[1]?.credentialKind).toBe('clave_permanente');
@@ -80,18 +81,24 @@ e2eSuite('the oracle on the real SpainBench', () => {
       ['choose-clave-permanente', 'structured'],
       ['clave-permanente-credential', 'structured'],
     ]);
-    const asked = observations(run.events, 'tool_end').find((event) => event.tool === 'ask_user');
-    expect(asked?.text).toContain('metodo): clave_permanente');
-    expect(outcome.result.usage.requests).toBeGreaterThan(10);
+    // The workflow waited for the answer: its result came to the agent as a message.
+    const results = observations(run.events, 'tool_end').filter((e) => e.tool === 'codemode');
+    expect(results.map((e) => e.text.split('\n')[0])).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/is waiting for the user \(interface: metodo\)/),
+        '[Workflow "vida-laboral" (Sacar tu vida laboral) succeeded]',
+      ]),
+    );
+    expect(outcome.result.usage.requests).toBeGreaterThan(5);
 
     // The app typed the credential from the vault into both fields; the model typed nothing.
     const starts = observations(run.events, 'tool_start');
-    const logins = starts.filter((event) => event.tool === 'browser_login_clave');
+    const logins = starts.filter((event) => event.tool === 'browser.loginClave');
     expect(logins).toHaveLength(1);
     expect(Object.keys(logins[0]?.args ?? {})).toEqual(
       expect.arrayContaining(['usernameRef', 'passwordRef']),
     );
-    expect(toolNames(run.events)).not.toContain('procedure:browser_type');
+    expect(toolNames(run.events)).not.toContain('procedure:browser.type');
     expect(JSON.stringify(starts)).not.toContain(CLAVE_PASSWORD);
 
     // The file in the user's documents is the report SpainBench sent, byte for byte.
@@ -111,8 +118,12 @@ e2eSuite('the oracle on the real SpainBench', () => {
 
     // What the run leaves behind: the transcripts of both agents, a checkpoint to resume from,
     // the logs of every process and the ledger of the model's calls.
+    const agent = /^Started agent (\S+)\./.exec(
+      observations(run.events, 'tool_end').find((e) => e.tool === 'agent_start')?.text ?? '',
+    )?.[1];
     for (const file of [
-      'transcripts/assistant/session.jsonl',
+      'transcripts/assistant/session-v2.jsonl',
+      `transcripts/agent-${agent}/session.jsonl`,
       'transcripts/assistant/transcript.json',
       'checkpoints/1/manifest.json',
       'llm/meter.jsonl',
@@ -154,12 +165,11 @@ e2eSuite('the oracle on the real SpainBench', () => {
     // Any prompt would have ended the run (`no-user-interruptions` fails at once): none was shown.
     expect(observations(run.events, 'prompt_shown')).toEqual([]);
     expect(observations(run.events, 'prompt_answered')).toEqual([]);
-    expect(toolNames(run.events)).not.toContain('procedure:ask_user');
-    expect(toolNames(run.events)).not.toContain('procedure:request_credential');
+    expect(observations(run.events, 'interface_render')).toEqual([]);
 
     // The saved credential was used by the app; the report is in the user's documents.
     const logins = observations(run.events, 'tool_start').filter(
-      (event) => event.tool === 'browser_login_clave',
+      (event) => event.tool === 'browser.loginClave',
     );
     expect(logins).toHaveLength(1);
     const documents = await vaultDocuments(join(run.dir, 'profile'));

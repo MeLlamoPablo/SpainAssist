@@ -1,26 +1,20 @@
-import type { CodemodeAgentInfo, CredentialKind, ProcedureListItem } from '@sa/shared';
+import type { CodemodeAgentInfo } from '@sa/shared';
 import { ChevronDown, CircleAlert, Hand, LoaderCircle, Square } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { Tooltip } from '../../components/ui/tooltip';
-import { useLang, useT } from '../../i18n';
-import { activityLabel, normalizeTool } from '../../lib/activity';
+import { useT } from '../../i18n';
 import { api, errorMessage } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { useCodemodeStore } from '../../store/codemode';
-import { useProcedureStore } from '../../store/procedures';
 import { toast } from '../../store/toast';
-import { useVaultStore } from '../../store/vault';
 import { Elapsed } from '../procedures/Elapsed';
 import { codemodeDict } from './i18n';
 
 /** One row of the meter: what is being done. */
 interface Work {
   id: string;
-  /** Codemode: the agent's status ("Analizando la página de Correos…"), the row's only text; classic: the card's title. */
+  /** The agent's status ("Analizando la página de Correos…"), the row's only text. */
   title: string;
-  /** Classic: the current tool call. */
-  now?: string;
   /** When the current stretch of work started (ISO), for the timer. */
   since?: string | undefined;
   /** It waits for the user (a question or an interface): no spinner, no timer. */
@@ -35,36 +29,14 @@ const ROWS = 3;
 /**
  * What the agents are doing, apart from the procedure cards: a small panel floating at the bottom
  * of "Mis trámites", one row per piece of work ("Renovar el DNI · Leyendo sede.policia.gob.es"),
- * each with a stop button: codemode's agents, then any procedure whose
- * classic agent still works (one started before the flag was on). Codemode only: the classic
- * design shows work on each card. Hidden when nothing works.
+ * each with a stop button. Hidden when nothing works.
  */
 export function AgentMeter() {
   const t = useT(codemodeDict);
-  const lang = useLang();
   const agents = useCodemodeStore((s) => s.agents);
-  const working = useProcedureStore(
-    useShallow((s) =>
-      Object.values(s.byId).filter((p) => p.runtime.activity === 'working' || p.runtime.error),
-    ),
-  );
-  const credentials = useVaultStore((s) => s.overview?.credentials);
   const [all, setAll] = useState(false);
 
-  const work = useMemo<Work[]>(
-    () => [
-      ...codemodeWork(Object.values(agents)),
-      ...working.map((p) =>
-        classicWork(
-          p,
-          lang,
-          (id) => credentials?.find((c) => c.id === id)?.kind,
-          t.meter.researching,
-        ),
-      ),
-    ],
-    [agents, working, lang, credentials, t.meter.researching],
-  );
+  const work = useMemo<Work[]>(() => codemodeWork(Object.values(agents)), [agents]);
 
   if (!work.length) return null;
   const shown = all || work.length <= ROWS + 1 ? work : work.slice(0, ROWS);
@@ -124,7 +96,6 @@ function WorkRow({ work: w }: { work: Work }) {
       ) : (
         <p className="min-w-0 flex-1 truncate py-2 text-[13.5px]">
           <span className="font-semibold text-fg">{w.title}</span>
-          {w.now ? <span className="ml-2 text-fg-subtle">{w.now}</span> : null}
           {!w.waiting && w.since ? (
             <Elapsed since={w.since} className="ml-2 text-fg-faint tabular-nums" />
           ) : null}
@@ -161,30 +132,6 @@ function agentWork(a: CodemodeAgentInfo): Work {
     error: a.activity === 'working' ? undefined : a.error,
     ...(a.kind === 'agent' && a.activity === 'working'
       ? { stop: () => api.invoke('codemode.stopAgent', a.id) }
-      : {}),
-  };
-}
-
-function classicWork(
-  p: ProcedureListItem,
-  lang: 'es' | 'en',
-  credentialKind: (id: string) => CredentialKind | undefined,
-  researching: string,
-): Work {
-  const now = p.runtime.now;
-  const label = now
-    ? normalizeTool(now.tool) === 'web_research'
-      ? researching
-      : activityLabel(now.tool, now.args, { lang, credentialKind }).text
-    : '…';
-  return {
-    id: p.id,
-    title: p.title,
-    now: label,
-    since: p.runtime.activity === 'working' ? p.runtime.workingSince : undefined,
-    error: p.runtime.activity === 'working' ? undefined : p.runtime.error,
-    ...(p.runtime.activity === 'working'
-      ? { stop: () => api.invoke('procedures.stop', p.id) }
       : {}),
   };
 }

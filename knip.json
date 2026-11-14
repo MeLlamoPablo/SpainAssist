@@ -38,7 +38,6 @@
     "tools/eval": {
       "entry": [
         "src/host/eval-main.ts",
-        "scripts/codemode-bench.ts",
         "test/bench/harness-child.ts",
         "test/cli/helpers/slow-run.ts",
         "test/host/probe-host.ts",

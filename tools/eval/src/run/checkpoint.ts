@@ -50,8 +50,11 @@ import {
 
 export const CHECKPOINT_FORMAT = 'sa-eval-checkpoint/1';
 
-/** Prompts the app cannot restore after a restart: it only brings back forms and phone calls. */
-const UNRESTORABLE: readonly PromptKind[] = ['confirm', 'credential', 'user_action'];
+/**
+ * Prompts the app cannot restore after a restart: none of its own (a workflow that waited on one
+ * hears it was interrupted). A form is a workflow's interface, which its workflow brings back.
+ */
+const UNRESTORABLE: readonly PromptKind[] = ['confirm', 'credential', 'user_action', 'phone_call'];
 
 export type CheckpointErrorCode =
   | 'not_a_checkpoint'
@@ -326,6 +329,12 @@ export function readCheckpoint(
     );
   }
   const where = `checkpoint ${ref.checkpoint} of run ${run.runId}`;
+  if (!run.options.codemode) {
+    throw new CheckpointError(
+      'invalid',
+      `${where} was taken with the app's classic agents, which it no longer has: its profile holds their conversations and procedures, not the workflows codemode resumes. Start a new run instead`,
+    );
+  }
   if (run.fixture.frozenHash !== frozenHash(fixture)) {
     throw new CheckpointError(
       'fixture_changed',

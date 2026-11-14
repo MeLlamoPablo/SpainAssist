@@ -154,7 +154,7 @@ class EvalAppImpl implements EvalApp {
   private readonly tails = new Map<string, SessionTail>();
   private readonly followers: NetLogFollower[] = [];
   private readonly unsubscribe: (() => void)[] = [];
-  /** Codemode: the workflows' interfaces as prompts of the simulator. */
+  /** The workflows' interfaces as prompts of the simulator (set by `attach`). */
   private interfaces: InterfacePrompts | undefined;
   private stopping: Promise<void> | undefined;
   private closing: Promise<void> | undefined;
@@ -207,36 +207,33 @@ class EvalAppImpl implements EvalApp {
     // What the run knew before the app existed (the fixture's passwords, the model's credential).
     for (const secret of this.parts.secrets.list()) this.parts.meter.addSecret(secret);
     observers.announcePending(app.services.prompts.pendingItems());
-    const codemode = app.services.codemode;
-    if (codemode) {
-      const interfaces = new InterfacePrompts({
-        port: {
-          workflows: () => codemode.workflows.infos(),
-          uiEvent: (workflowId, key, event) =>
-            app.invoke('codemode.uiEvent', workflowId, key, event),
-        },
-        onShown: (prompt) => observers.interfaceShown(prompt),
-        onNote: (text) => spec.sink.push({ type: 'note', text }),
-        onRender: (render) => spec.sink.push({ type: 'interface_render', ...render }),
-        // As the persona is told: what they are asked and don't know, they say they don't know.
-        onUnknown: (labels) => {
-          this.send(`No lo sé: ${labels.map((l) => `«${l}»`).join(', ')}.`).catch((error) =>
-            spec.sink.push({
-              type: 'note',
-              text: `could not say what the user does not know: ${error}`,
-            }),
-          );
-        },
-      });
-      this.interfaces = interfaces;
-      this.unsubscribe.push(
-        app.on((event) => {
-          if (event.type === 'codemode.workflow') interfaces.update(event.workflow);
-        }),
-      );
-      this.unsubscribe.push(() => interfaces.close());
-      for (const workflow of codemode.workflows.infos()) interfaces.update(workflow);
-    }
+    const { codemode } = app.services;
+    const interfaces = new InterfacePrompts({
+      port: {
+        workflows: () => codemode.workflows.infos(),
+        uiEvent: (workflowId, key, event) => app.invoke('codemode.uiEvent', workflowId, key, event),
+      },
+      onShown: (prompt) => observers.interfaceShown(prompt),
+      onNote: (text) => spec.sink.push({ type: 'note', text }),
+      onRender: (render) => spec.sink.push({ type: 'interface_render', ...render }),
+      // As the persona is told: what they are asked and don't know, they say they don't know.
+      onUnknown: (labels) => {
+        this.send(`No lo sé: ${labels.map((l) => `«${l}»`).join(', ')}.`).catch((error) =>
+          spec.sink.push({
+            type: 'note',
+            text: `could not say what the user does not know: ${error}`,
+          }),
+        );
+      },
+    });
+    this.interfaces = interfaces;
+    this.unsubscribe.push(
+      app.on((event) => {
+        if (event.type === 'codemode.workflow') interfaces.update(event.workflow);
+      }),
+    );
+    this.unsubscribe.push(() => interfaces.close());
+    for (const workflow of codemode.workflows.infos()) interfaces.update(workflow);
     observers.refreshCanaries();
     const onAbort = () => void this.abort('signal');
     spec.signal.addEventListener('abort', onAbort, { once: true });
@@ -271,11 +268,7 @@ class EvalAppImpl implements EvalApp {
     const { services } = this.parts.app;
     this.settling++;
     queueMicrotask(() => {
-      Promise.all([
-        services.coordinator.settled(),
-        services.chat.settled(),
-        services.codemode?.coordinator.settled(),
-      ])
+      Promise.all([services.chat.settled(), services.codemode.coordinator.settled()])
         .catch(() => {})
         .finally(() => {
           this.settling--;
@@ -294,9 +287,7 @@ class EvalAppImpl implements EvalApp {
 
   pendingPrompts(): PendingPrompt[] {
     return [
-      ...this.parts.app.services.prompts
-        .pendingItems()
-        .map(({ owner, item }) => toPendingPrompt(owner, item)),
+      ...this.parts.app.services.prompts.pendingItems().map(({ item }) => toPendingPrompt(item)),
       ...(this.interfaces?.pending() ?? []),
     ];
   }
@@ -345,20 +336,15 @@ class EvalAppImpl implements EvalApp {
     if (this.state !== 'open') return false;
     if (this.inflight > 0 || this.settling > 0 || this.agentOperations > 0) return false;
     const { services } = this.parts.app;
+    const { codemode } = services;
     if (services.agents.isRunning(ASSISTANT_AGENT_ID)) return false;
-    for (const procedure of services.procedures.list()) {
-      if (services.agents.isRunning(procedure.id)) return false;
+    for (const agent of codemode.directory.infos()) {
+      if (services.agents.isRunning(agent.id)) return false;
     }
-    const codemode = services.codemode;
-    if (codemode) {
-      // A workflow keeps running after its agent's turn ended (it detached), and an answer to an
-      // interface is a few events long.
-      if (this.interfaces?.busy() || (this.interfaces?.pending().length ?? 0) > 0) return false;
-      for (const agent of codemode.directory.infos()) {
-        if (services.agents.isRunning(agent.id)) return false;
-      }
-      if (codemode.workflows.list().some((workflow) => workflow.status === 'running')) return false;
-    }
+    // A workflow keeps running after its agent's turn ended (it detached), and an answer to an
+    // interface is a few events long.
+    if (this.interfaces?.busy() || (this.interfaces?.pending().length ?? 0) > 0) return false;
+    if (codemode.workflows.list().some((workflow) => workflow.status === 'running')) return false;
     return services.prompts.pendingItems().length === 0;
   }
 
@@ -543,10 +529,14 @@ function copyIfExists(from: string, to: string, mask: (text: string) => string):
   writeFileSync(to, mask(readFileSync(from, 'utf8')), { mode: 0o600 });
 }
 
+/** The coordinator's pi sessions: one per version of the chat's agent (`session-v2.jsonl`). */
+const SESSION_FILE = /^session(?:-v\d+)?\.jsonl$/;
+
 /**
  * pi's session file and the app's transcript of each agent, one folder per agent
- * (`transcripts/assistant`, `transcripts/procedure-<id>`). The sessions are the lossless record
- * of what each agent saw and did; the transcripts are what the app showed the user.
+ * (`transcripts/assistant`, the coordinator; `transcripts/agent-<id>`), and each procedure's card
+ * and activity (`transcripts/procedure-<id>`). The sessions are the lossless record of what each
+ * agent saw and did; the transcripts are what the app showed the user.
  */
 async function copyTranscripts(
   app: HeadlessApp,
@@ -558,16 +548,21 @@ async function copyTranscripts(
     await mkdir(folder, { recursive: true, mode: 0o700 });
     for (const name of names) copyIfExists(join(agentDir, name), join(folder, name), mask);
   };
-  await copy(app.paths.assistantDir, join(out, 'assistant'), ['session.jsonl', 'transcript.json']);
-  if (!existsSync(app.paths.proceduresDir)) return;
-  for (const entry of readdirSync(app.paths.proceduresDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    await copy(join(app.paths.proceduresDir, entry.name), join(out, `procedure-${entry.name}`), [
-      'session.jsonl',
-      'transcript.json',
-      'procedure.json',
-    ]);
-  }
+  const { assistantDir, proceduresDir, userData } = app.paths;
+  const sessions = existsSync(assistantDir)
+    ? readdirSync(assistantDir).filter((name) => SESSION_FILE.test(name))
+    : [];
+  await copy(assistantDir, join(out, 'assistant'), [...sessions, 'transcript.json']);
+  const each = async (dir: string, prefix: string, names: string[]) => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        await copy(join(dir, entry.name), join(out, `${prefix}-${entry.name}`), names);
+      }
+    }
+  };
+  await each(join(userData, 'agents'), 'agent', ['session.jsonl', 'transcript.json', 'agent.json']);
+  await each(proceduresDir, 'procedure', ['transcript.json', 'procedure.json']);
 }
 
 /** The host processes write their net logs themselves, so typed secrets are masked afterwards. */
@@ -673,7 +668,7 @@ export async function createEvalAppWith(
 
   const halt = { stopped: false };
   let impl: EvalAppImpl | undefined;
-  // Codemode's observations start with the agents, after the observers exist.
+  // The workflows' bridge calls start with the agents, after the observers exist.
   let observersRef: Observers | undefined;
   const fleet = new AgentFleet({
     spec,
@@ -732,12 +727,7 @@ export async function createEvalAppWith(
       hostScript: hostBundle,
       clock,
       idleMs: IDLE_MS,
-      ...(spec.codemode
-        ? {
-            features: { codemode: true },
-            onBridgeCall: (call) => observersRef?.bridgeCall(call),
-          }
-        : {}),
+      onBridgeCall: (call) => observersRef?.bridgeCall(call),
       openVault: async (dir, keys) => {
         vault = await openVault(dir, keys);
         return vault;

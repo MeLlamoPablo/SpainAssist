@@ -23,10 +23,6 @@ export const useProcedureStore = create<ProceduresState>()((set) => ({
     }),
 }));
 
-export function useProcedure(id: string | null | undefined): ProcedureListItem | undefined {
-  return useProcedureStore((s) => (id ? s.byId[id] : undefined));
-}
-
 // ---------------------------------------------------------------------------------------------
 // What a card says at a glance, and the order of the cards
 // ---------------------------------------------------------------------------------------------

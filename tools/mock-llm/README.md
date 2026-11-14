@@ -2,7 +2,8 @@
 
 A scripted, offline LLM server for tests, demos and for developing the eval harness for free
 (`tools/eval`). Rules (`when` conditions, `reply`) are matched against each request; see
-`src/scenario.ts` for the full vocabulary and `src/scenarios.ts` for the built-in `demo` and `echo`.
+`src/scenario.ts` for the full vocabulary and `src/scenarios.ts` for the built-in `demo` (the coordinator delegates "renovar el DNI" to an agent,
+whose `codemode` workflow creates the card and asks in an interface) and `echo`.
 
 ```sh
 corepack pnpm --filter @sa/mock-llm start -- --port 8789 [--scenario file.json|demo|echo] [--litellm] [--litellm-budget 1.5]
@@ -37,7 +38,8 @@ A reply's `usage` can set `promptTokens`, `completionTokens`, `cachedTokens`, `c
 
 Besides `lastUser`, `lastTool`, `lastToolResult`, `turn`, `model` and `hasTool`:
 
-- `systemPrompt`: regex on the system prompt (tells the assistant, procedure agents, the answerer apart);
+- `systemPrompt`: regex on the system prompt (tells the coordinator, its agents, the answerer apart; `hasTool`
+  with `^agent_start$` or `^codemode$` does too);
 - `toolCalled`: history (`{ name, args?, result?, atLeast?, atMost? }`, one or a list); its named groups feed the
   templates from the most recent matching call, so a reply can reuse a value seen several turns ago;
 - `lastToolResultNot`, `hasImage`, `anyOf`, `not`;

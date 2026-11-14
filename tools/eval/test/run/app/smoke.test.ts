@@ -1,5 +1,5 @@
 /**
- * The smallest run: the orchestrator alone answers a message. No browser, no procedure: what a
+ * The smallest run: the coordinator alone answers a message. No browser, no procedure: what a
  * machine without Chromium can still check of the composition.
  */
 import { existsSync, readdirSync } from 'node:fs';
@@ -15,7 +15,7 @@ afterAll(() => host?.cleanup());
 afterAll(expectNoEgress);
 
 describe('the smallest run', () => {
-  it('composes the app, lets the orchestrator answer once, and closes', async () => {
+  it('composes the app, lets the coordinator answer once, and closes', async () => {
     const stack = await startStack({
       hostBundle: host.bundle,
       scenario: { rules: [], fallback: { text: 'Hola, soy el asistente.' } },
@@ -29,7 +29,7 @@ describe('the smallest run', () => {
           .filter((o) => o.type !== 'net')
           .map((o) => [o.type, o.type === 'assistant_message' ? o.text : undefined]),
       ).toEqual([['assistant_message', 'Hola, soy el asistente.']]);
-      // The one request the orchestrator made, to the gateway under its own key.
+      // The one request the coordinator made, to the gateway under its own key.
       expect(stack.of('net').map((o) => [o.record.channel, o.record.route])).toEqual([
         ['llm', 'llm'],
       ]);
@@ -46,7 +46,9 @@ describe('the smallest run', () => {
       'profile',
       'transcripts',
     ]);
-    expect(existsSync(join(stack.runDir, 'transcripts', 'assistant', 'session.jsonl'))).toBe(true);
+    expect(existsSync(join(stack.runDir, 'transcripts', 'assistant', 'session-v2.jsonl'))).toBe(
+      true,
+    );
     removeRunDir(stack.runDir);
   }, 120_000);
 });

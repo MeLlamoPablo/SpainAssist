@@ -199,11 +199,7 @@ const STRINGS = {
     es: '{host} quiere saber con qué certificado firmarás. Sigue en el móvil: no se firma nada todavía.',
     en: '{host} wants to know which certificate you will sign with. Carry on on your phone: nothing is signed yet.',
   },
-  /** Codemode IPC calls without the `codemode` feature flag. */
-  codemodeOff: {
-    es: 'Esta función no está disponible en esta versión de la app.',
-    en: "This isn't available in this version of the app.",
-  },
+
   /** Codemode: an interface a workflow showed is no longer open. */
   codemodeUiClosed: {
     es: 'Esta pregunta ya no está abierta.',

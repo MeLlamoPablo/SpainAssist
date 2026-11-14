@@ -114,9 +114,10 @@ describe('the models', () => {
     expect(lib.modelLists.voucher).toEqual({
       procedures: [{ ...voucher.procedures[0], id: 'openai/gpt-6-luna' }],
       assistant: [{ ...voucher.assistant[0], id: 'anthropic/claude-sonnet-5.5' }],
-      // The scanner and the decider keep the product's models.
+      // The scanner and the decider keep the product's models, compaction its thresholds.
       scanner: voucher.scanner,
       decider: voucher.decider,
+      compaction: voucher.compaction,
     });
     expect(lib.modelLists.chatgpt.procedures).toEqual([
       { ...chatgpt.procedures[0], id: 'openai/gpt-6-luna' },

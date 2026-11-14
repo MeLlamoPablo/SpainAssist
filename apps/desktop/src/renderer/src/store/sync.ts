@@ -108,7 +108,6 @@ async function loadInitialState(): Promise<void> {
       ),
       api.invoke('updates.status'),
       api.invoke('dataImport.status'),
-      // Main answers empty without the codemode feature flag.
       api.invoke('codemode.state'),
     ]);
   document.documentElement.dataset.platform = info.platform;

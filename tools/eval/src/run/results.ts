@@ -156,7 +156,11 @@ export interface RunManifest {
   limits: RunLimits;
   options: {
     captureBrowser: boolean;
-    /** The app ran with the `codemode` feature flag; absent before it existed and when off. */
+    /**
+     * The app ran codemode (docs/codemode.md), its only harness since the classic one was removed:
+     * every new run says `true`. Absent in the runs of the classic harness (and the runs of
+     * codemode's old feature flag when it was off), so comparisons tell them apart.
+     */
     codemode?: boolean;
     settleTimeoutMs: number;
     evaluateIntervalMs: number;

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { ChatItem, type ConversationState, type NoticeItem, type Prompt } from '@sa/shared';
+import { ChatItem, type ConversationState, type NoticeItem } from '@sa/shared';
 import type { TranscriptSink } from '../chat/sink';
 import type { EventBus } from '../core/events';
 import { DebouncedWriter, ensurePrivateDir, writeFileAtomic } from '../core/fs';
@@ -167,18 +167,11 @@ export class ConversationService implements TranscriptSink {
 }
 
 /**
- * Questions that stay pending across a restart: data forms and phone calls (the user may call
- * hours later, when the office opens). Nothing live depends on them, unlike confirmations and
- * manual actions, which refer to a browser page that is gone.
+ * Close interrupted work. A prompt never outlives the agent's bridge call that showed it: after a
+ * restart, the workflow that asked resumes from its state (or its agent hears it was interrupted).
  */
-export function promptSurvivesRestart(prompt: Prompt): boolean {
-  return prompt.kind === 'form' || prompt.kind === 'phone_call';
-}
-
-/** Close interrupted work; unanswered forms and phone calls can be restored by PromptManager. */
 export function closeStaleItem(item: ChatItem, now: string): ChatItem {
-  if (item.type === 'prompt' && item.status === 'pending' && !promptSurvivesRestart(item.prompt))
-    return { ...item, status: 'cancelled' };
+  if (item.type === 'prompt' && item.status === 'pending') return { ...item, status: 'cancelled' };
   if (item.type === 'assistant' && item.status === 'streaming')
     return { ...item, status: 'aborted' };
   if (item.type === 'activity' && item.status === 'running')

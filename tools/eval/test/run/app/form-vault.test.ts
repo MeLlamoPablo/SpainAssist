@@ -1,7 +1,7 @@
 /**
- * The simulated user answers a form the way the UI does, through the app's own path: a field the
- * agent wants kept (`vaultKey`) ends up in the user's data. Fixture 1 depends on it: the agent asks
- * for the DNI in a form, and later types it from the vault.
+ * The simulated user answers an agent's interface the way the UI does, through the app's own path,
+ * and the agent keeps the answer in the user's data (`api.vault.save`). Fixture 1 depends on it:
+ * the agent asks for the DNI, and later the app types it from the vault.
  */
 import { join } from 'node:path';
 import type { ScenarioInput } from '@sa/mock-llm';
@@ -10,7 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getFixture } from '../../../src/fixtures';
 import { createUserSimulator } from '../../../src/run';
 import { PROFILE_KEY_SEED } from '../../../src/run/app/eval-app';
-import { assistantRules, step } from './scripts';
+import { AGENT, sequence, workflow } from '../../../src/scenarios/kit';
+import { coordinatorRules } from './scripts';
 import {
   expectNoEgress,
   prepareHostBundle,
@@ -22,51 +23,40 @@ import {
 
 const DNI = '53918274H';
 
-/** The procedure agent asks for the DNI and wants it kept in the user's data, then reads it back. */
+const DNI_FORM = `function DniForm({ api }) {
+  const [dni, setDni] = api.ui.useDurableState('dni', '');
+  return (
+    <Form title="Tu DNI">
+      <Text>Necesito tu DNI para entrar.</Text>
+      <TextField label="DNI" value={dni} onChange={setDni} />
+      <Actions>
+        <Button type="primary" disabled={!dni} onClick={() => api.ui.close(dni)}>Seguir</Button>
+      </Actions>
+    </Form>
+  );
+}`;
+
+/** The agent asks for the DNI in an interface, keeps it in the user's data and reads it back. */
 function dniScenario(): ScenarioInput {
   return {
     rules: [
-      ...assistantRules,
-      step(
-        null,
-        [
-          {
-            id: 'call_ask_dni',
-            name: 'ask_user',
-            arguments: {
-              title: 'Tu DNI',
-              message: 'Necesito tu DNI para entrar.',
-              fields: [
-                {
-                  key: 'dni',
-                  label: 'DNI',
-                  type: 'text',
-                  required: true,
-                  vaultKey: 'dniNumber',
-                },
-              ],
-            },
-          },
-        ],
-        1,
-      ),
-      step(1, [{ id: 'call_vault', name: 'vault_read', arguments: {} }], 2),
-      step(
-        2,
-        [
-          {
-            id: 'call_done',
-            name: 'procedure_update',
-            arguments: { status: 'done', summary: 'Hecho' },
-          },
-        ],
-        3,
-      ),
-      {
-        id: 'procedure-ends',
-        when: { hasTool: '^procedure_update$', state: { p: 3 } },
-        reply: { text: 'Hecho.' },
-      },
+      ...coordinatorRules,
+      ...sequence(AGENT, 'p', [
+        {
+          id: 'workflow',
+          call: workflow(
+            'dni',
+            `const procedure = await api.procedures.getOrCreate({ id: 'vida-laboral', title: 'Vida laboral' });
+  const dni = await api.ui.present('dni', () => <DniForm api={api} />);
+  const saved = await api.vault.save([{ key: 'dniNumber', value: dni }]);
+  const read = await api.vault.read({ keys: ['dniNumber'] });
+  await procedure.update({ status: 'done', summary: 'Hecho' });
+  return { dni, saved, read: read.personal };`,
+            { callId: 'call_dni', components: DNI_FORM },
+          ),
+        },
+        { id: 'ends', text: 'Hecho.' },
+      ]),
     ],
     fallback: { text: 'Hecho.' },
   };
@@ -132,17 +122,16 @@ describe('a form answered by the simulated user', () => {
     expectNoEgress();
   });
 
-  it("leaves the DNI in the vault under the form's vaultKey, as the UI would", () => {
+  it('leaves the DNI in the vault under the key the agent saved it with', () => {
     expect(vault.listPersonal().find((item) => item.key === 'dniNumber')?.value).toBe(DNI);
   });
 
-  it('tells the agent it was saved, and the agent can read it back', () => {
-    const asked = stack.of('tool_end').find((o) => o.tool === 'ask_user');
-    expect(asked?.text).toContain(DNI);
-    // The product says which answers it kept, by the form's own keys.
-    expect(asked?.text).toMatch(/Saved to their data: dni\./);
-    const read = stack.of('tool_end').find((o) => o.tool === 'vault_read');
-    expect(read?.text).toContain('dniNumber');
+  it('gives the workflow the answer, and the agent can read it back', () => {
+    const result = stack.of('tool_end').find((o) => o.toolCallId.startsWith('workflow-result-'));
+    expect(result?.text).toMatch(/^\[Workflow "dni" succeeded\]/);
+    expect(result?.text).toContain(`"dni":"${DNI}"`);
+    expect(result?.text).toContain('"saved":["dniNumber"]');
+    expect(result?.text).toMatch(/"key":"dniNumber"[^}]*"value":"53918274H"/);
   });
 
   it('answers through the app once, as a structured answer', () => {

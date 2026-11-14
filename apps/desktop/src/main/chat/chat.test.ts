@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ASSISTANT_AGENT_ID, type FormPrompt, type SaEvent } from '@sa/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { runAsCaller } from '../bridge/caller';
 import { ConversationService } from '../conversation/service';
 import { PromptCancelledError } from '../core/errors';
 import { EventBus } from '../core/events';
@@ -311,10 +312,11 @@ describe('PromptManager', () => {
     expect(procedures.get(procedureId)?.runtime.prompts).toBeUndefined();
   });
 
-  it('lists every pending prompt with its owner, oldest first, until answered', async () => {
+  it('lists every pending prompt with the agent that asked it, oldest first, until answered', async () => {
     const prompts = manager();
     expect(prompts.pendingItems()).toEqual([]);
-    const first = prompts.ask(procedureId, form);
+    // An agent's bridge call shows it on the procedure it acts on; the app's own has no asker.
+    const first = runAsCaller('a_0000000000000001', () => prompts.ask(procedureId, form));
     const second = prompts.ask(ASSISTANT_AGENT_ID, {
       kind: 'confirm',
       confirmKind: 'action',
@@ -322,12 +324,13 @@ describe('PromptManager', () => {
       message: 'Se enviará la solicitud.',
     });
     const pending = prompts.pendingItems();
-    expect(pending.map((p) => p.owner)).toEqual([procedureId, ASSISTANT_AGENT_ID]);
+    expect(pending.map((p) => p.asker)).toEqual(['a_0000000000000001', undefined]);
+    expect(pending.map((p) => p.item.procedureId)).toEqual([procedureId, undefined]);
     expect(pending.map((p) => p.item.prompt.kind)).toEqual(['form', 'confirm']);
     expect(pending.every((p) => p.item.status === 'pending')).toBe(true);
     prompts.respond(pending[1]!.item.id, { kind: 'confirm', approved: true });
     await second;
-    expect(prompts.pendingItems().map((p) => p.owner)).toEqual([procedureId]);
+    expect(prompts.pendingItems().map((p) => p.asker)).toEqual(['a_0000000000000001']);
     prompts.cancelAll(procedureId);
     await expect(first).rejects.toBeInstanceOf(PromptCancelledError);
     expect(prompts.pendingItems()).toEqual([]);

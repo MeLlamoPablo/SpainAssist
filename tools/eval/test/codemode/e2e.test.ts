@@ -30,7 +30,7 @@ beforeAll(async () => {
   execFileSync(process.execPath, [join(agentRoot, 'scripts', 'build-host.mjs')], { stdio: 'pipe' });
   site = await startLocalSite({ '/irpf/obligados': RENTA_PAGE });
   llm = await createMockLlm({ scenario: rentaCodemodeScenario(site.url) });
-  real = await openRealApp({ llmBaseUrl: llm.baseUrl, codemode: true });
+  real = await openRealApp({ llmBaseUrl: llm.baseUrl });
 }, 120_000);
 
 afterAll(async () => {

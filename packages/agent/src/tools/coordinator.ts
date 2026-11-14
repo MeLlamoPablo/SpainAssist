@@ -2,10 +2,9 @@ import type { Procedure } from '@sa/shared';
 import { Type } from 'typebox';
 import type { BridgeTransport } from '../bridge/client';
 import { callBridge, clip, compact, defineSaTool, textResult } from './common';
-import { renderProcedure } from './procedure';
 
 /**
- * The codemode coordinator's tools (docs/codemode.md, "The coordinator"): it only delegates. It
+ * The coordinator's tools (docs/codemode.md, "The coordinator"): it only delegates. It
  * never researches, asks the user or creates procedures; its background agents do, and they create
  * the cards once they know which procedures the user has. It starts them, passes on what the user
  * says and reads the cards they keep. Results stay short: its context lives forever (compacted).
@@ -68,7 +67,7 @@ const AgentMessageParams = Type.Object({
 });
 
 function renderCard(p: Procedure): string {
-  const lines = [renderProcedure(p).replace(/^Procedure updated\. /, '')];
+  const lines = [renderProcedure(p)];
   if (p.summary) lines.push(`Summary: ${clip(p.summary, 400)}`);
   return `Procedure ${p.id}\n${lines.join('\n')}`;
 }
@@ -192,4 +191,37 @@ export function coordinatorTools(bridge: BridgeTransport) {
       },
     }),
   ];
+}
+
+function renderProcedure(procedure: Procedure): string {
+  const lines = [`Status: ${procedure.status}.`, `Title: ${procedure.title}`];
+  if (procedure.administration) {
+    lines.push(
+      `Administration: ${procedure.administration.name} (${procedure.administration.level})`,
+    );
+  }
+  if (procedure.nextAction) {
+    lines.push(`Next action: ${procedure.nextAction.text} (${procedure.nextAction.owner})`);
+    const appointment = procedure.nextAction.appointment;
+    if (appointment) lines.push(`Appointment: ${appointment.startsAt} at ${appointment.address}`);
+  }
+  if (procedure.steps.length > 0) {
+    lines.push(
+      `Steps: ${procedure.steps.map((s) => `${s.title} [${s.status}${s.owner ? `, ${s.owner}` : ''}]`).join('; ')}`,
+    );
+  }
+  if (procedure.requirements.length > 0) {
+    lines.push(
+      `Requirements: ${procedure.requirements.map((r) => `${r.label} [${r.status}]`).join('; ')}`,
+    );
+  }
+  if (procedure.facts.length > 0) {
+    lines.push(
+      `Facts: ${procedure.facts.map((f) => `${f.label}: ${clip(f.value, 80)}`).join('; ')}`,
+    );
+  }
+  if (procedure.sources.length > 0) {
+    lines.push(`Sources: ${procedure.sources.length}`);
+  }
+  return lines.join('\n');
 }

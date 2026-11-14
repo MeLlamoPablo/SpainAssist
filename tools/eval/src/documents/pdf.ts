@@ -1,7 +1,7 @@
 /**
  * The PDFs a person downloads after paying online: the modelo 621 receipt (ITP on a used vehicle,
  * Andalucía), the DGT fee receipt (modelo 791) and a dealer's invoice. Drawn with Skia's PDF
- * backend (`@napi-rs/canvas`): real text that `document_read` extracts, no dates or ids in the
+ * backend (`@napi-rs/canvas`): real text that `api.documents.read` extracts, no dates or ids in the
  * file, so a spec always gives the same bytes. Plain text and boxes only: no logos or seals.
  */
 import { PDFDocument } from '@napi-rs/canvas';

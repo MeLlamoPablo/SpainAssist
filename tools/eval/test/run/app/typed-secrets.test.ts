@@ -1,6 +1,6 @@
 /**
  * Secrets in a run: a password the user types goes to the page and nowhere else; one that reaches
- * the model, a script or a stranger is found by `secretLeaks()`, and no file of the run keeps it
+ * the model, a workflow or a stranger is found by `secretLeaks()`, and no file of the run keeps it
  * (the browser's recording, which the run asks for, is the one place that does, and says so).
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -88,8 +88,8 @@ browserSuite('typed secrets', () => {
         expect(post?.reqBody).not.toContain(CLAVE_PASSWORD);
         expect(stack.app.secretLeaks()).toEqual([]);
         // What the agent saw of the page after typing and posting has the value masked.
-        const click = stack.of('tool_end').find((o) => o.tool === 'browser_click');
-        expect(click?.text).toContain('••••');
+        const seen = stack.of('tool_end').find((o) => o.tool === 'codemode');
+        expect(seen?.text).toContain('••••');
         expect(JSON.stringify(stack.observations())).not.toContain(CLAVE_PASSWORD);
         const engine = new RuleEngine({ rules: [noSecretLeak()] });
         for (const observation of stack.observations()) engine.observe(observation);
@@ -138,7 +138,7 @@ browserSuite('typed secrets', () => {
     }, 180_000);
   });
 
-  describe('the password reaches the model, a script and a stranger', () => {
+  describe('the password reaches the model, a workflow and a stranger', () => {
     it('is found in the arguments, the result, the request and the message, and never shown', async () => {
       const stack = await startStack({
         hostBundle: host.bundle,
@@ -153,10 +153,10 @@ browserSuite('typed secrets', () => {
         const sources = leaks.map((leak) => leak.split(':')[0]);
         expect(sources).toEqual(
           expect.arrayContaining([
-            expect.stringMatching(/^tool arguments of run_script \(procedure-p_/),
-            expect.stringMatching(/^result of run_script \(procedure-p_/),
-            `request POST ${PORTAL} (run_script)`,
-            expect.stringMatching(/^message of procedure-p_/),
+            expect.stringMatching(/^tool arguments of codemode \(procedure-a_/),
+            expect.stringMatching(/^result of codemode \(procedure-a_/),
+            `request POST ${PORTAL} (other)`,
+            expect.stringMatching(/^message of procedure-a_/),
           ]),
         );
         // The leaks name where, with the secret masked.

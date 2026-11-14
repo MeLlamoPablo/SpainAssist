@@ -8,7 +8,7 @@ import { createHeadlessApp, type HeadlessApp } from '@sa/desktop/headless';
 import type { SaEvent, UiNode, WorkflowInfo } from '@sa/shared';
 
 /**
- * A real app for codemode tests and the harness benchmark (docs/codemode.md, "Verification"):
+ * A real app for codemode tests (docs/codemode.md, "Verification"):
  * `createHeadlessApp` with the real agent hosts (`@sa/agent`'s dist/host.js) talking to a
  * scripted model (`tools/mock-llm`), and a local "official" site. Nothing leaves 127.0.0.1.
  */
@@ -48,14 +48,12 @@ export interface RealApp {
  */
 export async function openRealApp(options: {
   llmBaseUrl: string;
-  codemode: boolean;
   hostScript?: string;
 }): Promise<RealApp> {
   const root = await mkdtemp(join(tmpdir(), 'sa-codemode-real-'));
   const app = await createHeadlessApp({
     userDataDir: join(root, 'userData'),
     tmpRoot: join(root, 'tmp'),
-    features: { codemode: options.codemode },
     ...(options.hostScript ? { hostScript: options.hostScript } : {}),
     agentLib: {
       buildAgentLaunch: (opts) =>

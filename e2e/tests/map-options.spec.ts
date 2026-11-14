@@ -24,13 +24,14 @@ for (const lang of ['es', 'en']) {
       );
       if (home === 'none') {
         await page
+          .getByTestId('for-you-prompt')
           .getByRole('button', {
             name: lang === 'es' ? 'Continuar sin dirección' : 'Continue without an address',
             exact: true,
           })
           .click();
       }
-      const questions = page.getByTestId('card-questions');
+      const questions = page.getByTestId('for-you-prompt');
       const group = questions.getByRole('radiogroup');
       const map = questions.locator('.leaflet-container');
       await expect(group.getByRole('radio')).toHaveCount(3);
@@ -89,7 +90,7 @@ test('a typed address is located and saved without choosing from a list', async 
     new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort(),
   );
   await page.goto('http://127.0.0.1:5186/?map=1&freeze=1&lang=es');
-  const questions = page.getByTestId('card-questions');
+  const questions = page.getByTestId('for-you-prompt');
   await questions.getByLabel('Calle y número').fill('Calle de ejemplo 10');
   await questions.getByLabel('Municipio').fill('Sevilla');
   await questions.getByRole('button', { name: 'Buscar mi dirección', exact: true }).click();

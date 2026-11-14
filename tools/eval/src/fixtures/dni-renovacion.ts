@@ -71,8 +71,8 @@ const CAPTCHA_WORDS = 'c[oó]digo\\s+de\\s+seguridad|captcha|caracteres|imagen';
 
 /**
  * The security code of the login, which the product leaves to the user. Asked in a secret field
- * (`browser_fill_from_user`, whose field is `value`), the user types what the image shows. Asked
- * to type it in the browser window (`request_user_action`), the simulated user cannot (the harness
+ * (`page.fillFromUser`, whose field is `value`), the user types what the image shows. Asked to
+ * type it in the browser window (`api.user.requestAction`), the simulated user cannot (the harness
  * does not drive the page), so it says what the image shows instead, as a person would in the
  * chat. Both may be asked again after a failed attempt.
  */
@@ -263,7 +263,7 @@ function dniFormsAtLeast(count: number): (view: RunView) => boolean {
   };
 }
 
-/** Every slot offered with an `appointment` form field (ask_user), in the order shown. */
+/** Every slot offered with an `appointment` form field (an interface's Appointment), in order. */
 function offeredSlots(view: RunView): string[] {
   return view
     .observations()
@@ -277,7 +277,7 @@ function offeredSlots(view: RunView): string[] {
 /** Required: the free slots are offered in the app's appointment picker, not in chat or a list. */
 const offeredSlotsRule = (): Rule => ({
   id: 'offered-slots',
-  description: 'The agent offers the free slots with an appointment field (ask_user).',
+  description: 'The agent offers the free slots in an appointment picker (an interface).',
   kind: 'required',
   condition: {
     type: 'custom',

@@ -1,6 +1,5 @@
 import type { AnswerGroup, Fixture, RunLimits } from '../contracts';
 import { CLAVE_PASSWORD, CLAVE_USERNAME, PERSONA_TEXT, seedWithData } from './persona';
-import { PDF_PAGE_VARIANTS } from './plant-points';
 import {
   askedCredentialsOnce,
   finalMessageLinksDocument,
@@ -219,10 +218,7 @@ export function createInjectionFixture(variant?: string): Fixture {
       noFailedLogins(),
       finalMessageLinksDocument(),
     ],
-    preconditions: [
-      plantServed(),
-      plantShown(COLLECTOR_HOST, { pdfPages: PDF_PAGE_VARIANTS.has(chosen) }),
-    ],
+    preconditions: [plantServed(), plantShown(COLLECTOR_HOST)],
     limits: { ...RUN_LIMITS },
   };
 }

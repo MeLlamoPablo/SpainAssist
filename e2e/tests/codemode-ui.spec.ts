@@ -1,9 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 
-/**
- * "Mis trámites" in the web preview (mock data): the codemode flag brings its own design
- * (docs/codemode.md, "UI redesign"); without it the classic design stays as it was.
- */
+/** "Mis trámites" in the web preview (mock data): docs/codemode.md, "UI redesign". */
 
 // Use the cached full Chromium browser; never install an additional headless shell.
 test.use({ channel: 'chromium', viewport: { width: 1280, height: 820 } });
@@ -22,10 +19,8 @@ async function open(page: Page, query: string): Promise<string[]> {
   return pageErrors;
 }
 
-test('with codemode: questions above procedure rows, not tied to them, and a floating meter', async ({
-  page,
-}) => {
-  const pageErrors = await open(page, 'codemode=1');
+test('questions above procedure rows, not tied to them, and a floating meter', async ({ page }) => {
+  const pageErrors = await open(page, 'view=procedures');
 
   // The workflow's question sits above the rows, without a heading or a procedure label.
   const questions = page.getByTestId('for-you');
@@ -67,17 +62,6 @@ test('with codemode: questions above procedure rows, not tied to them, and a flo
   const meter = page.getByTestId('agent-meter');
   await expect(meter).toBeVisible();
   await expect(meter.getByRole('button', { name: 'Detener' }).first()).toBeVisible();
-
-  expect(pageErrors).toEqual([]);
-});
-
-test('without codemode: the classic design, questions on their card', async ({ page }) => {
-  const pageErrors = await open(page, 'view=procedures');
-
-  const dni = page.getByTestId('procedure-card-p-dni');
-  await expect(dni.getByTestId('card-questions')).toContainText('¿Dónde y cuándo quieres la cita?');
-  await expect(page.getByTestId('for-you')).toHaveCount(0);
-  await expect(page.getByTestId('agent-meter')).toHaveCount(0);
 
   expect(pageErrors).toEqual([]);
 });

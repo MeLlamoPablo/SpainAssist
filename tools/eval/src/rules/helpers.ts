@@ -30,7 +30,7 @@ function formOffersTwoMethods(observation: PromptShown): boolean {
 /**
  * The user was offered at least two authentication methods that include Cl@ve Permanente: a form
  * whose choice has it among its options with another method, or whose own title or message names
- * both (the question an `ask_user` asks), at any time; or a message of either agent that names
+ * both (the question an interface asks), at any time; or a message of either agent that names
  * both, before the user was first asked for the credential. After that point a message that names
  * methods is a report ("entré con Cl@ve Permanente, no con certificado digital"), not an offer, and
  * a confirmation or any other prompt is no choice of a method at all.

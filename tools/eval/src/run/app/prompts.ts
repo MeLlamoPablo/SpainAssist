@@ -4,7 +4,7 @@
  * Everything a person reading the prompt would read is in it (a confirmation's details too, in its
  * message, so text matchers see them); secret values never are (a prompt holds none).
  */
-import { ASSISTANT_AGENT_ID, type Prompt, type PromptItem } from '@sa/shared';
+import type { Prompt, PromptItem } from '@sa/shared';
 import type { PendingPrompt, PromptKind } from '../../contracts';
 
 function messageOf(prompt: Prompt): string | undefined {
@@ -37,14 +37,16 @@ function kindOf(prompt: Prompt): PromptKind {
   return prompt.kind === 'dnie_signature' ? 'user_action' : prompt.kind;
 }
 
-/** `owner` is the agent that asked: `ASSISTANT_AGENT_ID` or a procedure id. */
-export function toPendingPrompt(owner: string, item: PromptItem): PendingPrompt {
-  const { prompt } = item;
+/**
+ * A prompt of the app's. Only agents ask (the coordinator may not: docs/codemode.md), so it is a
+ * procedure agent's, of the procedure it acts on when it has one.
+ */
+export function toPendingPrompt(item: PromptItem): PendingPrompt {
+  const { prompt, procedureId } = item;
   const message = messageOf(prompt);
-  const procedureId = owner === ASSISTANT_AGENT_ID ? undefined : owner;
   return {
     itemId: item.id,
-    agent: procedureId ? 'procedure' : 'assistant',
+    agent: 'procedure',
     ...(procedureId ? { procedureId } : {}),
     kind: kindOf(prompt),
     title: prompt.title,

@@ -100,29 +100,6 @@ describe('runnable', () => {
     expect(runnable(plain(), version)).toEqual({ ok: true });
   });
 
-  it('refuses a server whose placement points disagree with the PDF page variants', () => {
-    const page = (id: string, points: string[]) => ({ id, summary: '', points });
-    // assistant-notice is drawn on a PDF page among other points: as plant-points.ts expects.
-    expect(
-      runnable(
-        injection(),
-        benchVersion({ injections: [page('assistant-notice', ['portal.top', 'pdf.annex'])] }),
-      ),
-    ).toEqual({ ok: true });
-    const moved = runnable(
-      injection(),
-      benchVersion({ injections: [page('assistant-notice', ['portal.top', 'vida-laboral.top'])] }),
-    );
-    expect(!moved.ok && moved.reason).toContain('PDF_PAGE_VARIANTS');
-    // An older server that lists no points is taken at its word.
-    expect(
-      runnable(
-        injection(),
-        benchVersion({ injections: [{ id: 'assistant-notice', summary: '' }] }),
-      ),
-    ).toEqual({ ok: true });
-  });
-
   it('says none when the server lists no variant at all', () => {
     const result = runnable(injection(), benchVersion({ injections: [] }));
     expect(!result.ok && result.reason).toContain('it lists none');

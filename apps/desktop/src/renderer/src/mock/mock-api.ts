@@ -888,34 +888,30 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const claveUsernames = new Map<string, string>();
   const claveUsername = (id: string) => claveUsernames.get(id) ?? '12345678Z';
 
-  // Codemode (`?codemode=1`): the DNI's question is a workflow's interface, agents fill the meter.
-  const codemode =
-    params.get('codemode') === '1'
-      ? createCodemodeMock({
-          lang,
-          emit,
-          getProcedure: (id) => state.procedures.get(id),
-          putProcedure: (p) => putProc(p),
-          places: DEMO_PLACES,
-          dniProcedureId: DEMO_IDS.dni,
-          freeze,
-          now,
-        })
-      : undefined;
-  if (codemode) {
-    const dni = state.procedures.get(DEMO_IDS.dni);
-    if (dni) {
-      const runtime = { ...dni.runtime, activity: 'idle' as const };
-      delete runtime.prompts;
-      state.procedures.set(DEMO_IDS.dni, { ...dni, runtime });
-    }
-    const padron = state.procedures.get(DEMO_IDS.padron);
-    if (padron)
-      state.procedures.set(DEMO_IDS.padron, {
-        ...padron,
-        runtime: { ...padron.runtime, activity: 'working' },
-      });
+  // The DNI's question is a workflow's interface, agents fill the meter.
+  const codemode = createCodemodeMock({
+    lang,
+    emit,
+    getProcedure: (id) => state.procedures.get(id),
+    putProcedure: (p) => putProc(p),
+    places: DEMO_PLACES,
+    dniProcedureId: DEMO_IDS.dni,
+    freeze,
+    now,
+  });
+  const dni = state.procedures.get(DEMO_IDS.dni);
+  if (dni) {
+    const runtime = { ...dni.runtime, activity: 'idle' as const };
+    // `?map=1` keeps the DNI's form, a map of places to choose from.
+    if (!params.has('map')) delete runtime.prompts;
+    state.procedures.set(DEMO_IDS.dni, { ...dni, runtime });
   }
+  const padron = state.procedures.get(DEMO_IDS.padron);
+  if (padron)
+    state.procedures.set(DEMO_IDS.padron, {
+      ...padron,
+      runtime: { ...padron.runtime, activity: 'working' },
+    });
 
   const handlers: Handlers = {
     'places.locateHome': () => ({ latitude: 37.375, longitude: -5.986 }),
@@ -939,7 +935,6 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         dniePhone: dnieStage,
         mustUpdate,
         errorReports: params.get('errors') === '1',
-        codemode: params.get('codemode') === '1',
       },
       errorReports: false,
     }),
@@ -1187,11 +1182,6 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'procedures.rename': (id, title) =>
       putProc({ ...getProc(id), title: title.trim().slice(0, 160) || getProc(id).title }),
     'procedures.archive': (id, archived) => putProc({ ...getProc(id), archived }),
-    'procedures.stop': (id) => {
-      getProc(id);
-      stopProcedure(id);
-      setRuntime(id, { activity: 'idle', now: undefined });
-    },
     'procedures.delete': (id) => {
       stopProcedure(id);
       state.procedures.delete(id);
@@ -1548,15 +1538,13 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         );
       else putChat(next);
     },
-    'codemode.state': () => codemode?.state() ?? { agents: [], workflows: [] },
-    'codemode.uiEvent': (workflowId, key, event) =>
-      codemode?.uiEvent(workflowId, key, event) ?? false,
-    'codemode.pins': (workflowId, key, addresses) =>
-      codemode?.pins(workflowId, key, addresses) ?? addresses.map(() => null),
+    'codemode.state': () => codemode.state(),
+    'codemode.uiEvent': (workflowId, key, event) => codemode.uiEvent(workflowId, key, event),
+    'codemode.pins': (workflowId, key, addresses) => codemode.pins(workflowId, key, addresses),
     'codemode.agentLog': () => [],
-    'codemode.stopAgent': (agentId) => codemode?.stopAgent(agentId),
-    'codemode.uiFailed': (workflowId, key) => codemode?.uiFailed(workflowId, key) ?? false,
-    'codemode.cancelWorkflow': (workflowId) => codemode?.cancelWorkflow(workflowId),
+    'codemode.stopAgent': (agentId) => codemode.stopAgent(agentId),
+    'codemode.uiFailed': (workflowId, key) => codemode.uiFailed(workflowId, key),
+    'codemode.cancelWorkflow': (workflowId) => codemode.cancelWorkflow(workflowId),
     'media.get': (id) => state.media.get(id) ?? null,
     'browser.show': () => {
       if (params.has('playground'))

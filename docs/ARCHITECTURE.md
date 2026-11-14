@@ -10,7 +10,7 @@ flowchart TB
   subgraph Desktop["Electron app (apps/desktop)"]
     Renderer["Renderer (React)<br/>chat, procedure cards, Mis datos"]
     Main["Main process<br/>state, vault, secrets"]
-    Agents["Agent processes (pi)<br/>assistant + one per procedure"]
+    Agents["Agent processes (pi)<br/>coordinator + background agents"]
     Browser["Chromium<br/>+ AutoFirma and FNMT shims"]
     Sidecar["sa-sidecar<br/>client certificates"]
   end
@@ -50,16 +50,13 @@ flowchart TB
 - **Renderer** is UI only. It never holds a secret; everything goes through `window.sa`.
 - **Agent processes** run pi (`@sa/agent`) as Electron-as-Node. pi's coding tools are off; agents
   only have SpainAssist tools. Idle agents are stopped and resume from their session file.
-  - **The assistant**: one perpetual chat with the user. It never researches or browses. It starts,
-    briefs and steers procedure agents, and relays their reports.
-  - **Procedure agents**: one per active procedure. They do the research, the browsing and the
-    forms, and keep the procedure's card up to date. Their activity goes to the card, not the chat.
-  - **Codemode** (the `codemode` flag, [codemode.md](codemode.md)) replaces both: the chat's
-    coordinator, which only delegates with a few plain tools and never asks the user, and
-    background agents independent of procedures, each with one tool that runs resumable JavaScript
-    workflows (QuickJS, in the agent's process) whose durable state main keeps. Agents ask the
-    user and create the procedures, which become durable records any agent may update (with
-    versions), plus a private working context.
+  - **The coordinator**: one perpetual chat with the user. It never researches, browses or asks the
+    user: with a few plain tools it starts and messages background agents, reads the procedures'
+    cards and relays the agents' reports ([codemode.md](codemode.md)).
+  - **Background agents**: independent of procedures, each with one tool, `codemode`, that runs
+    resumable JavaScript workflows (QuickJS, in the agent's process) whose durable state main
+    keeps. They research, browse, ask the user and create the procedures, which are durable
+    records any agent may update (with versions), plus a private working context.
 - **Browser**: one bundled Chromium (Chrome for Testing), with an isolated context per procedure.
   Its windows stay minimized unless the user needs to help (CAPTCHA, QR, manual step). The app never
   downloads a browser: the Microsoft Store forbids downloading code.
@@ -99,13 +96,14 @@ on Windows). So:
 ## 3. Key flows
 
 ### Conversation and delegation
-The user talks only to the assistant. For a new need it starts a procedure with a brief; a
-procedure agent then works in the background. The assistant reads procedure cards instead of
-asking their agents, passes on new information, and can resume, stop or cancel a procedure. When a
-run ends, the assistant gets a short report and tells the user in a sentence or two.
+The user talks only to the coordinator. For any request it starts a background agent with the
+user's words as its brief; the agent works in the background and creates the procedures' cards
+once it knows what the user needs. The coordinator reads the cards instead of asking agents,
+passes on what the user says, and stops an agent only when the user asks. When an agent's run
+ends, the coordinator gets a short report and tells the user in a sentence or two.
 
-### Codemode workflows
-Behind the `codemode` flag. An agent writes a module (`export async function main(api)`); main
+### Workflows
+An agent writes a module (`export async function main(api)`); main
 stores its memoized steps and the state of the interfaces it shows, the agent's host executes it
 and long-polls the user's events. The agent's turn ends while the user answers; the workflow
 continues by itself and its outcome reaches the agent as a message. After a restart, an
@@ -114,28 +112,26 @@ protocol is model-checked (`packages/agent/test/codemode-protocol.test.ts`). Det
 measurements: [codemode.md](codemode.md).
 
 ### Research and the card
-A procedure agent researches first, then plans, then asks for what's missing, then acts.
+An agent researches first, then plans, then asks for what's missing, then acts.
 - Voucher users get `web_research` on Parallel, sold by the key server from the voucher.
 - ChatGPT users get `web_research` with OpenAI's hosted web search, on their plan.
 - BYOK and custom endpoints get Exa search (free, or with their own Exa key).
 
-It can also read pages (`fetch_url`), search the BOE, browse read-only and search
-community learnings. It records status, steps, requirements, sources and the next action on the
-card.
+Its workflows can also read pages (`api.fetchUrl`), search the BOE, browse and search community
+learnings. It records status, steps, requirements, sources and the next action on the card.
 
 ### Asking the user
-Agents ask through native prompts: forms, confirmations, manual actions, credential requests and
-phone calls. Procedure prompts show on the card; the assistant's show in the chat. With the
-codemode flag (its own design of "Mis trámites", docs/codemode.md), workflows' interfaces show
-above the procedure cards, not tied to any procedure, and what agents are doing shows in a meter
-apart from the cards. Questions never
-block the chat. Unanswered forms and phone calls survive a restart.
-- **Forms** can fill from and save to the vault through `vaultKey` fields; secrets and documents
-  are never saved from answers.
-- **Map choices**: the agent gives addresses, main geocodes them through the maps server, and the
-  user picks one. Mapbox results are never stored or sent to the agent: only the chosen value
+Workflows ask in interfaces they render with the app's own components (forms, choices, maps,
+appointment slots, document pickers), plus native prompts for confirmations, manual actions,
+credential requests and phone calls. All of them show above the procedure cards ("Para ti"), not
+tied to any procedure; what agents are doing shows in a meter apart from the cards
+([codemode.md](codemode.md), "UI redesign"). Questions never block the chat. After a restart an
+interface comes back with what the user typed and its workflow resumes from its state; a pending
+native prompt is cancelled (its workflow hears it was interrupted).
+- **Map choices**: the workflow gives addresses, main geocodes them through the maps server, and
+  the user picks one. Mapbox results are never stored or sent to the agent: only the chosen value
   goes back.
-- **Phone calls**: the card can record the call and transcribe it through the gateway. Audio is
+- **Phone calls**: the prompt can record the call and transcribe it through the gateway. Audio is
   never stored.
 
 ### Credentials and certificates (the model never sees secrets)
@@ -226,7 +222,7 @@ or rating learnings (searching still works).
   launch. Flags can target an app version, OS, CPU or install channel. When Unleash can't be
   reached, every flag is off. Main enforces the flags itself; the UI only hides what main already
   refuses. Flags are listed in `FeatureFlags` (`@sa/shared`).
-- **Models.** The models of ChatGPT, Codex and vouchers (procedures, the assistant, the scanner, ChatGPT
+- **Models.** The models of ChatGPT, Codex and vouchers (background agents, the coordinator, the scanner, ChatGPT
   research modes) are lists in the repository's `models_warningUpdatingThisWillChangeItInAllClientsOnPushToMaster.json`, best first. Each build bundles
   it, and packaged builds download it from master on GitHub at most once an hour (the bundled or
   last read one when GitHub fails), so **a push that changes it changes every installed app**. A
@@ -259,10 +255,12 @@ or rating learnings (searching still works).
 - **Secrets.** The model never receives secrets. Credentials work only on allow-listed official
   domains. Certificate use and signatures need explicit approval.
 - **Least privilege.** Agent processes get only their bridge URL and token, a provider key and the
-  language. The assistant can't reach the browser, the signer or credentials. Procedure agents
-  can't start or message other procedures.
+  language. The coordinator can't reach the browser, the signer, credentials or the user's data;
+  it may only call its agents and read the cards (`codemodeMayCall`). Background agents can't
+  start or message other agents.
 - **Untrusted web content.** Agents have no shell or file tools, domain checks, and confirmations
-  for irreversible actions. Model-written scripts run in a sandboxed QuickJS with network access
-  only through `fetch_url`'s checks.
-- **Known gaps.** Procedure metadata, transcripts, screenshots, pi session files and development
-  captures are private local files but not encrypted.
+  for irreversible actions. Model-written workflows run in a sandboxed QuickJS in the agent's
+  process, with network access only through the host's checks (`api.fetchUrl`, `api.fetch`);
+  their page code runs only in the page.
+- **Known gaps.** Procedure metadata, transcripts, screenshots, pi session files, workflow records
+  and development captures are private local files but not encrypted.

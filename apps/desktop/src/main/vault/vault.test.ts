@@ -252,7 +252,7 @@ describe('browser wiring', () => {
     expect(app.vault.getCredential(b.id)?.lastUsedAt).toBeDefined();
     expect(app.vault.getCredential(a.id)?.lastUsedAt).toBeUndefined();
 
-    // Declined -> null; aborted -> null.
+    // Declined -> null; the procedure deleted meanwhile -> null.
     await app.vault.deleteCredential(a.id);
     const declined = app.services.browser.approveSignature(procedureId, summary);
     await app.waitFor(() => !!app!.pendingPrompt(procedureId));
@@ -263,7 +263,7 @@ describe('browser wiring', () => {
     expect(await declined).toBeNull();
     const aborted = app.services.browser.approveSignature(procedureId, summary);
     await app.waitFor(() => !!app!.pendingPrompt(procedureId));
-    await app.invoke('procedures.stop', procedureId);
+    await app.invoke('procedures.delete', procedureId);
     expect(await aborted).toBeNull();
   });
 });

@@ -65,7 +65,6 @@ export class ProcedureStore {
     const p = this.paths(procedure.id);
     await ensurePrivateDir(p.dir);
     await ensurePrivateDir(p.mediaDir);
-    await ensurePrivateDir(p.workDir);
     await writeFileAtomic(p.procedureFile, JSON.stringify(procedure, null, 2));
     await writeFileAtomic(p.transcriptFile, '[]');
   }

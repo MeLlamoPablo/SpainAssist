@@ -69,7 +69,6 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'procedures.log': z.tuple([id]),
   'procedures.rename': z.tuple([id, z.string().trim().min(1).max(160)]),
   'procedures.archive': z.tuple([id, z.boolean()]),
-  'procedures.stop': z.tuple([id]),
   'procedures.delete': z.tuple([id]),
   'procedures.markRead': z.tuple([id]),
 
