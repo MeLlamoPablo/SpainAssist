@@ -419,6 +419,15 @@ describe('tabs, dialogs, downloads', () => {
     obs = await t.service.back('pdf');
     obs = await t.service.click('pdf', refOf(obs.snapshot, 'link "Ver informe"'));
     expect(obs.downloads.map((d) => d.name)).toEqual(['_CON.pdf']);
+
+    // The same PDF again: no second download, and the tab is a PDF, not an empty page.
+    obs = await t.service.back('pdf');
+    obs = await t.service.click('pdf', refOf(obs.snapshot, 'link "Ver PDF"'));
+    expect(obs.downloads).toEqual([]);
+    expect(obs.notes.join('\n')).toContain('already downloaded ("inline.pdf")');
+    obs = await t.service.snapshot('pdf');
+    expect(obs.notes.join('\n')).toContain('This tab shows a PDF ("inline.pdf")');
+    expect(obs.notes.join('\n')).not.toContain('looks empty');
   });
 });
 

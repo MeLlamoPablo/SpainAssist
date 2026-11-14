@@ -66,6 +66,7 @@ describe('host operations', () => {
   it('act on the workflow’s procedure: its browser and its prompts', async () => {
     const { run, calls } = ops({
       'browser.type': OBSERVATION,
+      'downloads.list': { downloads: OBSERVATION.downloads },
       'prompt.confirm': { kind: 'confirm', approved: true },
     });
     const result = await run('browser.fill', {
@@ -98,6 +99,8 @@ describe('host operations', () => {
         params: { ref: 'loc:[["getByLabel","NIF",null]]', text: '12345678Z', submit: false },
         procedureId: 'p_aaaaaaaaaaaaaaaa',
       },
+      // From the app's temporary downloads: a later run still finds them.
+      { method: 'downloads.list', params: {}, procedureId: 'p_aaaaaaaaaaaaaaaa' },
       {
         method: 'prompt.confirm',
         params: {

@@ -423,6 +423,19 @@ describe('bridge: downloads', () => {
     expect(again.body.error?.code).toBe('not_found');
   });
 
+  it("downloads.list lists this procedure's downloads until they are saved", async () => {
+    const { downloadId } = await download('CotejoDocIdSv.pdf');
+    const other = await app.procedureWithToken();
+    expect((await app.rpc('downloads.list', {}, other.token)).body.result).toEqual({
+      downloads: [],
+    });
+    expect((await app.rpc('downloads.list', {}, token)).body.result).toEqual({
+      downloads: [{ downloadId, name: 'CotejoDocIdSv.pdf', mimeType: 'application/pdf' }],
+    });
+    await app.rpc('downloads.save', { downloadId, name: 'Renta 2025' }, token);
+    expect((await app.rpc('downloads.list', {}, token)).body.result).toEqual({ downloads: [] });
+  });
+
   it("only saves this procedure's downloads and drops them with the procedure", async () => {
     const { downloadId } = await download('recibo.pdf');
     const other = await app.procedureWithToken();

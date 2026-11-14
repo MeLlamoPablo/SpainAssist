@@ -226,6 +226,7 @@ interface Page {
   fillFromUser(target: Locator | string, o: { title: string; label: string; message?: string; submit?: boolean }): Promise<ActionResult>;
   /** TLS client-certificate logins only (signatures and AutoFirma logins need nothing: click "Firmar").${dnie ? ' DNIe: credentialId of the DNIe, origins required.' : ''} */
   useCertificate(o: { credentialId: string; origins?: string[] }): Promise<{ enabled: boolean; origins: string[]; message?: string }>;
+  /** This procedure's downloads not saved yet, from this run or earlier ones (each PDF once). */
   downloads(): Promise<{ downloadId: string; name: string; mimeType: string }[]>;
 }`;
 

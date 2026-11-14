@@ -180,7 +180,8 @@ interface Session {
   pending: Set<Promise<unknown>>;
   /** AutoFirma and FNMT calls in progress (usually waiting for the user's approval). */
   afirmaInFlight: Set<Promise<unknown>>;
-  pdfHashes: Set<string>;
+  /** Inline PDFs already captured, by content hash: the download's name once it is kept. */
+  pdfHashes: Map<string, string | undefined>;
   pdfPages: WeakMap<Page, string>;
   crashedPages: WeakSet<Page>;
   /** Pages whose current document holds a secret the app typed: no page code may read them. */
@@ -1784,7 +1785,7 @@ export class PlaywrightBrowserService implements BrowserService {
     } else if (!rendered.text.trim()) {
       notes.push(
         pdfName
-          ? `This tab shows a PDF ("${pdfName}"); its text is not in the snapshot. It was saved as a document.`
+          ? `This tab shows a PDF ("${pdfName}"); its text is not in the snapshot. It is in page.downloads() until saved.`
           : 'The page looks empty (it may still be loading).',
       );
     }
@@ -2044,9 +2045,17 @@ export class PlaywrightBrowserService implements BrowserService {
         const body = await response.body().catch(() => null);
         if (body?.subarray(0, 5).toString('latin1') !== '%PDF-') return;
         const hash = sha256(body);
-        if (s.pdfHashes.has(hash)) return;
+        if (s.pdfHashes.has(hash)) {
+          // The same PDF again: no second download, but the page still shows a PDF, not nothing.
+          const earlier = s.pdfHashes.get(hash);
+          if (earlier) {
+            s.pdfPages.set(page, earlier);
+            s.notes.push(`The PDF shown in the browser was already downloaded ("${earlier}").`);
+          }
+          return;
+        }
         if (s.pdfHashes.size > 200) s.pdfHashes.clear();
-        s.pdfHashes.add(hash);
+        s.pdfHashes.set(hash, undefined);
         let name =
           fileNameFromContentDisposition(disposition) ??
           fileNameFromUrl(pdfSourceUrl(response, page), 'documento.pdf');
@@ -2057,6 +2066,7 @@ export class PlaywrightBrowserService implements BrowserService {
         await fs.writeFile(staged, body);
         const doc = await this.deliver(s, staged, name, 'application/pdf');
         if (doc) {
+          s.pdfHashes.set(hash, doc.name);
           s.pdfPages.set(page, doc.name);
           s.notes.push(`The PDF shown in the browser was downloaded ("${doc.name}").`);
         }
@@ -2420,7 +2430,7 @@ function newSession(id: string): Session {
     notes: [],
     pending: new Set(),
     afirmaInFlight: new Set(),
-    pdfHashes: new Set(),
+    pdfHashes: new Map(),
     pdfPages: new WeakMap(),
     crashedPages: new WeakSet(),
     secretPages: new WeakSet(),

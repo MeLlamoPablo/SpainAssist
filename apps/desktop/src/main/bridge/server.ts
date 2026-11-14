@@ -71,7 +71,7 @@ export type CapabilityHandlers = Omit<BridgeHandlers, CodemodeMethod>;
 /** Methods that act on a procedure, so they need the procedure header. */
 function needsProcedure(method: BridgeMethod): boolean {
   return (
-    method.startsWith('browser.') || method === 'downloads.save' || method.startsWith('prompt.')
+    method.startsWith('browser.') || method.startsWith('downloads.') || method.startsWith('prompt.')
   );
 }
 

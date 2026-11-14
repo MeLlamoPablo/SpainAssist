@@ -65,6 +65,11 @@ export class DownloadStore {
     return item?.procedureId === procedureId ? describe(item) : undefined;
   }
 
+  /** The downloads of a procedure not saved or discarded yet, oldest first. */
+  list(procedureId: string): TemporaryDownload[] {
+    return [...this.items.values()].filter((i) => i.procedureId === procedureId).map(describe);
+  }
+
   async read(id: string): Promise<Buffer> {
     const item = this.items.get(id);
     if (!item) throw new Error('Download not found');

@@ -213,6 +213,8 @@ export const BridgeParams = {
     downloadId: z.string().min(1).max(120),
     name: z.string().trim().min(1).max(120),
   }),
+  /** This procedure's temporary downloads not saved yet, oldest first (from any run). */
+  'downloads.list': z.object({}),
 
   // --- browser -------------------------------------------------------------------------------
   'browser.open': z.object({ url: z.string().url(), newTab: z.boolean().default(false) }),
@@ -479,6 +481,7 @@ export interface BridgeResults {
   'vault.document': { id: string; name: string; mimeType: string; dataBase64: string };
   'vault.renameDocument': { documentId: string; name: string };
   'downloads.save': { documentId: string; name: string };
+  'downloads.list': { downloads: BrowserObservation['downloads'] };
   'browser.open': BrowserObservation;
   'browser.snapshot': BrowserObservation;
   'browser.click': BrowserObservation;

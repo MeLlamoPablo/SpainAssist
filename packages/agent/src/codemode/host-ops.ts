@@ -153,9 +153,6 @@ function str(value: unknown, what: string, max = 10_000): string {
 
 export function createHostOps(deps: HostOpsDeps): HostOp {
   const { bridge } = deps;
-  /** Accumulated downloads per procedure (observations report each once). */
-  const downloads = new Map<string, BrowserObservation['downloads']>();
-
   const call = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -166,13 +163,6 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
 
   const primary = (): string | undefined => deps.procedures()[0];
 
-  const noteDownloads = (procedureId: string, o: BrowserObservation) => {
-    if (!o.downloads.length) return;
-    const list = downloads.get(procedureId) ?? [];
-    for (const d of o.downloads) if (!list.some((x) => x.downloadId === d.downloadId)) list.push(d);
-    downloads.set(procedureId, list);
-  };
-
   async function browser(
     op: string,
     a: Record<string, unknown>,
@@ -182,7 +172,6 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
     const opts = { signal, procedureId };
     const observe = async (p: Promise<BrowserObservation>, full = false) => {
       const o = await p;
-      noteDownloads(procedureId, o);
       return full ? snapshotResult(o) : actionResult(o);
     };
     const target = () => encodeTarget(a.target);
@@ -209,7 +198,6 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           },
           opts,
         );
-        noteDownloads(procedureId, o);
         return typeof a.text === 'string' || typeof a.textGone === 'string'
           ? snapshotResult(o)
           : undefined;
@@ -322,7 +310,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
       case 'reopenHeaded':
         return observe(bridge.call('browser.reopenHeaded', {}, opts), true);
       case 'downloads':
-        return downloads.get(procedureId) ?? [];
+        return (await bridge.call('downloads.list', {}, opts)).downloads;
       default: {
         const queryOps = new Set([
           'textContent',
@@ -363,7 +351,6 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           },
           opts,
         );
-        if (result.observation) noteDownloads(procedureId, result.observation);
         return result.observation ? actionResult(result.observation) : result.value;
       }
     }

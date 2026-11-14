@@ -497,6 +497,11 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
         );
       return { documentId: saved.id, name: saved.name };
     },
+    'downloads.list': async (_params, ctx) => ({
+      downloads: deps.browser.downloads
+        .list(ctx.procedureId)
+        .map((d) => ({ downloadId: d.id, name: d.name, mimeType: d.mimeType })),
+    }),
 
     // --- browser -----------------------------------------------------------------------------
     'browser.open': async (params, ctx) => {
