@@ -365,6 +365,25 @@ describe('bridge: vault', () => {
     const missing = await app.rpc('vault.document', { documentId: 'nope' }, token);
     expect(missing.body.error?.code).toBe('not_found');
   });
+
+  it('vault.renameDocument gives a document a readable name and keeps its extension', async () => {
+    const doc = await app.vault.addDocument({
+      name: 'IMG_2034.JPG',
+      mimeType: 'image/jpeg',
+      source: 'user',
+      bytes: Buffer.from('foto'),
+    });
+    const renamed = await app.rpc(
+      'vault.renameDocument',
+      { documentId: doc.id, name: 'DNI/anverso.jpg' },
+      token,
+    );
+    expect(renamed.body.result).toEqual({ documentId: doc.id, name: 'DNI-anverso.JPG' });
+    expect(app.vault.getDocument(doc.id)?.name).toBe('DNI-anverso.JPG');
+
+    const missing = await app.rpc('vault.renameDocument', { documentId: 'nope', name: 'x' }, token);
+    expect(missing.body.error?.code).toBe('not_found');
+  });
 });
 
 describe('bridge: downloads', () => {

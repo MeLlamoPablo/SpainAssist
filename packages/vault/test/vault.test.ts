@@ -343,6 +343,23 @@ describe('documents', () => {
     }
   });
 
+  it('renames a document, keeping its contents', async () => {
+    const { vault } = await openVault();
+    const doc = await vault.addDocument({
+      name: 'IMG_2034.jpg',
+      mimeType: 'image/jpeg',
+      source: 'user',
+      bytes: Buffer.from('foto'),
+    });
+    const renamed = await vault.renameDocument(doc.id, '  DNI (anverso).jpg ');
+    expect(renamed).toEqual({ ...doc, name: 'DNI (anverso).jpg' });
+    expect(vault.getDocument(doc.id)?.name).toBe('DNI (anverso).jpg');
+    expect((await vault.readDocument(doc.id)).toString()).toBe('foto');
+    await expectVaultError(vault.renameDocument(doc.id, ' '), 'invalid_input');
+    await expectVaultError(vault.renameDocument('nope', 'x.jpg'), 'not_found');
+    expect(vault.getDocument(doc.id)?.name).toBe('DNI (anverso).jpg');
+  });
+
   it('validates document input', async () => {
     const { vault } = await openVault();
     const base = {

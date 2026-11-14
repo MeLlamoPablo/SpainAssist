@@ -592,6 +592,12 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           { downloadId: str(a.downloadId, 'downloadId', 120), name: str(a.name, 'name', 120) },
           { signal, procedureId: primary() },
         ),
+      'documents.rename': (a, signal) =>
+        bridge.call(
+          'vault.renameDocument',
+          { documentId: str(a.id, 'id', 120), name: str(a.name, 'name', 120) },
+          { signal },
+        ),
       'feedback.search': async (a, signal) =>
         (await bridge.call('feedback.search', a as { query: string }, { signal })).results,
       'feedback.submit': (a, signal) => bridge.call('feedback.submit', a as never, { signal }),

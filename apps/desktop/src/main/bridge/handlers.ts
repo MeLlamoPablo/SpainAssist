@@ -12,6 +12,7 @@ import {
   personalFieldDef,
   type UserActionPrompt,
 } from '@sa/shared';
+import { documentFileName } from '../browser/downloads';
 import type { BrowserHolder } from '../browser/holder';
 import type { PromptManager } from '../chat/prompts';
 import type { ConversationService } from '../conversation/service';
@@ -476,6 +477,19 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
         mimeType: meta.mimeType,
         dataBase64: Buffer.from(bytes).toString('base64'),
       };
+    },
+    'vault.renameDocument': async (params) => {
+      const vault = deps.vault();
+      const meta = vault.getDocument(params.documentId);
+      if (!meta) throw new BridgeError('not_found', `No document with id "${params.documentId}".`);
+      let renamed: { id: string; name: string };
+      try {
+        renamed = await vault.renameDocument(meta.id, documentFileName(params.name, meta.name));
+      } catch (err) {
+        throw new BridgeError('bad_request', truncate(errorMessage(err), 300));
+      }
+      vaultChanged();
+      return { documentId: renamed.id, name: renamed.name };
     },
 
     // --- downloads ---------------------------------------------------------------------------

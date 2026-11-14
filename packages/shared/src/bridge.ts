@@ -195,6 +195,14 @@ export const BridgeParams = {
   'vault.documents': z.object({}),
   /** Read the contents of one saved document (procedure agents read it with document_read). */
   'vault.document': z.object({ documentId: z.string().min(1).max(120) }),
+  /**
+   * Give a saved document a readable name ("DNI (anverso)"), for files the user attached under
+   * their camera's or scanner's name. The app keeps the original file extension.
+   */
+  'vault.renameDocument': z.object({
+    documentId: z.string().min(1).max(120),
+    name: z.string().trim().min(1).max(120),
+  }),
 
   // --- downloads (procedure agents) ----------------------------------------------------------
   /**
@@ -469,6 +477,7 @@ export interface BridgeResults {
   'vault.save': { saved: string[] };
   'vault.documents': { documents: { id: string; name: string }[] };
   'vault.document': { id: string; name: string; mimeType: string; dataBase64: string };
+  'vault.renameDocument': { documentId: string; name: string };
   'downloads.save': { documentId: string; name: string };
   'browser.open': BrowserObservation;
   'browser.snapshot': BrowserObservation;

@@ -149,6 +149,8 @@ interface Documents {
   /** Keeps a browser download (downloadId from page results) in the user's documents under a
    *  readable name ("Justificante cita DNI"). Unsaved downloads vanish when the app restarts. */
   saveDownload(downloadId: string, name: string): Promise<{ documentId: string; name: string }>;
+  /** Gives a saved document a short readable name ("DNI (anverso)"); its extension is kept. */
+  rename(id: string, name: string): Promise<{ documentId: string; name: string }>;
 }
 interface Image { imageId: string; mimeType: string }`;
 

@@ -38,6 +38,7 @@ export type VaultPort = Pick<
   | 'getDocument'
   | 'addDocument'
   | 'readDocument'
+  | 'renameDocument'
   | 'deleteDocument'
   | 'listCredentials'
   | 'getCredential'

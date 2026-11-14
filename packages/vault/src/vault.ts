@@ -121,6 +121,16 @@ function invalid(message: string): VaultError {
   return new VaultError('invalid_input', message);
 }
 
+/** A document's name: the last part of a path, trimmed. */
+function documentName(name: unknown): string {
+  if (typeof name !== 'string') throw invalid('The document needs a name');
+  const last = name.split(/[\\/]/).pop()!.trim();
+  if (!last || last.length > 255 || CONTROL_CHARS.test(last)) {
+    throw invalid('The document name is not valid');
+  }
+  return last;
+}
+
 function notFound(what: string): VaultError {
   return new VaultError('not_found', `${what} not found`);
 }
@@ -393,11 +403,7 @@ export class Vault {
       if (!options || typeof options !== 'object') throw invalid('Invalid document');
       const bytes = toBuffer(options.bytes, 'The document');
       if (bytes.length > MAX_DOCUMENT_SIZE) throw invalid('The document is too large (max 50 MB)');
-      if (typeof options.name !== 'string') throw invalid('The document needs a name');
-      const name = options.name.split(/[\\/]/).pop()!.trim();
-      if (!name || name.length > 255 || CONTROL_CHARS.test(name)) {
-        throw invalid('The document name is not valid');
-      }
+      const name = documentName(options.name);
       const mimeType = typeof options.mimeType === 'string' ? options.mimeType.toLowerCase() : '';
       if (!MIME_PATTERN.test(mimeType)) throw invalid('The document type is not valid');
       if (!DocumentSource.safeParse(options.source).success)
@@ -433,6 +439,19 @@ export class Vault {
         throw e;
       }
       return { ...meta };
+    });
+  }
+
+  /** Gives a saved document another name; its file and everything else stay. */
+  async renameDocument(id: string, newName: string): Promise<DocumentMeta> {
+    return this.lock.run(async () => {
+      const meta = typeof id === 'string' ? this.state.documents.get(id) : undefined;
+      if (!meta) throw notFound('Document');
+      const renamed = { ...meta, name: documentName(newName) };
+      await this.commit((draft) => {
+        draft.documents.set(id, renamed);
+      });
+      return { ...renamed };
     });
   }
 

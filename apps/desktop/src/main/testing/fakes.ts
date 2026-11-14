@@ -147,6 +147,13 @@ export class MemoryVault implements VaultPort {
     return Buffer.from(doc.bytes);
   }
 
+  async renameDocument(id: string, name: string): Promise<DocumentMeta> {
+    const doc = this.documents.get(id);
+    if (!doc) throw new VaultError('not_found', 'Document not found');
+    doc.meta = { ...doc.meta, name };
+    return { ...doc.meta };
+  }
+
   async deleteDocument(id: string): Promise<void> {
     if (!this.documents.delete(id)) throw new VaultError('not_found', 'Document not found');
   }
