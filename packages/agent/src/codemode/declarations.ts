@@ -163,7 +163,8 @@ interface Feedback {
   search(input: string | { query: string; procedure?: string; limit?: number }): Promise<{ id: string; title: string; body: string; kind: string; urls?: string[] }[]>;${
     f.submit
       ? `
-  /** Generic, reusable learnings (body ≤ 8000 chars). Never personal data. */
+  /** Generic, reusable learnings (body ≤ 8000 chars). Never personal data. After a success, a tip whose body
+   *  is only code: \`\`\`js await page.goto("https://…"); await page.getByRole("button", { name: "Consultar" }).click(); … \`\`\` */
   submit(input: { procedure: string; administration?: string; region?: string; kind: "tip"|"friction"|"gotcha"; title: string; body: string; tags?: string[]; urls?: string[] }): Promise<{ submitted: boolean }>;`
       : ''
   }${f.vote ? `\n  vote(id: string, vote: "up"|"down"): Promise<{ counted: boolean }>;` : ''}
