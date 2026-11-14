@@ -553,6 +553,19 @@ async function main(): Promise<void> {
     revealWindow: () => revealWindow(mainWindow),
     windowControls: (style) => setWindowControls(mainWindow, style),
     openPath: (path) => shell.openPath(path),
+    ...(process.platform === 'darwin'
+      ? {
+          openSystemCertificates: async () => {
+            // Keychain Access, where macOS 15 moved it and where it was before.
+            for (const dir of [
+              '/System/Library/CoreServices/Applications',
+              '/System/Applications/Utilities',
+            ])
+              if ((await shell.openPath(join(dir, 'Keychain Access.app'))) === '') return;
+            throw new Error('Keychain Access could not be opened');
+          },
+        }
+      : {}),
     chooseSavePath: async (request) => {
       const options: SaveDialogOptions = {
         ...request,

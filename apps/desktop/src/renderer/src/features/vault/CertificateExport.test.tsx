@@ -217,9 +217,21 @@ describe('Mis datos: exporting a certificate', () => {
       'Se va a instalar tu certificado en tu Mac y se va a borrar de Spain Assist.',
     );
     expect(html).toContain('Spain Assist también lo seguirá usando, pidiéndote permiso cada vez.');
-    expect(html).toContain(
-      'Aquí ya no podrás exportarlo ni borrarlo, eso se hace desde Acceso a Llaveros en tu Mac.',
+    // The program's name is a link that opens it.
+    expect(html).toMatch(
+      /Aquí ya no podrás exportarlo ni borrarlo, eso se hace desde <button[^>]*data-testid="certificate-move-manager"[^>]*>Acceso a Llaveros<\/button> en tu Mac\./,
     );
+    store.state = { ...store.state, info: { ...info, platform: 'win32' } };
+    const windows = renderToStaticMarkup(
+      <CertificateMoveDialog
+        credentialId={CERTIFICATE.id}
+        biometric={false}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(windows).toContain('eso se hace desde el administrador de certificados de Windows.');
+    expect(windows).not.toContain('certificate-move-manager');
     // A copy can also be made from the Mac afterwards: no warning.
     expect(html).not.toContain('copia de seguridad');
     expect(html).not.toContain('automáticamente');

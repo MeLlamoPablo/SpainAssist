@@ -88,6 +88,26 @@ export function CertificateMenu({
   );
 }
 
+/** `text` with its first `link` (when it has one) as an inline link. */
+function WithLink({ text, link, onClick }: { text: string; link?: string; onClick: () => void }) {
+  const at = link ? text.indexOf(link) : -1;
+  if (!link || at < 0) return text;
+  return (
+    <>
+      {text.slice(0, at)}
+      <button
+        type="button"
+        onClick={onClick}
+        className="font-medium text-accent-text underline decoration-accent-line decoration-1 underline-offset-[3px] hover:decoration-current"
+        data-testid="certificate-move-manager"
+      >
+        {link}
+      </button>
+      {text.slice(at + link.length)}
+    </>
+  );
+}
+
 /**
  * Explains the move, then main does it (Touch ID when available). For a certificate that is
  * already in the system (`inSystem`) nothing moves: main drops the app's copy. One the app uses
@@ -116,6 +136,7 @@ export function CertificateMoveDialog({
   const platform = useAppStore((s) => s.info?.platform);
   const lang = useLang();
   const system = systemName(platform, lang);
+  const manager = systemCertificateManager(platform, lang);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -123,6 +144,14 @@ export function CertificateMoveDialog({
     if (busy) return;
     if (!o) setError(null);
     onOpenChange(o);
+  };
+
+  const openManager = async () => {
+    try {
+      await api.invoke('vault.openSystemCertificates');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
   };
 
   const submit = async () => {
@@ -170,8 +199,10 @@ export function CertificateMoveDialog({
     >
       <div className="flex flex-col gap-4 pt-1">
         <ul className="flex list-disc flex-col gap-2 pl-5 text-[13px] text-fg-muted">
-          {t.points(system, systemCertificateManager(platform, lang)).map((point) => (
-            <li key={point}>{point}</li>
+          {t.points(system, manager.name).map((point) => (
+            <li key={point}>
+              <WithLink text={point} link={manager.app} onClick={() => void openManager()} />
+            </li>
           ))}
         </ul>
         {automatic ? (

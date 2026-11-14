@@ -261,6 +261,8 @@ export interface SaMethods {
    * Returns null when the user cancelled.
    */
   'vault.moveCertificateToSystem': [[id: string], VaultOverview | null];
+  /** Opens the program that manages the operating system's certificates (macOS: Keychain Access). */
+  'vault.openSystemCertificates': [[], void];
   'vault.setCredentialPolicy': [[id: string, policy: CredentialPolicy], CredentialSummary];
   'vault.deleteCredential': [[id: string], VaultOverview];
   /**

@@ -10,14 +10,26 @@ export function systemName(platform: Platform, lang: 'es' | 'en'): string {
   return lang === 'es' ? 'tu Mac' : 'your Mac';
 }
 
-/** Where the system's certificates are exported and deleted: "Acceso a Llaveros en tu Mac". */
-export function systemCertificateManager(platform: Platform, lang: 'es' | 'en'): string {
+/**
+ * Where the system's certificates are exported and deleted: "Acceso a Llaveros en tu Mac". `app`
+ * is the part of the name that names a program the app can open
+ * (`vault.openSystemCertificates`).
+ */
+export function systemCertificateManager(
+  platform: Platform,
+  lang: 'es' | 'en',
+): { name: string; app?: string } {
   if (platform === 'win32')
-    return lang === 'es'
-      ? 'el administrador de certificados de Windows'
-      : 'the Windows certificate manager';
-  if (platform === 'linux') return 'Linux';
-  return lang === 'es' ? 'Acceso a Llaveros en tu Mac' : 'Keychain Access on your Mac';
+    return {
+      name:
+        lang === 'es'
+          ? 'el administrador de certificados de Windows'
+          : 'the Windows certificate manager',
+    };
+  if (platform === 'linux') return { name: 'Linux' };
+  return lang === 'es'
+    ? { name: 'Acceso a Llaveros en tu Mac', app: 'Acceso a Llaveros' }
+    : { name: 'Keychain Access on your Mac', app: 'Keychain Access' };
 }
 
 /**

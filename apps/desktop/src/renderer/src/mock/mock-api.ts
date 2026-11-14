@@ -1506,6 +1506,9 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       emit({ type: 'vault.changed' });
       return overview();
     },
+    'vault.openSystemCertificates': () => {
+      toast.info(tr('Acceso a Llaveros de ejemplo', 'Example Keychain Access'));
+    },
     'vault.setCredentialPolicy': (id, policy) => {
       const cred = state.credentials.find((c) => c.id === id);
       if (!cred) throw new Error('Credencial no encontrada.');

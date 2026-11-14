@@ -56,6 +56,8 @@ export interface VaultServiceDeps {
    * look for them again and to move a vault certificate to the OS store.
    */
   osCertificates?: OsCertificates;
+  /** Opens the program that manages the OS store's certificates; none where there isn't one. */
+  openSystemCertificates?(): Promise<void>;
 }
 
 /** How often, at most, opening Mis datos reads the OS certificate store again. */
@@ -318,6 +320,13 @@ export class VaultService {
       this.changed();
       return this.overview();
     });
+  }
+
+  /** Where a moved certificate is exported and deleted from then on (macOS: Keychain Access). */
+  async openSystemCertificates(): Promise<void> {
+    const open = this.deps.openSystemCertificates;
+    if (!open) throw new UserError(t(this.deps.lang(), 'vaultNotFound'), 'unavailable');
+    await open();
   }
 
   setCredentialPolicy(id: string, policy: CredentialPolicy): Promise<CredentialSummary> {

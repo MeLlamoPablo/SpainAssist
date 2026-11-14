@@ -247,6 +247,7 @@ describe('the vault with external certificates', () => {
       },
     };
     let closedBrowsers = 0;
+    let managerOpened = 0;
     const service = new VaultService({
       vault,
       events: bus,
@@ -261,9 +262,35 @@ describe('the vault with external certificates', () => {
       onCredentialDeleted: async () => {
         closedBrowsers++;
       },
+      openSystemCertificates: async () => {
+        managerOpened++;
+      },
     });
-    return { own, store, os, vault, service, events, biometric, closed: () => closedBrowsers };
+    return {
+      own,
+      store,
+      os,
+      vault,
+      service,
+      events,
+      biometric,
+      closed: () => closedBrowsers,
+      managerOpened: () => managerOpened,
+    };
   }
+
+  it('opens the system’s certificate manager, where there is one', async () => {
+    const { service, managerOpened } = await setup();
+    await service.openSystemCertificates();
+    expect(managerOpened()).toBe(1);
+
+    const a = await createTestApp();
+    try {
+      await expect(a.services.vault.openSystemCertificates()).rejects.toThrow();
+    } finally {
+      await a.close();
+    }
+  });
 
   it('lists them as external certificates that cannot be changed, exported or deleted', async () => {
     const { store, os, vault, service } = await setup();

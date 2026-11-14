@@ -123,6 +123,8 @@ export interface MainDeps {
   /** Style the window controls (`app.windowControls`); none without a window. */
   windowControls?(style: WindowControlsStyle): void;
   openPath(path: string): Promise<string>;
+  /** Opens the program that manages the OS certificate store; none where there isn't one. */
+  openSystemCertificates?(): Promise<void>;
   /** The OS save dialog (certificate exports); none without a window. */
   chooseSavePath?: ChooseSavePath;
   /** User exports, separate from browser download staging. */
@@ -410,6 +412,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     tmpDir: paths.tmpDir,
     downloadsDir: deps.documentDownloadsDir,
     openPath: deps.openPath,
+    openSystemCertificates: deps.openSystemCertificates,
     lang,
     dniePhone,
     onCredentialDeleted: () => browser.closeAll(),
