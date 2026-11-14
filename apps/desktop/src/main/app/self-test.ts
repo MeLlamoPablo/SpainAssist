@@ -11,6 +11,8 @@
  *   the session's window closed, it must still be running, and serve a second session and a
  *   second tab without a relaunch: v0.3.2's quit there on Windows and Linux, on every launch.
  * - sa-sidecar starts and proxies a request, and every page the browser loads.
+ * - On macOS, the keychain library loads (koffi and Security.framework, `os-certificates/`):
+ *   a signed build's hardened runtime must accept the native module. Loading it reads nothing.
  *
  * A page that doesn't show in time fails its check with what the browser showed instead (`page`:
  * its URL, title, tabs and the service's notes, where navigation errors land), and a failed
@@ -103,6 +105,11 @@ export interface SelfTestOptions {
   chromium?: { executable: string; version: string } | { reason: string };
   sidecarBinary: string;
   browserFactory: BrowserFactory;
+  /**
+   * macOS: loads the keychain library (`openKeychain`), without reading the keychain. Omitted
+   * on other systems, where the report has no `keychain` check.
+   */
+  keychain?: () => Promise<unknown>;
   /** Tests only, where there is no display: the self-test checks the headed browser. */
   headless?: boolean;
   /** Tests only: how long a page may take to show (FIRST_PAGE_MS, then PAGE_MS). */
@@ -130,7 +137,10 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
   const logger = createLogger({ level: 'debug', sinks: [(line) => lines.push(line)] });
   const checks: SelfTestCheck[] = [];
   const cleanup: (() => Promise<unknown>)[] = [];
-  const check = async (name: (typeof CHECKS)[number], run: () => Promise<string | undefined>) => {
+  const check = async (
+    name: (typeof CHECKS)[number] | 'keychain',
+    run: () => Promise<string | undefined>,
+  ) => {
     const started = Date.now();
     try {
       const detail = await run();
@@ -189,6 +199,12 @@ export async function runSelfTest(opts: SelfTestOptions): Promise<SelfTestReport
       return `proxied ${target}`;
     });
     if (sidecar) cleanup.unshift(() => (sidecar as Sidecar).close());
+    const keychain = opts.keychain;
+    if (keychain)
+      await check('keychain', async () => {
+        await keychain();
+        return 'koffi and Security.framework loaded';
+      });
     if (!component) return report(checks, lines);
 
     const events: BrowserEvent[] = [];
@@ -298,7 +314,9 @@ async function showPage(
 }
 
 function report(checks: SelfTestCheck[], log: string[]): SelfTestReport {
-  const ok = CHECKS.every((name) => checks.some((c) => c.name === name && c.ok));
+  const ok =
+    CHECKS.every((name) => checks.some((c) => c.name === name && c.ok)) &&
+    checks.every((c) => c.ok);
   return { ok, checks, log };
 }
 

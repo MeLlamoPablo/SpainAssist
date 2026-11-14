@@ -27,6 +27,7 @@ import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import { errorMessage, formatBytes, hostOf } from '../core/util';
 import type { MediaStore } from '../media/store';
+import type { OsCertificates } from '../os-certificates/service';
 import type { Biometric, BrowserFactory, SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
 import { DownloadStore, documentFileName } from './downloads';
@@ -66,6 +67,8 @@ export interface BrowserHolderDeps {
   certificateRequests?: (call: FnmtCall, procedureId: string) => Promise<FnmtReply>;
   /** DNI signatures and logins with the paired phone; absent without the feature flag. */
   companion?: CompanionService;
+  /** External certificates, in the OS store (macOS); absent elsewhere. */
+  osCertificates?: OsCertificates;
   /** fetch for triphase signing (Electron's net.fetch uses the OS trust store). */
   fetch?: typeof fetch;
   logger: Logger;
@@ -122,6 +125,10 @@ export class BrowserHolder {
       const identity = await this.deps.companion?.login(procedureId, credential, origin);
       if (!identity) throw new Error('DNI login was cancelled or unavailable.');
       return identity;
+    }
+    if (credential.external) {
+      if (!this.deps.osCertificates) throw new Error('External certificates are unavailable.');
+      return this.deps.osCertificates.sidecarIdentity(credential.id);
     }
     const secret = await this.deps.vault().getCredentialSecret(credential.id);
     if (secret.kind !== 'certificate') throw new Error('Unexpected credential type');
@@ -397,6 +404,13 @@ export class BrowserHolder {
         return await deps.companion.approve(procedureId, summary, chosen);
       }
       if (!(await this.confirm(procedureId, summary, chosen))) return null;
+      if (chosen.external) {
+        // The key stays in the OS store, which may ask the user once more on first use.
+        if (!deps.osCertificates) return null;
+        const key = deps.osCertificates.signingKey(chosen.id);
+        deps.logger.info('signature approved', { procedureId, format: summary.format, host });
+        return key;
+      }
       const secret = await vault.getCredentialSecret(chosen.id);
       if (secret.kind !== 'certificate') return null;
       deps.logger.addSecret(secret.passphrase);

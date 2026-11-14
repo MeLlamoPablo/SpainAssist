@@ -253,6 +253,12 @@ export interface SaMethods {
    * when available. Returns the file name, or null when the user cancelled.
    */
   'vault.exportCertificate': [[id: string, password: string], string | null];
+  /**
+   * Moves a vault certificate (`canMoveToSystem`) to the operating system's store (macOS
+   * keychain): it leaves the vault once the app can use it from there, and shows as `external`.
+   * Touch ID first, when available. Returns null when the user cancelled.
+   */
+  'vault.moveCertificateToSystem': [[id: string], VaultOverview | null];
   'vault.setCredentialPolicy': [[id: string, policy: CredentialPolicy], CredentialSummary];
   'vault.deleteCredential': [[id: string], VaultOverview];
   /**

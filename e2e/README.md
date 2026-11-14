@@ -15,7 +15,8 @@ corepack pnpm e2e
 
 Three Playwright projects; `--project <name>` runs one.
 
-- **Electron tests** (`electron`, `tests/desktop.spec.ts`) launch the built app with Playwright. Each test
+- **Electron tests** (`electron`, `tests/desktop.spec.ts`, and on macOS
+  `tests/os-certificates.spec.ts`: external certificates, against a throwaway keychain file) launch the built app with Playwright. Each test
   starts the real key and feedback servers on fresh in-memory PGlite databases, a scripted mock
   model and a mock HTTPS government site, all on random ports. Each app gets a temporary
   profile and a test encryption key provider; closing the test shuts everything down and

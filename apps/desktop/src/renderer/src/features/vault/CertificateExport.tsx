@@ -1,7 +1,7 @@
-import { CERTIFICATE_EXPORT_PASSWORD_MIN, type CredentialSummary } from '@sa/shared';
-import { Download, FingerprintPattern, TriangleAlert } from 'lucide-react';
+import { CERTIFICATE_EXPORT_PASSWORD_MIN } from '@sa/shared';
+import { FingerprintPattern, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
-import { Button, IconButton } from '../../components/ui/button';
+import { Button } from '../../components/ui/button';
 import { Dialog } from '../../components/ui/dialog';
 import { Field, PasswordInput } from '../../components/ui/field';
 import { useT } from '../../i18n';
@@ -32,34 +32,6 @@ export async function submitCertificateExport(
   const issue = exportPasswordIssue(password, repeat);
   if (issue) return { issue };
   return { name: await api.invoke('vault.exportCertificate', credentialId, password) };
-}
-
-/** A certificate card's download button, next to its bin, and the password dialog it opens. */
-export function CertificateExportButton({
-  credential,
-  biometric,
-}: {
-  credential: CredentialSummary;
-  biometric: boolean;
-}) {
-  const t = useT(exportDict);
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <IconButton
-        icon={Download}
-        label={t.action}
-        data-testid="certificate-export"
-        onClick={() => setOpen(true)}
-      />
-      <CertificateExportDialog
-        credentialId={credential.id}
-        biometric={biometric}
-        open={open}
-        onOpenChange={setOpen}
-      />
-    </>
-  );
 }
 
 /** The new password, typed twice. Main never keeps it. */

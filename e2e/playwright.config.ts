@@ -17,7 +17,7 @@ export default defineConfig<E2eOptions>({
   },
   use: { trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [
-    { name: 'electron', testMatch: 'desktop.spec.ts' },
+    { name: 'electron', testMatch: ['desktop.spec.ts', 'os-certificates.spec.ts'] },
     {
       name: 'web',
       testMatch: ['map-options.spec.ts', 'shell-scroll.spec.ts', 'codemode-ui.spec.ts'],

@@ -58,6 +58,9 @@ export interface TestAppOptions {
   relaySocket?: typeof WebSocket;
   /** The app's clock. Default: the system clock. */
   clock?: Clock;
+  /** The OS certificate store and the CAs whose certificates it offers (external certificates). */
+  osKeyStore?: MainDeps['osKeyStore'];
+  osCertificateAuthorities?: MainDeps['osCertificateAuthorities'];
   /** AutoFirma and FNMT shims and handler. Default: none, so pages get no shim. */
   signer?: SignerLib;
   /** The OS save dialog. Default: none, so certificate exports are unavailable. */
@@ -196,6 +199,10 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     ...(opts.idleMs !== undefined ? { idleMs: opts.idleMs } : {}),
     ...(opts.relaySocket ? { relaySocket: opts.relaySocket } : {}),
     ...(opts.clock ? { clock: opts.clock } : {}),
+    ...(opts.osKeyStore ? { osKeyStore: opts.osKeyStore } : {}),
+    ...(opts.osCertificateAuthorities
+      ? { osCertificateAuthorities: opts.osCertificateAuthorities }
+      : {}),
   };
 
   let services: MainServices = await createMainServices(mainDeps);

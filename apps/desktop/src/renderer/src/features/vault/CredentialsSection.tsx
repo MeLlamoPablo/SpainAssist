@@ -25,6 +25,7 @@ import { SegmentedControl } from '../../components/ui/controls';
 import { ConfirmDialog, Dialog } from '../../components/ui/dialog';
 import { Field, Input, PasswordInput } from '../../components/ui/field';
 import { Card, Pill } from '../../components/ui/misc';
+import { Tooltip } from '../../components/ui/tooltip';
 import { useLang, useT } from '../../i18n';
 import { common } from '../../i18n/common';
 import { api, errorMessage } from '../../lib/api';
@@ -39,9 +40,10 @@ import { chatDict } from '../chat/i18n';
 import { DnieHelp } from '../companion/DnieHelp';
 import { companionDict } from '../companion/i18n';
 import { PairingPanel } from '../companion/PairingPanel';
-import { CertificateExportButton } from './CertificateExport';
+import { CertificateMenu } from './CertificateMenu';
 import { CertificateRequestCard } from './CertificateRequestCard';
 import { vaultDict } from './i18n';
+import { systemDict, systemName } from './systemI18n';
 import { SectionIntro } from './VaultView';
 
 export function CredentialsSection({ overview }: { overview: VaultOverview }) {
@@ -329,6 +331,7 @@ function CredentialCard({
   warning,
   below,
   actions,
+  badge,
 }: {
   credential: CredentialSummary;
   icon: LucideIcon;
@@ -338,8 +341,10 @@ function CredentialCard({
   warning?: ReactNode;
   /** Shown under the details (e.g. the DNIe's phone pairing). */
   below?: ReactNode;
-  /** Icon buttons before the bin (e.g. a certificate's download). */
+  /** Icon buttons before the bin (e.g. a certificate's menu). */
   actions?: ReactNode;
+  /** Next to the title (e.g. "Externo"). */
+  badge?: ReactNode;
 }) {
   const t = useT(vaultDict);
   const tc = useT(common);
@@ -377,12 +382,18 @@ function CredentialCard({
           <Icon size={19} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[14.5px] font-semibold text-fg">{title}</p>
-          <p className="mt-0.5 text-[12.5px] text-fg-subtle">
-            {c.lastUsedAt
-              ? t.credentials.lastUsed(formatRelative(c.lastUsedAt, lang))
-              : t.credentials.neverUsed}
+          <p className="flex items-center gap-2 text-[14.5px] font-semibold text-fg">
+            {title}
+            {badge}
           </p>
+          {/* The app keeps no record of an external certificate's uses. */}
+          {c.external ? null : (
+            <p className="mt-0.5 text-[12.5px] text-fg-subtle">
+              {c.lastUsedAt
+                ? t.credentials.lastUsed(formatRelative(c.lastUsedAt, lang))
+                : t.credentials.neverUsed}
+            </p>
+          )}
           {children ? (
             <dl className="mt-3 grid grid-cols-1 gap-3 @min-[720px]:grid-cols-3">{children}</dl>
           ) : null}
@@ -391,18 +402,21 @@ function CredentialCard({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {actions}
-          <IconButton
-            icon={Trash}
-            label={`${t.credentials.remove} ${title}`}
-            onClick={() => {
-              if (c.kind === 'dnie') void remove();
-              else setConfirm(true);
-            }}
-          />
+          {/* An external certificate isn't the app's to delete. */}
+          {c.external ? null : (
+            <IconButton
+              icon={Trash}
+              label={`${t.credentials.remove} ${title}`}
+              onClick={() => {
+                if (c.kind === 'dnie') void remove();
+                else setConfirm(true);
+              }}
+            />
+          )}
         </div>
       </div>
-      {/* Cl@ve Móvil and the DNIe are always approved on the phone. */}
-      {c.kind !== 'clave_movil' && c.kind !== 'dnie' ? (
+      {/* Cl@ve Móvil and the DNIe are approved on the phone; external certificates always ask. */}
+      {c.kind !== 'clave_movil' && c.kind !== 'dnie' && !c.external ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-2/60 px-5 py-3">
           <div className="min-w-0">
             <p className="text-[12.5px] font-semibold text-fg">{t.credentials.policy}</p>
@@ -448,7 +462,9 @@ function CertificateCard({
   biometric: boolean;
 }) {
   const t = useT(vaultDict);
+  const ts = useT(systemDict);
   const lang = useLang();
+  const platform = useAppStore((s) => s.info?.platform);
   const info = c.certificate;
   const days = info ? daysUntil(info.validTo) : null;
   const soon = days !== null && days < 30;
@@ -459,7 +475,21 @@ function CertificateCard({
       icon={FileKey}
       title={t.credentials.cert.title}
       biometric={biometric}
-      actions={<CertificateExportButton credential={c} biometric={biometric} />}
+      actions={c.external ? null : <CertificateMenu credential={c} biometric={biometric} />}
+      badge={
+        c.external ? (
+          <Tooltip content={ts.externalHint(systemName(platform, lang))}>
+            <span
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: the tooltip must be reachable by keyboard.
+              tabIndex={0}
+              className="inline-flex rounded-full"
+              data-testid="certificate-external"
+            >
+              <Pill size="sm">{ts.external}</Pill>
+            </span>
+          </Tooltip>
+        ) : null
+      }
       warning={
         soon && days !== null ? (
           <div

@@ -249,6 +249,7 @@ function demoCredentials(now: number): CredentialSummary[] {
       label: 'Certificado FNMT',
       policy: 'ask',
       createdAt: at(now, 9),
+      canMoveToSystem: true,
       certificate: {
         subject: 'CN=MARTIN ORTEGA LUCIA - 12345678Z, SN=MARTIN ORTEGA, G=LUCIA, C=ES',
         issuer: 'CN=AC FNMT Usuarios, OU=Ceres, O=FNMT-RCM, C=ES',

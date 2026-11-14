@@ -5,6 +5,7 @@ import { type BrowserService, createBrowserService } from '@sa/browser';
 import type { BrowserObservation } from '@sa/shared';
 import { buildSidecar } from '@sa/sidecar/build';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { openKeychain } from '../os-certificates/keychain';
 import type { BrowserFactory } from '../ports';
 import { runSelfTest } from './self-test';
 
@@ -63,6 +64,7 @@ it('passes with Playwright Chromium and a freshly built sidecar', {
     sidecarBinary,
     browserFactory: createBrowserService,
     headless: !headed,
+    ...(process.platform === 'darwin' ? { keychain: () => openKeychain() } : {}),
   });
   expect(
     report.checks.filter((c) => !c.ok),
@@ -72,6 +74,7 @@ it('passes with Playwright Chromium and a freshly built sidecar', {
     'browser-executable',
     'crlset',
     'sidecar',
+    ...(process.platform === 'darwin' ? ['keychain'] : []),
     'browser-launch',
     'browser-survives-without-windows',
     'browser-second-session',

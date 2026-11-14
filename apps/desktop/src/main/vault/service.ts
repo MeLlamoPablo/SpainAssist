@@ -20,8 +20,10 @@ import { ensurePrivateDir, writeFileAtomic, writeNewFile } from '../core/fs';
 import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import { errorMessage } from '../core/util';
+import type { OsCertificates } from '../os-certificates/service';
 import type { Biometric, VaultPort } from '../ports';
 import { type ChooseSavePath, exportCertificate } from './certificate-export';
+import { moveCertificateToSystem } from './certificate-move';
 import { logPersonalSaveFailure, setPersonalPartial } from './partial';
 
 const PREVIEW_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
@@ -49,11 +51,37 @@ export interface VaultServiceDeps {
   onCredentialDeleted?(id: string): Promise<void>;
   /** The OS save dialog, for certificate exports; none without a window. */
   chooseSavePath?: ChooseSavePath;
+  /**
+   * External certificates (macOS): `vault` already lists them (`withOsCertificates`). Here to
+   * look for them again and to move a vault certificate to the OS store.
+   */
+  osCertificates?: OsCertificates;
 }
+
+/** How often, at most, opening Mis datos reads the OS certificate store again. */
+const OS_CERTIFICATES_REFRESH_MS = 3000;
 
 /** "Mis datos" for the renderer (`vault.*`): every mutation emits `vault.changed`. */
 export class VaultService {
-  constructor(private readonly deps: VaultServiceDeps) {}
+  private osCertificatesReadAt = 0;
+
+  constructor(private readonly deps: VaultServiceDeps) {
+    this.refreshOsCertificates();
+  }
+
+  /**
+   * Looks in the OS store again, in the background: the user may have installed or removed a
+   * certificate. Silent, and `vault.changed` tells the renderer when the list changed.
+   */
+  private refreshOsCertificates(): void {
+    const os = this.deps.osCertificates;
+    const now = Date.now();
+    if (!os || now - this.osCertificatesReadAt < OS_CERTIFICATES_REFRESH_MS) return;
+    this.osCertificatesReadAt = now;
+    void os.refresh().then((changed) => {
+      if (changed) this.changed();
+    });
+  }
 
   get vault(): VaultPort {
     return this.deps.vault;
@@ -72,6 +100,7 @@ export class VaultService {
   }
 
   overview(): VaultOverview {
+    this.refreshOsCertificates();
     const overview = this.deps.vault.overview({
       biometricAvailable: this.deps.biometric.available(),
     });
@@ -279,6 +308,16 @@ export class VaultService {
   /** A certificate as a password-protected `.p12`, where the user picks (`certificate-export`). */
   exportCertificate(id: string, password: string): Promise<string | null> {
     return this.guard(() => exportCertificate(this.deps, id, password));
+  }
+
+  /** A vault certificate into the OS store, and out of the vault (`certificate-move`). */
+  moveCertificateToSystem(id: string): Promise<VaultOverview | null> {
+    return this.guard(async () => {
+      if (!(await moveCertificateToSystem(this.deps, id))) return null;
+      await this.deps.onCredentialDeleted?.(id);
+      this.changed();
+      return this.overview();
+    });
   }
 
   setCredentialPolicy(id: string, policy: CredentialPolicy): Promise<CredentialSummary> {

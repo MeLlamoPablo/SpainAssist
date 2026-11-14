@@ -84,13 +84,16 @@ export interface E2eOptions {
    * CRLSet (the app's bundled fixture, installed offline). Otherwise it runs headless without one.
    */
   parity: boolean;
+  /** Extra environment for the app (development overrides, `apps/desktop/src/main/app/env.ts`). */
+  appEnv: Record<string, string>;
 }
 
 export const test = base.extend<{ harness: Harness } & E2eOptions>({
   parity: [false, { option: true }],
+  appEnv: [{}, { option: true }],
   // Like browser tests, the app window stays hidden unless run with --headed (or headless: false);
   // UI mode and traces still show it through DOM snapshots and screencast frames.
-  harness: async ({ headless, parity }, use, testInfo) => {
+  harness: async ({ headless, parity, appEnv }, use, testInfo) => {
     const tracing = runnerTracing(testInfo);
     const userData = await mkdtemp(join(tmpdir(), 'sa-e2e-'));
     const close: (() => Promise<unknown>)[] = [
@@ -157,6 +160,7 @@ export const test = base.extend<{ harness: Harness } & E2eOptions>({
           : { SA_BROWSER_HEADLESS: '1' }),
         SA_HIDE_WINDOW: headless ? '1' : '0',
         SA_AGENT_HOST: join(root, 'packages/agent/dist/host.js'),
+        ...appEnv,
       });
       async function launch() {
         const app = await _electron.launch({

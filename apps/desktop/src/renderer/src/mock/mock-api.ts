@@ -1481,6 +1481,20 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         ? tr(`Certificado ${holder}.p12`, `Certificate ${holder}.p12`)
         : tr('Certificado digital.p12', 'Digital certificate.p12');
     },
+    // What the app does on a Mac: the certificate leaves the vault and shows as external.
+    'vault.moveCertificateToSystem': async (id) => {
+      await sleep(900);
+      const cred = state.credentials.find((c) => c.id === id && c.kind === 'certificate');
+      if (!cred?.certificate) throw new Error(tr('No lo encuentro.', 'Not found.'));
+      const { lastUsedAt: _, canMoveToSystem: __, ...rest } = cred;
+      state.credentials = state.credentials.map((c) =>
+        c === cred
+          ? { ...rest, id: `os-${cred.certificate?.fingerprint}`, policy: 'ask', external: true }
+          : c,
+      );
+      emit({ type: 'vault.changed' });
+      return overview();
+    },
     'vault.setCredentialPolicy': (id, policy) => {
       const cred = state.credentials.find((c) => c.id === id);
       if (!cred) throw new Error('Credencial no encontrada.');

@@ -530,6 +530,13 @@ export const CredentialSummary = z.object({
   certificate: CertificateInfo.optional(),
   /** DNIe: whether the vault holds its PIN (the PIN itself never leaves main). */
   hasPin: z.boolean().optional(),
+  /**
+   * A certificate installed in the operating system (macOS keychain), not in the vault: the app
+   * found it there and signs through the OS. It can't be downloaded, deleted or changed here.
+   */
+  external: z.boolean().optional(),
+  /** A vault certificate that `vault.moveCertificateToSystem` can move to the OS store. */
+  canMoveToSystem: z.boolean().optional(),
 });
 export type CredentialSummary = z.infer<typeof CredentialSummary>;
 

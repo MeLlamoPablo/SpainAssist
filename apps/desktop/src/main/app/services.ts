@@ -1,3 +1,4 @@
+import { X509Certificate } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatGPTLoginPages } from '@sa/agent';
@@ -11,7 +12,7 @@ import {
   type WindowControlsStyle,
 } from '@sa/shared';
 import type { Sidecar } from '@sa/sidecar';
-import type { KeyProvider } from '@sa/vault';
+import { certificateInfo, type KeyProvider } from '@sa/vault';
 import { AgentManager } from '../agents/manager';
 import { createBridgeHandlers } from '../bridge/handlers';
 import { type BridgeCall, BridgeServer } from '../bridge/server';
@@ -33,11 +34,15 @@ import type { Logger } from '../core/logger';
 import { type Clock, errorMessage, type IdFactory, newId, systemClock } from '../core/util';
 import type { CrlSetStore } from '../crlset/store';
 import { exportTranscripts } from '../export/transcripts';
+import { FNMT_AUTHORITIES } from '../fnmt/authorities';
 import { FnmtBroker } from '../fnmt/broker';
 import { registerIpcHandlers } from '../ipc/handlers';
 import { type IpcCallContext, IpcRouter } from '../ipc/router';
 import { MediaStore } from '../media/store';
 import { type DataImport, noDataImport } from '../migrate/nsis-import';
+import { OsCertificates } from '../os-certificates/service';
+import type { OsKeyStore } from '../os-certificates/store';
+import { withOsCertificates } from '../os-certificates/vault';
 import { CallTranscriber } from '../phone/transcriber';
 import { createMaps, type Maps } from '../places/maps';
 import { pendingFormPins } from '../places/resolve-form';
@@ -73,6 +78,13 @@ export interface MainDeps {
   keyProvider: KeyProvider;
   biometric: Biometric;
   openVault(dir: string, keys: KeyProvider): Promise<VaultPort>;
+  /**
+   * The OS certificate store (macOS keychain), where the app finds external certificates
+   * (`os-certificates/service.ts`); none on other systems or in tests.
+   */
+  osKeyStore?: OsKeyStore;
+  /** Tests: CAs (DER) whose certificates count as external ones, besides FNMT's. */
+  osCertificateAuthorities?: readonly Uint8Array[];
   agentLib: AgentLib;
   providerLib: ProviderLib;
   browserFactory: BrowserFactory;
@@ -202,7 +214,16 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const state = await AppStateStore.open(paths.stateFile, logger);
   const lang = () => settings.get().language;
 
-  const vaultPort = await deps.openVault(paths.vaultDir, deps.keyProvider);
+  const osCertificates = deps.osKeyStore
+    ? new OsCertificates({
+        store: deps.osKeyStore,
+        authorities: [...FNMT_AUTHORITIES, ...(deps.osCertificateAuthorities ?? [])],
+        certificateInfo: (der) => certificateInfo(new X509Certificate(der)),
+        logger: logger.child('os-certificates'),
+      })
+    : undefined;
+  const ownVault = await deps.openVault(paths.vaultDir, deps.keyProvider);
+  const vaultPort = osCertificates ? withOsCertificates(ownVault, osCertificates) : ownVault;
   const vaultFn = () => vaultPort;
 
   const procedureStore = new ProcedureStore(paths.proceduresDir, logger.child('store'));
@@ -393,6 +414,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     dniePhone,
     onCredentialDeleted: () => browser.closeAll(),
     chooseSavePath: deps.chooseSavePath,
+    ...(osCertificates ? { osCertificates } : {}),
   });
   // Remove plaintext copies left by versions that used userData/tmp.
   await rm(join(paths.userData, 'tmp'), { recursive: true, force: true }).catch((err) =>
@@ -471,6 +493,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     ...(deps.signer ? { signer: deps.signer } : {}),
     certificateRequests: certificateRequests.handle,
     ...(companion ? { companion } : {}),
+    ...(osCertificates ? { osCertificates } : {}),
     ...(deps.signerFetch ? { fetch: deps.signerFetch } : {}),
     logger: logger.child('browser'),
     lang,

@@ -1,3 +1,4 @@
+import { X509Certificate } from 'node:crypto';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { createConnection } from 'node:net';
@@ -68,6 +69,7 @@ import { errorReportsAllowed } from './errors/gate';
 import { startErrorReports } from './errors/reports';
 import { applyStagedLocalState, defaultUserData, openDataImport } from './migrate/nsis-import';
 import { findNsisUninstaller, launchNsisUninstaller } from './migrate/nsis-install';
+import { openKeychain } from './os-certificates/keychain';
 import { catastro } from './places/catastro';
 import { noBiometric } from './ports';
 import { chatgptLoginPages } from './providers/login-pages';
@@ -443,6 +445,24 @@ async function main(): Promise<void> {
     ? noBiometric
     : createTouchIdBiometric(systemPreferences, process.platform, log);
 
+  // External certificates: the macOS keychain. E2e runs only look where SA_OS_KEYCHAIN says.
+  const osKeyStore =
+    process.platform === 'darwin' && (!env.e2e || env.osKeychain)
+      ? await openKeychain(env.osKeychain ? { keychainPath: env.osKeychain } : {}).catch((err) => {
+          log.warn('the keychain is unavailable: no external certificates', {
+            error: errorMessage(err),
+          });
+          return undefined;
+        })
+      : undefined;
+  const osCertificateAuthorities = env.osCertificateCa
+    ? (
+        readFileSync(env.osCertificateCa, 'utf8').match(
+          /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g,
+        ) ?? []
+      ).map((pem) => new X509Certificate(pem).raw)
+    : undefined;
+
   let hostScript: string | undefined;
   const appInfo: AppInfo = {
     name: displayName,
@@ -497,6 +517,8 @@ async function main(): Promise<void> {
     keyProvider,
     biometric,
     openVault: (dir, keys) => openVault(dir, keys, log),
+    ...(osKeyStore ? { osKeyStore } : {}),
+    ...(osCertificateAuthorities ? { osCertificateAuthorities } : {}),
     agentLib,
     // Impersonating Codex CLI is against OpenAI's terms: production builds must not contain it.
     // Vite replaces import.meta.env.DEV with `false` there, so the module is never bundled.
@@ -724,6 +746,7 @@ async function selfTestMain(): Promise<void> {
         appPath: app.getAppPath(),
       }),
       browserFactory,
+      ...(process.platform === 'darwin' ? { keychain: () => openKeychain() } : {}),
     });
     // Electron's own files may stay (in use until it exits): a few KB in the temp folder.
     await rm(userData, { recursive: true, force: true, maxRetries: 3 }).catch(() => {});

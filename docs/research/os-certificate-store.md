@@ -6,6 +6,14 @@ macOS, Windows or Linux certificate store, so that Safari, Chrome, Edge, Firefox
 use it without the user importing a `.p12` by hand. Research only: nothing is built. The baseline
 to compare with is the password-protected `.p12` export ([fnmt.md](fnmt.md) §6.6).*
 
+**Update, 2026-11-14.** macOS is built, differently from §7–8: the app now finds FNMT
+certificates already in the keychain and uses them in place ("external" certificates), and
+"Mover al sistema operativo" moves a vault certificate there instead of copying it, so there is
+no second copy to track. The key is imported extractable, since the keychain then holds the only
+copy. koffi works with Security.framework from Electron's main process [verified in the
+development build; the notarized build is still to check]. See `docs/ARCHITECTURE.md`,
+"External certificates (macOS)". Windows is next.
+
 Marks used below:
 
 - **[verified]**: I ran it on this Mac (macOS 26.5.2, build 25F84, Apple silicon), against

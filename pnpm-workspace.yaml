@@ -7,12 +7,14 @@ packages:
 
 # pnpm blocks dependency install scripts by default; allow the ones we need.
 # The denied ones are a no-op (@google/genai), only check optional CLI deps (protobufjs), or
-# belong to Squirrel.Windows, which we don't build (electron-winstaller, via electron-builder).
+# belong to Squirrel.Windows, which we don't build (electron-winstaller, via electron-builder),
+# or would compile a binary that already comes prebuilt (koffi, via @koromix/koffi-<os>-<arch>).
 allowBuilds:
   esbuild: true
   '@google/genai': false
   protobufjs: false
   electron-winstaller: false
+  koffi: false
 
 # Only install versions published at least a week ago (minutes), so a compromised release has
 # time to be caught before it reaches us. Setting it makes pnpm fail instead of falling back.

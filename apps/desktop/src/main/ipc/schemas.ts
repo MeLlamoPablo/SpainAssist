@@ -123,6 +123,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
     }),
   ]),
   'vault.exportCertificate': z.tuple([id, CertificateExportPassword]),
+  'vault.moveCertificateToSystem': z.tuple([id]),
   'vault.setCredentialPolicy': z.tuple([id, CredentialPolicy]),
   'vault.deleteCredential': z.tuple([id]),
   'vault.deleteCertificateRequest': z.tuple([id]),

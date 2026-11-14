@@ -3,7 +3,6 @@ import { defineDict } from '../../i18n';
 /** Mis datos → Credenciales: exporting a certificate as a password-protected `.p12`. */
 export const exportDict = defineDict({
   es: {
-    action: 'Descargar copia (.p12)',
     title: 'Exportar certificado',
     lead: 'Guardo una copia de tu certificado y su clave privada en un archivo .p12, protegido con contraseña.',
     password: 'Contraseña del archivo',
@@ -18,7 +17,6 @@ export const exportDict = defineDict({
     saved: (name: string) => `Exportado: ${name}`,
   },
   en: {
-    action: 'Download a copy (.p12)',
     title: 'Export certificate',
     lead: 'I’ll save a copy of your certificate and its private key in a .p12 file, protected with a password.',
     password: 'Password for the file',

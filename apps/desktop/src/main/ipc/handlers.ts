@@ -213,6 +213,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('vault.exportCertificate', S['vault.exportCertificate'], (id, password) =>
     s.vault.exportCertificate(id, password),
   );
+  router.register('vault.moveCertificateToSystem', S['vault.moveCertificateToSystem'], (id) =>
+    s.vault.moveCertificateToSystem(id),
+  );
   router.register('vault.setCredentialPolicy', S['vault.setCredentialPolicy'], (id, policy) =>
     s.vault.setCredentialPolicy(id, policy),
   );

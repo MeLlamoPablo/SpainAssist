@@ -14,7 +14,9 @@ import {
   exportPasswordIssue,
   submitCertificateExport,
 } from './CertificateExport';
+import { CertificateMoveDialog } from './CertificateMenu';
 import { CredentialsSection } from './CredentialsSection';
+import { systemDict, systemName } from './systemI18n';
 
 // Server rendering reads a zustand store's initial state: give components a plain one instead.
 const store = vi.hoisted(() => ({ state: {} as Record<string, unknown> }));
@@ -120,11 +122,50 @@ function dialog(biometric: boolean): string {
 }
 
 describe('Mis datos: exporting a certificate', () => {
-  it('offers a download button on each certificate, never on the DNI', () => {
+  it('gives each certificate of the app a menu (download, move), never the DNI', () => {
     const html = section([CERTIFICATE, { ...CERTIFICATE, id: 'cred-cert-2' }, DNIE]);
-    expect(html.match(/data-testid="certificate-export"/g)).toHaveLength(2);
-    expect(html).toContain('aria-label="Descargar copia (.p12)"');
-    expect(section([DNIE])).not.toContain('Descargar copia (.p12)');
+    expect(html.match(/data-testid="certificate-menu"/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Más opciones"');
+    expect(section([DNIE])).not.toContain('Más opciones');
+  });
+
+  it('marks a certificate installed in the system as external: no menu, bin or policy', () => {
+    const html = section([{ ...CERTIFICATE, id: 'os-ab', external: true }]);
+    expect(html).toContain('data-testid="certificate-external"');
+    expect(html).toContain('Externo');
+    expect(html).toContain('CARMEN ESPAÑOLA ESPAÑOLA');
+    expect(html).not.toContain('data-testid="certificate-menu"');
+    expect(html).not.toContain('Borrar Certificado digital');
+    expect(html).not.toContain('Aún no se ha usado');
+    expect(html).not.toContain('Cuándo usarla');
+    // The same card, held by the app, has all three.
+    const own = section([CERTIFICATE]);
+    expect(own).not.toContain('Externo');
+    expect(own).toContain('Borrar Certificado digital');
+    expect(own).toContain('Cuándo usarla');
+  });
+
+  it('explains the move to the system before doing it', () => {
+    const html = renderToStaticMarkup(
+      <CertificateMoveDialog
+        credentialId={CERTIFICATE.id}
+        biometric
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(html).toContain('Mover el certificado a tu Mac');
+    expect(html).toContain('lo borro de Spain Assist');
+    expect(html).toContain(
+      'Si quieres una copia de seguridad (.p12), descárgala antes de moverlo.',
+    );
+    expect(html).toContain('Te pediré Touch ID para confirmar');
+    expect(systemDict.es.externalHint(systemName('darwin', 'es'))).toBe(
+      'Este certificado está instalado en tu Mac, no en Spain Assist.',
+    );
+    expect(systemDict.es.externalHint(systemName('win32', 'es'))).toBe(
+      'Este certificado está instalado en Windows, no en Spain Assist.',
+    );
   });
 
   it('asks for the password twice and says it can’t be recovered', () => {

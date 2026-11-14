@@ -39,6 +39,11 @@ import type { UserKey } from '../providers/manager';
  *   SA_BROWSER_CAPTURE=1     development only: record each procedure's browsing (HAR, trace,
  *                            HTML, actions.jsonl) in procedures/<id>/capture/, with typed
  *                            secrets scrubbed but personal data kept (docs/ARCHITECTURE.md)
+ *   SA_OS_KEYCHAIN           development only: a keychain file where the app looks for external
+ *                            certificates (macOS) instead of the user's keychains. E2e runs
+ *                            look nowhere unless this is set
+ *   SA_OS_CERTIFICATE_CA     development only: a PEM file of CAs whose certificates count as
+ *                            external certificates, besides FNMT's (test certificates)
  *   SA_HIDE_WINDOW=1         never show the app window or Dock icon (headless e2e runs)
  *   SA_AGENT_HOST            path of the agent host script (default: @sa/agent dist/host.js)
  *   OPENROUTER_DECIDER_API_KEY Development override for scan frame screening: an OpenRouter
@@ -80,6 +85,10 @@ export interface SaEnv {
   crlSetFixture?: boolean;
   /** Development only: record browsing for offline mock sites (SA_BROWSER_CAPTURE). */
   browserCapture?: boolean;
+  /** Development only: where to look for external certificates (SA_OS_KEYCHAIN). */
+  osKeychain?: string;
+  /** Development only: PEM file of extra CAs for external certificates (SA_OS_CERTIFICATE_CA). */
+  osCertificateCa?: string;
   hideWindow?: boolean;
   agentHost?: string;
   /** Maps server for address lookups; undefined in e2e runs without an override. */
@@ -149,6 +158,8 @@ const DEV_ONLY = [
   'SA_PROVIDER_API_KEY',
   'SA_DECIDER_URL',
   'SA_HIDE_WINDOW',
+  'SA_OS_KEYCHAIN',
+  'SA_OS_CERTIFICATE_CA',
   'SA_BROWSER_EXECUTABLE',
   'SA_BROWSER_CAPTURE',
   'SA_CRLSET_FIXTURE',
@@ -197,6 +208,8 @@ export function parseEnv(input: NodeJS.ProcessEnv, opts: { packaged?: boolean } 
     browserExecutable: nonEmpty(env.SA_BROWSER_EXECUTABLE),
     browserCapture: parseBool(env.SA_BROWSER_CAPTURE) === true,
     crlSetFixture: parseBool(env.SA_CRLSET_FIXTURE) === true,
+    osKeychain: nonEmpty(env.SA_OS_KEYCHAIN),
+    osCertificateCa: nonEmpty(env.SA_OS_CERTIFICATE_CA),
     hideWindow: parseBool(env.SA_HIDE_WINDOW) === true,
     agentHost: nonEmpty(env.SA_AGENT_HOST),
     warnings,
