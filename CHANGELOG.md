@@ -3,6 +3,68 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.4.0 (2026-11-14)
+
+Installed apps update to it. What changed since 0.3.3.
+
+### App
+
+- **A new assistant.** The assistant in the chat now only talks with you and hands the work to
+  background agents, which research, ask you in their own interfaces and create the procedures
+  once they know which apply. Agents drive the sites with short programs that can pause and
+  resume, so a procedure that waits for you or for the administration picks up where it was.
+  "Mis trámites" is redesigned: simpler procedure cards, and a meter showing what the agents are
+  doing. The chat starts a new conversation; the earlier one stays visible. (65f167f, e1c2866,
+  66de54c, 285a161, c8c1af3)
+- **The browser works out of sight.** The agent's browser now runs headless, and opens a visible
+  window only for sites that refuse a headless one. "Abrir navegador" shows you the page live, and
+  you can click and type in it; captchas come with the page's picture, and you can type the
+  characters on the card. (a22330b)
+- **Certificates:**
+  - The app requests and installs FNMT certificates itself, replacing FNMT's Configurador. The
+    certificate saves itself to Mis datos; a pending request is listed there, says to complete
+    it from Spain Assist, and can be discarded only once it is 30 days old. (73a4423, 9cc1474,
+    b02fd88, da01748)
+  - On macOS, FNMT certificates already in the keychain are found and listed as "Externo"; their
+    keys stay in the keychain and each use asks first. A certificate in Mis datos can be moved to
+    the keychain, downloaded as a password-protected .p12, or dropped onto the card as a
+    .p12/.pfx file. (6e31e46, ddd32b3, 3d1f45a)
+  - Signatures carry the certificate's serial number, which Java verifiers require (Correos' voto
+    por correo failed after signing), and Correos' certificate login no longer stops at Chromium's
+    own certificate picker. (a0b7d05, f898402)
+- **Your data:** what you type in an agent's form goes to Mis datos by itself, and documents you
+  attach get a readable name instead of the camera's (IMG_2034.jpg). (8df75d0, c0a90ca)
+- **Working on your behalf:** the assistant signs and acts in your name when you ask (also for
+  someone sitting with you), passes corrections to a running procedure without starting it over,
+  and never writes to the administration to settle a doubt unless you ask. (f1e1acb, 06a3bf8,
+  038498f, 658bc46, 274da4c, b1b89f2)
+- **ChatGPT:** when OpenAI ends the ChatGPT sign-in, the app says so and offers to sign in again,
+  instead of failing every run. Procedures use less of the ChatGPT plan (gpt-6.1-terra, high
+  thinking instead of max). (9e3097a, aa85d16, f8c174a)
+- **Smaller fixes:**
+  - A message linking a document that wasn't saved is written again with the right link.
+    (b07b31e, dbe0d8b)
+  - Procedure details get a download button next to each document. (dfad385)
+  - Requirements are have, missing or not needed, never "por confirmar". (5f3ec76, 9fd6d68)
+  - Signature and confirmation cards are shorter: no format, fingerprint or server lines.
+    (a27893b, 957e5d5, 5fbb2cf, 8ecaece)
+  - A click on a covered button fails in 2.5 s, saying what covers it. (2779092, 570e717)
+  - The browser's blank startup window is minimized at once. (598f427)
+
+### Agents and costs
+
+- Live scans reuse their prompt cache; context is compacted only when it fills up, at
+  per-role limits. (bcf1ee2, 2025fe8, 659e57c)
+- Session files record model switches and what ChatGPT web research spends. (94f642a, e191fe0)
+- Calls to the app retry once when the app closed the connection they reused. (55e377a)
+
+### Maintenance
+
+- CI is green again: the phone's test vectors, an OpenSSL 3 check and a lint error were fixed. (2b88fc4, be0235e)
+- SpainBench: new ILP-signing and 790-012 scenarios, runs on the new assistant, and fewer false
+  leaks. The playground shows the new agents' interfaces. (5d9adf0, 35fc9f6, 1d60876, 5a198d5)
+- Version 0.4.0 everywhere except the phone app.
+
 ## 0.3.3 (2026-10-30)
 
 Installed apps update to it. What changed since 0.3.2.
