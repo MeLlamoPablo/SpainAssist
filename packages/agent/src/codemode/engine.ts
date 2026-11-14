@@ -42,6 +42,8 @@ interface LiveRun {
   runId: string;
   workflowId: string;
   deliver: boolean;
+  /** Dispatches the events that wait for an interface to open (set by `pollEvents`). */
+  flushWaiting?: () => void;
 }
 
 export class WorkflowEngine {
@@ -155,7 +157,11 @@ export class WorkflowEngine {
         }
         return result;
       },
-      onUiChange: () => uiChanged(),
+      onUiChange: () => {
+        uiChanged();
+        // Out of the state operation that opened it: dispatch runs workflow code.
+        setTimeout(() => live.flushWaiting?.(), 0);
+      },
     });
     const live: LiveRun = { run, runId, workflowId: input.workflowId, deliver: false };
     this.live.set(input.workflowId, live);
@@ -245,6 +251,7 @@ export class WorkflowEngine {
         } else i++;
       }
     };
+    live.flushWaiting = flushWaiting;
     while (!ended) {
       let response: BridgeResults['workflow.events'];
       try {
@@ -269,12 +276,8 @@ export class WorkflowEngine {
         if (live.run.openUis().includes(item.key)) live.run.dispatch(item.key, item.event);
         else waiting.push({ key: item.key, event: item.event });
       }
+      // Events for interfaces still opening (a resumed run replays first) go when they open.
       flushWaiting();
-      if (waiting.length) {
-        // Interfaces still opening (a resumed run replays first): try again shortly.
-        await new Promise((r) => setTimeout(r, 50));
-        flushWaiting();
-      }
     }
   }
 
