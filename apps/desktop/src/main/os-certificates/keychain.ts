@@ -17,6 +17,8 @@ const UTF8 = 0x08000100;
 /** `SecExternalFormat` / `SecExternalItemType` of a PKCS#12 file. */
 const FORMAT_PKCS12 = 12;
 const ITEM_AGGREGATE = 5;
+/** Whether koffi already has the `SecItemImportExportKeychainParameters` struct. */
+let importParametersDefined = false;
 
 const DIGEST_ALGORITHMS: Record<SignatureDigest, string> = {
   sha1: 'kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA1',
@@ -33,8 +35,13 @@ export interface KeychainOptions {
   keychainPath?: string;
 }
 
+export interface Keychain extends OsKeyStore {
+  /** The file of the keychain `importPkcs12` adds to. */
+  importPath(): string;
+}
+
 /** Loads koffi and the system frameworks: macOS only. Throws when they can't be loaded. */
-export async function openKeychain(options: KeychainOptions = {}): Promise<OsKeyStore> {
+export async function openKeychain(options: KeychainOptions = {}): Promise<Keychain> {
   const { default: koffi } = await import('koffi');
   const cf = koffi.load('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation');
   const sec = koffi.load('/System/Library/Frameworks/Security.framework/Security');
@@ -67,16 +74,24 @@ export async function openKeychain(options: KeychainOptions = {}): Promise<OsKey
     'void *SecKeyCreateSignature(void *, void *, void *, _Out_ void **)',
   );
   const SecKeychainOpen = sec.func('int32_t SecKeychainOpen(const char *, _Out_ void **)');
-  koffi.struct('SecItemImportExportKeychainParameters', {
-    version: 'uint32_t',
-    flags: 'uint32_t',
-    passphrase: 'void *',
-    alertTitle: 'void *',
-    alertPrompt: 'void *',
-    accessRef: 'void *',
-    keyUsage: 'void *',
-    keyAttributes: 'void *',
-  });
+  const SecKeychainCopyDefault = sec.func('int32_t SecKeychainCopyDefault(_Out_ void **)');
+  const SecKeychainGetPath = sec.func(
+    'int32_t SecKeychainGetPath(void *, _Inout_ uint32_t *, _Out_ uint8_t *)',
+  );
+  // koffi's type names are global: a second `openKeychain` in the process finds it defined.
+  if (!importParametersDefined) {
+    importParametersDefined = true;
+    koffi.struct('SecItemImportExportKeychainParameters', {
+      version: 'uint32_t',
+      flags: 'uint32_t',
+      passphrase: 'void *',
+      alertTitle: 'void *',
+      alertPrompt: 'void *',
+      accessRef: 'void *',
+      keyUsage: 'void *',
+      keyAttributes: 'void *',
+    });
+  }
   const SecItemImport = sec.func(
     'int32_t SecItemImport(void *, void *, _Inout_ uint32_t *, _Inout_ uint32_t *, uint32_t, SecItemImportExportKeychainParameters *, void *, _Out_ void **)',
   );
@@ -111,6 +126,21 @@ export async function openKeychain(options: KeychainOptions = {}): Promise<OsKey
       throw new OsKeyStoreError('failed', 'The keychain could not be opened', status);
     keychain = out[0];
   }
+
+  /**
+   * The keychain a certificate is added to: the one given, or the user's default (the login
+   * keychain). `SecItemImport` stores a PKCS#12 nowhere without one (status -67795). The
+   * caller releases what `dispose` covers.
+   */
+  const importTarget = (): { ref: Ref; dispose(): void } => {
+    if (keychain) return { ref: keychain, dispose: () => {} };
+    const out: Ref[] = [null];
+    const status = SecKeychainCopyDefault(out);
+    const ref = out[0];
+    if (status !== 0 || !ref)
+      throw new OsKeyStoreError('failed', 'The user has no default keychain', status);
+    return { ref, dispose: () => release(ref) };
+  };
 
   /**
    * Every identity with its certificate (DER). The identities live until `dispose`, which the
@@ -213,7 +243,9 @@ export async function openKeychain(options: KeychainOptions = {}): Promise<OsKey
         constant(sec, 'kSecAttrIsExtractable'),
       ]);
       const items: Ref[] = [null];
+      let target: ReturnType<typeof importTarget> | undefined;
       try {
+        target = importTarget();
         const status = await run<number>(
           SecItemImport,
           input,
@@ -231,7 +263,7 @@ export async function openKeychain(options: KeychainOptions = {}): Promise<OsKey
             keyUsage: null,
             keyAttributes: attributes,
           },
-          keychain,
+          target.ref,
           items,
         );
         // Already there (an earlier import): the caller checks what the keychain holds.
@@ -242,7 +274,21 @@ export async function openKeychain(options: KeychainOptions = {}): Promise<OsKey
             status,
           );
       } finally {
+        target?.dispose();
         release(items[0], attributes, password, input);
+      }
+    },
+
+    importPath() {
+      const target = importTarget();
+      try {
+        const length = [1024];
+        const path = Buffer.alloc(length[0] as number);
+        const status = SecKeychainGetPath(target.ref, length, path);
+        if (status !== 0) throw new OsKeyStoreError('failed', 'The keychain has no path', status);
+        return path.subarray(0, length[0]).toString('utf8');
+      } finally {
+        target.dispose();
       }
     },
   };

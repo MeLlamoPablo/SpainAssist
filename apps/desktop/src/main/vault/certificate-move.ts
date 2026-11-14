@@ -96,7 +96,7 @@ export async function moveCertificateToSystem(
       inSystem
         ? 'the OS store’s certificate not proven the same'
         : 'certificate not moved to the OS store',
-      { error: errorMessage(err) },
+      { error: errorMessage(err), status: err instanceof OsKeyStoreError ? err.status : undefined },
     );
     const message = inSystem
       ? STRINGS[denied ? 'useDenied' : 'notSame']

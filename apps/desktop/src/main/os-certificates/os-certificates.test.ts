@@ -9,7 +9,7 @@ import {
   randomBytes,
   X509Certificate,
 } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -556,6 +556,7 @@ describe.skipIf(process.platform !== 'darwin')('the macOS keychain', () => {
     try {
       const keychain = await openKeychain({ keychainPath });
       expect(await keychain.list()).toEqual([]);
+      expect(keychain.importPath()).toBe(await realpath(keychainPath));
 
       const lucia = person();
       await keychain.importPkcs12(lucia.p12, lucia.passphrase);
@@ -583,5 +584,15 @@ describe.skipIf(process.platform !== 'darwin')('the macOS keychain', () => {
     } finally {
       execFileSync('/usr/bin/security', ['delete-keychain', keychainPath]);
     }
+  });
+
+  // The app names no keychain: a .p12 must then go to the user's default one, since
+  // SecItemImport stores it nowhere otherwise. Only looked up here, never written to.
+  it('adds to the user’s default keychain when none is named', async () => {
+    const keychain = await openKeychain();
+    const expected = execFileSync('/usr/bin/security', ['default-keychain'], { encoding: 'utf8' })
+      .trim()
+      .replace(/^"|"$/g, '');
+    expect(keychain.importPath()).toBe(expected);
   });
 });
