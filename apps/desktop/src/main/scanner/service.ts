@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Api, Credential, Model } from '@earendil-works/pi-ai';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
-import { configureModel } from '@sa/agent';
+import { configureModel, needsPromptCacheKey, withPromptCacheKey } from '@sa/agent';
 import { postalCodeProvince, type ThinkingLevel } from '@sa/shared';
 import { z } from 'zod';
 import type { DocumentFields, ScanGuidance, ScannerEvent, ScannerStatus } from '../../scanner';
@@ -80,6 +80,26 @@ export function scanReasoning(model: Model<Api>, effort: ThinkingLevel = scanEff
       if (model.api === 'openai-completions') return { ...body, reasoning_effort: 'none' };
       if (model.api === 'openai-responses') return { ...body, reasoning: { effort: 'none' } };
       return body;
+    },
+  };
+}
+
+/**
+ * Options of a live scan's requests: its reasoning, and the scan's id as the session so every turn
+ * reuses the cached system prompt and tools. pi sends `sessionId` as OpenAI's `prompt_cache_key`
+ * (and session-affinity headers where the provider takes them); LiteLLM OpenAI models get the key
+ * in the body, as agent sessions do. Anthropic models on LiteLLM get cache-control markers anyway.
+ */
+export function scanRequestOptions(model: Model<Api>, effort: ThinkingLevel, sessionId: string) {
+  const reasoning = scanReasoning(model, effort);
+  if (!needsPromptCacheKey(model)) return { ...reasoning, sessionId };
+  const reasoningPayload = 'onPayload' in reasoning ? reasoning.onPayload : undefined;
+  return {
+    ...reasoning,
+    sessionId,
+    onPayload: (payload: unknown) => {
+      const body = reasoningPayload ? reasoningPayload(payload) : payload;
+      return withPromptCacheKey(body, sessionId) ?? body;
     },
   };
 }
@@ -339,7 +359,7 @@ export class DocumentScanner {
             try {
               const response = await runtime.completeSimple(model, context, {
                 maxTokens: 1800,
-                ...scanReasoning(model, effort),
+                ...scanRequestOptions(model, effort, live.id),
                 signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
               });
               if (response.stopReason === 'error' || response.stopReason === 'aborted')
@@ -443,6 +463,7 @@ export class DocumentScanner {
             },
           ],
         },
+        // No session id: one request whose fixed prefix (<1k tokens) is under what providers cache.
         {
           maxTokens: 1500,
           signal: AbortSignal.timeout(60_000),

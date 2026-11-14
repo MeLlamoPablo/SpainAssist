@@ -61,6 +61,16 @@ export function needsPromptCacheKey(model: Model<Api>): boolean {
   return model.provider === LITELLM_PROVIDER_ID && litellmUpstream(model.id) === 'openai';
 }
 
+/** OpenAI's limit for `prompt_cache_key`. */
+const PROMPT_CACHE_KEY_MAX_LENGTH = 64;
+
+/** `payload` with `prompt_cache_key` set to `sessionId`, unless it already has one. */
+export function withPromptCacheKey(payload: unknown, sessionId: string): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined;
+  if ('prompt_cache_key' in payload && payload.prompt_cache_key) return undefined;
+  return { ...payload, prompt_cache_key: sessionId.slice(0, PROMPT_CACHE_KEY_MAX_LENGTH) };
+}
+
 /**
  * OpenAI-compatible request shape for LiteLLM: the standard `reasoning_effort` (LiteLLM maps it
  * for each upstream) instead of OpenRouter's `reasoning` object, `max_tokens`, no `store`, no

@@ -3,8 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { withPromptCacheKey } from '../src/host/extension';
-import { configureModel, needsPromptCacheKey } from '../src/host/model';
+import { configureModel, needsPromptCacheKey, withPromptCacheKey } from '../src/host/model';
 
 type Body = {
   messages: { role: string; content: unknown }[];

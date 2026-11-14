@@ -24,7 +24,7 @@ export {
   AgentHostConfigSchema,
   parseHostConfig,
 } from './config';
-export { configureModel } from './host/model';
+export { configureModel, needsPromptCacheKey, withPromptCacheKey } from './host/model';
 export {
   type AgentLaunch,
   type AgentLaunchOptions,

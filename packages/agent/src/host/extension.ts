@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionFactory } from '@earendil-works/pi-coding-agent';
 import type { AnyToolDefinition } from '../tools/common';
 import { registerDocumentLinkCheck, type SavedDocument } from './document-links';
+import { withPromptCacheKey } from './model';
 import { registerThinkingCutoffCheck } from './thinking-cutoff';
 
 export interface SpainAssistExtensionOptions {
@@ -57,14 +58,4 @@ export function createSpainAssistExtension(options: SpainAssistExtensionOptions)
         : { block: true, reason: `Tool "${event.toolName}" is not available.` },
     );
   };
-}
-
-/** OpenAI's limit for `prompt_cache_key`. */
-const PROMPT_CACHE_KEY_MAX_LENGTH = 64;
-
-/** `payload` with `prompt_cache_key` set to `sessionId`, unless it already has one. */
-export function withPromptCacheKey(payload: unknown, sessionId: string): unknown {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined;
-  if ('prompt_cache_key' in payload && payload.prompt_cache_key) return undefined;
-  return { ...payload, prompt_cache_key: sessionId.slice(0, PROMPT_CACHE_KEY_MAX_LENGTH) };
 }

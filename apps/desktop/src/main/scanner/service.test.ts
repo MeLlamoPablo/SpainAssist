@@ -11,7 +11,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ScannerEvent } from '../../scanner';
 import type { ProviderManager } from '../providers/manager';
 import type { FrameDecision } from './decider';
-import { DocumentScanner, parseDocumentFields, scanImageSchema, scanReasoning } from './service';
+import {
+  DocumentScanner,
+  parseDocumentFields,
+  scanImageSchema,
+  scanReasoning,
+  scanRequestOptions,
+} from './service';
 
 const fields = {
   givenName: 'Carmen',
@@ -149,6 +155,22 @@ describe('document vision scanner', () => {
     expect(scanReasoning(model, 'medium')).toEqual({ reasoning: 'medium' });
     expect(scanReasoning(model, 'off')).toEqual({});
   });
+  it('sends live scans as one prompt-cache session', () => {
+    const chatgpt = { id: 'gpt-6.1-sol', provider: 'openai', api: 'openai-responses' };
+    expect(scanRequestOptions(chatgpt as Model<Api>, 'low', 'scan-1')).toEqual({
+      reasoning: 'low',
+      sessionId: 'scan-1',
+    });
+    // LiteLLM OpenAI models: pi sends no key off api.openai.com, so the body gets it.
+    const voucher = { id: 'openai/gpt-6.1-sol', provider: 'litellm', api: 'openai-completions' };
+    const options = scanRequestOptions(voucher as Model<Api>, 'off', 'scan-1');
+    expect(options.sessionId).toBe('scan-1');
+    expect(options.onPayload?.({ model: 'm' })).toEqual({
+      model: 'm',
+      reasoning_effort: 'none',
+      prompt_cache_key: 'scan-1',
+    });
+  });
   // Vouchers scan with the scanner model on our gateway; OpenRouter BYOK with the selected model.
   it.each([
     ['litellm', 'anthropic/claude-haiku-5.5'],
@@ -232,17 +254,25 @@ describe('document vision scanner', () => {
 });
 
 describe('live scanner IPC lifecycle', () => {
-  it.each([
+  it.each<{
+    providerId: 'custom' | 'openrouter' | 'litellm';
+    development: boolean;
+    voucherModel?: string;
+  }>([
     { providerId: 'custom', development: true },
     { providerId: 'openrouter', development: true },
     { providerId: 'custom', development: false },
     { providerId: 'openrouter', development: false },
-    { providerId: 'litellm', development: false },
-  ] as const)(
-    'gates $providerId frames before inference and retains artifacts only in development ($development)',
-    async ({ providerId, development }) => {
+    // Vouchers: the models file's scanner model, and an OpenAI one (prompt_cache_key).
+    { providerId: 'litellm', development: false, voucherModel: 'anthropic/claude-haiku-5.5' },
+    { providerId: 'litellm', development: false, voucherModel: 'openai/gpt-6.1-sol' },
+  ])(
+    'gates $providerId $voucherModel frames before inference and retains artifacts only in development ($development)',
+    async ({ providerId, development, voucherModel }) => {
       const directory = await mkdtemp(join(tmpdir(), 'sa-scan-test-'));
       const requests: Record<string, unknown>[] = [];
+      const headers: Record<string, string | string[] | undefined>[] = [];
+      const complete = vi.spyOn(ModelRuntime.prototype, 'completeSimple');
       const completeFields = {
         ...fields,
         surname2: 'López',
@@ -291,6 +321,7 @@ describe('live scanner IPC lifecycle', () => {
         let body = '';
         for await (const chunk of req) body += chunk;
         requests.push(JSON.parse(body));
+        headers.push(req.headers);
         const calls = turns.shift()!;
         res.writeHead(200, { 'content-type': 'text/event-stream' });
         const chunk = {
@@ -322,7 +353,7 @@ describe('live scanner IPC lifecycle', () => {
           provider: providerId,
           // Vouchers: the models file's scanner model (the provider manager's).
           ...(providerId === 'litellm'
-            ? { id: 'anthropic/claude-haiku-5.5', thinkingLevel: 'low' as const }
+            ? { id: voucherModel!, thinkingLevel: 'low' as const }
             : { id: 'moonshotai/kimi-k2.6' }),
           baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
           api: 'openai-completions',
@@ -404,10 +435,23 @@ describe('live scanner IPC lifecycle', () => {
             requests.every((r) => (r.reasoning as { effort?: string })?.effort === 'none'),
           ).toBe(true);
         } else if (providerId === 'litellm') {
-          // Vouchers: Haiku 5.5 on our gateway, its lowest effort as the standard OpenAI parameter.
-          expect(requests.every((r) => r.model === 'anthropic/claude-haiku-5.5')).toBe(true);
+          // Vouchers: the scanner model on our gateway, its effort as the standard OpenAI parameter.
+          expect(requests.every((r) => r.model === voucherModel)).toBe(true);
           expect(requests.every((r) => r.reasoning_effort === 'low' && !r.reasoning)).toBe(true);
         } else expect(requests.every((r) => r.reasoning_effort === 'none')).toBe(true);
+        // Every turn of the scan is one prompt-cache session: the scan's id.
+        expect(complete).toHaveBeenCalledTimes(3);
+        expect(complete.mock.calls.every(([, , options]) => options?.sessionId === id)).toBe(true);
+        if (providerId === 'openrouter')
+          expect(headers.every((h) => h['x-session-id'] === id)).toBe(true);
+        if (voucherModel?.startsWith('openai/'))
+          expect(requests.every((r) => r.prompt_cache_key === id)).toBe(true);
+        else expect(requests.some((r) => 'prompt_cache_key' in r)).toBe(false);
+        if (voucherModel?.startsWith('anthropic/')) {
+          const system = (requests[0]!.messages as { role: string; content: unknown }[])[0]!;
+          expect(system.role).toBe('system');
+          expect(JSON.stringify(system.content)).toContain('"cache_control":{"type":"ephemeral"}');
+        }
         expect(JSON.stringify(requests[0])).toContain('capture_images');
         expect(JSON.stringify(requests[0])).toContain(image);
         if (development) {
