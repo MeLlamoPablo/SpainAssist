@@ -42,6 +42,7 @@ export const systemDict = defineDict({
     external: 'Externo',
     externalHint: (system: string) =>
       `Este certificado está instalado en ${system}, no en Spain Assist.`,
+    openManager: (app: string) => `Abrir ${app}`,
     menu: 'Más opciones',
     download: 'Descargar .p12',
     move: 'Mover al sistema operativo',
@@ -80,6 +81,7 @@ export const systemDict = defineDict({
     external: 'External',
     externalHint: (system: string) =>
       `This certificate is installed on ${system}, not in Spain Assist.`,
+    openManager: (app: string) => `Open ${app}`,
     menu: 'More options',
     download: 'Download .p12',
     move: 'Move to the operating system',

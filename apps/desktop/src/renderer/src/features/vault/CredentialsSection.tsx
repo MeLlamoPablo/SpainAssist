@@ -6,6 +6,7 @@ import {
   type VaultOverview,
 } from '@sa/shared';
 import {
+  ArrowUpRight,
   ExternalLink,
   FileKey,
   IdCard,
@@ -44,7 +45,7 @@ import { CertificateMenu } from './CertificateMenu';
 import { CertificateRequestCard } from './CertificateRequestCard';
 import { vaultDict } from './i18n';
 import { SystemLogo } from './SystemLogo';
-import { systemDict, systemName } from './systemI18n';
+import { systemCertificateManager, systemDict, systemName } from './systemI18n';
 import { SectionIntro } from './VaultView';
 
 export function CredentialsSection({ overview }: { overview: VaultOverview }) {
@@ -398,7 +399,7 @@ function CredentialCard({
           {warning}
           {below}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex min-h-8 shrink-0 items-center gap-1">
           {actions ? (
             actions(() => setConfirm(true))
           ) : (
@@ -452,6 +453,56 @@ function CredentialCard({
   );
 }
 
+/**
+ * "Externo", with the system's logo, on a certificate installed in the operating system. Where
+ * the app can open the program that manages those (macOS: Acceso a Llaveros), it is a button
+ * that does, marked with an arrow.
+ */
+function ExternalLabel() {
+  const t = useT(systemDict);
+  const lang = useLang();
+  const platform = useAppStore((s) => s.info?.platform);
+  const manager = systemCertificateManager(platform, lang).app;
+  const pill = (
+    <Pill className={manager ? 'transition-colors duration-150 group-hover:bg-surface-3' : ''}>
+      <SystemLogo platform={platform} size={12} />
+      {t.external}
+      {manager ? <ArrowUpRight size={13} className="-mr-0.5 text-fg-subtle" aria-hidden /> : null}
+    </Pill>
+  );
+  const open = async () => {
+    try {
+      await api.invoke('vault.openSystemCertificates');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+  return (
+    <Tooltip content={t.externalHint(systemName(platform, lang))}>
+      {manager ? (
+        <button
+          type="button"
+          aria-label={`${t.external}. ${t.openManager(manager)}`}
+          onClick={() => void open()}
+          className="group inline-flex rounded-full"
+          data-testid="certificate-external"
+        >
+          {pill}
+        </button>
+      ) : (
+        <span
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: the tooltip must be reachable by keyboard.
+          tabIndex={0}
+          className="inline-flex rounded-full"
+          data-testid="certificate-external"
+        >
+          {pill}
+        </span>
+      )}
+    </Tooltip>
+  );
+}
+
 function CertificateCard({
   credential: c,
   biometric,
@@ -460,9 +511,7 @@ function CertificateCard({
   biometric: boolean;
 }) {
   const t = useT(vaultDict);
-  const ts = useT(systemDict);
   const lang = useLang();
-  const platform = useAppStore((s) => s.info?.platform);
   const info = c.certificate;
   const days = info ? daysUntil(info.validTo) : null;
   const soon = days !== null && days < 30;
@@ -476,19 +525,7 @@ function CertificateCard({
       // An external certificate isn't the app's to download, move or delete.
       actions={(remove) =>
         c.external ? (
-          <Tooltip content={ts.externalHint(systemName(platform, lang))}>
-            <span
-              // biome-ignore lint/a11y/noNoninteractiveTabindex: the tooltip must be reachable by keyboard.
-              tabIndex={0}
-              className="inline-flex rounded-full"
-              data-testid="certificate-external"
-            >
-              <Pill>
-                <SystemLogo platform={platform} size={12} />
-                {ts.external}
-              </Pill>
-            </span>
-          </Tooltip>
+          <ExternalLabel />
         ) : (
           <CertificateMenu credential={c} biometric={biometric} onDelete={remove} />
         )

@@ -24,6 +24,8 @@ export function SystemLogo({
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden
+      // The apple reads low next to text, its leaf being so light: lifted to sit on the baseline.
+      className={platform === 'darwin' ? '-translate-y-px' : undefined}
       data-testid={`system-logo-${platform}`}
     >
       <path d={path} />

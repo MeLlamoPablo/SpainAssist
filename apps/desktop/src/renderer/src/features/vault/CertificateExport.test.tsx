@@ -185,6 +185,10 @@ describe('Mis datos: exporting a certificate', () => {
     expect(html).toContain('data-testid="certificate-external"');
     expect(html).toContain('Externo');
     expect(html).toContain('data-testid="system-logo-darwin"');
+    // On a Mac the label is a button that opens Acceso a Llaveros.
+    expect(html).toMatch(
+      /<button[^>]*aria-label="Externo\. Abrir Acceso a Llaveros"[^>]*data-testid="certificate-external"/,
+    );
     expect(html).toContain('CARMEN ESPAÑOLA ESPAÑOLA');
     expect(html).not.toContain('data-testid="certificate-menu"');
     expect(menuItems(html)).toEqual([]);
@@ -201,6 +205,9 @@ describe('Mis datos: exporting a certificate', () => {
     const windows = section([{ ...CERTIFICATE, id: 'os-ab', external: true }]);
     expect(windows).toContain('data-testid="system-logo-win32"');
     expect(windows).not.toContain('data-testid="system-logo-darwin"');
+    // Nothing to open there yet: a plain label.
+    expect(windows).toMatch(/<span[^>]*data-testid="certificate-external"/);
+    expect(windows).not.toContain('Abrir');
   });
 
   it('explains the move to the system before doing it', () => {
