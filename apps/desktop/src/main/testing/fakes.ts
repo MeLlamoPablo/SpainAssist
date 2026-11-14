@@ -473,6 +473,9 @@ export class FakeBrowser implements BrowserPort {
   async startScreencast(): Promise<() => Promise<void>> {
     return async () => {};
   }
+  async input(procedureId: string, event: unknown): Promise<void> {
+    this.calls.push({ method: 'input', procedureId, args: [event] });
+  }
   certificates: { origin: string }[] = [];
   url = 'https://sede.example.gob.es/';
 
@@ -589,10 +592,10 @@ export class FakeBrowser implements BrowserPort {
   async hide(procedureId: string) {
     this.calls.push({ method: 'hide', procedureId, args: [] });
   }
-  async exportState() {
+  async exportState(_procedureId: string): Promise<string | null> {
     return null;
   }
-  async importState() {}
+  async importState(_procedureId: string, _state: string): Promise<void> {}
   async close(procedureId: string) {
     this.opened.delete(procedureId);
     this.calls.push({ method: 'close', procedureId, args: [] });

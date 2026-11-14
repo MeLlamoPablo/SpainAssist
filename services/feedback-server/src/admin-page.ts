@@ -975,7 +975,7 @@ function editView(entry) {
   const kind = el('select', { name: 'kind' }, ...KINDS.map((k) => el('option', { value: k }, t('k_' + k))));
   kind.value = e.kind;
   const title = input('title', e.title, { required: true, minlength: 5, maxlength: 200 });
-  const body = el('textarea', { name: 'body', rows: 10, required: true, minlength: 10, maxlength: 4000 });
+  const body = el('textarea', { name: 'body', rows: 10, required: true, minlength: 10, maxlength: 8000 });
   body.value = e.body;
   const procedure = input('procedure', e.procedure, { required: true, minlength: 3, maxlength: 200, list: 'procedures' });
   const tags = input('tags', e.tags.join(', '), { maxlength: 450 });
@@ -992,7 +992,7 @@ function editView(entry) {
     el('div', {}, el('h2', {}, t(entry ? 'editTitle' : 'newTitle')), el('p', { class: 'hint' }, t(entry ? 'editHint' : 'newHint'))),
     field(t('kind'), kind),
     field(t('fTitle'), title, counted(title, 200)),
-    field(t('body'), body, counted(body, 4000)),
+    field(t('body'), body, counted(body, 8000)),
     el('div', { class: 'grid' },
       field(t('procedure'), procedure),
       field(t('administration'), input('administration', e.administration, { maxlength: 200 })),

@@ -57,9 +57,14 @@ flowchart TB
     resumable JavaScript workflows (QuickJS, in the agent's process) whose durable state main
     keeps. They research, browse, ask the user and create the procedures, which are durable
     records any agent may update (with versions), plus a private working context.
-- **Browser**: one bundled Chromium (Chrome for Testing), with an isolated context per procedure.
-  Its windows stay minimized unless the user needs to help (CAPTCHA, QR, manual step). The app never
-  downloads a browser: the Microsoft Store forbids downloading code.
+- **Browser**: the bundled Chromium (Chrome for Testing), with an isolated context per procedure,
+  headless (`browser/routed.ts`). When the user needs to help (CAPTCHA, QR, manual step), "Abrir
+  navegador" opens a live view of the page in the app (its screencast, taking the user's clicks
+  and keys), and a CAPTCHA's prompt shows its screenshot, where the user can type it. A site that
+  refuses the headless browser: the agent moves that procedure to a second, headed Chromium
+  (`reopenHeaded`: cookies kept, the page reloaded, never as the first attempt), whose windows
+  stay minimized until the user asks to see them. The app never downloads a browser: the
+  Microsoft Store forbids downloading code.
 - **sa-sidecar** (Go, `packages/sidecar`): a loopback TLS proxy per browser context that answers
   client-certificate requests with a `.p12` or the phone's DNIe.
 

@@ -48,6 +48,7 @@ export type {
   ClientCertificateUse,
   CrlSetComponent,
   DownloadedFile,
+  LiveInput,
   Logger,
   RefInfo,
   ScreencastFrame,

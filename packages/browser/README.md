@@ -24,7 +24,8 @@ See `src/types.ts` for the complete API and options.
   become the active page automatically.
 - `onDownload` must copy the staged file before returning its document descriptor: the staging
   file is deleted afterwards. Inline PDF responses are captured too.
-- `saveMedia` optionally persists throttled JPEGs; `startScreencast` follows the active tab.
+- `saveMedia` optionally persists throttled JPEGs; `startScreencast` follows the active tab, and
+  `input` sends the live view's mouse and keys to it (not queued behind the agent's actions).
   Screenshots (those and `screenshot`'s) are tried again while Chromium has no frame of the page
   yet: it then fails them at once ("Unable to capture screenshot") instead of waiting, as it does
   headed for the pages of a browser that started a moment ago (seen under `xvfb-run`). Any other

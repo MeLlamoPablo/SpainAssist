@@ -348,7 +348,8 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       const { attachScreenshot, ...rest } = params;
       const browser = deps.browser.current();
       let imageId: string | undefined;
-      if (attachScreenshot && browser?.isOpen(pid)) {
+      // A captcha always shows its page: the user can type what they read there.
+      if ((attachScreenshot || rest.actionKind === 'captcha') && browser?.isOpen(pid)) {
         try {
           const shot = await browser.screenshot(pid);
           imageId = await deps.media.save(pid, shot.data, shot.mimeType);
@@ -742,6 +743,8 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       }
       return { closed: true };
     },
+    'browser.reopenHeaded': async (_params, ctx) =>
+      observe(ctx.procedureId, () => deps.browser.reopenHeaded(ctx.procedureId)),
 
     // --- feedback --------------------------------------------------------------
     'feedback.search': async (params) => deps.feedback.search(params),

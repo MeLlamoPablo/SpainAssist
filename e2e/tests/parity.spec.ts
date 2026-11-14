@@ -16,8 +16,9 @@ import {
 } from '../helpers';
 
 /**
- * The parity project (playwright.config.ts): the agent's browser as users get it, headed with
- * its windows minimized and a CRLSet, where the other projects run it headless without one. On
+ * The parity project (playwright.config.ts): the agent's headed browser as users get it when an
+ * agent moves a procedure there (`reopenHeaded`; the app starts headless), with its windows
+ * minimized and a CRLSet, where the other projects run it headless without one. On
  * Windows and Linux headed Chromium quits when its last window closes: v0.3.2's did after every
  * launch, and only a headed run off macOS shows it. CI runs this project on Linux (xvfb-run) and
  * on Windows.

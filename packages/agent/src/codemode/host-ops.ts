@@ -319,6 +319,8 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
       }
       case 'close':
         return bridge.call('browser.close', {}, opts);
+      case 'reopenHeaded':
+        return observe(bridge.call('browser.reopenHeaded', {}, opts), true);
       case 'downloads':
         return downloads.get(procedureId) ?? [];
       default: {

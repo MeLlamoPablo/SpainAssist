@@ -1,13 +1,16 @@
 import { join } from 'node:path';
 import type {
+  BrowserServiceOptions,
   CaptureOptions,
   CertificateProxy,
   ClientCertificateUse,
   CrlSetComponent,
   DownloadedFile,
+  LiveInput,
 } from '@sa/browser';
 import {
   type AfirmaSignatureSummary,
+  type BrowserObservation,
   type CredentialSummary,
   type DocumentMeta,
   type FnmtCall,
@@ -24,9 +27,10 @@ import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import { errorMessage, formatBytes, hostOf } from '../core/util';
 import type { MediaStore } from '../media/store';
-import type { Biometric, BrowserFactory, BrowserPort, SignerLib, VaultPort } from '../ports';
+import type { Biometric, BrowserFactory, SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
 import { DownloadStore, documentFileName } from './downloads';
+import { RoutedBrowser } from './routed';
 
 export interface BrowserHolderDeps {
   factory: BrowserFactory;
@@ -36,7 +40,10 @@ export interface BrowserHolderDeps {
   executablePath?: string;
   /** Chrome's CRLSet for each launch (`crlset/store.ts`); none in tests. */
   crlSet?: () => Promise<CrlSetComponent | undefined>;
-  /** Headless override for development/test runs only. */
+  /**
+   * Development/test override. Default headless: agents move a procedure to a headed browser
+   * (`reopenHeaded`) when a site refuses it; with `false` every procedure is headed from the start.
+   */
   headless?: boolean;
   /** Staging directory for browser downloads; temporary downloads live in its `kept` folder. */
   downloadsDir: string;
@@ -65,6 +72,9 @@ export interface BrowserHolderDeps {
   lang: () => Language;
 }
 
+/** Frames of the live view: the headless viewport's size (`@sa/browser`), sharp enough to read. */
+const LIVE_FRAME_SIZE = { width: 1280, height: 800 };
+
 function describeCertificate(c: CredentialSummary, lang: Language): string {
   if (c.kind === 'dnie') {
     const holder = c.certificate?.holderName;
@@ -82,14 +92,17 @@ function describeCertificate(c: CredentialSummary, lang: Language): string {
 }
 
 /**
- * Owns the single BrowserService (created lazily, windows minimized until help is requested)
- * and its app-side hooks: downloads go to temporary downloads (until the agent saves them to
- * the vault with `saveDownload`), screenshots to the media store,
- * AutoFirma signature requests to an approval prompt in the procedure's chat, and FNMT
- * certificate requests to `FnmtBroker`.
+ * Owns the agent's browsers (`RoutedBrowser`: headless, plus a headed one with minimized windows
+ * for procedures an agent moved there), created lazily; the live view that shows the user a
+ * headless page and takes their mouse and keys; and the browsers' app-side hooks: downloads go
+ * to temporary downloads (until the agent saves them to the vault with `saveDownload`),
+ * screenshots to the media store, AutoFirma signature requests to an approval prompt in the
+ * procedure's chat, and FNMT certificate requests to `FnmtBroker`.
  */
 export class BrowserHolder {
-  private service?: BrowserPort;
+  private service?: RoutedBrowser;
+  /** Live views being streamed to the renderer: their stop function, by procedure. */
+  private readonly live = new Map<string, () => Promise<void>>();
   readonly downloads: DownloadStore;
 
   constructor(private readonly deps: BrowserHolderDeps) {
@@ -122,13 +135,70 @@ export class BrowserHolder {
     return this.deps.companion?.takeLoginNotes(procedureId) ?? [];
   }
 
-  get(): BrowserPort {
+  get(): RoutedBrowser {
     this.service ??= this.create();
     return this.service;
   }
 
-  current(): BrowserPort | undefined {
+  current(): RoutedBrowser | undefined {
     return this.service;
+  }
+
+  /** `RoutedBrowser.reopenHeaded`, ending the procedure's live view first (its page goes away). */
+  async reopenHeaded(procedureId: string): Promise<BrowserObservation> {
+    await this.endLive(procedureId, true);
+    return this.get().reopenHeaded(procedureId);
+  }
+
+  /**
+   * Shows the user the procedure's page: a headed procedure's real window comes to the front
+   * (`window`); a headless one streams its frames as `browser.frame` events (`stream`) until
+   * `stopLive`. `null` when the procedure has no page open.
+   */
+  async startLive(procedureId: string): Promise<'stream' | 'window' | null> {
+    const browser = this.service;
+    if (!browser?.isOpen(procedureId)) return null;
+    if (browser.isHeaded(procedureId)) {
+      await browser.show(procedureId);
+      return 'window';
+    }
+    await this.endLive(procedureId, false);
+    const stop = await browser.startScreencast(
+      procedureId,
+      (frame) =>
+        this.deps.events.emit({
+          type: 'browser.frame',
+          procedureId,
+          jpeg: frame.data.toString('base64'),
+          width: frame.viewportWidth,
+          height: frame.viewportHeight,
+        }),
+      { ...LIVE_FRAME_SIZE, quality: 80 },
+    );
+    this.live.set(procedureId, stop);
+    return 'stream';
+  }
+
+  /** The renderer closed the live view. */
+  stopLive(procedureId: string): Promise<void> {
+    return this.endLive(procedureId, false);
+  }
+
+  /** Stops a live view; `notify`: main ended it, so the renderer hears `browser.liveEnded`. */
+  private async endLive(procedureId: string, notify: boolean): Promise<void> {
+    const stop = this.live.get(procedureId);
+    if (!stop) return;
+    this.live.delete(procedureId);
+    if (notify) this.deps.events.emit({ type: 'browser.liveEnded', procedureId });
+    await stop().catch((err) =>
+      this.deps.logger.warn('could not stop the live view', { error: errorMessage(err) }),
+    );
+  }
+
+  /** The user's mouse or keys in a live view (ignored when it isn't streaming). */
+  async liveInput(procedureId: string, event: LiveInput): Promise<void> {
+    if (!this.live.has(procedureId)) return;
+    await this.service?.input(procedureId, event);
   }
 
   needsBrowserHelp(procedureId: string): boolean {
@@ -159,6 +229,7 @@ export class BrowserHolder {
   }
 
   async close(procedureId: string): Promise<void> {
+    await this.endLive(procedureId, true);
     if (this.service?.isOpen(procedureId)) await this.service.close(procedureId);
   }
 
@@ -168,20 +239,28 @@ export class BrowserHolder {
   }
 
   async closeAll(): Promise<void> {
+    await Promise.all([...this.live.keys()].map((id) => this.endLive(id, true)));
     const service = this.service;
     this.service = undefined;
-    if (service)
-      await service
-        .closeAll()
-        .catch((err) => this.deps.logger.warn('closeAll failed', { error: errorMessage(err) }));
+    await service?.closeAll();
   }
 
-  private create(): BrowserPort {
+  private create(): RoutedBrowser {
+    const { deps } = this;
+    const headless = deps.headless ?? true;
+    const options = this.options();
+    return new RoutedBrowser(
+      deps.factory({ ...options, headless }),
+      headless ? () => deps.factory({ ...options, headless: false }) : undefined,
+      deps.logger,
+    );
+  }
+
+  private options(): BrowserServiceOptions {
     const { deps } = this;
     const signer = deps.signer?.shimSource ? deps.signer : undefined;
-    return deps.factory({
+    return {
       certificates: deps.certificates,
-      headless: deps.headless ?? false,
       startHidden: true,
       executablePath: deps.executablePath,
       ...(deps.crlSet ? { crlSet: deps.crlSet } : {}),
@@ -216,7 +295,7 @@ export class BrowserHolder {
           }
         : {}),
       logger: deps.logger,
-    });
+    };
   }
 
   /** Keeps a browser download as a temporary download of the procedure (not in the vault). */

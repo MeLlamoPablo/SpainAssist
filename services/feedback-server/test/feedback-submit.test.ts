@@ -83,7 +83,7 @@ describe('POST /v1/feedback', () => {
     ['short body', submission({ body: 'corto' })],
     ['too many tags', submission({ tags: Array.from({ length: 11 }, (_, i) => `t${i}`) })],
     ['invalid url', submission({ urls: ['no es una url'] })],
-    ['long body', submission({ body: 'a'.repeat(4001) })],
+    ['long body', submission({ body: 'a'.repeat(8001) })],
     ['missing author', submission({ author: undefined })],
     ['"human" author (only admin edits write it)', submission({ author: 'human' })],
     ['author without a reasoning level', submission({ author: 'gpt-6.1-sol' })],

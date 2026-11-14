@@ -1,5 +1,6 @@
 import {
   Attachment,
+  BrowserLiveInput,
   ByokInput,
   CertificateExportPassword,
   CredentialPolicy,
@@ -156,4 +157,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'codemode.cancelWorkflow': z.tuple([z.string().min(1).max(64)]),
   'media.get': z.tuple([id]),
   'browser.show': z.tuple([id]),
+  'browser.live.start': z.tuple([id]),
+  'browser.live.stop': z.tuple([id]),
+  'browser.live.input': z.tuple([id, BrowserLiveInput]),
 };

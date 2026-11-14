@@ -73,6 +73,7 @@ import type {
   BrowserServiceOptions,
   ClientCertificateUse,
   CrlSetComponent,
+  LiveInput,
   Logger,
   RefInfo,
   ScreencastFrame,
@@ -913,6 +914,35 @@ export class PlaywrightBrowserService implements BrowserService {
       await sc.chain;
       return () => this.stopScreencast(s, sc);
     });
+  }
+
+  async input(procedureId: string, event: LiveInput): Promise<void> {
+    const s = this.sessions.get(procedureId);
+    const page = s && !s.closed ? this.livePage(s) : undefined;
+    if (!page || !this.browser?.isConnected()) return;
+    const at = (n: number) => (Number.isFinite(n) ? Math.max(0, n) : 0);
+    switch (event.type) {
+      case 'mouseMove':
+        await page.mouse.move(at(event.x), at(event.y));
+        return;
+      case 'mouseDown':
+      case 'mouseUp':
+        await page.mouse.move(at(event.x), at(event.y));
+        await page.mouse[event.type === 'mouseDown' ? 'down' : 'up']({
+          button: event.button ?? 'left',
+        });
+        return;
+      case 'wheel':
+        await page.mouse.move(at(event.x), at(event.y));
+        await page.mouse.wheel(event.deltaX, event.deltaY);
+        return;
+      case 'key':
+        await page.keyboard.press(event.key);
+        return;
+      case 'text':
+        await page.keyboard.insertText(event.text);
+        return;
+    }
   }
 
   // =============================================================================================

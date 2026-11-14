@@ -205,6 +205,8 @@ and the app replays them on the real page with the real Playwright API
 (`packages/browser/src/locator.ts`), so waiting, strictness and errors are Playwright's. Only the
 listed steps exist; nothing reaches the context, the browser or other procedures. Locator targets go through the same bridge handlers as every page action (domain allowlists,
 input type checks, approvals).
+The browser is headless; `page.reopenHeaded()` moves the procedure to a headed Chromium when a
+site refuses it, and only after a headless attempt (`apps/desktop/src/main/browser/routed.ts`).
 
 **`evaluate` and secrets.** Page code is allowed (structured extraction is one of codemode's main
 wins) and runs only in the page: the app gives Playwright a function whose `toString()` is the

@@ -636,6 +636,7 @@ export const KERNEL = String.raw`
     selectTab(index) { return this._op('tabs', { action: 'select', index: index }); }
     closeTab(index) { return this._op('tabs', { action: 'close', index: index }); }
     close() { return this._op('close'); }
+    reopenHeaded() { return this._op('reopenHeaded'); }
     downloads() { return this._op('downloads'); }
     fillFromVault(target, key, options) { return this._op('fillFromVault', { target: targetOf(target), key: key, submit: !!(options && options.submit) }); }
     fillFromUser(target, options) { return this._op('fillFromUser', Object.assign({ target: targetOf(target) }, options || {})); }

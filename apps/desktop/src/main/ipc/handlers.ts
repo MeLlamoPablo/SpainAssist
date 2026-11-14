@@ -273,4 +273,17 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
       s.logger.warn('browser.show failed', { error: errorMessage(err) });
     }
   });
+  router.register('browser.live.start', S['browser.live.start'], async (id) => {
+    s.procedures.require(id);
+    return s.browser.startLive(id);
+  });
+  router.register('browser.live.stop', S['browser.live.stop'], (id) => s.browser.stopLive(id));
+  router.register('browser.live.input', S['browser.live.input'], async (id, input) => {
+    try {
+      await s.browser.liveInput(id, input);
+    } catch (err) {
+      // A page that navigated or closed under the user's click: the next frame shows it.
+      s.logger.debug('live input failed', { error: errorMessage(err) });
+    }
+  });
 }

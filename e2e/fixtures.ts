@@ -79,9 +79,9 @@ export interface Harness {
 
 export interface E2eOptions {
   /**
-   * The parity project (playwright.config.ts): the agent's browser runs as users get it, headed
-   * with its windows minimized and a CRLSet (the app's bundled fixture, installed offline).
-   * Otherwise it runs headless without one.
+   * The parity project (playwright.config.ts): the agent's browser runs headed, as users get it
+   * when an agent moves a procedure there (`reopenHeaded`), with its windows minimized and a
+   * CRLSet (the app's bundled fixture, installed offline). Otherwise it runs headless without one.
    */
   parity: boolean;
 }
@@ -152,7 +152,9 @@ export const test = base.extend<{ harness: Harness } & E2eOptions>({
         SA_FEEDBACK_SERVER_URL: feedbackUrl,
         SA_FEATURE_FLAGS: 'dnie-phone',
         SA_EXTRA_TRUSTED_HOSTS: 'localhost,127.0.0.1',
-        ...(parity ? { SA_CRLSET_FIXTURE: '1' } : { SA_BROWSER_HEADLESS: '1' }),
+        ...(parity
+          ? { SA_CRLSET_FIXTURE: '1', SA_BROWSER_HEADLESS: '0' }
+          : { SA_BROWSER_HEADLESS: '1' }),
         SA_HIDE_WINDOW: headless ? '1' : '0',
         SA_AGENT_HOST: join(root, 'packages/agent/dist/host.js'),
       });

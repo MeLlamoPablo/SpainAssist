@@ -426,8 +426,8 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     captcha: [
       t('Resolver un captcha', 'Solve a captcha'),
       t(
-        'Completa el captcha en la ventana del navegador.',
-        'Complete the captcha in the browser window.',
+        'La web pide un código de seguridad. Escribe los caracteres de la imagen, o ábrela en el navegador y resuélvelo allí.',
+        'The website asks for a security code. Type the characters in the image, or open it in the browser and solve it there.',
       ),
     ],
     qr_scan: [

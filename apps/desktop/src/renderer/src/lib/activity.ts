@@ -422,6 +422,13 @@ export function activityLabel(
     }
     case 'browser_close':
       return { text: es ? 'Cerrando el navegador' : 'Closing the browser', icon: X };
+    case 'browser_reopen_headed':
+      return {
+        text: es
+          ? 'Abriendo la web en una ventana visible'
+          : 'Opening the site in a visible window',
+        icon: PanelTop,
+      };
     default: {
       return {
         text: es ? 'Trabajando en tu solicitud' : 'Working on your request',

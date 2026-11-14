@@ -229,6 +229,9 @@ export const FeedbackKind = z.enum([
   'friction', // something that went wrong / was hard ("la sede caduca la sesión a los 10 min")
   'gotcha', // non-obvious trap ("hay que marcar 'renovación' y no 'expedición'")
 ]);
+
+/** The longest body of a learning (the code of a procedure's browser steps fits). */
+export const FEEDBACK_BODY_MAX = 8000;
 export type FeedbackKind = z.infer<typeof FeedbackKind>;
 
 /**
@@ -276,7 +279,7 @@ export const FeedbackSubmission = z.object({
   region: z.string().trim().max(100).optional(),
   kind: FeedbackKind,
   title: z.string().trim().min(5).max(200),
-  body: z.string().trim().min(10).max(4000),
+  body: z.string().trim().min(10).max(FEEDBACK_BODY_MAX),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
   /** Official URLs involved (query strings and fragments are stripped). */
   urls: z.array(z.string().url()).max(5).default([]),

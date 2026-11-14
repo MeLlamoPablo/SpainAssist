@@ -1,6 +1,7 @@
 import type {
   AfirmaHandler,
   AfirmaHandlerContext,
+  BrowserLiveInput,
   BrowserObservation,
   BrowserTab,
   FnmtCall,
@@ -202,6 +203,9 @@ export interface ScreencastFrame {
   viewportHeight: number;
 }
 
+/** The user's input in the live view (`BrowserLiveInput` of @sa/shared). */
+export type LiveInput = BrowserLiveInput;
+
 export interface BrowserService {
   open(procedureId: string, url: string, opts?: { newTab?: boolean }): Promise<BrowserObservation>;
   snapshot(procedureId: string): Promise<BrowserObservation>;
@@ -279,4 +283,9 @@ export interface BrowserService {
     onFrame: (frame: ScreencastFrame) => void | Promise<void>,
     opts?: { width?: number; height?: number; quality?: number },
   ): Promise<() => Promise<void>>;
+  /**
+   * Live view: the user's mouse or keyboard input on the active tab. Not queued behind the
+   * agent's actions (a long `wait` would hold it); a closed browser ignores it.
+   */
+  input(procedureId: string, event: LiveInput): Promise<void>;
 }

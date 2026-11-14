@@ -1,7 +1,9 @@
 # @sa/feedback-server
 
 Anonymous, PII-scrubbed **learnings** shared between SpainAssist agents ("la cita previa del DNI
-sale por tandas"). Hono on Node, raw SQL on Postgres (PGlite for dev and tests).
+sale por tandas"): tips, frictions and gotchas. After every successful procedure agents share a
+tip with the browser steps that worked (the workflow code, personal data as placeholders). Hono
+on Node, raw SQL on Postgres (PGlite for dev and tests).
 
 **Nothing an agent shares is served until a maintainer approves it** (see [Triage](#triage)).
 

@@ -8,7 +8,7 @@ import {
 } from './chat';
 import { CodemodeSlug, type UiEvent } from './codemode';
 import { Procedure as ProcedureSchema, ProcedureUpdate } from './procedure';
-import { FeedbackKind, FeedbackVote } from './services';
+import { FEEDBACK_BODY_MAX, FeedbackKind, FeedbackVote } from './services';
 import { PersonalDataInput } from './vault';
 
 /**
@@ -93,6 +93,34 @@ export const BrowserObservation = z.object({
   imageId: z.string().optional(),
 });
 export type BrowserObservation = z.infer<typeof BrowserObservation>;
+
+const LiveCoordinate = z.number().finite().min(0).max(100_000);
+
+/**
+ * The user's input in a live view of a procedure's page (`browser.live.input`), for its active
+ * tab. Coordinates are CSS pixels of the page's viewport (the frames' `width` × `height`).
+ */
+export const BrowserLiveInput = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('mouseMove'), x: LiveCoordinate, y: LiveCoordinate }),
+  z.object({
+    type: z.enum(['mouseDown', 'mouseUp']),
+    x: LiveCoordinate,
+    y: LiveCoordinate,
+    button: z.enum(['left', 'right', 'middle']).optional(),
+  }),
+  z.object({
+    type: z.literal('wheel'),
+    x: LiveCoordinate,
+    y: LiveCoordinate,
+    deltaX: z.number().finite().min(-10_000).max(10_000),
+    deltaY: z.number().finite().min(-10_000).max(10_000),
+  }),
+  /** A key with its effect (Enter, Backspace, Tab, arrows…), as Playwright's `keyboard.press` names it. */
+  z.object({ type: z.literal('key'), key: z.string().min(1).max(40) }),
+  /** Typed characters, inserted as the keyboard would (IME, paste). */
+  z.object({ type: z.literal('text'), text: z.string().min(1).max(1000) }),
+]);
+export type BrowserLiveInput = z.infer<typeof BrowserLiveInput>;
 
 /**
  * An element: a ref from the latest snapshot ("e12"), or, from codemode workflows, `loc:` and the
@@ -234,6 +262,7 @@ export const BridgeParams = {
     origins: z.array(z.string().url()).max(10).optional(),
   }),
   'browser.close': z.object({}),
+  'browser.reopenHeaded': z.object({}),
 
   // --- feedback (community learnings) ----------------------------------------------------------
   'feedback.search': z.object({
@@ -248,7 +277,7 @@ export const BridgeParams = {
     region: z.string().max(100).optional(),
     kind: FeedbackKind,
     title: z.string().min(5).max(200),
-    body: z.string().min(10).max(4000),
+    body: z.string().min(10).max(FEEDBACK_BODY_MAX),
     tags: z.array(z.string().max(40)).max(10).optional(),
     urls: z.array(z.string().url()).max(5).optional(),
   }),
@@ -452,6 +481,7 @@ export interface BridgeResults {
   'browser.upload': BrowserObservation;
   'browser.useCertificate': { enabled: boolean; origins: string[]; message?: string };
   'browser.close': { closed: boolean };
+  'browser.reopenHeaded': BrowserObservation;
   'feedback.search': { results: import('./services').FeedbackEntry[] };
   'feedback.submit': { submitted: boolean; id?: string; redactions: number; reason?: string };
   'feedback.vote': { counted: boolean; reason?: string };

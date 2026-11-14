@@ -31,6 +31,12 @@ beforeAll(async () => {
     { host: '127.0.0.1' },
   );
   a = await startServer({
+    '/live': page(
+      `<input id=f aria-label="Código" style="position:absolute;left:10px;top:10px;width:300px;height:40px">
+       <p id=k style="position:absolute;top:80px"></p>
+       <script>f.addEventListener('keydown', (e) => { if (e.key === 'Enter') k.textContent = 'Enviado: ' + f.value; });</script>`,
+      'Vista en directo',
+    ),
     '/': page(
       `<h1>Sede de pruebas</h1>
        <a href="/form">Ir al formulario</a>
@@ -548,6 +554,18 @@ describe('notes, state and lifecycle', () => {
     await new Promise((r) => setTimeout(r, 300));
     await stop();
     expect(frames.length).toBeGreaterThan(0);
+  });
+
+  it("takes the user's clicks and keys from the live view", async () => {
+    await t.service.open('live', `${a.origin}/live`);
+    await t.service.input('live', { type: 'mouseDown', x: 50, y: 30 });
+    await t.service.input('live', { type: 'mouseUp', x: 50, y: 30 });
+    await t.service.input('live', { type: 'text', text: 'SPAIN' });
+    await t.service.input('live', { type: 'key', key: 'Enter' });
+    const obs = await t.service.snapshot('live');
+    expect(obs.snapshot).toContain('Enviado: SPAIN');
+    // A procedure without a browser ignores it.
+    await expect(t.service.input('nobody', { type: 'key', key: 'Enter' })).resolves.toBeUndefined();
   });
 
   it('opens, reports, screenshots and closes procedure browsers', async () => {

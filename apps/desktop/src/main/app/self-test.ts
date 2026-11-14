@@ -5,7 +5,8 @@
  * parity project runs it on the development build (docs/ARCHITECTURE.md, "Shipping").
  *
  * - The browser: the bundled Chromium (Playwright's in development) starts through the real
- *   BrowserService as the app starts it, headed with its windows minimized, and enforces a CRLSet
+ *   BrowserService as the app starts its headed browser (the one agents move a procedure to when a
+ *   site refuses the headless one), with its windows minimized, and enforces a CRLSet
  *   (the bundled fixture, which CrlSetStore installs from memory). Once the CRLSet settled and
  *   the session's window closed, it must still be running, and serve a second session and a
  *   second tab without a relaunch: v0.3.2's quit there on Windows and Linux, on every launch.
@@ -102,7 +103,7 @@ export interface SelfTestOptions {
   chromium?: { executable: string; version: string } | { reason: string };
   sidecarBinary: string;
   browserFactory: BrowserFactory;
-  /** Tests only, where there is no display: the app always runs the browser headed. */
+  /** Tests only, where there is no display: the self-test checks the headed browser. */
   headless?: boolean;
   /** Tests only: how long a page may take to show (FIRST_PAGE_MS, then PAGE_MS). */
   pageMs?: number;

@@ -1,3 +1,4 @@
+import type { BrowserLiveInput } from './bridge';
 import type { Attachment, ChatItem, ConversationState, PromptResponse } from './chat';
 import type { CodemodeAgentInfo, UiEvent, WorkflowInfo } from './codemode';
 import type { ProcedureListItem } from './procedure';
@@ -310,6 +311,15 @@ export interface SaMethods {
   'media.get': [[id: string], string | null];
   /** Bring the procedure's browser window to the front (if open). */
   'browser.show': [[procedureId: string], void];
+  /**
+   * Live view of the procedure's page: `stream` sends `browser.frame` events until
+   * `browser.live.stop`; `window` brought its real window to the front instead (a headed
+   * procedure); null: no page open.
+   */
+  'browser.live.start': [[procedureId: string], 'stream' | 'window' | null];
+  'browser.live.stop': [[procedureId: string], void];
+  /** The user's mouse or keys on the streamed page. */
+  'browser.live.input': [[procedureId: string, input: BrowserLiveInput], void];
 }
 
 export type SaMethod = keyof SaMethods;
@@ -335,7 +345,11 @@ export type SaEvent =
   | { type: 'codemode.agent'; agent: CodemodeAgentInfo }
   | { type: 'codemode.agentLog'; agentId: string; item: ChatItem }
   | { type: 'codemode.workflow'; workflow: WorkflowInfo }
-  | { type: 'updates.status'; status: UpdateStatus };
+  | { type: 'updates.status'; status: UpdateStatus }
+  /** A frame of a live view (`browser.live.start`): a base64 JPEG of a `width` × `height` page. */
+  | { type: 'browser.frame'; procedureId: string; jpeg: string; width: number; height: number }
+  /** Main ended a live view (the page closed or moved to a headed browser). */
+  | { type: 'browser.liveEnded'; procedureId: string };
 
 /**
  * The app's own updates (electron-updater, GitHub Releases). They download in the background and

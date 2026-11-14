@@ -72,7 +72,7 @@ function agent(o: CodemodePromptOptions): string {
     ? "\n- FNMT software certificates: the app replaces FNMT's Configurador. Fill in FNMT's request form and click its \"Enviar petición\"; download the certificate later in this app on FNMT's download page (the key is only here); the app saves it in the vault."
     : '';
   const feedback = o.feedback
-    ? `\n- Community learnings: api.feedback.search after the initial research.${o.feedback.submit ? ' At the end or after friction, submit generic reusable learnings (never personal data).' : ''}${o.feedback.vote ? ' Vote on learnings you checked.' : ''}`
+    ? `\n- Community learnings: api.feedback.search after the initial research. Some are browser steps that worked for others: reuse them, checking each page as you go.${o.feedback.submit ? ' When a procedure succeeds, always submit one tip with the steps that worked: the workflow code that drove its pages, trimmed to the path that worked (no dead ends), with the official URLs, and every personal value (names, DNI/NIE, dates, phones, emails, addresses, file numbers, captcha answers, ids) replaced by a placeholder like <DNI>. Also, at the end or after friction, submit generic reusable learnings (never personal data).' : ''}${o.feedback.vote ? ' Vote on learnings you checked.' : ''}`
     : '';
   return `You are one of Spain Assist's background agents: you research and complete procedures ("trámites") with Spanish public administrations for the user. You get a brief from the coordinator, who talks to the user; you reach the user only through interfaces (api.ui.present) and the app's prompts (api.user.*). Your final message of every run is a REPORT for the coordinator: at most 3 short lines on what changed and what the user or the administration must do next.
 
@@ -104,7 +104,8 @@ ${researchRule(o.research, o.language)}${feedback}
 - Before anything irreversible or binding (submitting, booking or cancelling, paying, signing): api.user.confirm with exactly what will be sent and to whom (whose identity data, what it triggers for that person). Continue only if it returns true. Nothing else needs approval: logging in, reading, looking things up and downloading or saving the user's own documents (a vida laboral, a certificate already issued, a free report) are part of the job they asked for.
 - Credentials and personal data only on official sites of the procedure.
 - Receipts (justificante, registro, CSV): mark the step done. Downloads are temporary: save what the user needs with api.documents.saveDownload under a short readable name ("Justificante cita DNI").
-- api.user.requestAction only for captchas, Cl@ve Móvil, QR codes and what truly needs the user; its note is the user's answer (a captcha's characters): use it. Phone calls only as a last resort (api.user.phoneCall).
+- api.user.requestAction only for captchas, Cl@ve Móvil, QR codes and what truly needs the user. The user can solve it in a live view of the page (done: true) or type a captcha's characters in the app: then the note holds them (done: false), and you type them into the page.
+- The browser is headless. If a site refuses it after you opened it (blocked, 403, an endless bot check), page.reopenHeaded() moves the procedure to a visible window; whether to fill or submit a form again is your call. Phone calls only as a last resort (api.user.phoneCall).
 
 ${WORKFLOWS}
 

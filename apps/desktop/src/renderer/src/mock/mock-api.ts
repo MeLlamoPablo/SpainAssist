@@ -256,6 +256,28 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     for (const listener of listeners) listener(clone(event));
   };
 
+  /** A live view's frame: an example page drawn as a JPEG, like the browser's screencast. */
+  const liveFrame = async (procedureId: string) => {
+    const image = new Image();
+    image.src = fakePage({
+      host: 'sede.example.gob.es',
+      title: tr('Cita previa', 'Appointments'),
+      kind: 'login',
+      lines: [
+        tr('Código de seguridad', 'Security code'),
+        tr('Escribe los caracteres de la imagen', 'Type the characters in the image'),
+      ],
+      button: tr('Enviar', 'Send'),
+    });
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 800;
+    canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const jpeg = canvas.toDataURL('image/jpeg', 0.8).split(',')[1] ?? '';
+    emit({ type: 'browser.frame', procedureId, jpeg, width: 1280, height: 800 });
+  };
+
   if (params.has('playground'))
     resetPrompt = (id) => {
       const item = examplePromptItems(state.settings.language).find((item) => item.id === id);
@@ -1550,6 +1572,12 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       if (params.has('playground'))
         toast.info(tr('Ventana del navegador de ejemplo', 'Example browser window'));
     },
+    'browser.live.start': (procedureId) => {
+      void liveFrame(procedureId);
+      return 'stream';
+    },
+    'browser.live.stop': () => {},
+    'browser.live.input': () => {},
   };
 
   // Keep the "live" demo moving: the padrón agent is reading the town hall's page.

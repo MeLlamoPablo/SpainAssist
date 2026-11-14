@@ -158,11 +158,15 @@ interface Feedback {
   search(input: string | { query: string; procedure?: string; limit?: number }): Promise<{ id: string; title: string; body: string; kind: string; urls?: string[] }[]>;${
     f.submit
       ? `
-  /** Generic, reusable learnings. Never personal data. */
-  submit(input: { procedure: string; administration?: string; region?: string; kind: string; title: string; body: string; tags?: string[]; urls?: string[] }): Promise<{ submitted: boolean }>;`
+  /** Generic, reusable learnings (body ≤ 8000 chars). Never personal data. */
+  submit(input: { procedure: string; administration?: string; region?: string; kind: "tip"|"friction"|"gotcha"; title: string; body: string; tags?: string[]; urls?: string[] }): Promise<{ submitted: boolean }>;`
       : ''
   }${f.vote ? `\n  vote(id: string, vote: "up"|"down"): Promise<{ counted: boolean }>;` : ''}
 }`;
+
+/** When to move a procedure to the headed browser (`page.reopenHeaded`). */
+const REOPEN_HEADED =
+  'The browser is headless (no window). If a site refuses it after you opened it (blocked, 403, a bot check that never ends, a captcha that rejects correct answers), reopen the procedure in a visible browser window: cookies kept, the current page loaded again, but what was typed and not submitted is lost, so judge whether a form must be filled or submitted again. Never as a first attempt, and not for captchas the user can solve from the app.';
 
 const BROWSER = (dnie: boolean) => `
 /** The procedure's browser (the app's own Chromium; one per procedure, shared by its tabs).
@@ -205,6 +209,8 @@ interface Page {
   screenshot(o?: { fullPage?: boolean }): Promise<Image>;
   evaluate<R>(fn: (arg: any) => R, arg?: unknown): Promise<R>;
   tabs(): Promise<{ index: number; url: string; title: string; active: boolean }[]>; selectTab(i: number): Promise<void>; closeTab(i: number): Promise<void>;
+  /** ${REOPEN_HEADED} */
+  reopenHeaded(): Promise<Snapshot>;
   /** The app types secrets itself; you never see them. Only on official sites of the procedure. */
   fillFromVault(target: Locator | string, key: string, o?: { submit?: boolean }): Promise<ActionResult>;
   /** Cl@ve Permanente: the saved DNI/NIE and password (the user adds it in the app when none is saved;
@@ -223,7 +229,9 @@ interface User {
   /** Only before something binding (submit, book, cancel, pay, sign): exactly what will be sent and to
    *  whom. Never for logins, reads or downloads. false = declined: stop that action. */
   confirm(o: { title: string; message: string; kind?: "action"|"submission"|"payment"; details?: { label: string; value: string }[]; confirmLabel?: string; danger?: boolean }): Promise<boolean>;
-  /** Captchas, Cl@ve Móvil approvals, QR codes, in-person or paper steps. */
+  /** Captchas, Cl@ve Móvil approvals, QR codes, in-person or paper steps. The user can open a live view
+   *  of the page (showBrowser) and act there: done. A captcha always shows them its screenshot; when they
+   *  type its characters in the app instead, done is false and note holds them: type the note yourself. */
   requestAction(o: { kind: "captcha"|"qr_scan"|"phone_approval"|"manual_step"|"offline"; title: string; message: string; showBrowser?: boolean; attachScreenshot?: boolean }): Promise<{ done: boolean; note?: string }>;
   /** The user adds a missing login method in the app; returns its credential id. */
   requestCredential(o: { credential: "clave_permanente"|"dnie"; title: string; message: string }): Promise<{ credentialId?: string }>;

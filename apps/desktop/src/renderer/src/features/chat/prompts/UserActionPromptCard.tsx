@@ -9,9 +9,9 @@ import {
   QrCode,
   Smartphone,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Button } from '../../../components/ui/button';
-import { Textarea } from '../../../components/ui/field';
+import { Input, Textarea } from '../../../components/ui/field';
 import { Skeleton } from '../../../components/ui/misc';
 import { useT } from '../../../i18n';
 import { common } from '../../../i18n/common';
@@ -20,6 +20,7 @@ import { useMedia } from '../../../lib/media';
 import { toast } from '../../../store/toast';
 import { chatDict } from '../i18n';
 import { Lightbox } from '../Lightbox';
+import { LiveBrowser } from '../LiveBrowser';
 import { Markdown } from '../Markdown';
 import { PromptShell } from './PromptShell';
 
@@ -50,15 +51,21 @@ export function UserActionPromptCard({
   const [cannotOpen, setCannotOpen] = useState(false);
   const [note, setNote] = useState('');
   const [lightbox, setLightbox] = useState(false);
+  const [live, setLive] = useState(false);
+  const [characters, setCharacters] = useState('');
   const media = useMedia(prompt.imageId);
+  // A captcha the user can read off its screenshot: they type it here and the agent enters it.
+  const typesCaptcha = prompt.actionKind === 'captcha' && !!prompt.imageId && !item.response;
+  const doneLabel = prompt.doneLabel ?? t.prompt.done;
+  const closeLive = useCallback(() => setLive(false), []);
 
-  const respond = async (done: boolean) => {
+  const respond = async (done: boolean, typed?: string) => {
     setBusy(done ? 'done' : 'cannot');
     try {
       await api.invoke('chat.respond', item.id, {
         kind: 'user_action',
         done,
-        note: !done && note.trim() ? note.trim() : undefined,
+        note: typed ?? (!done && note.trim() ? note.trim() : undefined),
       });
     } catch (err) {
       toast.error(errorMessage(err));
@@ -105,6 +112,39 @@ export function UserActionPromptCard({
         ) : null}
       </div>
 
+      {typesCaptcha ? (
+        <form
+          className="mt-4 flex items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (characters.trim()) void respond(false, characters.trim());
+          }}
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label htmlFor={`captcha-${item.id}`} className="text-[13px] font-medium text-fg">
+              {t.prompt.captchaLabel}
+            </label>
+            <Input
+              id={`captcha-${item.id}`}
+              value={characters}
+              onChange={(e) => setCharacters(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={100}
+            />
+          </div>
+          <Button
+            type="submit"
+            variant="secondary"
+            className="h-10"
+            loading={busy === 'cannot'}
+            disabled={busy !== null || !characters.trim()}
+          >
+            {t.prompt.captchaSend}
+          </Button>
+        </form>
+      ) : null}
+
       {cannotOpen ? (
         <div className="mt-4 rounded-xl bg-surface-2 p-3 ring-1 ring-line ring-inset">
           <label htmlFor={`note-${item.id}`} className="text-[13px] font-medium text-fg">
@@ -138,12 +178,8 @@ export function UserActionPromptCard({
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        {prompt.showBrowser ? (
-          <Button
-            variant="secondary"
-            icon={Monitor}
-            onClick={() => procedureId && void api.invoke('browser.show', procedureId)}
-          >
+        {prompt.showBrowser && procedureId ? (
+          <Button variant="secondary" icon={Monitor} onClick={() => setLive(true)}>
             {t.prompt.showBrowser}
           </Button>
         ) : null}
@@ -160,10 +196,22 @@ export function UserActionPromptCard({
             disabled={busy !== null}
             onClick={() => void respond(true)}
           >
-            {prompt.doneLabel ?? t.prompt.done}
+            {doneLabel}
           </Button>
         </div>
       </div>
+      {procedureId && prompt.showBrowser ? (
+        <LiveBrowser
+          procedureId={procedureId}
+          open={live && !item.response}
+          onClose={closeLive}
+          doneLabel={doneLabel}
+          onDone={() => {
+            setLive(false);
+            void respond(true);
+          }}
+        />
+      ) : null}
       <Lightbox
         mediaId={lightbox ? (prompt.imageId ?? null) : null}
         caption={prompt.title}
