@@ -6,6 +6,7 @@ import { BUNDLED_MODEL_LISTS, type FixedModel } from '../src/providers/defaults'
 import {
   CHATGPT_RESEARCH_MODELS,
   createChatGPTResearchTool,
+  type ResearchUsage,
 } from '../src/research/chatgpt-research';
 import type { ToolResult } from '../src/tools/common';
 
@@ -60,14 +61,26 @@ function fakeRuntime(reply: Partial<AssistantMessage>, events: unknown[] = []) {
 function tool(
   runtime: Pick<ModelRuntime, 'streamSimple'>,
   models?: Record<ResearchMode, FixedModel>,
+  onUsage?: (usage: ResearchUsage) => void,
 ) {
   return createChatGPTResearchTool({
     runtime,
     model: (id) => ({ id, provider: 'openai' }) as Model<Api>,
     language: 'es',
     ...(models ? { models } : {}),
+    ...(onUsage ? { onUsage } : {}),
   });
 }
+
+const spent = {
+  input: 41_000,
+  output: 9_000,
+  cacheRead: 12_000,
+  cacheWrite: 0,
+  reasoning: 7_500,
+  totalTokens: 62_000,
+  cost: { input: 0.05, output: 0.09, cacheRead: 0.003, cacheWrite: 0, total: 0.143 },
+};
 
 const answer = (text: string): Partial<AssistantMessage> => ({
   content: [{ type: 'text', text }],
@@ -190,6 +203,53 @@ describe('web research on a ChatGPT plan', () => {
     const text = (result.content[0] as { text: string }).text;
     expect(text).toContain('usage_limit_reached');
     expect(text).toContain('Do not automatically start a replacement run.');
+  });
+
+  it("reports each request's usage, from pi's final message, failed requests too", async () => {
+    const models: Record<ResearchMode, FixedModel> = {
+      ...CHATGPT_RESEARCH_MODELS,
+      deep: { id: 'gpt-plan-deep', thinkingLevel: 'high' },
+    };
+    const reports: ResearchUsage[] = [];
+    const ok = fakeRuntime({ ...answer('Cita previa.'), usage: spent }, [searchDone, searchDone]);
+    await tool(ok.runtime, models, (u) => reports.push(u)).execute(
+      'call',
+      { query: 'renovar el permiso', mode: 'deep' },
+      undefined,
+      undefined,
+      ctx,
+    );
+    const failed = fakeRuntime({
+      stopReason: 'error',
+      errorMessage: 'usage_limit_reached',
+      usage: spent,
+      responseModel: 'gpt-plan-deep-2026',
+    });
+    await tool(failed.runtime, models, (u) => reports.push(u)).execute(
+      'call',
+      { query: 'renovar el permiso', mode: 'deep' },
+      undefined,
+      undefined,
+      ctx,
+    );
+    expect(reports).toEqual([
+      {
+        provider: 'openai',
+        model: 'gpt-plan-deep',
+        mode: 'deep',
+        thinkingLevel: 'high',
+        usage: spent,
+        durationMs: expect.any(Number),
+        searches: 2,
+        stopReason: 'stop',
+      },
+      expect.objectContaining({
+        model: 'gpt-plan-deep-2026',
+        usage: spent,
+        searches: 0,
+        stopReason: 'error',
+      }),
+    ]);
   });
 
   it('propagates a user abort', async () => {

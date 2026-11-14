@@ -1,4 +1,4 @@
-import type { Api, JsonValue, Model } from '@earendil-works/pi-ai';
+import type { Api, JsonValue, Model, StopReason, Usage } from '@earendil-works/pi-ai';
 import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { ResearchMode } from '@sa/shared';
 import { Type } from 'typebox';
@@ -32,6 +32,23 @@ export interface ChatGPTResearchOptions {
   model: (id: string) => Model<Api>;
   language: 'es' | 'en';
   models?: Readonly<Record<ResearchMode, FixedModel>>;
+  /** Called once per request that got an answer, failed or not: what it spent of the plan. */
+  onUsage?: (usage: ResearchUsage) => void;
+}
+
+/** One research request's spend, as pi reports it (counts and metadata only, never text). */
+export interface ResearchUsage {
+  provider: string;
+  /** The model that answered (the requested one if the provider doesn't say). */
+  model: string;
+  mode: ResearchMode;
+  thinkingLevel: FixedModel['thinkingLevel'];
+  /** Tokens, and their cost at the catalog's price (0 when the catalog has none). */
+  usage: Usage;
+  durationMs: number;
+  /** Hosted `web_search` calls the model made. */
+  searches: number;
+  stopReason: StopReason;
 }
 
 type Citation = { url: string; title?: string };
@@ -100,6 +117,7 @@ export function createChatGPTResearchTool(options: ChatGPTResearchOptions) {
           ? `\n\nAnswer only with one JSON value that matches this JSON Schema, with the source URLs inside it:\n${JSON.stringify(params.outputSchema)}`
           : '';
         progress();
+        const started = Date.now();
         const response = await options.runtime
           .streamSimple(
             model,
@@ -140,6 +158,16 @@ export function createChatGPTResearchTool(options: ChatGPTResearchOptions) {
             },
           )
           .result();
+        options.onUsage?.({
+          provider: model.provider,
+          model: response.responseModel ?? model.id,
+          mode: params.mode,
+          thinkingLevel: choice.thinkingLevel,
+          usage: response.usage,
+          durationMs: Date.now() - started,
+          searches,
+          stopReason: response.stopReason,
+        });
         if (response.stopReason === 'aborted') requestSignal.throwIfAborted();
         if (response.stopReason === 'error') {
           throw new Error(response.errorMessage || 'The research request failed.');

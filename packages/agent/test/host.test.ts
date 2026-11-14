@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { Api, Credential, Model } from '@earendil-works/pi-ai';
+import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { parseAppLink } from '@sa/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BridgeClient } from '../src/bridge/client';
@@ -9,7 +10,7 @@ import { parseHostConfig } from '../src/config';
 import { BridgeCredentialStore, normalizeCredential } from '../src/host/credentials';
 import { linkedDocumentIds, unknownDocumentsMessage } from '../src/host/document-links';
 import { templateFor } from '../src/host/model';
-import { prepareSessionFile } from '../src/host/session';
+import { prepareSessionFile, recordResearchUsage } from '../src/host/session';
 import { agentHostPath, buildAgentLaunch } from '../src/launch';
 import { buildCoordinatorPrompt } from '../src/prompt/coordinator';
 import { formatToday } from '../src/prompt/system';
@@ -202,6 +203,59 @@ describe('session file', () => {
     writeFileSync(existing, '{}\n', { mode: 0o644 });
     prepareSessionFile(existing);
     if (posix) expect(statSync(existing).mode & 0o777).toBe(0o600);
+  });
+
+  it("records web research usage next to the agent's messages, outside the model's context", () => {
+    dir = mkdtempSync(join(tmpdir(), 'sa-session-'));
+    const file = prepareSessionFile(join(dir, 'p1.jsonl'));
+    const session = SessionManager.open(file, dir, dir);
+    const usage = {
+      input: 41_000,
+      output: 9_000,
+      cacheRead: 12_000,
+      cacheWrite: 0,
+      reasoning: 7_500,
+      totalTokens: 62_000,
+      cost: { input: 0.05, output: 0.09, cacheRead: 0.003, cacheWrite: 0, total: 0.143 },
+    };
+    session.appendMessage({ role: 'user', content: 'Renovar el permiso', timestamp: 1 });
+    session.appendMessage({
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Investigo.' }],
+      api: 'openai-codex-responses',
+      provider: 'openai-codex',
+      model: 'gpt-agent',
+      usage,
+      stopReason: 'stop',
+      timestamp: 2,
+    });
+    const context = session.buildSessionContext().messages;
+    const line = recordResearchUsage(session, {
+      provider: 'openai-codex',
+      model: 'gpt-5.6-terra',
+      mode: 'deep',
+      thinkingLevel: 'high',
+      usage,
+      durationMs: 93_200,
+      searches: 7,
+      stopReason: 'stop',
+    });
+    expect(line).toBe(
+      'openai-codex/gpt-5.6-terra mode=deep thinking=high searches=7 durationMs=93200 stop=stop input=41000 cacheRead=12000 output=9000 reasoning=7500 cost=0.1430',
+    );
+    const entries = readFileSync(file, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(entries.at(-1)).toMatchObject({
+      type: 'usage',
+      kind: 'web_research',
+      provider: 'openai-codex',
+      model: 'gpt-5.6-terra',
+      usage,
+      note: 'mode=deep thinking=high searches=7 durationMs=93200 stop=stop',
+    });
+    expect(session.buildSessionContext().messages).toEqual(context);
   });
 });
 

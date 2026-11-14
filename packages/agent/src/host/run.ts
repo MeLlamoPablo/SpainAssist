@@ -23,7 +23,7 @@ import type { HostHooks } from './hooks';
 import { hostLog } from './log';
 import { configureModel, LITELLM_PROVIDER_ID, needsPromptCacheKey } from './model';
 import { promptResearch, researchBackend } from './research';
-import { prepareSessionFile, recordSessionSelection } from './session';
+import { prepareSessionFile, recordResearchUsage, recordSessionSelection } from './session';
 
 /**
  * Agent host: one process per active agent (the coordinator, or a background agent). Reads its
@@ -117,6 +117,7 @@ export async function runHost(
       }),
     );
   } else if (research === 'chatgpt') {
+    // Its requests spend the plan outside the agent's messages: recorded in the session file.
     researchTools.push(
       createChatGPTResearchTool({
         runtime: modelRuntime,
@@ -128,6 +129,13 @@ export async function runHost(
         }),
         language: config.language,
         ...(config.research.chatgptModels ? { models: config.research.chatgptModels } : {}),
+        onUsage: (usage) => {
+          try {
+            hostLog('info', `web research usage: ${recordResearchUsage(sessionManager, usage)}`);
+          } catch (err) {
+            hostLog('warn', `web research usage not recorded: ${String(err)}`);
+          }
+        },
       }),
     );
   } else if (research === 'exa') {
@@ -237,7 +245,7 @@ export async function runHost(
     cacheWarming: 'off',
     quietStartup: true,
   });
-  const sessionManager = pi.SessionManager.open(sessionFile, dirname(sessionFile), cwd);
+  let sessionManager = pi.SessionManager.open(sessionFile, dirname(sessionFile), cwd);
 
   const runtime = await pi.createAgentSessionRuntime(
     async (options) => {
@@ -266,6 +274,8 @@ export async function runHost(
         tools: agentTools.map((tool) => tool.name),
       });
       recordSessionSelection(options.sessionManager, result.session);
+      // The session that side requests (web research) record their usage in from now on.
+      sessionManager = options.sessionManager;
       return { ...result, services, diagnostics: services.diagnostics };
     },
     { cwd, agentDir, sessionManager },

@@ -2,6 +2,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, realpathSync } f
 import { homedir, tmpdir } from 'node:os';
 import { dirname, parse, resolve } from 'node:path';
 import type { SessionManager } from '@earendil-works/pi-coding-agent';
+import type { ResearchUsage } from '../research/chatgpt-research';
 
 /**
  * Make sure the session file and its directory are private (0600 / 0700) before pi touches
@@ -43,6 +44,37 @@ export function recordSessionSelection(
   if (lastThinking?.thinkingLevel !== thinkingLevel) {
     sessionManager.appendThinkingLevelChange(thinkingLevel);
   }
+}
+
+/** Kind of the pi `usage` entry of a web research request (see recordResearchUsage). */
+const RESEARCH_USAGE_KIND = 'web_research';
+
+/**
+ * Record what a web research request spent (ChatGPT research is a separate Responses request,
+ * outside the agent's own messages) as a pi `usage` entry in the agent's session file, next to
+ * its assistant messages: pi's session stats count it, and one script can sum an agent's spend.
+ * The note holds the rest as `key=value` pairs. Returns them, with the token counts, for a log line.
+ */
+export function recordResearchUsage(
+  sessionManager: Pick<SessionManager, 'appendUsage'>,
+  research: ResearchUsage,
+): string {
+  const note = [
+    `mode=${research.mode}`,
+    `thinking=${research.thinkingLevel}`,
+    `searches=${research.searches}`,
+    `durationMs=${research.durationMs}`,
+    `stop=${research.stopReason}`,
+  ].join(' ');
+  sessionManager.appendUsage(
+    RESEARCH_USAGE_KIND,
+    research.provider,
+    research.model,
+    research.usage,
+    note,
+  );
+  const { input, cacheRead, output, reasoning, cost } = research.usage;
+  return `${research.provider}/${research.model} ${note} input=${input} cacheRead=${cacheRead} output=${output} reasoning=${reasoning ?? 0} cost=${cost.total.toFixed(4)}`;
 }
 
 /** Never tighten directories other programs rely on (home, temp, filesystem root). */
