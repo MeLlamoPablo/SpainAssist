@@ -113,6 +113,11 @@ if (isDev && launchSocket) {
       reject(new Error('Dev launcher stopped'));
       app.quit();
     });
+  }).catch((error: unknown) => {
+    // The launcher stopped before this app connected (e.g. `pnpm dev` restarted) and took its
+    // socket with it. Nothing would ever stop this app: exit instead of lingering on an error box.
+    console.error(`Dev launcher unavailable, exiting: ${errorMessage(error)}`);
+    return process.exit(1);
   });
   Object.assign(process.env, z.record(z.string(), z.string()).parse(JSON.parse(raw)));
 }
