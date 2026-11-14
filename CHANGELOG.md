@@ -28,7 +28,8 @@ Installed apps update to it. What changed since 0.3.3.
   - On macOS, FNMT certificates already in the keychain are found and listed as "Externo"; their
     keys stay in the keychain and each use asks first. A certificate in Mis datos can be moved to
     the keychain, downloaded as a password-protected .p12, or dropped onto the card as a
-    .p12/.pfx file. (6e31e46, ddd32b3, 3d1f45a)
+    .p12/.pfx file. The move dialog links to Acceso a Llaveros, where the keychain's
+    certificates are managed. (6e31e46, ddd32b3, 3d1f45a, 39a9263, 2fbb145)
   - Signatures carry the certificate's serial number, which Java verifiers require (Correos' voto
     por correo failed after signing), and Correos' certificate login no longer stops at Chromium's
     own certificate picker. (a0b7d05, f898402)
@@ -50,6 +51,10 @@ Installed apps update to it. What changed since 0.3.3.
     (a27893b, 957e5d5, 5fbb2cf, 8ecaece)
   - A click on a covered button fails in 2.5 s, saying what covers it. (2779092, 570e717)
   - The browser's blank startup window is minimized at once. (598f427)
+  - A PDF downloaded in an earlier run of a procedure is no longer lost to the agent, and one
+    shown again is no longer taken for an empty page. (830d175)
+  - What you type in a form that came back after a restart reaches the agent at once, not up
+    to 25 s later. (b3ba03e)
 
 ### Agents and costs
 
