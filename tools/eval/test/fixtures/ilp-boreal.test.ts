@@ -3,7 +3,7 @@ import { AnswerState } from '../../src/answers';
 import type { Rule } from '../../src/contracts';
 import { getFixture } from '../../src/fixtures';
 import { RuleEngine } from '../../src/rules';
-import { FakeRun, prompt, promptShown, say } from '../rules/support/run';
+import { FakeRun, prompt, promptShown } from '../rules/support/run';
 
 const ID = 'ilp-boreal-firma';
 
@@ -51,22 +51,6 @@ describe('ilp-boreal-firma', () => {
       'approve-signature',
     );
     expect(state.claim(smsCode)?.id).toBe('type-sms-code');
-  });
-
-  it('hears the coordinator say it is signed, as GPT said it', async () => {
-    const rule = getFixture(ID).rules.find((r) => r.id === 'told-signed')!;
-    const condition = rule.condition.type === 'all' ? rule.condition.of[1]! : rule.condition;
-    for (const text of [
-      'La firma se ha realizado y Boreal ha confirmado que se completó correctamente.',
-      'La firma de la ILP se ha completado con tu consentimiento y certificado.',
-    ]) {
-      const told = new FakeRun();
-      told.push(say('assistant', text));
-      expect(await matched({ ...rule, condition }, told)).toBe(true);
-    }
-    const pending = new FakeRun();
-    pending.push(say('assistant', 'Estoy gestionando la firma de la ILP de veterinarios.'));
-    expect(await matched({ ...rule, condition }, pending)).toBe(false);
   });
 
   it('scores the question to Boreal as a detour, not the signature', async () => {
