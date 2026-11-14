@@ -19,7 +19,7 @@ import {
   TriangleAlert,
   Upload,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type DragEvent, type ReactNode, useEffect, useState } from 'react';
 import { Button, IconButton } from '../../components/ui/button';
 import { SegmentedControl } from '../../components/ui/controls';
 import { ConfirmDialog, Dialog } from '../../components/ui/dialog';
@@ -48,6 +48,12 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
   const t = useT(vaultDict);
   const [claveOpen, setClaveOpen] = useState(false);
   const [certOpen, setCertOpen] = useState(false);
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const openCert = (file: File | null) => {
+    setCertFile(file);
+    setCertOpen(true);
+  };
+  const certDrop = useCertificateDrop(openCert);
   const [movilBusy, setMovilBusy] = useState(false);
   const [dnieBusy, setDnieBusy] = useState(false);
   const clave = overview.credentials.find((c) => c.kind === 'clave_permanente');
@@ -192,15 +198,16 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
             icon={FileKey}
             title={t.credentials.cert.title}
             body={t.credentials.cert.what}
+            drop={certDrop}
             action={
-              <Button variant="secondary" icon={Plus} onClick={() => setCertOpen(true)}>
+              <Button variant="secondary" icon={Plus} onClick={() => openCert(null)}>
                 {t.credentials.cert.add}
               </Button>
             }
           />
         ) : (
           <div>
-            <Button variant="ghost" icon={Plus} onClick={() => setCertOpen(true)}>
+            <Button variant="ghost" icon={Plus} onClick={() => openCert(null)}>
               {t.credentials.cert.another}
             </Button>
           </div>
@@ -208,7 +215,7 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
       </div>
       <ClaveDialog open={claveOpen} onOpenChange={setClaveOpen} />
       <DnieEarlyAccessDialog open={earlyOpen} onOpenChange={setEarlyOpen} />
-      <CertificateDialog open={certOpen} onOpenChange={setCertOpen} />
+      <CertificateDialog open={certOpen} onOpenChange={setCertOpen} initialFile={certFile} />
     </div>
   );
 }
@@ -219,6 +226,7 @@ function AddCard({
   badge,
   body,
   action,
+  drop,
 }: {
   icon: LucideIcon;
   title: string;
@@ -226,9 +234,17 @@ function AddCard({
   badge?: ReactNode;
   body: string;
   action: ReactNode;
+  /** Makes the card a drop target for files. */
+  drop?: FileDrop;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 rounded-xl border border-dashed border-line-strong bg-surface-2/50 px-5 py-4">
+    <div
+      {...drop?.props}
+      className={cn(
+        'flex flex-wrap items-center gap-4 rounded-xl border border-dashed px-5 py-4 transition-colors duration-150',
+        drop?.dragging ? 'border-accent bg-accent-soft' : 'border-line-strong bg-surface-2/50',
+      )}
+    >
       <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-3 text-fg-subtle">
         <Icon size={19} aria-hidden />
       </span>
@@ -237,11 +253,55 @@ function AddCard({
           <p className="text-[14.5px] font-semibold text-fg">{title}</p>
           {badge}
         </div>
-        <p className="mt-0.5 text-[13px] text-fg-muted">{body}</p>
+        <p className="mt-0.5 text-[13px] text-fg-muted">{drop?.dragging ? drop.hint : body}</p>
       </div>
       {action}
     </div>
   );
+}
+
+interface FileDrop {
+  dragging: boolean;
+  /** Replaces the target's text while a file is over it. */
+  hint: string;
+  props: {
+    onDragOver: (e: DragEvent) => void;
+    onDragLeave: (e: DragEvent) => void;
+    onDrop: (e: DragEvent) => void;
+  };
+}
+
+const isCertificateFile = (file: File) => /\.(p12|pfx)$/i.test(file.name);
+
+/** Lets the user drop a .p12/.pfx on a target; any other file is refused with a toast. */
+function useCertificateDrop(onFile: (file: File) => void): FileDrop {
+  const t = useT(vaultDict);
+  const [dragging, setDragging] = useState(false);
+  return {
+    dragging,
+    hint: t.credentials.cert.dropHere,
+    props: {
+      onDragOver: (e) => {
+        if (!e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setDragging(true);
+      },
+      // Leaving for one of the target's own children isn't leaving the target.
+      onDragLeave: (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      },
+      onDrop: (e) => {
+        e.preventDefault();
+        setDragging(false);
+        const files = [...e.dataTransfer.files];
+        if (files.length === 0) return;
+        const file = files.find(isCertificateFile);
+        if (file) onFile(file);
+        else toast.error(t.credentials.cert.notCertificate);
+      },
+    },
+  };
 }
 
 function Meta({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
@@ -851,9 +911,12 @@ export function ClaveDialog({
 function CertificateDialog({
   open,
   onOpenChange,
+  initialFile,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  /** A file dropped on the section before the dialog opened. */
+  initialFile: File | null;
 }) {
   const t = useT(vaultDict);
   const tc = useT(common);
@@ -863,18 +926,25 @@ function CertificateDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (open) setFile(initialFile);
+  }, [open, initialFile]);
+
   const reset = () => {
     setFile(null);
     setPassphrase('');
     setError(null);
   };
 
+  const pick = (picked: File) => {
+    setFile(picked);
+    setError(null);
+  };
+  const drop = useCertificateDrop(pick);
+
   const choose = async () => {
     const [picked] = await pickFiles('.p12,.pfx,application/x-pkcs12');
-    if (picked) {
-      setFile(picked);
-      setError(null);
-    }
+    if (picked) pick(picked);
   };
 
   const submit = async () => {
@@ -936,13 +1006,19 @@ function CertificateDialog({
           <button
             type="button"
             onClick={() => void choose()}
-            className="flex items-center gap-3 rounded-lg border border-dashed border-line-strong bg-surface-2/60 px-3.5 py-3 text-left hover:border-accent-line hover:bg-accent-soft"
+            {...drop.props}
+            className={cn(
+              'flex items-center gap-3 rounded-lg border border-dashed px-3.5 py-3 text-left transition-colors duration-150',
+              drop.dragging
+                ? 'border-accent bg-accent-soft'
+                : 'border-line-strong bg-surface-2/60 hover:border-accent-line hover:bg-accent-soft',
+            )}
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface text-fg-subtle ring-1 ring-line">
               {file ? <FileKey size={17} aria-hidden /> : <Upload size={17} aria-hidden />}
             </span>
             <span className="min-w-0 truncate text-[13.5px] font-medium text-fg">
-              {file ? file.name : t.credentials.cert.chooseFile}
+              {drop.dragging ? drop.hint : file ? file.name : t.credentials.cert.chooseFile}
             </span>
           </button>
         </div>
