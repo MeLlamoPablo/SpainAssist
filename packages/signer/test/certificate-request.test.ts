@@ -119,7 +119,8 @@ describe('createCertificateRequest', () => {
       ['req', '-verify', '-noout', '-subject'],
       Buffer.from(toPem(req.pkcs10, 'CERTIFICATE REQUEST')),
     ).toString();
-    expect(out).toContain('CN=foo.bar.com');
+    // OpenSSL 3 prints "CN = foo.bar.com", LibreSSL "CN=foo.bar.com".
+    expect(out).toMatch(/CN ?= ?foo\.bar\.com/);
   });
 });
 
