@@ -1,13 +1,14 @@
 import {
-  AGENT_HIDDEN_PERSONAL_KEYS,
   ASSISTANT_AGENT_ID,
   type BrowserObservation,
   type ConfirmPrompt,
   type CredentialPrompt,
   type CredentialSummary,
   credentialAllowedOn,
+  hiddenFromAgents,
   type Language,
   type PhoneCallPrompt,
+  PIN_KEY,
   type PromptResponse,
   personalFieldDef,
   type UserActionPrompt,
@@ -60,17 +61,6 @@ export interface BridgeHandlerDeps {
 
 function personalLabel(key: string, lang: Language, fallback?: string): string {
   return personalFieldDef(key)?.label[lang] ?? fallback ?? key.replace(/^custom\./, '');
-}
-
-/** Keys for a PIN ("pin", "custom.pin_dnie"): PINs are secrets, never personal data. */
-const PIN_KEY = /(?:^|[._-])pin(?:$|[._-])/i;
-
-/**
- * Agents never read, save, type or ask for these: the DNI CAN (it goes only to the phone) and
- * PINs (the DNI's is typed on the desktop and goes only to the phone).
- */
-function hiddenFromAgents(key: string): boolean {
-  return AGENT_HIDDEN_PERSONAL_KEYS.has(key) || PIN_KEY.test(key);
 }
 
 function refuseHiddenKey(key: string | undefined): void {

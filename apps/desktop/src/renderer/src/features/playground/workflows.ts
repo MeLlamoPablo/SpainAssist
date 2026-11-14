@@ -132,18 +132,18 @@ export async function main(api) {
       id: 'datos',
       label: t('Datos de la solicitud', 'Application details'),
       code: 'TextField · Select · Province · DocumentPicker',
-      source: `import { Form, Section, TextField, Select, Province, DocumentPicker, Checkbox, Text, Actions, Button } from "@spainassist/ui";
+      source: `import { Form, Section, TextField, Select, Province, DocumentPicker, Text, Actions, Button } from "@spainassist/ui";
 
 function Details({ api }) {
   const [form, setForm] = api.ui.useDurableState("form", {
-    name: "", email: "", phone: "", income: "", birth: "", province: "", reason: "", photo: "", notes: "",
-    reply: "email", save: true,
+    name: "", surname: "", email: "", phone: "", income: "", birth: "", province: "", reason: "", photo: "",
+    reply: "email",
   });
   const [tried, setTried] = api.ui.useState(false);
   const set = (field) => (value) => setForm((prev) => ({ ...prev, [field]: value }));
   const missing = (field) => (tried && !form[field] ? ${q('Falta este dato.', 'This is missing.')} : undefined);
   const email = tried && form.email && !form.email.includes("@") ? ${q('Revisa el correo.', 'Check the email.')} : undefined;
-  const complete = form.name && form.email.includes("@") && form.birth && form.province && form.reason && form.photo;
+  const complete = form.name && form.surname && form.email.includes("@") && form.birth && form.province && form.reason && form.photo;
 
   return (
     <Form
@@ -151,13 +151,15 @@ function Details({ api }) {
       description=${q('Lo que la Junta pide en el formulario. Los que ya tenías guardados vienen rellenos.', 'What the regional government asks for. Saved details come filled in.')}
     >
       <Section title=${q('Tú', 'You')}>
-        <TextField label=${q('Nombre y apellidos', 'Full name')} value={form.name} onChange={set("name")} error={missing("name")} />
-        <TextField label=${q('Fecha de nacimiento', 'Date of birth')} type="date" value={form.birth} onChange={set("birth")} error={missing("birth")} />
-        <Province value={form.province} onChange={set("province")} error={missing("province")} />
+        {/* vaultKey: when the interface closes, the app saves these answers to Mis datos itself. */}
+        <TextField label=${q('Nombre', 'First name')} vaultKey="givenName" value={form.name} onChange={set("name")} error={missing("name")} />
+        <TextField label=${q('Primer apellido', 'First surname')} vaultKey="surname1" value={form.surname} onChange={set("surname")} error={missing("surname")} />
+        <TextField label=${q('Fecha de nacimiento', 'Date of birth')} type="date" vaultKey="birthDate" value={form.birth} onChange={set("birth")} error={missing("birth")} />
+        <Province vaultKey="addressProvince" value={form.province} onChange={set("province")} error={missing("province")} />
       </Section>
       <Section title=${q('Contacto', 'Contact')}>
-        <TextField label=${q('Correo electrónico', 'Email')} type="email" placeholder="nombre@ejemplo.es" value={form.email} onChange={set("email")} error={missing("email") || email} />
-        <TextField label=${q('Teléfono', 'Phone')} type="phone" value={form.phone} onChange={set("phone")} required={false} />
+        <TextField label=${q('Correo electrónico', 'Email')} type="email" placeholder="nombre@ejemplo.es" vaultKey="email" value={form.email} onChange={set("email")} error={missing("email") || email} />
+        <TextField label=${q('Teléfono', 'Phone')} type="phone" vaultKey="phone" value={form.phone} onChange={set("phone")} required={false} />
         <Select
           label=${q('¿Cómo quieres que te avisen?', 'How should they reach you?')}
           options={[
@@ -175,7 +177,6 @@ function Details({ api }) {
         <DocumentPicker label=${q('Contrato de alquiler', 'Rental contract')} value={form.photo} onChange={set("photo")} error={missing("photo")} />
         <Text tone="muted" size="sm">${t('Solo se envía a la Junta de Andalucía.', 'Only sent to the Junta de Andalucía.')}</Text>
       </Section>
-      <Checkbox label=${q('Guardar mis datos para otros trámites', 'Save my details for other procedures')} checked={form.save} onChange={set("save")} />
       <Actions>
         <Button type="ghost" onClick={() => api.ui.close(null)}>${t('Ahora no', 'Not now')}</Button>
         <Button type="primary" onClick={() => (complete ? api.ui.close(form) : setTried(true))}>${t('Continuar', 'Continue')}</Button>

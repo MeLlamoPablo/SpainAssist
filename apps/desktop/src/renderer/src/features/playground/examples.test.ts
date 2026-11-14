@@ -161,6 +161,45 @@ describe('agent playground', () => {
     ]);
   });
 
+  it('saves what the user typed in fields with a vaultKey when the interface closes, however it closes', async () => {
+    const source = playgroundWorkflows('es').find((w) => w.id === 'datos')?.source ?? '';
+    const saved: unknown[] = [];
+    let view: RunView | undefined;
+    const run = new PlaygroundRun('wf-datos', source, EMPTY, {
+      lang: 'es',
+      delayMs: 0,
+      ask: () => () => {},
+      saveAnswers: async (answers) => {
+        saved.push(...answers);
+      },
+      onChange: (v) => {
+        view = v;
+      },
+    });
+    run.start();
+    const form = await until(() => view?.ui[0], 'the form');
+    const email = nodes(form.tree ?? '').find((n) => n.props.vaultKey === 'email');
+    run.uiEvent('details', {
+      handler: (email?.props.onChange as { $handler: string }).$handler,
+      rev: form.rev,
+      value: 'lucia@example.es',
+    });
+    const typed = await until(() => {
+      const ui = view?.ui[0];
+      return ui && ui.rev > form.rev && ui;
+    }, 'the email in the tree');
+    // "Ahora no": the user still keeps what they typed.
+    const notNow = nodes(typed.tree ?? '').find(
+      (n) => n.type === 'Button' && n.children.includes('Ahora no'),
+    );
+    run.uiEvent('details', {
+      handler: (notNow?.props.onClick as { $handler: string }).$handler,
+      rev: typed.rev,
+    });
+    await until(() => view?.status === 'succeeded', 'the end');
+    expect(saved).toEqual([{ key: 'email', value: 'lucia@example.es' }]);
+  });
+
   it('resumes from durable state: closed interfaces and memoized steps are not repeated', async () => {
     const source = playgroundWorkflows('es').find((w) => w.id === 'cita-dni')?.source ?? '';
     const state = {

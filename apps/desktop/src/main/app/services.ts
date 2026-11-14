@@ -59,6 +59,7 @@ import type { FetchFn } from '../remote/http';
 import { AppStateStore, SettingsStore } from '../settings/store';
 import { createUpdates, type Updates } from '../updates/updater';
 import type { ChooseSavePath } from '../vault/certificate-export';
+import { setPersonalPartial } from '../vault/partial';
 import { VaultService } from '../vault/service';
 import type { SaEnv } from './env';
 import { type AppPaths, assistantPaths, CHAT_VERSION } from './paths';
@@ -258,6 +259,22 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         for (const id of end.workflow.procedures) void browser.finishCapture(id).catch(() => {});
     },
     onDetachedEvent: (workflow) => codemodeCoordinator.onDetachedEvent(workflow),
+    // What the user typed into fields with a vaultKey goes to Mis datos, always.
+    saveAnswers: async (_workflow, answers) => {
+      const current = new Map(vaultPort.listPersonal().map((p) => [p.key, p.value]));
+      const changed = answers.filter((a) => current.get(a.key) !== a.value);
+      if (!changed.length) return;
+      const { saved } = await setPersonalPartial(
+        vaultPort,
+        changed,
+        'form',
+        logger.child('workflows'),
+      );
+      if (!saved.length) return;
+      events.emit({ type: 'vault.changed' });
+      const labels = saved.map((p) => p.label).join(', ');
+      conversation.addNotice('info', t(lang(), 'savedToVault', { labels }));
+    },
     onStale: (workflow) => codemodeCoordinator.onStale(workflow),
   });
   await directory.init();

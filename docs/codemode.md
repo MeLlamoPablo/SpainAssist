@@ -104,7 +104,12 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
 - `api.ui`: `present(key, render)`, `close(result, key?)`, hooks `useDurableState`, `useState`,
   `useMemo`; components from `@spainassist/ui`: Form, Section, Text, Callout, Facts, Link, Divider,
   Progress, TextField, Select, Choice, MultiChoice, Checkbox, Province, DocumentPicker, Map,
-  Appointment, Actions, Button. JSX, no other imports.
+  Appointment, Actions, Button. JSX, no other imports. A field that asks for personal data
+  (TextField, Select, Choice, Province) carries a `vaultKey` ("email", "custom.<slug>"; never the
+  CAN or a PIN): when its interface closes, however it closes, main saves the field's value to
+  Mis datos (`uiTreeAnswers`, from the last tree; skipped when the field has an `error` or the
+  value is already saved) and says so in the chat. The user has no "save my data" choice and the
+  agent no call to make; `api.vault.save` is for personal data found elsewhere.
 - `api.procedures`: `list`, `get`, `getOrCreate({ id, title, …card })`, and handles with `update`
   (optimistic concurrency), `refresh`, `context`/`setContext` (private working context).
 - `api.parallelize(tasks, { concurrency })` (allSettled with a limit), `api.setStatus(status)` (the

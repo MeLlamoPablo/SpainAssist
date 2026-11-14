@@ -6,7 +6,9 @@ import {
   type PromptItem,
   type PromptResponse,
   UI_FAILED,
+  type UiAnswer,
   type UiEvent,
+  uiTreeAnswers,
   uiTreeProblem,
   type WorkflowUi,
 } from '@sa/shared';
@@ -58,6 +60,8 @@ export interface RunnerHost {
   delayMs?: number;
   /** The log of the run this one resumes. */
   history?: RunLine[];
+  /** Saves an interface's answers to Mis datos, as main does when it closes. */
+  saveAnswers?(answers: UiAnswer[]): Promise<void>;
   /** Procedures as the app has them (they outlive runs). */
   procedures?: ProcedureListItem[];
 }
@@ -143,9 +147,18 @@ export class PlaygroundRun {
           );
         },
         closeUi: async (key, result) => {
+          // Like main: what the user answered in fields with a vaultKey goes to Mis datos.
+          const answers = uiTreeAnswers(this.view.ui.find((u) => u.key === key)?.tree);
           this.view.state.ui[key] = { status: 'closed', result };
           this.view.ui = this.view.ui.filter((u) => u.key !== key);
           this.line('call', `ui.close("${key}") → ${short(result)}`);
+          if (answers.length) {
+            this.line(
+              'state',
+              `the app saves to Mis datos: ${answers.map((a) => a.key).join(', ')}`,
+            );
+            await host.saveAnswers?.(answers);
+          }
         },
       },
       onLog: (text) => this.line('log', text),

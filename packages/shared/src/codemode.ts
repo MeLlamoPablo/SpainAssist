@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { APPOINTMENT_MAX_SLOTS, APPOINTMENT_MORE, APPOINTMENT_SLOT } from './chat';
+import { hiddenFromAgents, PersonalFieldKey } from './vault';
 
 /**
  * Codemode (the `codemode` feature flag): agents write JavaScript workflows instead of calling
@@ -34,6 +35,13 @@ const MapOption = z.object({
   address: z.string().min(1).max(500),
 });
 const Tone = z.enum(['default', 'muted', 'info', 'success', 'warning', 'error']);
+/**
+ * The personal data a field asks for (Mis datos: "email", "custom.<slug>"). When the interface
+ * closes, the app saves the field's value there itself (uiTreeAnswers): no checkbox, no agent call.
+ */
+const VaultKey = PersonalFieldKey.refine((key) => !hiddenFromAgents(key), {
+  message: 'is not available to agents',
+}).optional();
 
 /**
  * Props of each native component, validated by main before the renderer sees a tree. Values are
@@ -73,6 +81,7 @@ export const UI_COMPONENT_PROPS = {
     error: Short.optional(),
     required: z.boolean().optional(),
     disabled: z.boolean().optional(),
+    vaultKey: VaultKey,
     onChange: Handler,
   }),
   Select: z.object({
@@ -84,6 +93,7 @@ export const UI_COMPONENT_PROPS = {
     error: Short.optional(),
     required: z.boolean().optional(),
     disabled: z.boolean().optional(),
+    vaultKey: VaultKey,
     onChange: Handler,
   }),
   /** One of a few options as buttons ("Mañanas" / "Tardes"). */
@@ -94,6 +104,7 @@ export const UI_COMPONENT_PROPS = {
     help: Short.optional(),
     error: Short.optional(),
     disabled: z.boolean().optional(),
+    vaultKey: VaultKey,
     onChange: Handler,
   }),
   MultiChoice: z.object({
@@ -118,6 +129,7 @@ export const UI_COMPONENT_PROPS = {
     value: z.string().max(100).optional(),
     help: Short.optional(),
     error: Short.optional(),
+    vaultKey: VaultKey,
     onChange: Handler,
   }),
   /** A saved document, or one the user adds or scans now; the value is its document id. */
@@ -255,6 +267,36 @@ export function uiTreeAddresses(tree: UiNode): string[] {
   };
   visit(tree);
   return [...new Set(out)];
+}
+
+/** A value an interface saves to Mis datos (`vaultKey`). */
+export interface UiAnswer {
+  key: string;
+  value: string;
+  /** The field's label, for a "custom.<slug>" key. */
+  label?: string;
+}
+
+/**
+ * What a closing interface saves to Mis datos, from its last tree: the value of every field with
+ * a `vaultKey` that the user filled in and the workflow doesn't flag (`error`). The last field of
+ * a key wins.
+ */
+export function uiTreeAnswers(tree: UiNode | undefined): UiAnswer[] {
+  const answers = new Map<string, UiAnswer>();
+  const visit = (node: UiNode) => {
+    if (typeof node === 'string') return;
+    const { vaultKey, value, error, label } = node.props as Record<string, unknown>;
+    if (typeof vaultKey === 'string' && typeof value === 'string' && value.trim() && !error)
+      answers.set(vaultKey, {
+        key: vaultKey,
+        value: value.trim(),
+        ...(vaultKey.startsWith('custom.') && typeof label === 'string' ? { label } : {}),
+      });
+    for (const child of node.children) visit(child);
+  };
+  if (tree) visit(tree);
+  return [...answers.values()];
 }
 
 /** An event the user caused on a rendered tree, sent back to the workflow. */

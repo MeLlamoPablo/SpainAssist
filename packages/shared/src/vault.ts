@@ -361,6 +361,17 @@ export const PERSONAL_FIELDS: readonly PersonalFieldDef[] = [
  */
 export const AGENT_HIDDEN_PERSONAL_KEYS: ReadonlySet<string> = new Set(['dniAccessNumber']);
 
+/** Keys for a PIN ("pin", "custom.pin_dnie"): PINs are secrets, never personal data. */
+export const PIN_KEY = /(?:^|[._-])pin(?:$|[._-])/i;
+
+/**
+ * Agents never read, save, type or ask for these: the DNI CAN (it goes only to the phone) and
+ * PINs (the DNI's is typed on the desktop and goes only to the phone).
+ */
+export function hiddenFromAgents(key: string): boolean {
+  return AGENT_HIDDEN_PERSONAL_KEYS.has(key) || PIN_KEY.test(key);
+}
+
 /** Well-known keys agents may use. */
 export const AGENT_PERSONAL_FIELD_KEYS = PERSONAL_FIELDS.map((f) => f.key).filter(
   (key) => !AGENT_HIDDEN_PERSONAL_KEYS.has(key),

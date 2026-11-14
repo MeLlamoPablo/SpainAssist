@@ -71,6 +71,9 @@ interface Ui {
 //    locates and sorts them by distance; present throws code "bad_request" listing addresses it can't find)
 //  <Appointment slots={["YYYY-MM-DDTHH:MM"]} value onChange allowMore?/> ("more" = none suits)
 //  <Actions><Button type?="primary"|"secondary"|"danger"|"ghost" disabled? loading? onClick/></Actions>
+// vaultKey="email" (a Mis datos key, or "custom.<slug>") on TextField, Select, Choice or Province: when the
+//   interface closes, the app saves the field's value to Mis datos itself (unless it has an error). Never add a
+//   "save my data" checkbox or call api.vault.save for these answers. Prefill value from api.vault.read.
 // Ask everything you need in one interface. Offer a way out ("Saltar"/"No lo sé") when the answer may not exist.`;
 
 const PROCEDURES = `

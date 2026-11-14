@@ -392,6 +392,77 @@ describe('a workflow', () => {
   });
 });
 
+describe('answers for Mis datos', () => {
+  const field = (props: Record<string, unknown>): UiNode => ({
+    type: 'TextField',
+    props: { label: 'Dato', ...props },
+    children: [],
+  });
+  const tree = (...children: UiNode[]): UiNode => ({ type: 'Root', props: {}, children });
+
+  it('are saved by the app when the interface closes: fields with a vaultKey, unless flagged', async () => {
+    const { app, agentLib } = await open();
+    const { token } = await anAgent(app, agentLib);
+    await app.invoke('vault.setPersonal', [{ key: 'phone', value: '+34 600 000 000' }]);
+    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
+    const runId = result.runId as string;
+    const ui = (action: string, extra: Record<string, unknown>) =>
+      call(app, token, 'workflow.ui', { runId, action, key: 'datos', ...extra });
+    expect((await ui('open', { rev: 1, tree: tree(field({ value: '' })) })).ok).toBe(true);
+    // The last tree is what the user answered.
+    await ui('render', {
+      rev: 2,
+      tree: tree(
+        field({ vaultKey: 'email', value: ' lucia@example.es ' }),
+        field({ vaultKey: 'phone', value: '+34 600 000 000' }),
+        field({ vaultKey: 'givenName', value: 'Lu', error: 'Escribe tu nombre completo.' }),
+        field({
+          vaultKey: 'custom.referencia_catastral',
+          label: 'Referencia catastral',
+          value: '9872023VH5797S0001WX',
+        }),
+        field({ value: 'sin vaultKey' }),
+      ),
+    });
+    await vi.waitFor(() => expect(app.services.codemode.workflows.get('w')?.ui.datos?.rev).toBe(2));
+    expect((await ui('close', { result: { ok: true } })).ok).toBe(true);
+
+    const personal = (key: string) =>
+      app.services.vault.overview().personal.find((p) => p.key === key);
+    expect(personal('email')).toMatchObject({
+      value: 'lucia@example.es',
+      source: 'form',
+    });
+    expect(personal('custom.referencia_catastral')).toMatchObject({
+      label: 'Referencia catastral',
+      value: '9872023VH5797S0001WX',
+    });
+    // Flagged as wrong by the workflow: not saved. Already saved: left as it was.
+    expect(personal('givenName')).toBeUndefined();
+    expect(personal('phone')).toMatchObject({ source: 'manual' });
+    expect(app.services.conversation.transcript().at(-1)).toMatchObject({
+      type: 'notice',
+      text: 'Guardado en Mis datos: Correo electrónico, Referencia catastral.',
+    });
+  });
+
+  it('may not name what agents never see (the CAN, PINs)', async () => {
+    const { app, agentLib } = await open();
+    const { token } = await anAgent(app, agentLib);
+    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
+    for (const vaultKey of ['dniAccessNumber', 'custom.pin_tarjeta']) {
+      const refused = await call(app, token, 'workflow.ui', {
+        runId: result.runId,
+        action: 'open',
+        key: 'x',
+        rev: 1,
+        tree: tree(field({ vaultKey, value: '' })),
+      });
+      expect(refused.error?.message).toMatch(/vaultKey is not available to agents/);
+    }
+  });
+});
+
 describe('procedure keys', () => {
   it('name the same procedure on every run of a workflow, whoever runs it; full ids pass through', () => {
     const id = procedureIdFor('renta-obligacion', 'obligatoriedad-renta');

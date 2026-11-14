@@ -4,9 +4,11 @@ import {
   CodemodeSlug,
   type MapPoint,
   UI_FAILED,
+  type UiAnswer,
   type UiEvent,
   type UiNode,
   uiTreeAddresses,
+  uiTreeAnswers,
   uiTreeProblem,
   type WorkflowInfo,
   WorkflowStatus,
@@ -106,6 +108,11 @@ export interface WorkflowServiceDeps {
   onEnd?(end: WorkflowEnd): void;
   /** The user acted on an interface of a workflow no process is running. */
   onDetachedEvent?(workflow: WorkflowRecord): void;
+  /**
+   * An interface closed with values for Mis datos (its fields' `vaultKey`). Saved before its
+   * `present` resolves, so the workflow reads them back from the vault.
+   */
+  saveAnswers?(workflow: WorkflowRecord, answers: UiAnswer[]): Promise<void>;
   /** Whether an agent's process is alive (a live run of a workflow is not taken over). */
   agentAlive(agentId: string): boolean;
   /** A run that was running stopped reaching main (its host lost it); its agent should know. */
@@ -522,6 +529,8 @@ export class WorkflowService {
     const { record } = this.runOf(runId, agentId);
     checkValue(`The result of "${key}"`, result);
     const ui = record.ui[key];
+    // What the user answered, as the last tree shows it (the app keeps it, not the agent).
+    const answers = ui?.status === 'open' ? uiTreeAnswers(ui.tree as UiNode | undefined) : [];
     record.ui[key] = {
       key,
       status: 'closed',
@@ -538,6 +547,13 @@ export class WorkflowService {
     if (!openUis(record).length && record.status === 'waiting_user') record.status = 'running';
     await this.persist(record);
     this.emit(record);
+    if (answers.length && this.deps.saveAnswers)
+      await this.deps.saveAnswers(record, answers).catch((err: unknown) =>
+        this.deps.logger.warn('saving an interface’s answers failed', {
+          workflowId: record.id,
+          error: errorMessage(err),
+        }),
+      );
   }
 
   /** Long poll for the user's events on a run's interfaces. */

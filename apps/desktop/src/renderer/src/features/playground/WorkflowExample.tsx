@@ -6,10 +6,12 @@ import { useShallow } from 'zustand/react/shallow';
 import { Button } from '../../components/ui/button';
 import { Pill, type Tone } from '../../components/ui/misc';
 import { useLang, useT } from '../../i18n';
+import { api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { putPlaygroundItem, setPlaygroundCodemode } from '../../mock/mock-api';
 import { useChatStore } from '../../store/chat';
 import { useCodemodeStore } from '../../store/codemode';
+import { useVaultStore } from '../../store/vault';
 import { AgentMeter } from '../codemode/AgentMeter';
 import { type ForYouEntry, ForYouItem } from '../codemode/ForYou';
 import { ProcedureRow } from '../codemode/ProcedureRow';
@@ -81,6 +83,8 @@ export function WorkflowExample({ example }: { example: PlaygroundExample }) {
       const next = new PlaygroundRun(`${example.id}-${++count.current}`, code, state, {
         lang,
         ask,
+        saveAnswers: async (answers) =>
+          useVaultStore.getState().set(await api.invoke('vault.setPersonal', answers)),
         ...(resumed ? { history: resumed.lines, procedures: resumed.procedures } : {}),
         onChange: (v) => {
           if (run.current === next) setView(v);
