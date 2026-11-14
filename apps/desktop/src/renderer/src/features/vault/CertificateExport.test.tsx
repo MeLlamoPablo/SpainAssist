@@ -172,7 +172,10 @@ describe('Mis datos: exporting a certificate', () => {
       />,
     );
     expect(dialog).toContain('Usar el certificado de tu Mac');
-    expect(dialog).toContain('Compruebo que es el mismo y borro la copia de Spain Assist.');
+    expect(dialog).toContain(
+      'Se va a comprobar que es el mismo y se va a borrar la copia de Spain Assist.',
+    );
+    expect(dialog).toContain('Si quieres una copia de seguridad (.p12), descárgala antes.');
     expect(dialog).toContain('Usar el del sistema');
     expect(dialog).not.toContain('Mover');
   });
@@ -210,16 +213,37 @@ describe('Mis datos: exporting a certificate', () => {
       />,
     );
     expect(html).toContain('Mover el certificado a tu Mac');
-    expect(html).toContain('lo borro de Spain Assist');
     expect(html).toContain(
-      'Si quieres una copia de seguridad (.p12), descárgala antes de moverlo.',
+      'Se va a instalar tu certificado en tu Mac y se va a borrar de Spain Assist.',
     );
+    expect(html).toContain('Spain Assist también lo seguirá usando, pidiéndote permiso cada vez.');
+    expect(html).toContain(
+      'Aquí ya no podrás exportarlo ni borrarlo, eso se hace desde Acceso a Llaveros en tu Mac.',
+    );
+    // A copy can also be made from the Mac afterwards: no warning.
+    expect(html).not.toContain('copia de seguridad');
+    expect(html).not.toContain('automáticamente');
     expect(html).toContain('Te pediré Touch ID para confirmar');
     expect(systemDict.es.externalHint(systemName('darwin', 'es'))).toBe(
       'Este certificado está instalado en tu Mac, no en Spain Assist.',
     );
     expect(systemDict.es.externalHint(systemName('win32', 'es'))).toBe(
       'Este certificado está instalado en Windows, no en Spain Assist.',
+    );
+  });
+
+  it('says a certificate used automatically will ask from then on', () => {
+    const html = renderToStaticMarkup(
+      <CertificateMoveDialog
+        credentialId={CERTIFICATE.id}
+        automatic
+        biometric={false}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(html).toContain(
+      'Spain Assist ya no podrá usar tu certificado automáticamente sin tu intervención para iniciar sesión en sedes oficiales.',
     );
   });
 

@@ -56,7 +56,7 @@ test('a certificate moves from Mis datos to the keychain and comes back as exter
   await expect(h.page.getByRole('menuitem', { name: 'Descargar .p12' })).toBeVisible();
   await expect(h.page.getByRole('menuitem', { name: 'Borrar' })).toBeVisible();
   await h.page.getByRole('menuitem', { name: 'Mover al sistema operativo' }).click();
-  await expect(h.page.getByRole('dialog')).toContainText('lo borro de Spain Assist');
+  await expect(h.page.getByRole('dialog')).toContainText('se va a borrar de Spain Assist');
   await h.page.getByTestId('certificate-move-submit').click();
 
   // Out of the vault, in the keychain, and listed from there.
@@ -95,7 +95,7 @@ test('a certificate moves from Mis datos to the keychain and comes back as exter
     'Usar el del sistema operativo',
   ]);
   await h.page.getByRole('menuitem', { name: 'Usar el del sistema operativo' }).click();
-  await expect(h.page.getByRole('dialog')).toContainText('Compruebo que es el mismo');
+  await expect(h.page.getByRole('dialog')).toContainText('comprobar que es el mismo');
   await h.page.getByTestId('certificate-move-submit').click();
   await expect(again.getByTestId('certificate-external')).toBeVisible();
   expect(await external()).toMatchObject([{ id: `os-${fingerprint}`, external: true }]);
