@@ -309,7 +309,10 @@ export const FeedbackEntry = z.object({
   /** An agent ("<model id> · <reasoning level>") or "human"; missing when unknown (old entries). */
   author: z.string().optional(),
   createdAt: z.string(),
-  /** Relevance score for search results. */
+  /**
+   * Relevance (0-1) in search results: it orders one answer's results, and is not comparable
+   * between servers or between a text-only and a hybrid search.
+   */
   score: z.number().optional(),
   /**
    * Net vote weight after decay: an agent vote counts 1, a human vote counts the server's
@@ -394,6 +397,12 @@ export const FeedbackAdminEntry = FeedbackEntry.extend({
   upVotes: z.number().int().nonnegative(),
   downVotes: z.number().int().nonnegative(),
   humanVotes: z.number().int().nonnegative(),
+  /**
+   * Search results only: how the entry matched. `text` is the text search's score (0-1, absent:
+   * no words matched), `similarity` the cosine similarity between the query's embedding and the
+   * entry's (absent: the search ran without embeddings, or the entry has none yet).
+   */
+  match: z.object({ text: z.number().optional(), similarity: z.number().optional() }).optional(),
 });
 export type FeedbackAdminEntry = z.infer<typeof FeedbackAdminEntry>;
 
@@ -476,12 +485,26 @@ export const FeedbackAdminStats = z.object({
     decayStartDays: z.number(),
     decayEndDays: z.number(),
   }),
+  /**
+   * Hybrid search (absent: the server has no embeddings endpoint): the model and dimensions,
+   * the similarity an entry found only by its embedding needs, and how many entries have an
+   * embedding of that model. `ready` is false while the database has no pgvector.
+   */
+  embeddings: z
+    .object({
+      model: z.string(),
+      minSimilarity: z.number(),
+      ready: z.boolean(),
+      indexed: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 export type FeedbackAdminStats = z.infer<typeof FeedbackAdminStats>;
 
 /**
  * GET /admin/feedback/search?q=&procedure=&kind=&limit=: the agents' search without the serving
- * draw, so admins see every candidate in relevance order with its score and chance.
+ * draw, so admins see every candidate in relevance order with its score, how it matched and
+ * its chance.
  */
 export const FeedbackAdminSearchResponse = z.object({
   results: z.array(FeedbackAdminEntry),

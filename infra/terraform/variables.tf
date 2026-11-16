@@ -296,6 +296,13 @@ variable "feedback_user_id_secret" {
   }
 }
 
+variable "feedback_embeddings_key" {
+  description = "LiteLLM key the feedback server embeds entries and search queries with (hybrid search). Create it once with the master key, allowed to call only the embeddings model (README.md, \"Hybrid search\"). Empty: searches match text only."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "feedback_server_env" {
   description = "Extra feedback server environment variables, merged over the defaults in coolify.tf."
   type        = map(string)

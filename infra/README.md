@@ -76,8 +76,10 @@ Notes:
   published on), `POSTGRES_PASSWORD`, and the role passwords `KEY_SERVER_DB_PASSWORD` and
   `FEEDBACK_DB_PASSWORD` (URL-safe characters only). The services' own settings are in their
   READMEs; add any the compose file lacks to their `environment:` block.
+- Postgres is built from `postgres/Dockerfile`: the official image plus pgvector, for the
+  feedback server's hybrid search (set `FEEDBACK_EMBEDDINGS_KEY` and `LITELLM_URL` to turn it on).
 - `postgres/init/10-create-databases.sh` runs only when the `pgdata` volume is created (roles,
-  databases, `unaccent` and `pg_trgm` for the feedback database). Changing a password later:
+  databases, `unaccent`, `pg_trgm` and `vector` for the feedback database). Changing a password later:
   `ALTER ROLE key_server PASSWORD '…'`, then update `.env`. Postgres is not published.
 - Validate the file without a Docker daemon: `docker compose -f infra/docker-compose.yml config`.
 - Backups: `docker compose -f infra/docker-compose.yml exec -T postgres pg_dump -U postgres keyserver > keyserver.sql`
@@ -187,9 +189,10 @@ the IP. The relay and the webhook host are on `<domain>` only.
   `curl --path-as-is`. Re-check after Traefik or LiteLLM upgrades, or if LiteLLM ever runs behind
   another proxy.
 - **Prices** come from `templates/litellm_sa_pricing.py` (a LiteLLM callback module written next
-  to its config). At start and every 6 hours it loads OpenRouter's public price list
-  (`/api/v1/models`) and registers every priced model, so a new model needs no deploy; Perplexity
-  Decider, which that list lacks, is registered by hand. Without a price, calls cost $0 and escape
+  to its config). At start and every 6 hours it loads OpenRouter's public price lists
+  (`/api/v1/models`, and `/api/v1/embeddings/models` for the feedback server's embeddings) and
+  registers every priced model, so a new model needs no deploy; Perplexity
+  Decider, which those lists lack, is registered by hand. Without a price, calls cost $0 and escape
   key budgets, so the same module rejects chat calls to models without one (OpenRouter's routers
   such as `openrouter/auto`, free models, and models LiteLLM's own list lacks if OpenRouter's
   cannot be loaded): budget reservation needs a price to check a call's worst case.
@@ -313,6 +316,32 @@ only changes its DSN.
   URL fragment). The admin API also works with curl:
   `curl -s https://keys.<domain>/admin/vouchers -H "authorization: Bearer $ADMIN_TOKEN"`.
   `corepack pnpm feedback` does the same for the feedback server's admin page.
+- **Hybrid search** (the feedback server finds learnings by meaning too, see its README) needs
+  two things, in either order. Until both are there, searches match text only.
+  1. *pgvector in Postgres.* The official image lacks it. `.github/workflows/postgres-image.yml`
+     publishes `ghcr.io/<owner>/<repository>-postgres` from `postgres/Dockerfile` (the same
+     Alpine image plus the extension) whenever that file changes on `master`; the run's summary
+     prints the image with its digest. Check that the package is public (Coolify pulls without
+     credentials), set it as `image` of `coolify_database_postgresql.main` in `coolify.tf`,
+     apply, and restart Postgres in Coolify at a quiet moment: every service loses its database
+     for a few seconds. The data stays as it is (same Postgres, same Alpine, so text sorts the
+     same). Within ten minutes the feedback server creates the extension and its table itself
+     (its log says `migrations applied: 012_embeddings.sql`), then embeds every learning.
+  2. *A LiteLLM key for embeddings*, which may call nothing else:
+
+     ```bash
+     curl -s https://llm.<domain>/key/generate -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
+       -H 'Content-Type: application/json' -d '{
+         "key_alias": "feedback-server-embeddings",
+         "models": ["google/gemini-embedding-001"],
+         "allowed_routes": ["/v1/embeddings"],
+         "budget_limits": [{"budget_duration": "30d", "max_budget": 5}]
+       }' | jq -r .key
+     ```
+
+     Set it as `feedback_embeddings_key` and apply; the feedback server redeploys. Its admin
+     page's overview says whether searches are hybrid and how many learnings have an embedding.
+     Another model: `feedback_server_env = { EMBEDDINGS_MODEL = "…" }`, and a key that allows it.
 - **LiteLLM keys by hand** (UI or API): always set `allowed_routes` the way the key server does
   (`KEY_ROUTES` in `services/key-server/src/providers/key-provisioner.ts`). LiteLLM's default
   route group includes `/openrouter/*`, a pass-through that uses our OpenRouter key and charges

@@ -6,29 +6,35 @@ import type { Db } from './types';
  * - `postgres://…` / `postgresql://…` → node-postgres pool
  * - `pglite://memory` → in-memory PGlite (tests)
  * - `pglite://<dir>` → PGlite persisted in <dir> (dev; resolve relative dirs first, see config)
+ *
+ * PGlite comes with pgvector unless `pgvector` is false (tests: a database without it, like a
+ * Postgres whose image lacks the extension).
  */
-export async function openDb(url: string): Promise<Db> {
+export async function openDb(url: string, options: { pgvector?: boolean } = {}): Promise<Db> {
   if (/^postgres(?:ql)?:\/\//.test(url)) return openPg(url);
   if (url.startsWith('pglite://')) {
     const target = url.slice('pglite://'.length);
-    return openPglite(target === '' || target === 'memory' ? undefined : target);
+    return openPglite(
+      target === '' || target === 'memory' ? undefined : target,
+      options.pgvector !== false,
+    );
   }
   throw new Error('DATABASE_URL must start with postgres://, postgresql:// or pglite://');
 }
 
-async function openPglite(dataDir?: string): Promise<Db> {
-  const [{ PGlite }, { unaccent }, { pg_trgm }] = await Promise.all([
+async function openPglite(dataDir: string | undefined, pgvector: boolean): Promise<Db> {
+  const [{ PGlite }, { unaccent }, { pg_trgm }, { vector }] = await Promise.all([
     import('@electric-sql/pglite'),
     import('@electric-sql/pglite/contrib/unaccent'),
     import('@electric-sql/pglite/contrib/pg_trgm'),
+    import('@electric-sql/pglite-pgvector'),
   ]);
   const unlock = dataDir ? await lockDataDir(dataDir) : async () => {};
-  const pg = await PGlite.create({ dataDir, extensions: { unaccent, pg_trgm } }).catch(
-    async (err: unknown) => {
-      await unlock();
-      throw err;
-    },
-  );
+  const extensions = { unaccent, pg_trgm, ...(pgvector ? { vector } : {}) };
+  const pg = await PGlite.create({ dataDir, extensions }).catch(async (err: unknown) => {
+    await unlock();
+    throw err;
+  });
   type Tx = Pick<typeof pg, 'query' | 'exec'>;
   const wrap = (conn: Tx): Omit<Db, 'transaction' | 'close'> => ({
     kind: 'pglite',

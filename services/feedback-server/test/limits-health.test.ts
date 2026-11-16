@@ -81,6 +81,7 @@ describe('health and migrations', () => {
       '009_vote_users.sql',
       '010_vote_retention.sql',
       '011_triage.sql',
+      '012_embeddings.sql',
     ]);
   });
 
@@ -117,7 +118,7 @@ describe('health and migrations', () => {
       await vote(agentsOnly, 1, 'agent');
       const plain = await insert('Sin votos', 'gpt-6.1-sol · medium');
 
-      expect(await migrate(old)).toEqual(['011_triage.sql']);
+      expect(await migrate(old)).toEqual(['011_triage.sql', '012_embeddings.sql']);
       const { rows } = await old.query<{ id: string; triage: string; triaged: boolean }>(
         'SELECT id::text, triage, triaged_at IS NOT NULL AS triaged FROM feedback',
       );

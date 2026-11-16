@@ -10,6 +10,8 @@ import type {
   FeedbackTriage,
 } from '@sa/shared';
 import type { Db } from '../db/types';
+import { embeddingsReady } from '../embed/indexer';
+import type { Semantic } from './hybrid';
 import {
   COLUMNS,
   type NewFeedback,
@@ -210,8 +212,9 @@ export async function adminSearch(
   db: Db,
   query: FeedbackSearchQuery,
   ctx: VoteContext,
+  semantic?: Semantic,
 ): Promise<FeedbackAdminEntry[]> {
-  const hits = await searchCandidates(db, query, query.limit, false);
+  const hits = await searchCandidates(db, query, query.limit, false, semantic);
   const rows = new Map(
     (
       await adminEntries(
@@ -223,7 +226,7 @@ export async function adminSearch(
   );
   return hits.flatMap((h) => {
     const row = rows.get(h.id);
-    return row ? [toAdminEntry(row, ctx, h.score)] : [];
+    return row ? [{ ...toAdminEntry(row, ctx, h.score), match: h.match }] : [];
   });
 }
 
@@ -273,7 +276,31 @@ export async function deleteVote(db: Db, id: string, voteId: string): Promise<bo
 /** Most frequent procedures, tags and authors listed by the stats (they feed the page's filters). */
 const FACETS = 200;
 
-export async function adminStats(db: Db, ctx: VoteContext): Promise<FeedbackAdminStats> {
+/** Hybrid search as the stats report it: how many entries have an embedding agents' searches use. */
+async function embeddingStats(
+  db: Db,
+  semantic: Semantic,
+): Promise<NonNullable<FeedbackAdminStats['embeddings']>> {
+  const ready = await embeddingsReady(db);
+  const { rows } = ready
+    ? await db.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM feedback_embeddings WHERE model = $1',
+        [semantic.space],
+      )
+    : { rows: [] };
+  return {
+    model: semantic.space,
+    minSimilarity: semantic.minSimilarity,
+    ready,
+    indexed: Number(rows[0]?.n ?? 0),
+  };
+}
+
+export async function adminStats(
+  db: Db,
+  ctx: VoteContext,
+  semantic?: Semantic,
+): Promise<FeedbackAdminStats> {
   const q = new Query(ctx);
   const [kinds, triage, votes, procedures, tags, authors] = await Promise.all([
     db.query<{ kind: FeedbackKind; n: number }>(
@@ -318,5 +345,6 @@ export async function adminStats(db: Db, ctx: VoteContext): Promise<FeedbackAdmi
     tags: facet(tags.rows),
     authors: facet(authors.rows),
     policy: { ...ctx.policy },
+    ...(semantic ? { embeddings: await embeddingStats(db, semantic) } : {}),
   };
 }

@@ -3,13 +3,19 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { FeedbackKind, FeedbackSearchQuery } from '@sa/shared';
 import { z } from 'zod';
 import type { Db } from './db/types';
+import type { Semantic } from './feedback/hybrid';
 import { searchFeedback, type VoteContext } from './feedback/repo';
 
 /**
  * Read-only MCP server (Streamable HTTP, stateless, JSON responses) so third-party agents can
  * query the community learnings.
  */
-function createMcpServer(db: Db, votes: VoteContext, random?: () => number): McpServer {
+function createMcpServer(
+  db: Db,
+  votes: VoteContext,
+  random?: () => number,
+  semantic?: Semantic,
+): McpServer {
   const server = new McpServer({ name: 'spainassist-feedback', version: '0.1.1' });
 
   server.registerTool(
@@ -18,10 +24,10 @@ function createMcpServer(db: Db, votes: VoteContext, random?: () => number): Mcp
       title: 'Search community learnings',
       description:
         'Search anonymous, PII-scrubbed learnings that agents shared after doing Spanish ' +
-        'administrative procedures ("trámites"): tips, frictions and gotchas. Use a few ' +
-        'Spanish keywords, e.g. "cita previa renovar dni".',
+        'administrative procedures ("trámites"): tips, frictions and gotchas. Ask in Spanish, ' +
+        'with keywords or a question, e.g. "cita previa renovar dni".',
       inputSchema: {
-        query: z.string().min(2).max(300).describe('A few keywords, in Spanish.'),
+        query: z.string().min(2).max(300).describe('Keywords or a question, in Spanish.'),
         procedure: z.string().max(200).optional().describe('Procedure name to filter by.'),
         kind: FeedbackKind.optional(),
         limit: z.number().int().min(1).max(20).optional(),
@@ -30,7 +36,7 @@ function createMcpServer(db: Db, votes: VoteContext, random?: () => number): Mcp
     },
     async ({ query, procedure, kind, limit }) => {
       const q = FeedbackSearchQuery.parse({ q: query, procedure, kind, limit });
-      const results = await searchFeedback(db, q, votes, random);
+      const results = await searchFeedback(db, q, votes, random, semantic);
       return { content: [{ type: 'text', text: JSON.stringify({ results }) }] };
     },
   );
@@ -44,8 +50,9 @@ export async function handleMcpRequest(
   db: Db,
   votes: VoteContext,
   random?: () => number,
+  semantic?: Semantic,
 ): Promise<Response> {
-  const server = createMcpServer(db, votes, random);
+  const server = createMcpServer(db, votes, random, semantic);
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

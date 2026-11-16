@@ -81,4 +81,41 @@ describe('config', () => {
     expect(() => loadConfig({ VOTE_THRESHOLD: '0' })).toThrow(/VOTE_THRESHOLD/);
     expect(() => loadConfig({ VOTE_DECAY_START_DAYS: '400' })).toThrow(/VOTE_DECAY_END_DAYS/);
   });
+
+  it('turns hybrid search on with an embeddings key', () => {
+    expect(loadConfig({}).embeddings).toBeUndefined();
+    expect(loadConfig({ EMBEDDINGS_URL: 'https://llm.test/v1' }).embeddings).toBeUndefined();
+    // The gateway that checks users' keys also serves embeddings.
+    const litellm = { LITELLM_URL: 'http://litellm:4000/', EMBEDDINGS_API_KEY: ' sk-embed ' };
+    expect(loadConfig(litellm).embeddings).toEqual({
+      url: 'http://litellm:4000/v1',
+      apiKey: 'sk-embed',
+      model: 'google/gemini-embedding-001',
+      dimensions: 1536,
+      minSimilarity: 0.64,
+    });
+    expect(
+      loadConfig({
+        ...litellm,
+        EMBEDDINGS_URL: 'https://llm.test/v1/',
+        EMBEDDINGS_MODEL: 'acme/embed',
+        EMBEDDINGS_DIMENSIONS: '768',
+        EMBEDDINGS_MIN_SIMILARITY: '0.5',
+      }).embeddings,
+    ).toEqual({
+      url: 'https://llm.test/v1',
+      apiKey: 'sk-embed',
+      model: 'acme/embed',
+      dimensions: 768,
+      minSimilarity: 0.5,
+    });
+    expect(() => loadConfig({ EMBEDDINGS_API_KEY: 'sk-embed' })).toThrow(/EMBEDDINGS_URL/);
+    expect(() => loadConfig({ ...litellm, EMBEDDINGS_URL: 'llm.test' })).toThrow(/EMBEDDINGS_URL/);
+    expect(() => loadConfig({ ...litellm, EMBEDDINGS_DIMENSIONS: '0' })).toThrow(/DIMENSIONS/);
+    expect(() => loadConfig({ ...litellm, EMBEDDINGS_DIMENSIONS: '20000' })).toThrow(/DIMENSIONS/);
+    for (const bad of ['1.5', '-0.1', 'high'])
+      expect(() => loadConfig({ ...litellm, EMBEDDINGS_MIN_SIMILARITY: bad })).toThrow(
+        /MIN_SIMILARITY/,
+      );
+  });
 });

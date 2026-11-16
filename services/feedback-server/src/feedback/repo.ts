@@ -1,6 +1,7 @@
 import type { FeedbackEntry, FeedbackKind, FeedbackSearchQuery, FeedbackTriage } from '@sa/shared';
 import type { Db } from '../db/types';
-import { type Scored, type SearchSpec, tieredSearch } from '../search';
+import { type SearchSpec, tieredSearch } from '../search';
+import { type Fused, fuse, type Semantic } from './hybrid';
 import { type CastVote, serveChance, type VotePolicy, type Voter, voteWeight } from './votes';
 
 /** A scrubbed submission ready to store. */
@@ -102,22 +103,30 @@ export async function insertFeedback(db: Db, f: NewFeedback): Promise<string> {
 
 /**
  * Searches approved entries, then serves each hit with the chance its votes give it (see
- * votes.ts), in relevance order. `random` returns a number in [0, 1).
+ * votes.ts), in relevance order. `random` returns a number in [0, 1). With `semantic`, entries
+ * that match the query's meaning are found too (hybrid.ts).
  */
 export async function searchFeedback(
   db: Db,
   query: FeedbackSearchQuery,
   votes: VoteContext,
   random: () => number = Math.random,
+  semantic?: Semantic,
 ): Promise<FeedbackEntry[]> {
-  const rows = await searchCandidates(db, query, query.limit * CANDIDATES_PER_RESULT, true);
+  const rows = await searchCandidates(
+    db,
+    query,
+    query.limit * CANDIDATES_PER_RESULT,
+    true,
+    semantic,
+  );
   const weights = await voteWeights(
     db,
     rows.map((r) => r.id),
     votes,
   );
   const served: FeedbackEntry[] = [];
-  for (const { score, ...row } of rows) {
+  for (const { score, match: _match, ...row } of rows) {
     const weight = weights.get(row.id) ?? 0;
     if (random() >= serveChance(weight, votes.policy)) continue;
     served.push(toEntry(row as Row, weight, score));
@@ -126,37 +135,93 @@ export async function searchFeedback(
   return served;
 }
 
+/** The query's filters on alias `t`; `param(value)` returns the value's placeholder. */
+function filters(query: FeedbackSearchQuery, servedOnly: boolean) {
+  return (param: (value: unknown) => string): string[] => {
+    const where: string[] = servedOnly ? [SERVED] : [];
+    if (query.procedure) {
+      const $ = param(query.procedure);
+      // Fuzzy procedure filter: same words (stemmed, accent-insensitive) or a similar name.
+      where.push(`(to_tsvector('public.spanish_unaccent', t.procedure)
+            @@ plainto_tsquery('public.spanish_unaccent', ${$}::text)
+          OR similarity(public.f_unaccent(lower(t.procedure)), public.f_unaccent(lower(${$}::text))) >= 0.4)`);
+    }
+    if (query.kind) where.push(`t.kind = ${param(query.kind)}`);
+    return where;
+  };
+}
+
 /**
  * Search hits in relevance order, before votes and the serving draw; only approved entries when
- * `servedOnly` (agents), every entry otherwise (the admin page).
+ * `servedOnly` (agents), every entry otherwise (the admin page). Each hit says how it matched.
  */
-export function searchCandidates(
+export async function searchCandidates(
   db: Db,
   query: FeedbackSearchQuery,
   limit: number,
   servedOnly: boolean,
-): Promise<Scored<Row>[]> {
+  semantic?: Semantic,
+): Promise<Fused<Row>[]> {
   const spec: SearchSpec = {
     table: 'feedback',
     columns: COLUMNS,
     key: 'id',
-    filters: (param) => {
-      const where: string[] = servedOnly ? [SERVED] : [];
-      if (query.procedure) {
-        const $ = param(query.procedure);
-        // Fuzzy procedure filter: same words (stemmed, accent-insensitive) or a similar name.
-        where.push(`(to_tsvector('public.spanish_unaccent', t.procedure)
-            @@ plainto_tsquery('public.spanish_unaccent', ${$}::text)
-          OR similarity(public.f_unaccent(lower(t.procedure)), public.f_unaccent(lower(${$}::text))) >= 0.4)`);
-      }
-      if (query.kind) where.push(`t.kind = ${param(query.kind)}`);
-      return where;
-    },
+    filters: filters(query, servedOnly),
     trigram: ['title', 'procedure'],
     boost: BOOST,
     tiebreak: 'created_at DESC',
   };
-  return tieredSearch<Row>(db, spec, query.q, limit);
+  // The query's vector comes from another server: ask for it while the text search runs.
+  const [textHits, vector] = await Promise.all([
+    tieredSearch<Row>(db, spec, query.q, limit),
+    semantic?.queryVector(query.q),
+  ]);
+  if (!semantic || !vector) return textHits.map((hit) => ({ ...hit, match: { text: hit.score } }));
+  const vectorHits = await nearest(
+    db,
+    query,
+    servedOnly,
+    semantic,
+    vector,
+    limit,
+    textHits.map((h) => h.id),
+  );
+  return fuse(textHits, vectorHits, semantic.minSimilarity, limit);
+}
+
+/**
+ * The entries closest to the query's vector, nearest first, and after them the text hits that
+ * are not among those (so every candidate's similarity is known).
+ */
+async function nearest(
+  db: Db,
+  query: FeedbackSearchQuery,
+  servedOnly: boolean,
+  semantic: Semantic,
+  vector: string,
+  limit: number,
+  textIds: string[],
+): Promise<(Row & { similarity: number })[]> {
+  const params: unknown[] = [vector, semantic.space];
+  const param = (value: unknown) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+  const conditions = filters(query, servedOnly);
+  const where = conditions(param)
+    .map((w) => `AND ${w}`)
+    .join(' ');
+  const select = `SELECT ${COLUMNS}, 1 - (e.embedding <=> $1::vector) AS similarity
+     FROM feedback t JOIN feedback_embeddings e ON e.feedback_id = t.id
+     WHERE e.model = $2 ${where}`;
+  const { rows } = await db.query<Row & { similarity: number }>(
+    `(${select} ORDER BY e.embedding <=> $1::vector, t.created_at DESC LIMIT ${param(limit)})
+     UNION
+     (${select} AND t.id::text = ANY(${param(textIds)}::text[]))
+     ORDER BY similarity DESC, created_at DESC`,
+    params,
+  );
+  return rows.map((r) => ({ ...r, similarity: Number(r.similarity) }));
 }
 
 /** Records a vote with no user (maintainers' votes); false if the entry does not exist. */

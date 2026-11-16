@@ -51,6 +51,18 @@ export interface ServerConfig {
   mcp: boolean;
   /** How votes change how often an entry is served. */
   votes: VotePolicy;
+  /**
+   * Hybrid search: an OpenAI-compatible embeddings endpoint (our LiteLLM gateway), the model and
+   * the similarity an entry found only by its embedding needs. Unset (no EMBEDDINGS_API_KEY):
+   * searches match text only.
+   */
+  embeddings?: {
+    url: string;
+    apiKey: string;
+    model: string;
+    dimensions: number;
+    minSimilarity: number;
+  };
 }
 
 const flag = (v: string | undefined, dflt: boolean) =>
@@ -60,6 +72,15 @@ const int = (v: string | undefined, dflt: number) => {
   const n = v ? Number.parseInt(v, 10) : Number.NaN;
   return Number.isFinite(n) && n >= 0 ? n : dflt;
 };
+
+/**
+ * The best of the models our gateway serves under OpenRouter's zero-data-retention policy, on
+ * Spanish administrative questions (docs/research/feedback-embeddings.md). 1536 of its 3072
+ * dimensions lose nothing there and fit a pgvector index (at most 2000).
+ */
+const DEFAULT_EMBEDDINGS = { model: 'google/gemini-embedding-001', dimensions: 1536 };
+/** Fits DEFAULT_EMBEDDINGS: another model needs its own EMBEDDINGS_MIN_SIMILARITY. */
+const DEFAULT_MIN_SIMILARITY = 0.64;
 
 /** Used only with PGlite when USER_ID_SECRET is unset (public: development data only). */
 export const DEV_USER_ID_SECRET = 'sa-dev-user-id-secret-NOT-SECRET-0123';
@@ -93,6 +114,37 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     votePerKeyPerDay: int(env.VOTE_DAILY_LIMIT, 200),
     mcp: flag(env.MCP_ENABLED, true),
     votes: votePolicy(env),
+    ...embeddings(env, litellmUrl),
+  };
+}
+
+function embeddings(
+  env: NodeJS.ProcessEnv,
+  litellmUrl: string | undefined,
+): Pick<ServerConfig, 'embeddings'> {
+  const apiKey = env.EMBEDDINGS_API_KEY?.trim();
+  if (!apiKey) return {};
+  const url =
+    env.EMBEDDINGS_URL?.trim().replace(/\/+$/, '') || (litellmUrl ? `${litellmUrl}/v1` : undefined);
+  if (!url || !/^https?:\/\//.test(url))
+    throw new Error('EMBEDDINGS_API_KEY needs EMBEDDINGS_URL (an http(s) URL) or LITELLM_URL.');
+  const dimensions = int(env.EMBEDDINGS_DIMENSIONS, DEFAULT_EMBEDDINGS.dimensions);
+  // pgvector stores up to 16000 dimensions.
+  if (dimensions < 1 || dimensions > 16_000)
+    throw new Error('EMBEDDINGS_DIMENSIONS must be between 1 and 16000.');
+  const minSimilarity = env.EMBEDDINGS_MIN_SIMILARITY?.trim()
+    ? Number(env.EMBEDDINGS_MIN_SIMILARITY)
+    : DEFAULT_MIN_SIMILARITY;
+  if (!(minSimilarity >= 0 && minSimilarity <= 1))
+    throw new Error('EMBEDDINGS_MIN_SIMILARITY must be between 0 and 1.');
+  return {
+    embeddings: {
+      url,
+      apiKey,
+      model: env.EMBEDDINGS_MODEL?.trim() || DEFAULT_EMBEDDINGS.model,
+      dimensions,
+      minSimilarity,
+    },
   };
 }
 

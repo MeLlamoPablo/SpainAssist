@@ -40,6 +40,7 @@ key_server_admin_token  = "..."
 key_encryption_key      = "..." # openssl rand -hex 32; never change once ChatGPT keys exist
 feedback_admin_token    = "..."
 feedback_user_id_secret = "..." # openssl rand -hex 32; never change once votes exist
+# feedback_embeddings_key = "sk-..." # hybrid search: a LiteLLM key for embeddings (README.md)
 
 mapbox_secret_token = "sk...." # Mapbox secret token for the maps server (no extra scopes)
 

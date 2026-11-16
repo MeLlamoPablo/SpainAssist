@@ -25,6 +25,10 @@ resource "coolify_project" "main" {
 
 # A new `image` is an in-place update: Coolify saves it but only uses it when the database next
 # (re)starts, which Terraform doesn't trigger.
+#
+# The feedback server's hybrid search needs pgvector, which this official image lacks: switch to
+# the image .github/workflows/postgres-image.yml publishes from infra/postgres/Dockerfile (the
+# same Alpine image plus the extension), pinned by digest (README.md, "Hybrid search").
 resource "coolify_database_postgresql" "main" {
   name              = "postgres"
   description       = "Databases keyserver, feedback, litellm, unleash and glitchtip (one role each)"
@@ -184,6 +188,9 @@ locals {
       LITELLM_URL  = local.litellm_internal_url
       # One vote per user and entry: users' ids are an HMAC of their key with this secret.
       USER_ID_SECRET = var.feedback_user_id_secret
+      # Hybrid search: embeddings from LITELLM_URL with this key (empty: text search only). It
+      # also needs pgvector in Postgres; until then the server keeps searching by text.
+      EMBEDDINGS_API_KEY = var.feedback_embeddings_key
       TRUST_PROXY    = "1"
       DEV_SEED       = "0"
     }, var.feedback_server_env)

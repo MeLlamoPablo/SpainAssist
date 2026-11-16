@@ -1,0 +1,279 @@
+[
+  {
+    "q": "no hay citas disponibles para la tarjeta de residencia",
+    "expect": [
+      "adb92c63-b7e0-45e4-8772-30b74a557df2",
+      "38475cc1-c125-46b6-bfd6-3855021f3a16",
+      "98ad8c88-627e-4980-91c6-ddd5eec485b4",
+      "3e94f2c0-1468-4436-9383-ed0a8505c569"
+    ]
+  },
+  {
+    "q": "¿cuántos puntos me quedan en el carné?",
+    "expect": ["3cda7c29-487f-486b-92a4-3fd6b5610bcf"]
+  },
+  {
+    "q": "puedo hacerme la foto del DNI allí mismo en comisaría",
+    "expect": ["2c55ae5c-ecce-488a-8cef-d7c4b448156d"]
+  },
+  {
+    "q": "multas de tráfico en Cataluña",
+    "expect": ["ba01db13-5ec9-4c3d-9ed4-4f286934ea04"]
+  },
+  {
+    "q": "ver si tengo sanciones de tráfico sin pagar",
+    "expect": ["c64c55b2-e1e9-40a9-a5af-83a2187a964a"]
+  },
+  {
+    "q": "darse de alta en cl@ve sin ir presencialmente",
+    "expect": ["e3a8a5ed-f8f8-4a2c-9923-ae0e5bc08d79"]
+  },
+  {
+    "q": "comprobar que mi certificado digital no está revocado",
+    "expect": ["82d84c52-1b4c-4df8-a661-517844741371"]
+  },
+  {
+    "q": "permiso para salir de España y volver mientras tramito la tarjeta",
+    "expect": ["d6a6295e-485a-478e-ac34-24982bc604e5", "2727d93b-ace4-4a9e-99f8-715df3ddf7c2"]
+  },
+  {
+    "q": "el número de justificante cambia al volver a generar el impreso de la tasa",
+    "expect": ["38a0b43e-b166-47c0-957e-6b4e53f34169"]
+  },
+  {
+    "q": "pagar la tasa de extranjería en un cajero automático",
+    "expect": ["e67d1c28-9a2c-4c37-a833-a131288d94d6"]
+  },
+  {
+    "q": "firmar una iniciativa legislativa popular online",
+    "expect": [
+      "22135df9-75ea-4368-b93d-4ce24ed63b28",
+      "f79956eb-1f24-4fd1-8bd9-19ec6311ce42",
+      "69ebaf33-003e-403d-b6c5-1d706ab0df65"
+    ]
+  },
+  {
+    "q": "qué tasa selecciono para cónyuge de ciudadano español",
+    "expect": ["35c634bc-4674-4c92-bd18-8fcd2f5d5296"]
+  },
+  {
+    "q": "la web de FNMT dice que debo leer las condiciones",
+    "expect": ["ae2cca0c-fac1-4784-939a-2924b4ad3957"]
+  },
+  {
+    "q": "hace falta AutoFirma para pedir el certificado con el DNI electrónico",
+    "expect": ["cd1f9e56-46d4-4e2a-beb4-c8dff5254188"]
+  },
+  {
+    "q": "volante de empadronamiento Sevilla página no encontrada",
+    "expect": ["a46413fe-50a0-410b-a637-79c2fe565a38"]
+  },
+  {
+    "q": "pagar el 790 por banca online",
+    "expect": ["7f9443f7-b60f-4ed6-99af-d49c467a25f4"]
+  },
+  {
+    "q": "descargar impreso de solicitud de tarjeta de identidad de extranjero",
+    "expect": ["d0a24399-40ac-4773-8c40-30f10f34391f"]
+  },
+  {
+    "q": "mi pareja puede pagar la tasa por mí en el banco",
+    "expect": ["a5285771-dd01-4e61-8b16-05f00140cbbc"]
+  },
+  {
+    "q": "me ha tocado estar en una mesa en las elecciones",
+    "expect": ["e98bb53e-9293-4737-8b59-378cf46828e9"]
+  },
+  {
+    "q": "cuánto tarda una demanda contra una aerolínea",
+    "expect": ["29607084-cb65-466b-9f9c-1d971e5cbe75"]
+  },
+  {
+    "q": "copia del expediente del juzgado en Andalucía",
+    "expect": ["f353f7a9-48cb-4d2a-a8ee-25ba3d6e62c5"]
+  },
+  {
+    "q": "he puesto el IBAN en el formulario, ¿ya está pagada la tasa?",
+    "expect": ["bef56d79-ff0d-4a90-a625-0e18c5f4a587", "e67d1c28-9a2c-4c37-a833-a131288d94d6"]
+  },
+  {
+    "q": "qué papeles llevar a la cita de huellas",
+    "expect": ["8cb48e74-a35f-42c9-a0c8-dd163babf873"]
+  },
+  {
+    "q": "registrar a un recién nacido hijo de extranjeros",
+    "expect": ["a6f6c4d0-fd00-4bcd-b9bb-0fc92e8ad020"]
+  },
+  {
+    "q": "Error acceso a Cl@ve al consultar el padrón del INE",
+    "expect": ["e49f0203-a6f8-4300-ae97-f68e57abe806"]
+  },
+  {
+    "q": "Request Rejected sede policía cita extranjería",
+    "expect": ["98ad8c88-627e-4980-91c6-ddd5eec485b4"]
+  },
+  {
+    "q": "ya tengo cita para el DNI y no me deja pedir otra",
+    "expect": ["2922d762-4917-4f41-a9a3-56db26f78f3a"]
+  },
+  {
+    "q": "bajar la declaración de hacienda del año pasado",
+    "expect": ["f583b490-e998-42da-b235-98d1c2a25a85", "c2d0cc4a-da22-4d63-892d-c9deb4adaa29"]
+  },
+  {
+    "q": "informe de vida laboral con DNIe",
+    "expect": ["28f2b149-6d52-453c-a8a6-3005078713fe"]
+  },
+  {
+    "q": "dónde hacer el psicotécnico para renovar el carnet",
+    "expect": ["9c8766a0-cee2-44fb-9763-1c49e8ebecbb"]
+  },
+  {
+    "q": "horario en que se liberan citas de huellas en Valencia",
+    "expect": ["6117ca08-63c6-4258-baa2-56c1daf4f4eb"]
+  },
+  {
+    "q": "el botón aceptar no funciona en la web de cita previa de extranjería",
+    "expect": ["3e94f2c0-1468-4436-9383-ed0a8505c569"]
+  },
+  {
+    "q": "fingerprint appointment residence card no slots",
+    "expect": [
+      "38475cc1-c125-46b6-bfd6-3855021f3a16",
+      "adb92c63-b7e0-45e4-8772-30b74a557df2",
+      "98ad8c88-627e-4980-91c6-ddd5eec485b4"
+    ]
+  },
+  {
+    "q": "income tax return PDF download",
+    "expect": ["c2d0cc4a-da22-4d63-892d-c9deb4adaa29", "f583b490-e998-42da-b235-98d1c2a25a85"]
+  },
+  {
+    "q": "driving licence medical check centres",
+    "expect": ["9c8766a0-cee2-44fb-9763-1c49e8ebecbb"]
+  },
+  {
+    "q": "birth registration deadline",
+    "expect": ["a6f6c4d0-fd00-4bcd-b9bb-0fc92e8ad020"]
+  },
+  {
+    "q": "apoyar ILP con certificado digital sin cuenta de Google",
+    "expect": ["f79956eb-1f24-4fd1-8bd9-19ec6311ce42"]
+  },
+  {
+    "q": "justificante de haber firmado la ILP",
+    "expect": ["22135df9-75ea-4368-b93d-4ce24ed63b28", "69ebaf33-003e-403d-b6c5-1d706ab0df65"]
+  },
+  {
+    "q": "recibo de IRPF modelo 100 pdf",
+    "expect": ["c2d0cc4a-da22-4d63-892d-c9deb4adaa29", "f583b490-e998-42da-b235-98d1c2a25a85"]
+  },
+  {
+    "q": "regreso a España con la TIE en trámite, qué formulario",
+    "expect": ["d6a6295e-485a-478e-ac34-24982bc604e5", "2727d93b-ace4-4a9e-99f8-715df3ddf7c2"]
+  },
+  {
+    "q": "modelo 790 código 012 tarjeta familiar comunitario",
+    "expect": ["35c634bc-4674-4c92-bd18-8fcd2f5d5296"]
+  },
+  {
+    "q": "certificado FNMT en el móvil",
+    "expect": ["82d84c52-1b4c-4df8-a661-517844741371"]
+  },
+  {
+    "q": "consultar deudas con tráfico",
+    "expect": ["c64c55b2-e1e9-40a9-a5af-83a2187a964a"]
+  },
+  {
+    "q": "padrón municipal certificado individual sin tasa",
+    "expect": ["a46413fe-50a0-410b-a637-79c2fe565a38"]
+  },
+  {
+    "q": "sede judicial solicitud de acceso al expediente electrónico caída por mantenimiento",
+    "expect": ["f353f7a9-48cb-4d2a-a8ee-25ba3d6e62c5"]
+  },
+  {
+    "q": "se cuelga la página al elegir provincia para la TIE",
+    "expect": ["3e94f2c0-1468-4436-9383-ed0a8505c569", "98ad8c88-627e-4980-91c6-ddd5eec485b4"]
+  },
+  {
+    "q": "activar clave permanente código de activación",
+    "expect": ["e3a8a5ed-f8f8-4a2c-9923-ae0e5bc08d79"]
+  },
+  {
+    "q": "saldo de puntos DGT con certificado",
+    "expect": ["3cda7c29-487f-486b-92a4-3fd6b5610bcf"]
+  },
+  {
+    "q": "solicitar beca MEC",
+    "expect": []
+  },
+  {
+    "q": "matricular un coche importado",
+    "expect": []
+  },
+  {
+    "q": "pedir cita con el médico de cabecera",
+    "expect": []
+  },
+  {
+    "q": "renovar el pasaporte",
+    "expect": []
+  },
+  {
+    "q": "prestación por desempleo SEPE",
+    "expect": []
+  },
+  {
+    "q": "darse de baja de autónomos",
+    "expect": []
+  },
+  {
+    "q": "certificado de antecedentes penales",
+    "expect": []
+  },
+  {
+    "q": "tarjeta sanitaria europea",
+    "expect": []
+  },
+  {
+    "q": "ayuda al alquiler joven",
+    "expect": []
+  },
+  {
+    "q": "cambio de domicilio en el permiso de circulación",
+    "expect": []
+  },
+  {
+    "q": "título de familia numerosa",
+    "expect": []
+  },
+  {
+    "q": "simulador de pensión de jubilación",
+    "expect": []
+  },
+  {
+    "q": "licencia de obra menor",
+    "expect": []
+  },
+  {
+    "q": "receta de paella valenciana",
+    "expect": []
+  },
+  {
+    "q": "weather in Madrid tomorrow",
+    "expect": []
+  },
+  {
+    "q": "homologar un título universitario extranjero",
+    "expect": []
+  },
+  {
+    "q": "apostilla de La Haya",
+    "expect": []
+  },
+  {
+    "q": "nacionalidad española por residencia examen CCSE",
+    "expect": []
+  }
+]

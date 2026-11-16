@@ -15,8 +15,10 @@ CREATE ROLE feedback LOGIN PASSWORD :'feedback_password';
 CREATE DATABASE feedback OWNER feedback;
 REVOKE ALL ON DATABASE feedback FROM PUBLIC;
 
--- Extensions the feedback server's Spanish full-text search uses (pre-created as superuser).
+-- Extensions the feedback server's search uses (pre-created as superuser): Spanish full text,
+-- and pgvector for hybrid search (in this stack's image, infra/postgres/Dockerfile).
 \connect feedback
 CREATE EXTENSION IF NOT EXISTS unaccent;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS vector;
 SQL

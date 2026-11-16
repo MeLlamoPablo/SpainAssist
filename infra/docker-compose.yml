@@ -10,7 +10,9 @@ name: spainassistant
 
 services:
   postgres:
-    image: postgres:17.11-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    # The official postgres:17.11-alpine plus pgvector (postgres/Dockerfile).
+    build: ./postgres
+    image: spainassistant/postgres:local
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -86,6 +88,8 @@ services:
       LITELLM_URL: ${LITELLM_URL:-}
       # Required with LITELLM_URL: HMAC key for users' ids (at least 32 characters).
       USER_ID_SECRET: ${FEEDBACK_USER_ID_SECRET:-}
+      # Hybrid search: a key of that LiteLLM for embeddings; unset, searches match text only.
+      EMBEDDINGS_API_KEY: ${FEEDBACK_EMBEDDINGS_KEY:-}
       # Add the feedback server's own settings here (see services/feedback-server/README.md).
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:8788:8788"

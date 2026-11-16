@@ -33,6 +33,9 @@ export interface SearchSpec {
 
 export type Scored<T> = T & { score: number };
 
+/** Scores from this up are strict hits (every query term matched); lower ones matched in part. */
+export const STRICT_SCORE = 0.6;
+
 /** With 3+ query terms, any-term hits must match at least a third of them. */
 const MIN_COVERAGE_MANY_TERMS = 0.33;
 
@@ -81,7 +84,7 @@ export async function tieredSearch<T extends Record<string, unknown>>(
      LIMIT ${p(1)}`,
     [...base, limit],
   );
-  take(strict.rows, 0.6, 0.4);
+  take(strict.rows, STRICT_SCORE, 1 - STRICT_SCORE);
   if (out.length >= limit) return out;
 
   // 2) any term, ranked by the share of query terms matched, then cover density
@@ -125,7 +128,7 @@ export async function tieredSearch<T extends Record<string, unknown>>(
       ({ rank: _r, coverage: _c, terms: _t, boost: _b, ...row }) => row as T & { s: number },
     ),
     0.25,
-    0.35,
+    STRICT_SCORE - 0.25,
   );
   if (out.length >= limit) return out;
 

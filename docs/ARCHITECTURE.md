@@ -33,9 +33,9 @@ flowchart TB
 
 | Service | Role |
 | --- | --- |
-| LiteLLM gateway (`infra/`) | Voucher and ChatGPT-subsidy keys: chat to OpenRouter, search to Parallel, scan screening, phone-call transcription. Per-key budgets; stores no prompts. |
+| LiteLLM gateway (`infra/`) | Voucher and ChatGPT-subsidy keys: chat to OpenRouter, search to Parallel, scan screening, phone-call transcription. Also the feedback server's embeddings. Per-key budgets; stores no prompts. |
 | `services/key-server` | Turns a voucher code into a capped gateway key, gives ChatGPT accounts their subsidy key, and sells Parallel research runs. Never sees conversations. |
-| `services/feedback-server` | Anonymous, PII-scrubbed "learnings" shared between agents, with Spanish full-text search. |
+| `services/feedback-server` | Anonymous, PII-scrubbed "learnings" shared between agents, found by a hybrid search: Spanish full text and embeddings (pgvector). |
 | `services/maps-server` | Mapbox address lookups for map forms, so no Mapbox token ships in the app. |
 | `services/relay-server` | Passes end-to-end encrypted frames between the desktop and the phone. No accounts. |
 | `apps/mobile` | Reads the DNIe over NFC and signs what the desktop sends, after the user approves. |
@@ -243,6 +243,10 @@ twice on the device (patterns with checksums, and every value in the vault), the
 server. A maintainer approves each one on the feedback server's admin page before agents get it.
 Future agents search approved learnings and vote on the ones they used. Searching, sharing and
 voting respect the user's sharing setting; sharing and voting also require a user key.
+
+The server finds learnings by their words and by their meaning: it embeds each one, and each
+search query (scrubbed on the device, and again there), through the gateway. Research:
+`docs/research/feedback-embeddings.md`.
 
 ## 4. Users and our services
 

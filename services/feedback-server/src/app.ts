@@ -33,6 +33,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { z } from 'zod';
 import { ADMIN_PAGE_HEADERS, ADMIN_PAGE_HTML } from './admin-page';
 import type { Db } from './db/types';
+import type { Indexer } from './embed/indexer';
 import {
   adminDetail,
   adminEntry,
@@ -43,6 +44,7 @@ import {
   setTriage,
   updateFeedback,
 } from './feedback/admin';
+import type { Semantic } from './feedback/hybrid';
 import {
   addVote,
   castVote,
@@ -94,6 +96,10 @@ export interface AppDeps {
   log?: (line: string) => void;
   /** Expose the read-only MCP endpoint at /mcp (default true). */
   mcp?: boolean;
+  /** Hybrid search: searches also match by meaning (hybrid.ts). Without it, by text only. */
+  semantic?: Semantic;
+  /** Told after every write, so new and edited entries get their embedding soon. */
+  indexer?: Pick<Indexer, 'kick'>;
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -219,6 +225,7 @@ export function createApp(deps: AppDeps): Hono {
         );
       }
       const id = await insertFeedback(db, feedback);
+      deps.indexer?.kick();
       return c.json({ id, redactions } satisfies FeedbackSubmitResponse, 201);
     },
   );
@@ -228,7 +235,13 @@ export function createApp(deps: AppDeps): Hono {
     if (tooMany) return tooMany;
     const parsed = FeedbackSearchQuery.safeParse(c.req.query());
     if (!parsed.success) return fail(c, 400, 'bad_request', describe(parsed.error));
-    const results = await searchFeedback(db, parsed.data, voteContext(), deps.random);
+    const results = await searchFeedback(
+      db,
+      parsed.data,
+      voteContext(),
+      deps.random,
+      deps.semantic,
+    );
     return c.json({ results } satisfies FeedbackSearchResponse);
   });
 
@@ -287,12 +300,12 @@ export function createApp(deps: AppDeps): Hono {
     return c.json((await adminList(db, parsed.data, voteContext())) satisfies FeedbackAdminList);
   });
   admin.get('/feedback/stats', async (c) =>
-    c.json((await adminStats(db, voteContext())) satisfies FeedbackAdminStats),
+    c.json((await adminStats(db, voteContext(), deps.semantic)) satisfies FeedbackAdminStats),
   );
   admin.get('/feedback/search', async (c) => {
     const parsed = FeedbackSearchQuery.safeParse(c.req.query());
     if (!parsed.success) return fail(c, 400, 'bad_request', describe(parsed.error));
-    const results = await adminSearch(db, parsed.data, voteContext());
+    const results = await adminSearch(db, parsed.data, voteContext(), deps.semantic);
     return c.json({ results } satisfies FeedbackAdminSearchResponse);
   });
   admin.get('/feedback/:id', async (c) => {
@@ -331,6 +344,7 @@ export function createApp(deps: AppDeps): Hono {
     if ('response' in read) return read.response;
     // A maintainer wrote it: no need to triage it.
     const id = await insertFeedback(db, { ...read.feedback, triage: 'approved' });
+    deps.indexer?.kick();
     const entry = await adminEntry(db, id, voteContext());
     if (!entry) return notFound(c); // deleted meanwhile
     return c.json({ entry, redactions: read.redactions } satisfies FeedbackEditResponse, 201);
@@ -340,6 +354,7 @@ export function createApp(deps: AppDeps): Hono {
     if ('response' in read) return read.response;
     const id = c.req.param('id').toLowerCase();
     if (!(await updateFeedback(db, id, read.feedback))) return notFound(c);
+    deps.indexer?.kick();
     const entry = await adminEntry(db, id, voteContext());
     if (!entry) return notFound(c); // deleted meanwhile
     return c.json({ entry, redactions: read.redactions } satisfies FeedbackEditResponse);
@@ -386,7 +401,7 @@ export function createApp(deps: AppDeps): Hono {
     app.all('/mcp', async (c) => {
       const tooMany = limited(searchLimiter, c);
       if (tooMany) return tooMany;
-      return handleMcpRequest(c.req.raw, db, voteContext(), deps.random);
+      return handleMcpRequest(c.req.raw, db, voteContext(), deps.random, deps.semantic);
     });
   }
 

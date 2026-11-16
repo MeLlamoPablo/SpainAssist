@@ -588,6 +588,9 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.5.11
         version: 0.5.11
+      '@electric-sql/pglite-pgvector':
+        specifier: 0.0.12
+        version: 0.0.12(@electric-sql/pglite@0.5.11)
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
@@ -1039,6 +1042,11 @@ packages:
   '@earendil-works/pi-tui@1.4.0':
     resolution: {integrity: sha512-4obPOjgOD7g4mGSlngIvxyujC1UPdmyI9zdVthbr8GufacFEX+Ce0+scPgHg++k2xj5+QjESM2d5TxvIuzCVmg==}
     engines: {node: '>=22.19.0'}
+
+  '@electric-sql/pglite-pgvector@0.0.12':
+    resolution: {integrity: sha512-n3TJqjWI9FXwFrGhuTVMghef8SL3E6nb4lxZnxYFW3UTg/7/hMUWfz7v2y0+idWzEsQ/raRpMNCsw9zvSdC/SA==, tarball: https://registry.npmjs.org/@electric-sql/pglite-pgvector/-/pglite-pgvector-0.0.12.tgz}
+    peerDependencies:
+      '@electric-sql/pglite': 0.5.11
 
   '@electric-sql/pglite@0.5.11':
     resolution: {integrity: sha512-SWuqsTjA4DDWqgZ05PC1RJaq8e00p5KACxbqaikDFQ8dIGA0SLRzuPniky7IW+q/c5RDNMdEXwv7mFBWIx9Hxw==}
@@ -6119,6 +6127,10 @@ snapshots:
       get-east-asian-width: 1.6.0
       marked: 18.0.11
       marked-cjk-friendly: 0.1.2(marked@18.0.11)
+
+  '@electric-sql/pglite-pgvector@0.0.12(@electric-sql/pglite@0.5.11)':
+    dependencies:
+      '@electric-sql/pglite': 0.5.11
 
   '@electric-sql/pglite@0.5.11': {}
 

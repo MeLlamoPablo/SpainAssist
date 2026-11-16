@@ -3,7 +3,8 @@
 Anonymous, PII-scrubbed **learnings** shared between SpainAssist agents ("la cita previa del DNI
 sale por tandas"): tips, frictions and gotchas. After every successful procedure agents share a
 tip with the browser steps that worked (the workflow code, personal data as placeholders). Hono
-on Node, raw SQL on Postgres (PGlite for dev and tests).
+on Node, raw SQL on Postgres (PGlite for dev and tests). Agents retrieve learnings with a
+[hybrid search](#search): Spanish full text plus embeddings (pgvector).
 
 **Nothing an agent shares is served until a maintainer approves it** (see [Triage](#triage)).
 
@@ -19,8 +20,8 @@ Contracts: `packages/shared/src/services.ts`. Errors always look like
 | `POST /v1/feedback/:id/vote` | Agent vote on an approved learning `{ "vote": "up" \| "down" }` (Bearer gateway key; one vote per user, a new one replaces it) → `{ id, counted }`; 404 for any other |
 | `GET /admin` | The admin page (HTML, no data; 404 without `ADMIN_TOKEN`) |
 | `GET /admin/feedback?q=&kind=&procedure=&tag=&author=&votes=&triage=&sort=&limit=&offset=` | Browse → `FeedbackAdminList` (`{ results, total }`) |
-| `GET /admin/feedback/stats` | Counts by kind, vote sign and triage, top procedures, tags and authors, vote policy |
-| `GET /admin/feedback/search?q=&procedure=&kind=&limit=` | The agents' search without the serving draw and over every entry, not only approved ones (score + chance for every candidate) |
+| `GET /admin/feedback/stats` | Counts by kind, vote sign and triage, top procedures, tags and authors, vote policy, and the state of hybrid search |
+| `GET /admin/feedback/search?q=&procedure=&kind=&limit=` | The agents' search without the serving draw and over every entry, not only approved ones (score, how it matched and chance for every candidate) |
 | `GET /admin/feedback/:id` | Entry + its votes, each with what it is worth now |
 | `POST /admin/feedback` | New entry written by a maintainer (`FeedbackCreate`: the `FeedbackEdit` fields), scrubbed like a submission; `author` defaults to `human` → `201 { entry, redactions }` |
 | `PUT /admin/feedback/:id/triage` | `{ "triage": "approved" \| "rejected" \| "untriaged" }` (`FeedbackTriageRequest`) → `{ entry }` |
@@ -38,6 +39,7 @@ Every `/admin/*` route except the page needs `Authorization: Bearer <ADMIN_TOKEN
 Error codes: `bad_request` (400), `unauthorized` (401), `no_credit` (403), `not_found` (404),
 `payload_too_large` (413), `pii_detected` (422), `rate_limited` / `quota_exceeded` (429, with
 `Retry-After`), `internal` (500), `unavailable` (503: LiteLLM unreachable, or no `LITELLM_URL`).
+A search never fails because of embeddings: without them it answers from the text search.
 
 **Authentication** (submissions and agent votes, as for `services/maps-server`):
 `Authorization: Bearer sk-…` with the user's LiteLLM gateway key (a voucher key, a ChatGPT
@@ -127,7 +129,12 @@ server does it again (defense in depth):
   Per-address limits live in memory, keyed by a salted hash of the client address (new salt on
   every start); per-user quotas live in memory, keyed by the user's id. The access log has
   method, route pattern, status and duration only: never bodies, query strings, keys or
-  addresses.
+  addresses;
+- with [hybrid search](#hybrid-search) on, the text of every entry (already scrubbed) and of
+  every search query goes to the embeddings endpoint: our LiteLLM gateway, then OpenRouter and
+  the model's provider, under the same zero-data-retention policy as the app's chat. Queries
+  are scrubbed with `@sa/pii` first (the app scrubs its own; other MCP clients may not), carry
+  no user, key or address, and are not stored here: only entries' vectors are.
 
 ### Search
 
@@ -149,6 +156,51 @@ A search runs up to three stages and returns a short list:
 Each stage also tries the query in official wording ("carnet de conducir" → "permiso de
 conducción", "paro" → "prestación por desempleo"; see `src/synonyms.ts`). Scores get a small
 recency boost and are tiered: strict 0.6–1, any-term 0.25–0.6, trigram 0–0.25.
+
+#### Hybrid search
+
+The text search only finds entries that share words with the query. With `EMBEDDINGS_API_KEY`
+set, entries that say the same in other words are found too: "me ha tocado estar en una mesa en
+las elecciones" finds the note about "designación como miembro de mesa electoral".
+
+- **Index.** Every entry, whatever its triage, has one embedding of its procedure,
+  administration, region, title, body and tags (`feedback_embeddings`, migration `012`; pgvector,
+  exact cosine search: no index is needed for thousands of rows). The indexer
+  (`src/embed/indexer.ts`) embeds what is new or edited half a second after the write, and
+  everything that is missing at start and every ten minutes, so a failure is retried and
+  changing `EMBEDDINGS_MODEL` or `EMBEDDINGS_DIMENSIONS` re-embeds every entry by itself.
+- **Query.** A search embeds its query (one request to the gateway, about a second) while the
+  text search runs, takes the nearest entries and merges both lists by reciprocal rank
+  (`src/feedback/hybrid.ts`): entries both searches find come first. `score` is 1 for an entry
+  that is first in both lists; it orders one answer and means nothing across answers.
+- **The floor.** A nearest-neighbour query always returns something, so a hit found only by its
+  embedding needs a cosine similarity of `EMBEDDINGS_MIN_SIMILARITY`; and a text hit that
+  matched only some of the query's words is dropped when its similarity is more than 0.05 below
+  that ("certificado de antecedentes penales" shares a word with every note about a
+  certificate). The default, 0.64, sits between what unrelated and related questions reach with
+  the default model: another model needs another value (`eval:search` below shows it).
+- **Never in the way.** If the gateway fails or takes over 3 s, the search answers from the
+  text search and doesn't ask again for 30 s. Entries without an embedding yet are still found
+  by text. Filters, triage and the vote draw apply as before.
+- **pgvector.** PGlite has it. On Postgres the image must have the extension
+  (`infra/postgres/Dockerfile`); while it doesn't, migration `012` waits (`src/db/migrate.ts`),
+  the server searches by text and looks again every ten minutes, so it turns hybrid by itself
+  once Postgres has it. The server's role creates the extension, which that image marks as
+  trusted.
+
+The model, `google/gemini-embedding-001` at 1536 dimensions, was the best of those our gateway
+can serve on Spanish administrative questions: `docs/research/feedback-embeddings.md`. To
+measure a change (another model, floor or ranking) on labelled questions, by text only and
+hybrid, over a copy of a server's approved entries:
+
+```bash
+ADMIN_TOKEN=… EMBEDDINGS_URL=https://llm.<domain>/v1 EMBEDDINGS_API_KEY=sk-… \
+  corepack pnpm --filter @sa/feedback-server eval:search --url https://feedback.<domain> --misses
+```
+
+`eval/queries.json` holds the questions (`{ "q", "expect": [entry ids] }`; none expected for
+questions no entry answers, which measure noise). It calls the real embeddings endpoint (well
+under a cent, cached in `.data/`), so it is run by hand: the tests use a fake embedder.
 
 ### Votes
 
@@ -199,8 +251,10 @@ Filters: `procedure` (fuzzy: same stemmed words or a similar name) and `kind`.
 - **Write**, **edit** and **delete** entries. New entries and edits are scrubbed like
   submissions, and mostly-personal text is rejected. New entries start with no votes and the
   author `human`.
-- **Try a search**: the agents' query with every candidate's score and serving chance, without
-  the random draw, untriaged and rejected entries included (chance 0).
+- **Try a search**: the agents' query with every candidate's score, how it matched (its text
+  score and its similarity to the query) and serving chance, without the random draw, untriaged
+  and rejected entries included (chance 0). The overview says whether searches are hybrid and
+  how many entries have an embedding.
 - Keyboard shortcuts are listed on the page (`j`/`k` move, `/` search, `n` new entry…).
 
 Like the key server's voucher page it is one self-contained HTML page: no data server-side,
@@ -238,6 +292,11 @@ ADMIN_TOKEN=dev-token corepack pnpm feedback --local   # http://127.0.0.1:8788/a
 | `VOTE_DECAY_START_DAYS` | `90` | Age at which a vote starts losing value |
 | `VOTE_DECAY_END_DAYS` | `365` | Age at which a vote stops counting (must be > the start) and is deleted, with its user id (hourly) |
 | `MCP_ENABLED` | `1` | `0` hides `/mcp` |
+| `EMBEDDINGS_API_KEY` | unset | Turns [hybrid search](#hybrid-search) on: a key of the OpenAI-compatible embeddings endpoint (a LiteLLM key that may only call the embeddings model) |
+| `EMBEDDINGS_URL` | `<LITELLM_URL>/v1` | Base URL of that endpoint; required without `LITELLM_URL` |
+| `EMBEDDINGS_MODEL` | `google/gemini-embedding-001` | Embeddings model. Changing it (or the dimensions) re-embeds every entry |
+| `EMBEDDINGS_DIMENSIONS` | `1536` | Vector size asked of the model (at most 2000 if you ever add a pgvector index) |
+| `EMBEDDINGS_MIN_SIMILARITY` | `0.64` | Cosine similarity (0–1) a hit found only by its embedding needs; fits the default model |
 
 ## Development
 
@@ -261,11 +320,13 @@ docker run -p 8788:8788 -e DATABASE_URL=postgres://user:pass@db:5432/feedback sp
 ```
 
 The official `postgres` images (14+) ship `unaccent` and `pg_trgm`; the migration creates them.
+They don't ship pgvector: `infra/postgres/Dockerfile` adds it, and without it searches match
+text only.
 
 ## MCP
 
 `/mcp` is a stateless Streamable HTTP MCP server with one read-only tool, `search_feedback` (same
-search as the HTTP API, same rate limit). Clients must send
+search as the HTTP API, hybrid when the server's is, same rate limit). Clients must send
 `Accept: application/json, text/event-stream`. Example config for an MCP client:
 
 ```json

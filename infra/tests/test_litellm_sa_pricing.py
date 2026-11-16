@@ -44,10 +44,12 @@ class PricingTests(unittest.IsolatedAsyncioTestCase):
         ):
             urlopen.return_value.__enter__.return_value.read.return_value = b'{"data": []}'
             spec.loader.exec_module(self.pricing)
-            urlopen.assert_called_once()
+            # The chat catalog and the embeddings catalog.
+            self.assertEqual(urlopen.call_count, 2)
             thread.return_value.start.assert_called_once()
         self.clock = Mock(return_value=1000)
         patch.object(self.pricing, "time", types.SimpleNamespace(monotonic=self.clock)).start()
+        self.fetch_models = self.pricing.fetch_models
         self.fetch = patch.object(self.pricing, "fetch_models", return_value=[]).start()
         self.addCleanup(patch.stopall)
         self.litellm.register_model.reset_mock()
@@ -146,6 +148,25 @@ class PricingTests(unittest.IsolatedAsyncioTestCase):
             release.set()
             await asyncio.gather(*tasks)
         self.fetch.assert_called_once()
+
+    def test_embedding_models_are_priced_as_embeddings(self):
+        embedding = catalog_model("google/gemini-embedding-001", "0.00000015", "0")
+        embedding["architecture"] = {"output_modalities": ["embeddings"]}
+        prices = self.pricing.openrouter_prices([catalog_model("inception/mercury-3"), embedding])
+        self.assertEqual(prices["openrouter/inception/mercury-3"]["mode"], "chat")
+        self.assertEqual(
+            prices["openrouter/google/gemini-embedding-001"],
+            {"litellm_provider": "openrouter", "mode": "embedding", "input_cost_per_token": 1.5e-07, "output_cost_per_token": 0.0},
+        )
+
+    def test_chat_prices_load_without_the_embeddings_catalog(self):
+        def catalog(url):
+            if url == self.pricing.OPENROUTER_EMBEDDING_MODELS_URL:
+                raise OSError("embeddings catalog unavailable")
+            return [catalog_model("inception/mercury-3")]
+
+        with patch.object(self.pricing, "fetch_catalog", side_effect=catalog):
+            self.assertEqual(self.fetch_models(), [catalog_model("inception/mercury-3")])
 
     async def test_periodic_refresh_still_updates_prices_during_miss_cooldown(self):
         await self.assert_rejected()

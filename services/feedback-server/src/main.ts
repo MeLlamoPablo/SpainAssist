@@ -4,6 +4,9 @@ import { createApp } from './app';
 import { loadConfig } from './config';
 import { migrate } from './db/migrate';
 import { openDb } from './db/open';
+import { createGatewayEmbedder } from './embed/embedder';
+import { scheduleIndexer } from './embed/indexer';
+import { createSemantic } from './feedback/hybrid';
 import { scheduleVotePurge } from './feedback/retention';
 import { seedFeedback } from './feedback/seed';
 
@@ -21,6 +24,18 @@ async function main() {
   }
   // Retention: votes are deleted once they stop counting (VOTE_DECAY_END_DAYS), hourly.
   const stopPurge = scheduleVotePurge(db, config.votes, log);
+  // Hybrid search: entries get an embedding in the background, searches one for their query.
+  const embedder = config.embeddings && createGatewayEmbedder(config.embeddings);
+  const hybrid = config.embeddings &&
+    embedder && {
+      indexer: scheduleIndexer(db, embedder, log),
+      semantic: createSemantic({
+        db,
+        embedder,
+        minSimilarity: config.embeddings.minSimilarity,
+        log,
+      }),
+    };
   const app = createApp({
     db,
     adminToken: config.adminToken,
@@ -42,13 +57,16 @@ async function main() {
     },
     mcp: config.mcp,
     votes: config.votes,
+    ...(hybrid || {}),
     log,
   });
   const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) =>
     log(
       `feedback server on http://${info.address}:${info.port} (db: ${db.kind}, admin: ${
         config.adminToken ? 'on' : 'off'
-      }, mcp: ${config.mcp ? 'on' : 'off'}, sharing: ${config.users ? 'on' : 'off: no LITELLM_URL'})`,
+      }, mcp: ${config.mcp ? 'on' : 'off'}, sharing: ${
+        config.users ? 'on' : 'off: no LITELLM_URL'
+      }, embeddings: ${embedder ? embedder.space : 'off: no EMBEDDINGS_API_KEY'})`,
     ),
   );
 
@@ -58,6 +76,7 @@ async function main() {
     closing = true;
     log(`${signal}: shutting down`);
     stopPurge();
+    hybrid?.indexer.stop();
     server.close(() => {
       db.close().finally(() => process.exit(0));
     });

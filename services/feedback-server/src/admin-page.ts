@@ -96,6 +96,7 @@ a { color: var(--accent); }
 .item-title { font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; white-space: normal; }
 .item-sub { color: var(--subtle); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.item-match { color: var(--info-fg); font-variant-numeric: tabular-nums; }
 .list-foot { padding: 12px 16px; text-align: center; }
 .empty { padding: 32px 16px; text-align: center; color: var(--subtle); }
 .keys { padding: 8px 16px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 12px; }
@@ -232,7 +233,10 @@ const T = {
     clear: 'Quitar filtros', refresh: 'Actualizar', more: 'Cargar más', loading: 'Cargando…',
     count: (n, total) => (n < total ? n + ' de ' + total : String(total)) + (total === 1 ? ' aprendizaje' : ' aprendizajes'),
     empty: 'No hay aprendizajes con estos filtros.',
-    searchHint: 'Lo mismo que buscan los agentes, en orden de relevancia y sin sorteo: ves todos los candidatos con su puntuación y su probabilidad de salir.',
+    searchHint: 'Lo mismo que buscan los agentes, en orden de relevancia y sin sorteo: ves todos los candidatos con su puntuación, cómo coinciden y su probabilidad de salir.',
+    matchText: 'texto', matchMeaning: 'significado',
+    matchTitle: 'Cómo coincide con la búsqueda: por sus palabras (texto) y por lo que dice (significado), de 0 a 1',
+    scoreTitle: 'Relevancia en esta búsqueda, de 0 a 1',
     searchQ: 'Búsqueda', searchQPh: 'p. ej. cita previa renovar dni', limit: 'Resultados', search: 'Buscar',
     searchEmpty: 'Ningún resultado para esta búsqueda.', searchShort: 'Escribe al menos 2 letras.',
     m_untriaged: 'sin triar', m_approved: 'aprobado', m_rejected: 'rechazado',
@@ -277,6 +281,15 @@ const T = {
     st_total: 'aprendizajes', st_untriaged: 'sin triar', st_up: 'con votos positivos', st_down: 'con votos negativos',
     byKind: 'Por tipo', topProcedures: 'Trámites con más aprendizajes', topTags: 'Etiquetas más usadas',
     topAuthors: 'Quién los escribe',
+    searchTitle: 'Cómo se busca',
+    searchMode: (e, total) => !e
+      ? ['Solo por texto: el servidor no tiene una clave para embeddings (EMBEDDINGS_API_KEY).']
+      : !e.ready
+        ? ['Solo por texto por ahora: la base de datos no tiene la extensión pgvector. Modelo configurado: ' + e.model + '.']
+        : ['Por texto y por significado, con embeddings de ' + e.model + '.',
+          e.indexed >= total ? 'Todos los aprendizajes tienen embedding.'
+            : e.indexed + ' de ' + total + (total === 1 ? ' aprendizaje tiene' : ' aprendizajes tienen') + ' embedding; los demás solo se encuentran por texto.',
+          'Lo que solo coincide por significado necesita un parecido de ' + fmtNum(e.minSimilarity) + ' o más.'],
     policyTitle: 'Cómo funcionan los votos',
     policy: (p) => [
       'Los votos deciden cuántas veces se sirve un aprendizaje, no su posición.',
@@ -305,7 +318,10 @@ const T = {
     clear: 'Clear filters', refresh: 'Refresh', more: 'Load more', loading: 'Loading…',
     count: (n, total) => (n < total ? n + ' of ' + total : String(total)) + (total === 1 ? ' learning' : ' learnings'),
     empty: 'No learnings match these filters.',
-    searchHint: 'The same search agents run, in relevance order and without the draw: you see every candidate with its score and its chance of being served.',
+    searchHint: 'The same search agents run, in relevance order and without the draw: you see every candidate with its score, how it matches and its chance of being served.',
+    matchText: 'text', matchMeaning: 'meaning',
+    matchTitle: 'How it matches the query: by its words (text) and by what it says (meaning), from 0 to 1',
+    scoreTitle: 'Relevance in this search, from 0 to 1',
     searchQ: 'Query', searchQPh: 'e.g. cita previa renovar dni', limit: 'Results', search: 'Search',
     searchEmpty: 'No results for this search.', searchShort: 'Type at least 2 letters.',
     m_untriaged: 'untriaged', m_approved: 'approved', m_rejected: 'rejected',
@@ -350,6 +366,15 @@ const T = {
     st_total: 'learnings', st_untriaged: 'untriaged', st_up: 'with positive votes', st_down: 'with negative votes',
     byKind: 'By kind', topProcedures: 'Procedures with most learnings', topTags: 'Most used tags',
     topAuthors: 'Who wrote them',
+    searchTitle: 'How search works',
+    searchMode: (e, total) => !e
+      ? ['By text only: the server has no embeddings key (EMBEDDINGS_API_KEY).']
+      : !e.ready
+        ? ['By text only for now: the database lacks the pgvector extension. Configured model: ' + e.model + '.']
+        : ['By text and by meaning, with embeddings from ' + e.model + '.',
+          e.indexed >= total ? 'Every learning has an embedding.'
+            : e.indexed + ' of ' + total + (total === 1 ? ' learning has' : ' learnings have') + ' an embedding; the rest are found by text only.',
+          'What matches by meaning alone needs a similarity of ' + fmtNum(e.minSimilarity) + ' or more.'],
     policyTitle: 'How votes work',
     policy: (p) => [
       'Votes decide how often a learning is served, not where it ranks.',
@@ -485,6 +510,7 @@ function fmtWeight(w) {
 function fmtPct(p) {
   return new Intl.NumberFormat(locale(), { style: 'percent', maximumFractionDigits: 0 }).format(p);
 }
+function fmtNum(n) { return new Intl.NumberFormat(locale(), { maximumFractionDigits: 2 }).format(n); }
 function weightClass(w) { return w >= 0.005 ? 'w-up' : w <= -0.005 ? 'w-down' : 'w-zero'; }
 /** "human" in the page's language; agents as sent ("<model id> · <reasoning level>"). */
 function authorLabel(author) { return author === 'human' ? t('a_human') : author || t('a_unknown'); }
@@ -618,13 +644,23 @@ function itemNode(e, withScore) {
     el('span', { class: 'item-top' },
       kindBadge(e.kind),
       weightBadge(e),
-      withScore && typeof e.score === 'number' ? el('span', { class: 'badge score' }, e.score.toFixed(2)) : null,
+      withScore && typeof e.score === 'number' ? el('span', { class: 'badge score', title: t('scoreTitle') }, e.score.toFixed(2)) : null,
       triageMark(e.triage),
       authorBadge(e),
       el('time', { datetime: e.createdAt, title: fmtDate(e.createdAt) }, fmtAgo(e.createdAt))),
     el('span', { class: 'item-title' }, e.title),
-    el('span', { class: 'item-sub' }, [e.procedure, e.region].filter(Boolean).join(' · ')));
+    el('span', { class: 'item-sub' }, [e.procedure, e.region].filter(Boolean).join(' · ')),
+    withScore ? matchLine(e.match) : null);
   return el('li', {}, button);
+}
+
+/** How a search result matched: "texto 0.71 · significado 0.68". */
+function matchLine(match) {
+  if (!match) return null;
+  const parts = [];
+  if (typeof match.text === 'number') parts.push(t('matchText') + ' ' + match.text.toFixed(2));
+  if (typeof match.similarity === 'number') parts.push(t('matchMeaning') + ' ' + match.similarity.toFixed(2));
+  return parts.length ? el('span', { class: 'item-sub item-match', title: t('matchTitle') }, parts.join(' · ')) : null;
 }
 
 function triageMark(triage) {
@@ -651,7 +687,7 @@ function markSelected() {
 }
 
 function replaceEntry(entry) {
-  const swap = (list) => list && list.map((e) => (e.id === entry.id ? Object.assign({}, entry, { score: e.score }) : e));
+  const swap = (list) => list && list.map((e) => (e.id === entry.id ? Object.assign({}, entry, { score: e.score, match: e.match }) : e));
   entries = swap(entries);
   results = swap(results);
   renderList();
@@ -1100,6 +1136,8 @@ function overview() {
     wrap.append(el('section', { class: 'card' }, el('h3', {}, t('topAuthors')),
       bars(stats.authors.slice(0, 8).map((a) => ({ ...a, label: authorLabel(a.value) })), (a) => setFilter('f-author', a))));
   }
+  wrap.append(el('section', { class: 'card' }, el('h3', {}, t('searchTitle')),
+    el('ul', { class: 'plain' }, ...t('searchMode')(stats.embeddings, stats.total).map((line) => el('li', {}, line)))));
   wrap.append(el('section', { class: 'card' }, el('h3', {}, t('policyTitle')),
     el('ul', { class: 'plain' }, ...t('policy')(stats.policy).map((line) => el('li', {}, line)))));
   return wrap;

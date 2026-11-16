@@ -1,7 +1,7 @@
 # Loaded by LiteLLM as a callback module (litellm_settings.callbacks: ["sa_pricing.handler"]).
-# Registers OpenRouter's own prices (https://openrouter.ai/api/v1/models) for every model it
-# serves, at start, every few hours and on a chat price miss, so spend reaches key budgets and
-# a new model needs no deploy. LiteLLM's remote price list lags behind OpenRouter and its prices may be stale; OpenRouter
+# Registers OpenRouter's own prices (https://openrouter.ai/api/v1/models, and its embedding
+# models) for every model it serves, at start, every few hours and on a chat price miss, so
+# spend reaches key budgets and a new model needs no deploy. LiteLLM's remote price list lags behind OpenRouter and its prices may be stale; OpenRouter
 # is what we are billed.
 import asyncio
 import json
@@ -15,6 +15,8 @@ from fastapi import HTTPException
 from litellm.integrations.custom_logger import CustomLogger
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+# Embedding models have a list of their own (the feedback server's hybrid search calls one).
+OPENROUTER_EMBEDDING_MODELS_URL = "https://openrouter.ai/api/v1/embeddings/models"
 REFRESH_SECONDS = 6 * 60 * 60
 MISS_REFRESH_SECONDS = 60
 _refresh_lock = threading.Lock()
@@ -54,7 +56,8 @@ def price(value) -> float | None:
 def model_entry(model: dict) -> dict | None:
     """LiteLLM price entry for one OpenRouter model, or None when it has no usable price."""
     pricing = model.get("pricing") or {}
-    entry: dict = {"litellm_provider": "openrouter", "mode": "chat"}
+    outputs = (model.get("architecture") or {}).get("output_modalities") or []
+    entry: dict = {"litellm_provider": "openrouter", "mode": "embedding" if "embeddings" in outputs else "chat"}
     for source, target in PRICE_FIELDS.items():
         value = price(pricing.get(source))
         if value is not None:
@@ -100,10 +103,19 @@ def openrouter_prices(models: list) -> dict:
     return prices
 
 
-def fetch_models() -> list:
-    request = urllib.request.Request(OPENROUTER_MODELS_URL, headers={"Accept": "application/json"})
+def fetch_catalog(url: str) -> list:
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)["data"]
+
+
+def fetch_models() -> list:
+    models = fetch_catalog(OPENROUTER_MODELS_URL)
+    try:
+        models += fetch_catalog(OPENROUTER_EMBEDDING_MODELS_URL)
+    except Exception as error:  # noqa: BLE001: chat prices matter more than embedding prices
+        print(f"sa_pricing: could not load OpenRouter embedding prices: {error}", file=sys.stderr, flush=True)
+    return models
 
 
 def refresh(*, on_miss: bool = False) -> None:
