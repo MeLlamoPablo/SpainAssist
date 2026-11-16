@@ -29,9 +29,8 @@ One question is 2 points of hit@1: differences smaller than that mean nothing.
 - `dimensions` is passed on (Gemini, OpenAI and Perplexity models returned the size asked for).
 - The answer has `usage.prompt_tokens` but no `x-litellm-response-cost` header: LiteLLM had no
   price, so the key was charged nothing. `templates/litellm_sa_pricing.py` now registers
-  OpenRouter's embedding prices (`/api/v1/embeddings/models`, mode `embedding`). That LiteLLM
-  then charges the key is **UNVERIFIED** (not deployed when this was written): look for the
-  header after the next apply.
+  OpenRouter's embedding prices (`/api/v1/embeddings/models`, mode `embedding`); once deployed,
+  the header appeared ($0.0000006 for 4 tokens) and the feedback server's key showed its spend.
 - **The account's zero-data-retention policy applies.** OpenRouter refused five of fourteen
   models with "0 endpoints … matching your guardrail restrictions and data policy":
   `google/gemini-embedding-2`, `cohere/embed-5-pro`, `cohere/embed-5-fast`,
@@ -118,8 +117,11 @@ learnings a question gets that no learning answers.
 - **Coolify always pulls a database's image before it starts it** (`docker compose pull`, under
   `bash -e`: read in Coolify 4.4.7's `StartPostgresql.php`), so an image that only exists on
   the server would not start: it has to come from a registry. A GitHub workflow publishes it to
-  ghcr.io. That a package published from this public repository is public without a setting is
-  **UNVERIFIED**.
+  ghcr.io; published from this public repository, the package was public without any setting.
+- **The rollout** (2026-11-16) [live]: Coolify restarted Postgres on the new image in about four
+  seconds, on the same data; every service reconnected by itself. The feedback server found the
+  extension at its next ten-minute check, created it and its table, and embedded the 50
+  learnings ($0.0012).
 
 ## Sources
 

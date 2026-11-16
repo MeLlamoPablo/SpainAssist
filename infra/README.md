@@ -324,8 +324,9 @@ only changes its DSN.
      changes on `master`; the run's summary prints the image with its digest. To change it (a
      new Postgres or pgvector): check that the package is still public (Coolify pulls without
      credentials), set it as `image` of `coolify_database_postgresql.main` in `coolify.tf`,
-     apply, and restart Postgres in Coolify at a quiet moment: every service loses its database
-     for a few seconds. The data stays as it is (same Postgres, same Alpine, so text sorts the
+     apply, and restart Postgres in Coolify at a quiet moment (the dashboard, or
+     `POST /api/v1/databases/<uuid>/restart`): every service loses its database for a few
+     seconds and reconnects by itself. The data stays as it is (same Postgres, same Alpine, so text sorts the
      same). Within ten minutes the feedback server creates the extension and its table itself
      (its log says `migrations applied: 012_embeddings.sql`), then embeds every learning.
   2. *A LiteLLM key for embeddings*, which may call nothing else:
