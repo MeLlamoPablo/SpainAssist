@@ -16,11 +16,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.11",
-    "@hono/node-server": "^2.1.5",
+    "@electric-sql/pglite": "^0.5.16",
+    "@hono/node-server": "^2.1.6",
     "@sa/shared": "workspace:*",
-    "hono": "^4.13.13",
-    "jose": "^6.2.13",
+    "hono": "^4.13.17",
+    "jose": "^6.2.17",
     "pg": "^8.23.1",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"

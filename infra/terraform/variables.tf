@@ -397,7 +397,7 @@ variable "parallel_api_key" {
 variable "unleash_image" {
   description = "Unleash server image."
   type        = string
-  default     = "unleashorg/unleash-server:8.2.1"
+  default     = "unleashorg/unleash-server:8.3.1"
 }
 
 variable "unleash_admin_password" {

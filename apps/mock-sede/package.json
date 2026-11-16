@@ -15,13 +15,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.5",
+    "@hono/node-server": "^2.1.6",
     "@sa/shared": "workspace:*",
-    "asn1js": "^3.1.0",
-    "hono": "^4.13.13",
-    "node-forge": "^1.4.0",
+    "asn1js": "^4.0.0",
+    "hono": "^4.13.17",
+    "node-forge": "^1.4.3",
     "pdf-lib": "^1.17.1",
-    "pkijs": "^3.4.3",
+    "pkijs": "^4.0.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

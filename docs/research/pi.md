@@ -648,6 +648,7 @@ Concurrency:
 Packaging note:
 
 - An SDK host must declare `typebox` and `@earendil-works/pi-ai` itself to import them (versions matching pi's; with 1.0.0's shrinkwrap, nested duplicate copies also interoperated). `apps/desktop` keeps them equal to `@sa/agent`'s (`electron-packaging.md` §6.11).
+- pi-coding-agent pins `undici` exactly (8.12.3 in pi 1.5.0) and pi-ai takes it as a peer, so `@sa/agent` pins the same version for its own fetches: a newer one there makes pnpm install a second undici and, with it, a second copy of pi-ai.
 
 ---
 

@@ -41,14 +41,14 @@ export function renderChecks(checks: readonly Check[]): string {
 }
 
 function nodeCheck(): Check {
-  const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
-  const fine = major > 22 || (major === 22 && minor >= 19);
+  const [major = 0] = process.versions.node.split('.').map(Number);
+  const fine = major >= 24;
   return fine
     ? { status: 'ok', name: 'Node', detail: process.version }
     : {
         status: 'fail',
         name: 'Node',
-        detail: `${process.version}: the suite needs Node 22.19 or later (24 is the repo's)`,
+        detail: `${process.version}: the suite needs Node 24 or later`,
       };
 }
 

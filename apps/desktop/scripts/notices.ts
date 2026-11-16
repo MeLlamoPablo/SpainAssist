@@ -87,17 +87,41 @@ function mayShip(license: string): boolean {
   return isPermissive(license) || license in DECIDED;
 }
 
-/** Packages that bundle another project's code without shipping its notice. */
-const EMBEDDED: Record<string, Component> = {
-  unpdf: {
-    name: 'PDF.js (bundled in unpdf)',
-    license: 'Apache-2.0',
-    files: [
+/**
+ * Packages that bundle other projects' code, whose notices aren't at the package's top level.
+ * Each gets the package's directory.
+ */
+const EMBEDDED: Record<string, (dir: string) => Component[]> = {
+  unpdf: (dir) => {
+    // unpdf ships the licences of the decoders it bundles next to its build.
+    const file = (name: string) => ({
+      name,
+      text: readFileSync(path.join(dir, 'dist', 'licenses', name), 'utf8').trim(),
+    });
+    return [
       {
-        name: 'NOTICE',
-        text: 'Copyright 2012 Mozilla Foundation. Licensed under the Apache License, Version 2.0 (its text is in this file). https://github.com/mozilla/pdf.js',
+        name: 'PDF.js (bundled in unpdf)',
+        license: 'Apache-2.0',
+        files: [
+          {
+            name: 'NOTICE',
+            text: 'Copyright 2012 Mozilla Foundation. Licensed under the Apache License, Version 2.0 (its text is in this file). https://github.com/mozilla/pdf.js',
+          },
+        ],
       },
-    ],
+      // PDF.js' image decoders (JBIG2 and CCITT; JPEG 2000): PDFium's and OpenJPEG's code, as
+      // Mozilla builds it.
+      {
+        name: 'PDFium JBIG2 decoder (PDF.js build, bundled in unpdf)',
+        license: 'BSD-3-Clause AND Apache-2.0',
+        files: [file('LICENSE_JBIG2'), file('LICENSE_PDFJS_JBIG2')],
+      },
+      {
+        name: 'OpenJPEG decoder (PDF.js build, bundled in unpdf)',
+        license: 'BSD-2-Clause',
+        files: [file('LICENSE_OPENJPEG'), file('LICENSE_PDFJS_OPENJPEG')],
+      },
+    ];
   },
 };
 
@@ -224,8 +248,9 @@ export function collectPackages(appDir = APP_DIR): Component[] {
         author: authorOf(pkg),
         files: noticeFiles(dir),
       });
-      const embedded = EMBEDDED[pkg.name];
-      if (embedded) found.set(`${dir}#embedded`, embedded);
+      for (const embedded of EMBEDDED[pkg.name]?.(dir) ?? []) {
+        found.set(`${dir}#${embedded.name}`, embedded);
+      }
     }
     for (const dep of Object.keys(pkg.dependencies ?? {})) visit(dir, dep, true);
     for (const dep of Object.keys(pkg.optionalDependencies ?? {})) visit(dir, dep, false);

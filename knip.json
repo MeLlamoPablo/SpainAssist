@@ -46,7 +46,7 @@
         "test/net/helpers/loopback-fetch-child.mts"
       ],
       "ignoreDependencies": ["typebox"],
-      "ignoreBinaries": ["pgrep", "wget", "WGET.exe"]
+      "ignoreBinaries": ["wget", "WGET.exe"]
     },
     "packages/sidecar": {
       "ignoreBinaries": ["go"]
