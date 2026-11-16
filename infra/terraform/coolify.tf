@@ -26,16 +26,16 @@ resource "coolify_project" "main" {
 # A new `image` is an in-place update: Coolify saves it but only uses it when the database next
 # (re)starts, which Terraform doesn't trigger.
 #
-# The feedback server's hybrid search needs pgvector, which this official image lacks: switch to
-# the image .github/workflows/postgres-image.yml publishes from infra/postgres/Dockerfile (the
-# same Alpine image plus the extension), pinned by digest (README.md, "Hybrid search").
+# The image is the official postgres:17.11-alpine plus pgvector, for the feedback server's hybrid
+# search: .github/workflows/postgres-image.yml publishes it from infra/postgres/Dockerfile and
+# prints the digest to pin here (README.md, "Hybrid search").
 resource "coolify_database_postgresql" "main" {
   name              = "postgres"
   description       = "Databases keyserver, feedback, litellm, unleash and glitchtip (one role each)"
   project_uuid      = coolify_project.main.uuid
   server_uuid       = local.server_uuid
   environment_name  = "production"
-  image             = "postgres:17.11-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b"
+  image             = "ghcr.io/mellamopablo/spainassist-postgres:17.11-pgvector0.8.7@sha256:1c9d321c1e6c93c53e258173ba98bcedcd4e08f3a82d4ba9234a1637402e8f3a"
   postgres_user     = "postgres"
   postgres_password = var.postgres_password
   postgres_db       = "postgres"

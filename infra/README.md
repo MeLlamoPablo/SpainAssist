@@ -318,10 +318,11 @@ only changes its DSN.
   `corepack pnpm feedback` does the same for the feedback server's admin page.
 - **Hybrid search** (the feedback server finds learnings by meaning too, see its README) needs
   two things, in either order. Until both are there, searches match text only.
-  1. *pgvector in Postgres.* The official image lacks it. `.github/workflows/postgres-image.yml`
-     publishes `ghcr.io/<owner>/<repository>-postgres` from `postgres/Dockerfile` (the same
-     Alpine image plus the extension) whenever that file changes on `master`; the run's summary
-     prints the image with its digest. Check that the package is public (Coolify pulls without
+  1. *pgvector in Postgres.* The official image lacks it, so production runs our own.
+     `.github/workflows/postgres-image.yml` publishes `ghcr.io/<owner>/<repository>-postgres`
+     from `postgres/Dockerfile` (the same Alpine image plus the extension) whenever that file
+     changes on `master`; the run's summary prints the image with its digest. To change it (a
+     new Postgres or pgvector): check that the package is still public (Coolify pulls without
      credentials), set it as `image` of `coolify_database_postgresql.main` in `coolify.tf`,
      apply, and restart Postgres in Coolify at a quiet moment: every service loses its database
      for a few seconds. The data stays as it is (same Postgres, same Alpine, so text sorts the
