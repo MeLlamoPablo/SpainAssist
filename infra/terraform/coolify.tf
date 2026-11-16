@@ -191,8 +191,8 @@ locals {
       # Hybrid search: embeddings from LITELLM_URL with this key (empty: text search only). It
       # also needs pgvector in Postgres; until then the server keeps searching by text.
       EMBEDDINGS_API_KEY = var.feedback_embeddings_key
-      TRUST_PROXY    = "1"
-      DEV_SEED       = "0"
+      TRUST_PROXY        = "1"
+      DEV_SEED           = "0"
     }, var.feedback_server_env)
     # Mapbox address lookups for the app (no Mapbox token ships in it). Users authenticate with
     # their own LiteLLM key, checked against LiteLLM's /key/info over the internal network.
