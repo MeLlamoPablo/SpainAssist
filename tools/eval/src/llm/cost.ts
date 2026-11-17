@@ -50,6 +50,7 @@ const sol: PriceEntry = {
   cacheWrite: 2.5,
   tiers: [{ inputTokensAbove: 272_000, input: 4, output: 15, cacheRead: 0.4, cacheWrite: 5 }],
 };
+/** GPT-6.1 Sol, and GPT-6.2 Sol at the same OpenRouter prices. */
 const sol61: PriceEntry = { ...sol, cacheRead: 0.1 };
 /** InclusionAI's Ling 3.0 Flash VL on OpenRouter (no cache write charge). */
 const lingFlashVl: PriceEntry = { input: 0.06, output: 0.18, cacheRead: 0.012, cacheWrite: 0.06 };
@@ -84,6 +85,7 @@ export const DEFAULT_PRICES: PriceTable = {
   'openai/gpt-6-luna': luna,
   'openai/gpt-6-sol': sol,
   'openai/gpt-6.1-sol': sol61,
+  'openai/gpt-6.2-sol': sol61,
   'openai/gpt-6-astra': astra,
   'inclusionai/ling-3.0-flash-vl': lingFlashVl,
   'meta-llama/llama-3.3-70b-instruct': llama33,
@@ -91,6 +93,7 @@ export const DEFAULT_PRICES: PriceTable = {
   'gpt-6-luna': luna,
   'gpt-6-sol': sol,
   'gpt-6.1-sol': sol61,
+  'gpt-6.2-sol': sol61,
   'gpt-6-astra': astra,
 };
 
