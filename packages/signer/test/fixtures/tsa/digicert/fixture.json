@@ -1,0 +1,17 @@
+{
+  "url": "http://timestamp.digicert.com",
+  "genTime": "2026-11-18 23:03:22+00:00",
+  "policy": "2.16.840.1.114412.7.1",
+  "urls": {
+    "http://ocsp.digicert.com": {
+      "CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1,O=DigiCert\\, Inc.,C=US": "ocsp-0.der",
+      "CN=DigiCert Trusted G4 TimeStamping RSA4096 SHA256 2025 CA1,O=DigiCert\\, Inc.,C=US": "ocsp-1.der"
+    },
+    "http://crl3.digicert.com/DigiCertTrustedG4TimeStampingRSA4096SHA2562025CA1.crl": {
+      "*": "crl-0-0.crl"
+    },
+    "http://crl3.digicert.com/DigiCertTrustedRootG4.crl": {
+      "*": "crl-1-0.crl"
+    }
+  }
+}

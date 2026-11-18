@@ -208,7 +208,7 @@ function signatureAlgorithm(key: KeyObject): { alg: x509.AlgorithmIdentifier; ha
     : { alg: new x509.AlgorithmIdentifier({ algorithm: '1.2.840.10045.4.3.2' }), hash: 'sha256' };
 }
 
-function extension(extnID: string, value: unknown, critical = false): x509.Extension {
+export function extension(extnID: string, value: unknown, critical = false): x509.Extension {
   return new x509.Extension({
     extnID,
     critical,
@@ -216,7 +216,7 @@ function extension(extnID: string, value: unknown, critical = false): x509.Exten
   });
 }
 
-interface IssueOptions {
+export interface IssueOptions {
   subject: [string, string][];
   publicKey: KeyObject;
   /** Issuer certificate (DER) + its key; omit for a self-signed CA. */
@@ -230,9 +230,11 @@ interface IssueOptions {
   keyUsage?: number;
   /** Adds qcStatements with QcCompliance and QcSSCD (DNIe FIRMA). */
   qcSscd?: boolean;
+  /** More extensions (authority information access, CRL points, extended key usage…). */
+  extensions?: x509.Extension[];
 }
 
-function issueCertificate(opts: IssueOptions): Buffer {
+export function issueCertificate(opts: IssueOptions): Buffer {
   const subject = new x509.Name(opts.subject.map(([t, v]) => attr(t, v)));
   const issuerCert = opts.issuer
     ? AsnConvert.parse(opts.issuer.certDer, x509.Certificate)
@@ -293,6 +295,7 @@ function issueCertificate(opts: IssueOptions): Buffer {
       }),
     );
   }
+  if (opts.extensions) extensions.push(...opts.extensions);
   const tbs = new x509.TBSCertificate({
     version: x509.Version.v3,
     serialNumber: serial.buffer.slice(serial.byteOffset, serial.byteOffset + serial.byteLength),

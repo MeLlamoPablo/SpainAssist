@@ -1,0 +1,17 @@
+{
+  "url": "http://timestamp.sectigo.com/qualified",
+  "genTime": "2026-11-18 23:04:48+00:00",
+  "policy": "0.4.0.2023.1.1",
+  "urls": {
+    "http://ocsp.sectigo.com": {
+      "CN=Sectigo Qualified Time Stamping Signer #3,O=Sectigo (Europe) SL,C=ES": "ocsp-0.der",
+      "CN=Sectigo Qualified Time Stamping CA R35,O=Sectigo (Europe) SL,C=ES": "ocsp-1.der"
+    },
+    "http://crl.sectigo.com/SectigoQualifiedTimeStampingCAR35.crl": {
+      "*": "crl-0-0.crl"
+    },
+    "http://crl.sectigo.com/SectigoQualifiedTimeStampingRootR45.crl": {
+      "*": "crl-1-0.crl"
+    }
+  }
+}

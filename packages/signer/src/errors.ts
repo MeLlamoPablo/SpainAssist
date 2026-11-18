@@ -99,6 +99,14 @@ export class AfirmaError extends Error {
     );
   }
 
+  /** Its CA says the signing certificate (or one above it) is revoked: no valid signature. */
+  static revokedCertificate(subject: string): AfirmaError {
+    return AfirmaError.generic(
+      'AF501001',
+      `El certificado está revocado según su autoridad de certificación (${subject})`,
+    );
+  }
+
   static triphase(phase: 'pre' | 'post', serverMessage: string): AfirmaError {
     return AfirmaError.generic(
       phase === 'pre' ? 'AF300451' : 'AF300452',
