@@ -51,6 +51,7 @@ import { externalIdentity, p12Identity, type SignerIdentity } from './key';
 import { sniffMime } from './mime';
 import { openP12, P12Error } from './p12';
 import { createPades, type PadesVisibleSignature, pdfLayout } from './pades';
+import { type LongTermOptions, makeLongTerm } from './timestamping';
 import { expandPolicy, type PolicyFormat, readPolicy } from './policy';
 import {
   type BatchRequest,
@@ -118,6 +119,11 @@ export interface AfirmaHandlerOptions {
   logger?: { info(msg: string, data?: unknown): void; warn?(msg: string, data?: unknown): void };
   /** The script font of visible PDF signatures (TrueType); without it, Helvetica Oblique. */
   signatureFont?: Uint8Array;
+  /**
+   * Makes PAdES signatures long-term (B-LT: timestamp, chains and revocation data); without it
+   * they stay PAdES-B-B and nothing is fetched.
+   */
+  longTerm?: Omit<LongTermOptions, 'logger'>;
 }
 
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
@@ -634,7 +640,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       }
     }
 
-    const signed = await using(identity, () => {
+    let signed = await using(identity, () => {
       const algorithm = resolveAlgorithm(algorithmName, identity.keyType);
       return triphase
         ? triphaseSign({
@@ -660,6 +666,16 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
             visible: padesVisible,
           });
     });
+    // A PDF signed here becomes long-term (timestamp and validation data), once the key is
+    // released: the network never holds up the approval. Triphase servers build their own.
+    if (family === 'PAdES' && !triphase && options.longTerm) {
+      signed = (
+        await makeLongTerm(signed, effective, {
+          ...options.longTerm,
+          ...(options.logger ? { logger: options.logger } : {}),
+        })
+      ).pdf;
+    }
 
     if (input.outputFileName != null && options.saveFile) {
       await options.saveFile({

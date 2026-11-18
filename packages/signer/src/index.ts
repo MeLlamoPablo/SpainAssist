@@ -93,6 +93,7 @@ export {
   installFnmtShim,
 } from './shim';
 export { type SignPdfOptions, signPdf } from './sign-pdf';
+export { DEFAULT_TSAS, type LongTermOptions } from './timestamping';
 export { batchSign, type TriphaseOptions, triphaseSign } from './triphase';
 export { defaultPlacement, maskIds } from './visible';
 export { createXades, type XadesSignOptions, xadesVariant } from './xades';

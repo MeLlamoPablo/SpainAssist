@@ -14,6 +14,8 @@ export const GENERIC_TYPE = 'java.lang.Exception';
 export class AfirmaError extends Error {
   readonly errorType: string;
   readonly errorCode: string;
+  /** The signing certificate is revoked: a signature with it is worthless. */
+  revoked?: boolean;
 
   constructor(errorType: string, message: string, errorCode: string) {
     super(message);
@@ -101,10 +103,12 @@ export class AfirmaError extends Error {
 
   /** Its CA says the signing certificate (or one above it) is revoked: no valid signature. */
   static revokedCertificate(subject: string): AfirmaError {
-    return AfirmaError.generic(
+    const error = AfirmaError.generic(
       'AF501001',
       `El certificado está revocado según su autoridad de certificación (${subject})`,
     );
+    error.revoked = true;
+    return error;
   }
 
   static triphase(phase: 'pre' | 'post', serverMessage: string): AfirmaError {

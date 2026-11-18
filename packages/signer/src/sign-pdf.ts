@@ -1,12 +1,14 @@
 /**
  * Signing a PDF of the user's own (Mis documentos) with no site involved: always a visible
- * PAdES-BES signature with our handwritten appearance, where the user placed it (or where
- * `defaultPlacement` puts it). The approval, with its box, is the app's.
+ * PAdES signature with our handwritten appearance, where the user placed it (or where
+ * `defaultPlacement` puts it), made long-term (B-LT) when `longTerm` is given. The approval,
+ * with its box, is the app's.
  */
 import type { SignaturePlacement, SigningKey } from '@sa/shared';
 import { resolveAlgorithm } from './algorithms';
 import { checkValidity, openCertificate } from './handler';
 import { createPades } from './pades';
+import { type LongTermOptions, makeLongTerm } from './timestamping';
 import { signatureAppearance } from './visible';
 
 export interface SignPdfOptions {
@@ -16,6 +18,8 @@ export interface SignPdfOptions {
   placement: SignaturePlacement;
   /** The script font of the signature (TrueType). */
   signatureFont?: Uint8Array;
+  /** Makes the signature long-term (B-LT); without it, PAdES-B-B. */
+  longTerm?: LongTermOptions;
   now?: Date;
 }
 
@@ -29,8 +33,9 @@ export async function signPdf(o: SignPdfOptions): Promise<Buffer> {
     if (o.key.kind === 'external') o.key.release(false);
     throw e;
   }
+  let signed: Buffer;
   try {
-    const signed = await createPades({
+    signed = await createPades({
       pdf: Buffer.from(o.pdf),
       algorithm: resolveAlgorithm('SHA256withRSA', identity.keyType),
       signer: identity.signer,
@@ -50,9 +55,10 @@ export async function signPdf(o: SignPdfOptions): Promise<Buffer> {
       },
     });
     identity.release(true);
-    return signed;
   } catch (e) {
     identity.release(false);
     throw e;
   }
+  // After the release: the network never holds up the approval.
+  return o.longTerm ? (await makeLongTerm(signed, {}, o.longTerm)).pdf : signed;
 }
