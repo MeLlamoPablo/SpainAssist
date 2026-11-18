@@ -7,7 +7,7 @@ import { parseHTML } from 'linkedom';
 import TurndownService from 'turndown';
 import { gfm } from 'turndown-plugin-gfm';
 import { Agent, fetch as undiciFetch } from 'undici';
-import { extractText, getDocumentProxy } from 'unpdf';
+import { extractText, getDocumentProxy, renderPageAsImage } from 'unpdf';
 
 /**
  * `api.fetchUrl` core: download a page or PDF and turn it into compact Markdown/text for the model.
@@ -601,6 +601,34 @@ export async function pdfToText(
       ? pages.map((page, i) => `[Página ${i + 1}]\n${page}`).join('\n\n')
       : (pages[0] ?? '');
   return { text: body, pages: totalPages, title };
+}
+
+/** The longer side, in pixels, of a page rendered by `pdfPage`. */
+const PAGE_IMAGE_SIDE = 1600;
+
+/**
+ * One page (from 1) of a PDF: its text and, with `image`, the page as a PNG. Throws a RangeError
+ * for a page the PDF doesn't have.
+ */
+export async function pdfPage(
+  bytes: Uint8Array,
+  pageNumber: number,
+  o: { image: boolean },
+): Promise<{ text: string; pages: number; png?: Uint8Array }> {
+  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pdf.numPages)
+    throw new RangeError(
+      `This PDF has ${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'}; page ${pageNumber} doesn't exist.`,
+    );
+  const { text: texts } = await extractText(pdf, { mergePages: false });
+  const text = tidyMarkdown((Array.isArray(texts) ? texts : [texts])[pageNumber - 1] ?? '');
+  if (!o.image) return { text, pages: pdf.numPages };
+  const { width, height } = (await pdf.getPage(pageNumber)).getViewport({ scale: 1 });
+  const png = await renderPageAsImage(pdf, pageNumber, {
+    canvasImport: () => import('@napi-rs/canvas'),
+    scale: PAGE_IMAGE_SIDE / Math.max(width, height),
+  });
+  return { text, pages: pdf.numPages, png };
 }
 
 // ---------------------------------------------------------------------------------------------

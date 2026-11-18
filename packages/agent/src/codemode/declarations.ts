@@ -147,8 +147,10 @@ interface Vault {
   save(items: { key: string; value: string; label?: string }[]): Promise<{ saved: string[] }>;
 }
 interface Documents {
-  /** A saved document: text (PDFs: text by page) or an image to show yourself with api.output.image. */
-  read(id: string, options?: { page?: number }): Promise<{ id: string; name: string; mimeType: string; text?: string; pages?: number; image?: Image }>;
+  /** A saved document: its text, or an image to show yourself with api.output.image. PDFs: the text
+   *  of every page (truncated: true when cut), or with page (from 1) that page's text and image
+   *  (scans have no text: look at their pages). */
+  read(id: string, options?: { page?: number }): Promise<{ id: string; name: string; mimeType: string; text?: string; pages?: number; truncated?: boolean; image?: Image }>;
   /** Keeps a browser download (downloadId from page results) in the user's documents under a
    *  readable name ("Justificante cita DNI"). Unsaved downloads vanish when the app restarts. */
   saveDownload(downloadId: string, name: string): Promise<{ documentId: string; name: string }>;

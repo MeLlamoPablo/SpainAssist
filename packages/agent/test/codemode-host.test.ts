@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { BridgeMethod } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import type { BridgeCallOptions, BridgeTransport } from '../src/bridge/client';
@@ -38,19 +40,30 @@ const OBSERVATION = {
 function ops(
   answers: Partial<Record<BridgeMethod, unknown>> = {},
   procedures = ['p_aaaaaaaaaaaaaaaa'],
+  imagesSupported = true,
 ) {
   const { bridge, calls } = stubBridge(answers);
+  const images = createImageStore();
   const call = createHostOps({
     bridge,
-    images: createImageStore(),
+    images,
     runId: () => 'run_1',
     procedures: () => procedures,
-    imagesSupported: true,
+    imagesSupported,
   });
   const run = (op: string, args: unknown) =>
     call(op, args, { signal: new AbortController().signal });
-  return { run, calls };
+  return { run, calls, images };
 }
+
+const PDF_DOCUMENT = {
+  id: 'doc-1',
+  name: 'Tasas.pdf',
+  mimeType: 'application/pdf',
+  dataBase64: readFileSync(join(import.meta.dirname, 'fixtures', 'pdf', 'tasas.pdf')).toString(
+    'base64',
+  ),
+};
 
 describe('encodeTarget', () => {
   it('keeps refs as they are and sends locator chains as loc: JSON', () => {
@@ -63,6 +76,42 @@ describe('encodeTarget', () => {
 });
 
 describe('host operations', () => {
+  it('read a PDF whole, or one page with its image', async () => {
+    const { run, images } = ops({ 'vault.document': PDF_DOCUMENT });
+    const whole = (await run('documents.read', { id: 'doc-1' })) as Record<string, unknown>;
+    expect(whole).toMatchObject({ id: 'doc-1', name: 'Tasas.pdf', pages: 2 });
+    expect(whole.text).toContain('Renovación: 12,00 euros');
+    expect(whole.text).toContain('Familia numerosa: exento.');
+    expect(whole).not.toHaveProperty('image');
+    expect(whole).not.toHaveProperty('truncated');
+
+    const second = (await run('documents.read', { id: 'doc-1', page: 2 })) as {
+      text: string;
+      pages: number;
+      image: { imageId: string; mimeType: string };
+    };
+    expect(second.pages).toBe(2);
+    expect(second.text).toContain('Familia numerosa: exento.');
+    expect(second.text).not.toContain('Renovación');
+    expect(second.image.mimeType).toBe('image/png');
+    const png = Buffer.from(images.get(second.image.imageId)?.dataBase64 ?? '', 'base64');
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+    // A4 portrait: the longer side is the height.
+    expect(png.readUInt32BE(20)).toBe(1600);
+
+    await expect(run('documents.read', { id: 'doc-1', page: 3 })).rejects.toMatchObject({
+      code: 'bad_request',
+      message: "This PDF has 2 pages; page 3 doesn't exist.",
+    });
+  });
+
+  it('read a PDF page as text only for a model that cannot see images', async () => {
+    const { run } = ops({ 'vault.document': PDF_DOCUMENT }, undefined, false);
+    const page = await run('documents.read', { id: 'doc-1', page: 1 });
+    expect(page).toMatchObject({ pages: 2 });
+    expect(page).not.toHaveProperty('image');
+  });
+
   it('act on the workflow’s procedure: its browser and its prompts', async () => {
     const { run, calls } = ops({
       'browser.type': OBSERVATION,

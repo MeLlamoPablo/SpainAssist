@@ -8,6 +8,7 @@ import {
   fetchDocument,
   fetchPublic,
   type HostResolver,
+  pdfPage,
   pdfToText,
   readCapped,
   sliceText,
@@ -365,14 +366,31 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
     const bytes = Buffer.from(doc.dataBase64, 'base64');
     const base = { id: doc.id, name: doc.name, mimeType: doc.mimeType };
     if (doc.mimeType === 'application/pdf') {
+      if (a.page !== undefined) {
+        let page: Awaited<ReturnType<typeof pdfPage>>;
+        try {
+          page = await pdfPage(bytes, Number(a.page), { image: deps.imagesSupported });
+        } catch (error) {
+          if (error instanceof RangeError)
+            throw new HostOpError('bad_request', error.message, 'not_started');
+          throw error;
+        }
+        return {
+          ...base,
+          pages: page.pages,
+          text: page.text,
+          ...(page.png
+            ? { image: deps.images.put('image/png', Buffer.from(page.png).toString('base64')) }
+            : {}),
+        };
+      }
       const pdf = await pdfToText(bytes);
-      const offset = typeof a.offset === 'number' ? a.offset : 0;
-      const page = sliceText(pdf.text, offset, 40_000);
+      const text = sliceText(pdf.text, 0, 40_000);
       return {
         ...base,
         pages: pdf.pages,
-        text: page.chunk,
-        ...(page.nextOffset ? { nextOffset: page.nextOffset } : {}),
+        text: text.chunk,
+        ...(text.nextOffset ? { truncated: true } : {}),
       };
     }
     if (doc.mimeType.startsWith('image/')) {
