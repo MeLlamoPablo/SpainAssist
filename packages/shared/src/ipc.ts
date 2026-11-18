@@ -218,6 +218,8 @@ export interface SaMethods {
   'chat.abort': [[], void];
   /** Answers a prompt, whoever asked it (the assistant or a procedure's agent). */
   'chat.respond': [[promptItemId: string, response: PromptResponse], void];
+  /** The PDF a pending `pdf_signature` prompt shows (null once it is answered). */
+  'chat.promptDocument': [[promptItemId: string], Uint8Array | null];
 
   'vault.overview': [[], VaultOverview];
   'vault.setPersonal': [[items: PersonalDataInput[]], VaultOverview];

@@ -5,7 +5,12 @@ import {
   AUTOSCRIPT_SHIM_SOURCE,
   certificateInfo,
   createAfirmaHandler,
+  defaultPlacement,
   FNMT_SHIM_SOURCE,
+  maskIds,
+  pdfLayout,
+  signatureName,
+  signPdf,
 } from '@sa/signer';
 import { createTestKeyProvider, type KeyProvider, Vault } from '@sa/vault';
 import type { Logger } from '../core/logger';
@@ -51,12 +56,21 @@ export function providerLib(codex?: CodexLib): ProviderLib {
 export const browserFactory: BrowserFactory = (opts) => createBrowserService(opts);
 export const certificateOrigins: readonly string[] = CERTIFICATE_ORIGINS;
 
-export function signerLib(logger: Logger): SignerLib {
+/**
+ * `signatureFont`: the script font of visible PDF signatures (`app/signature-font.ts`, which only
+ * the Electron build can import); without it the name is drawn in Helvetica Oblique.
+ */
+export function signerLib(logger: Logger, signatureFont?: Uint8Array): SignerLib {
   return {
     shimSource: AUTOSCRIPT_SHIM_SOURCE,
-    handler: createAfirmaHandler({ logger }),
+    handler: createAfirmaHandler({ logger, ...(signatureFont ? { signatureFont } : {}) }),
     fnmtShimSource: FNMT_SHIM_SOURCE,
     certificateInfo,
+    pdfLayout,
+    defaultPlacement,
+    signPdf: (options) => signPdf({ ...options, ...(signatureFont ? { signatureFont } : {}) }),
+    signatureName,
+    maskIds,
   };
 }
 

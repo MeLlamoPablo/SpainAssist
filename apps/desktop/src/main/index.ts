@@ -47,6 +47,7 @@ import {
   signerLib,
   testKeyProvider,
 } from './app/libs';
+import { signatureFont } from './app/signature-font';
 import { installMacApp } from './app/mac-install';
 import { createAppPaths } from './app/paths';
 import {
@@ -551,7 +552,7 @@ async function main(): Promise<void> {
     browserExecutable: bundledBrowser(log),
     ...(crlSets ? { crlSets } : {}),
     certificateOrigins,
-    signer: signerLib(log),
+    signer: signerLib(log, signatureFont),
     pii: piiLib,
     fetch,
     signerFetch: net.fetch as unknown as typeof fetch,

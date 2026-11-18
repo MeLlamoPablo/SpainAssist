@@ -42,6 +42,7 @@ import {
   type MockState,
 } from './demo';
 import { fakeDocumentPage, fakePage } from './images';
+import { pdfSignatureExample, sampleContractPdf } from './pdf';
 import {
   type AStep,
   DEMO_TOPICS,
@@ -264,6 +265,25 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       .get(DEMO_IDS.dni)
       ?.runtime.prompts?.find((p) => p.id === DEMO_IDS.dniPrompt);
     if (item) item.prompt = phoneCallExample((es, en) => (initialLang === 'en' ? en : es));
+  }
+  const dniProcedure = state.procedures.get(DEMO_IDS.dni);
+  if (params.has('pdfSign') && dniProcedure) {
+    // The DNI card asks to sign a PDF with a visible signature (the card's states).
+    dniProcedure.runtime = {
+      ...dniProcedure.runtime,
+      prompts: [
+        {
+          id: 'c-pdf-signature',
+          type: 'prompt',
+          createdAt: new Date().toISOString(),
+          procedureId: DEMO_IDS.dni,
+          status: 'pending',
+          prompt: pdfSignatureExample(params.get('pdfSign'), (es, en) =>
+            initialLang === 'en' ? en : es,
+          ),
+        },
+      ],
+    };
   }
   if (params.has('playground')) {
     state.conversation = examplePromptItems(initialLang);
@@ -947,8 +967,10 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const dni = state.procedures.get(DEMO_IDS.dni);
   if (dni) {
     const runtime = { ...dni.runtime, activity: 'idle' as const };
-    // `?map=1` keeps the DNI's form, a map of places to choose from.
-    if (!params.has('map')) delete runtime.prompts;
+    // `?map=1` keeps the DNI's form, a map of places to choose from; `?phone` and `?pdfSign`
+    // the cards they put there.
+    if (!params.has('map') && !params.has('phone') && !params.has('pdfSign'))
+      delete runtime.prompts;
     state.procedures.set(DEMO_IDS.dni, { ...dni, runtime });
   }
   const padron = state.procedures.get(DEMO_IDS.padron);
@@ -959,6 +981,8 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     });
 
   const handlers: Handlers = {
+    'chat.promptDocument': (itemId) =>
+      findPrompt(itemId)?.prompt.kind === 'pdf_signature' ? sampleContractPdf() : null,
     'places.locateHome': () => ({ latitude: 37.375, longitude: -5.986 }),
     'places.pins': (itemId, fieldKey) => {
       if (params.get('nomap') === '1') return null;

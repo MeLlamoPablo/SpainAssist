@@ -17,7 +17,7 @@ import { documentFileName } from '../browser/downloads';
 import type { BrowserHolder } from '../browser/holder';
 import type { PromptManager } from '../chat/prompts';
 import type { ConversationService } from '../conversation/service';
-import { BridgeError, SIGN_IN_ENDED_MESSAGE, SignInEndedError } from '../core/errors';
+import { BridgeError, SIGN_IN_ENDED_MESSAGE, SignInEndedError, UserError } from '../core/errors';
 import type { EventBus } from '../core/events';
 import { t } from '../core/i18n';
 import { type Logger, truncate } from '../core/logger';
@@ -480,6 +480,23 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       }
       vaultChanged();
       return { documentId: renamed.id, name: renamed.name };
+    },
+
+    'vault.signDocument': async (params, ctx) => {
+      const meta = deps.vault().getDocument(params.documentId);
+      if (!meta) throw new BridgeError('not_found', `No document with id "${params.documentId}".`);
+      if (meta.mimeType !== 'application/pdf') {
+        throw new BridgeError('bad_request', 'Only PDF documents can be signed.');
+      }
+      try {
+        const signed = await deps.browser.signDocument(ctx.procedureId, meta.id);
+        return { documentId: signed.id, name: signed.name, signed: true };
+      } catch (err) {
+        if (err instanceof UserError && err.code === 'cancelled') {
+          return { documentId: meta.id, name: meta.name, signed: false };
+        }
+        throw new BridgeError('bad_request', truncate(errorMessage(err), 300));
+      }
     },
 
     // --- downloads ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@
         "scripts/*.{ts,mjs}",
         "electron-builder.ts"
       ],
-      "ignoreDependencies": ["typebox", "@napi-rs/canvas"],
+      "ignoreDependencies": ["typebox"],
       "ignoreBinaries": ["plutil", "iconutil", "go", "reg.exe", "explorer.exe", "certutil.exe"]
     },
     "apps/mock-sede": {

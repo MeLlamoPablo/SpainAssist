@@ -92,7 +92,8 @@ sign.done ───────────────────────�
     no content streams.
 
   XAdES, triphase formats, precalculated hashes, cosignatures and countersignatures are not
-  verifiable: the phone says so before the user approves. Documents over 12 MB are sent without
+  verifiable: the phone says so before the user approves. Neither is a visible PAdES signature:
+  its appearance is a content stream, which the check refuses. Documents over 12 MB are sent without
   their bytes, which also makes the request not verifiable.
 - **Both certificates.** Opening the card with the CAN gives both of its certificates, with no
   PIN (jmulticard reads them all while it opens the card). Besides the request's one

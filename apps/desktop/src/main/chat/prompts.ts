@@ -30,6 +30,8 @@ export interface AskOptions {
   mapPins?: MapPins;
   /** Gets the item id as soon as the prompt is shown (for `update` and `settle`). */
   onShown?(itemId: string): void;
+  /** The PDF a `pdf_signature` prompt shows (memory only, dropped with the prompt). */
+  document?: Uint8Array;
 }
 
 interface PendingPrompt {
@@ -43,6 +45,7 @@ interface PendingPrompt {
   cleanup(): void;
   /** Map pins for a form's map fields: in memory only, dropped with the prompt. */
   mapPins?: MapPins;
+  document?: Uint8Array;
 }
 
 /**
@@ -96,6 +99,7 @@ export class PromptManager {
         reject,
         cleanup: () => opts.signal?.removeEventListener('abort', onAbort),
         ...(opts.mapPins ? { mapPins: opts.mapPins } : {}),
+        ...(opts.document ? { document: opts.document } : {}),
         ...(asker ? { asker } : {}),
       });
       this.syncAsker(asker);
@@ -187,6 +191,11 @@ export class PromptManager {
     }));
   }
 
+  /** The document a pending prompt shows (never part of the saved item). */
+  document(itemId: string): Uint8Array | undefined {
+    return this.pending.get(itemId)?.document;
+  }
+
   /** The in-memory map pins of a pending prompt (never part of the saved item). */
   mapPins(itemId: string): MapPins | undefined {
     const entry = this.pending.get(itemId);
@@ -251,6 +260,15 @@ export function sanitizeResponse(
   response: PromptResponse,
   language: Language = 'es',
 ): PromptResponse {
+  if (prompt.kind === 'pdf_signature' && response.kind === 'pdf_signature') {
+    if (!response.approved) return { kind: 'pdf_signature', approved: false };
+    if (prompt.mode !== 'choose') return { kind: 'pdf_signature', approved: true };
+    if (response.placement === null && prompt.optional) {
+      return { kind: 'pdf_signature', approved: true, placement: null };
+    }
+    if (!response.placement) throw new UserError(t(language, 'invalidRequest'), 'bad_request');
+    return { kind: 'pdf_signature', approved: true, placement: response.placement };
+  }
   if (prompt.kind !== 'form' || response.kind !== 'form') return response;
   if (response.dismissed || !response.values) {
     return { kind: 'form', dismissed: true, savedToVault: [] };

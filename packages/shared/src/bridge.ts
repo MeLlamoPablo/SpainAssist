@@ -204,6 +204,12 @@ export const BridgeParams = {
     name: z.string().trim().min(1).max(120),
   }),
 
+  /**
+   * Sign a saved PDF with the user's certificate or DNI, with a visible signature: the user picks
+   * where it goes and approves it in the app; the signed PDF replaces the document (same id).
+   */
+  'vault.signDocument': z.object({ documentId: z.string().min(1).max(120) }),
+
   // --- downloads (procedure agents) ----------------------------------------------------------
   /**
    * Move one of this procedure's temporary downloads into the vault under a readable name.
@@ -480,6 +486,7 @@ export interface BridgeResults {
   'vault.documents': { documents: { id: string; name: string }[] };
   'vault.document': { id: string; name: string; mimeType: string; dataBase64: string };
   'vault.renameDocument': { documentId: string; name: string };
+  'vault.signDocument': { documentId: string; name: string; signed: boolean };
   'downloads.save': { documentId: string; name: string };
   'downloads.list': { downloads: BrowserObservation['downloads'] };
   'browser.open': BrowserObservation;

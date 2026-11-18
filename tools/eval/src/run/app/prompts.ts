@@ -14,7 +14,8 @@ function messageOf(prompt: Prompt): string | undefined {
     case 'credential':
       return prompt.message;
     case 'confirm':
-    case 'dnie_signature': {
+    case 'dnie_signature':
+    case 'pdf_signature': {
       const details = (prompt.details ?? []).map((d) => `${d.label}: ${d.value}`);
       return [prompt.message, ...details].join('\n');
     }
@@ -31,10 +32,13 @@ function messageOf(prompt: Prompt): string | undefined {
 
 /**
  * The kind the harness knows it by. A DNIe signature (raised by the app for the paired phone,
- * which a run never has: the feature is off) is a manual action as far as an answer is concerned.
+ * which a run never has: the feature is off) is a manual action as far as an answer is concerned;
+ * a visible PDF signature is a confirmation.
  */
 function kindOf(prompt: Prompt): PromptKind {
-  return prompt.kind === 'dnie_signature' ? 'user_action' : prompt.kind;
+  if (prompt.kind === 'dnie_signature') return 'user_action';
+  if (prompt.kind === 'pdf_signature') return 'confirm';
+  return prompt.kind;
 }
 
 /**

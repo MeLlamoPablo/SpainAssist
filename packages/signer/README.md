@@ -13,7 +13,7 @@ throughout PKCS#12 import and all local signing formats.
 | CAdES coSign/counterSign | Multiple signers; leaf/tree countersignatures |
 | NONE/PKCS#1 | Raw RSA PKCS#1 or DER ECDSA signature |
 | XAdES | Enveloping, Enveloped, internally Detached; BES/EPES, FirmaAGE |
-| PAdES | Invisible incremental signature; classic or stream xref, co-sign by appending |
+| PAdES | Incremental signature, invisible or visible (below); classic or stream xref, co-sign by appending |
 | selectCertificate | Explicit approval then DER certificate in Base64, chosen by the certificate filters |
 | signBatchProcess | JSON local batches and remote JSON pre/post batches |
 | signBatch | Legacy XML `<signbatch>` against the site's BatchPresigner/BatchPostsigner; the page gets the Base64 result log |
@@ -22,11 +22,41 @@ throughout PKCS#12 import and all local signing formats.
 
 Known gaps: no local smart-card readers (the DNIe signs on the phone through an
 `ExternalSigningKey`), no revocation checking, timestamp/LTV, local XML batch, FacturaE/ASiC local
-assembly, visible PDF signing, encrypted PDFs or PDF certification. XAdES Detached without an
+assembly, encrypted PDFs, PDF certification, a blank page appended for the signature
+(`signaturePages=append`), and underlined or struck-through `layer2FontStyle`. XAdES Detached without an
 explicit `format` parameter deliberately maps to Enveloping, matching AutoFirma's REG quirk.
 External detached XML reference resolution and local XAdES co/countersigning are unsupported.
 Use the site's triphase service for these formats where available. Implementations are verified
 cryptographically offline; acceptance by particular production sedes remains unverified.
+
+## Visible PDF signatures
+
+AutoFirma's visible-signature parameters (`visible.ts`; what AutoFirma does with each is in
+docs/research/autofirma.md, "Visible PAdES signatures"):
+
+- **Where.** `signatureField` (an empty signature field), or the four
+  `signaturePositionOnPage*` in points of the page as displayed, on `signaturePages`/`signaturePage`
+  (`all`, numbers and ranges, negative from the end; the last page by default). The box is clipped
+  to the page; one that starts outside it fails as in AutoFirma.
+- **What.** Without `layer2Text` or `signatureRubricImage`, our handwritten signature
+  (`appearance.ts`): the signer's name in a script font, drawn as vector paths (no embedded font),
+  over a hairline and a Helvetica caption with the name, the masked NIF (`***4567**`) and the date.
+  With them, AutoFirma's: the text with its `$$…$$` placeholders expanded (IDs masked unless
+  `obfuscateCertText=false`), in Courier, Helvetica or Times with `layer2FontSize`, bold/italic
+  and colour, over the rubric (a JPEG), shrunk to fit instead of cut off. `signatureRotation`
+  turns it by quarter turns; the page's /Rotate is always undone so it reads upright.
+- **Who places it.** `visibleSignature=want|optional` asks the user: the approval
+  (`AfirmaSignatureSummary.placement`) gets `mode: 'choose'` and the key comes back with the
+  user's `placement` (null: none, only with `optional`). Without it the site's box is `fixed` and
+  only shown. `want` with no box at all fails with `AF501010`, like AutoFirma.
+- **The phone can't check it.** Its binding check refuses any content stream in the update, and
+  the appearance is one, so visible PAdES requests are `verifiable: false`.
+
+The handler takes the script font as `signatureFont` (the app passes `assets/great-vibes-latin.ttf`,
+Great Vibes under the OFL, subset to Latin). `signPdf` signs a PDF of the user's own, with no site:
+always visible, PAdES-BES, at the placement the user chose. `pdfLayout` lists a PDF's pages and
+empty signature fields, and `defaultPlacement` picks the first field or the bottom-right corner
+of the last page.
 
 ## Installing the shim
 

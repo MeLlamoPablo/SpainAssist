@@ -305,6 +305,15 @@ function demoDocuments(
       createdAt: dayAt(now, 3, 18, 31),
     },
     {
+      id: 'doc-contrato',
+      name: t('Contrato de alquiler.pdf', 'Rental contract.pdf'),
+      mimeType: 'application/pdf',
+      size: 96_000,
+      source: 'user',
+      createdAt: at(now, 4 * 1440),
+      signedAt: at(now, 3 * 1440),
+    },
+    {
       id: 'doc-dni',
       name: t('DNI (reverso).jpg', 'DNI (back).jpg'),
       mimeType: 'image/jpeg',

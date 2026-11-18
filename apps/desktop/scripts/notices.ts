@@ -11,7 +11,7 @@
  * - the app's `dependencies` (kept external and copied into the app by the packager);
  * - everything the build bundles: the runtime `devDependencies`, and the `dependencies` of the
  *   workspace packages (`@sa/*`, our own MIT code), all followed transitively;
- * - Electron, the bundled Instrument Serif font and the Go standard library in `sa-sidecar`;
+ * - Electron, the bundled Instrument Serif and Great Vibes fonts and the Go standard library in `sa-sidecar`;
  * - the agent's browser: playwright-core's Chrome for Testing build, in `<resources>/chromium`
  *   (scripts/chromium.ts).
  * Chromium's notices are Electron's own `LICENSES.chromium.html`.
@@ -280,6 +280,7 @@ export function collectOthers(appDir = APP_DIR): Component[] {
   if (!electronDir) throw new Error('electron is not installed');
   const electron = readJson(path.join(electronDir, 'package.json'));
   const font = path.join(appDir, 'src/renderer/src/assets/brand/OFL.txt');
+  const signatureFont = path.join(appDir, '../../packages/signer/assets/OFL.txt');
   const others: Component[] = [
     {
       name: 'electron',
@@ -291,6 +292,11 @@ export function collectOthers(appDir = APP_DIR): Component[] {
       name: 'Instrument Serif (font)',
       license: 'OFL-1.1',
       files: [{ name: 'OFL.txt', text: readFileSync(font, 'utf8').trim() }],
+    },
+    {
+      name: 'Great Vibes (font, visible signatures)',
+      license: 'OFL-1.1',
+      files: [{ name: 'OFL.txt', text: readFileSync(signatureFont, 'utf8').trim() }],
     },
   ];
   others.push({

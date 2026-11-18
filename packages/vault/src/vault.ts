@@ -455,6 +455,36 @@ export class Vault {
     });
   }
 
+  /**
+   * Replaces a document's contents, keeping its id, name and everything else (a PDF the user just
+   * signed: `signedAt`).
+   */
+  async replaceDocument(
+    id: string,
+    bytes: Uint8Array,
+    options: { signedAt?: Date } = {},
+  ): Promise<DocumentMeta> {
+    return this.lock.run(async () => {
+      const meta = typeof id === 'string' ? this.state.documents.get(id) : undefined;
+      if (!meta) throw notFound('Document');
+      const data = toBuffer(bytes, 'The document');
+      if (data.length > MAX_DOCUMENT_SIZE) throw invalid('The document is too large (max 50 MB)');
+      const replaced: DocumentMeta = {
+        ...meta,
+        size: data.length,
+        ...(options.signedAt ? { signedAt: options.signedAt.toISOString() } : {}),
+      };
+      await writeFileAtomic(
+        this.documentPath(id),
+        seal(this.derived, PURPOSE.document, documentContext(id), data),
+      );
+      await this.commit((draft) => {
+        draft.documents.set(id, replaced);
+      });
+      return { ...replaced };
+    });
+  }
+
   async readDocument(id: string): Promise<Buffer> {
     return this.lock.run(async () => {
       if (typeof id !== 'string' || !this.state.documents.has(id)) throw notFound('Document');

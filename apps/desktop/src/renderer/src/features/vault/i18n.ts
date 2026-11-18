@@ -85,6 +85,7 @@ export const vaultDict = defineDict({
       deleted: 'Documento borrado',
       uploaded: 'Documento guardado',
       fromProcedure: 'Trámite',
+      signed: (when: string) => `Firmado el ${when}`,
     },
     credentials: {
       lead: 'Delega en el asistente el acceso a las webs oficiales.',
@@ -278,6 +279,7 @@ export const vaultDict = defineDict({
       deleted: 'Document deleted',
       uploaded: 'Document saved',
       fromProcedure: 'Procedure',
+      signed: (when: string) => `Signed ${when}`,
     },
     credentials: {
       lead: 'Let the assistant sign in to official websites for you.',

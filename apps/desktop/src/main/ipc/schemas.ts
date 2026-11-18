@@ -78,6 +78,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'chat.send': z.tuple([z.object({ text: z.string().max(20_000), attachments })]),
   'chat.abort': none,
   'chat.respond': z.tuple([id, PromptResponse]),
+  'chat.promptDocument': z.tuple([id]),
 
   'vault.overview': none,
   'vault.setPersonal': z.tuple([z.array(PersonalDataInput).min(1).max(100)]),

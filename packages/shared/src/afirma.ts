@@ -98,8 +98,36 @@ export interface ExternalSigningKey {
  */
 export type CertificateRefusal = 'no_match' | 'authentication_only';
 
-/** What the signer uses for one operation. Never leaves the main process. */
-export type SigningKey = P12SigningKey | ExternalSigningKey;
+/**
+ * What the signer uses for one operation. Never leaves the main process. With a `placement`
+ * request, `placement` is where the user put the visible signature (null: they chose none).
+ * `displayName` is the signer's name as the visible signature writes it (Mis datos' spelling).
+ */
+export type SigningKey = (P12SigningKey | ExternalSigningKey) & {
+  placement?: SignaturePlacement | null;
+  displayName?: string;
+};
+
+/**
+ * Where a visible PDF signature goes: a 1-based page and the box's lower-left and upper-right
+ * corners in that page's default user space (points, before /Rotate).
+ */
+export interface SignaturePlacement {
+  page: number;
+  rect: [number, number, number, number];
+}
+
+/** A visible PDF signature to place or show in the approval (AutoFirma's visible PAdES). */
+export interface SignaturePlacementRequest {
+  /** `fixed`: the site chose the box and the card only shows it; `choose`: the user places it. */
+  mode: 'fixed' | 'choose';
+  /** The user may also sign without a visible signature (AutoFirma's `visibleSignature=optional`). */
+  optional?: boolean;
+  /** Where the box starts: the site's box, an empty signature field or the app's default. */
+  initial?: SignaturePlacement;
+  /** `handwritten`: our signature with the signer's name; `text`: the site's own text. */
+  appearance: 'handwritten' | 'text';
+}
 
 export interface AfirmaDocument {
   name?: string;
@@ -121,6 +149,8 @@ export interface AfirmaSignatureSummary {
   verifiable: boolean;
   /** Signatures the operation makes, when more than one (batches). */
   signatures?: number;
+  /** A visible signature on `documents[0]` (a PDF): the approval shows or places its box. */
+  placement?: SignaturePlacementRequest;
 }
 
 export interface AfirmaHandlerContext {

@@ -299,7 +299,19 @@ class EvalAppImpl implements EvalApp {
       await this.operation(() => interfaces.respond(itemId, response));
       return;
     }
-    await this.operation(() => this.parts.app.invoke('chat.respond', itemId, response));
+    // A visible PDF signature is a confirmation to the simulator: it leaves the box where it is.
+    const prompt = this.parts.app.services.prompts.pendingItem(itemId)?.prompt;
+    const answer: PromptResponse =
+      prompt?.kind === 'pdf_signature' && response.kind === 'confirm'
+        ? {
+            kind: 'pdf_signature',
+            approved: response.approved,
+            ...(response.approved && prompt.mode === 'choose' && prompt.initial
+              ? { placement: prompt.initial }
+              : {}),
+          }
+        : response;
+    await this.operation(() => this.parts.app.invoke('chat.respond', itemId, answer));
   }
 
   async addClave(input: { username: string; password: string; label?: string }): Promise<string> {

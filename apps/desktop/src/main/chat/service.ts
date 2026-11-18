@@ -149,4 +149,8 @@ export class ChatService {
   respond(promptItemId: string, response: PromptResponse): void | Promise<void> {
     return this.deps.prompts.respond(promptItemId, response);
   }
+
+  promptDocument(promptItemId: string): Uint8Array | null {
+    return this.deps.prompts.document(promptItemId) ?? null;
+  }
 }

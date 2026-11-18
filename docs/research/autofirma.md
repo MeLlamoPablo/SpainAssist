@@ -665,3 +665,59 @@ AutoFirma stores the result with `op=put&v=1_0&id=<id>&dat=…`. The StorageServ
 - Whether strict validators reject xadesjs's forward-order `X509IssuerName`.
 - WAF filtering on User-Agent for triphase calls.
 - Whether REG's backend would also accept a true Detached signature (we recommend the Enveloping output AutoFirma produces).
+
+---
+
+## Visible PAdES signatures (2026-11-18)
+
+Read from clienteafirma at `0d7f3cf` (and the iText fork it ships, `afirma-lib-itext` 1.7, from its
+sources jar on Maven Central); not run. What `@sa/signer` does with each is in
+`packages/signer/README.md`, "Visible PDF signatures".
+
+**Parameters** (`PdfExtraParams`, `PdfUtil`, `PdfVisibleAreasUtils`, `PdfSessionManager`):
+
+- Visible when `signatureField` is set, or the four `signaturePositionOnPage{LowerLeft,UpperRight}{X,Y}`
+  give a box with width and height. AutoFirma parses them as integers: a decimal makes the
+  signature silently invisible (we accept decimals). Points of the page **as displayed** (MediaBox
+  after /Rotate, CropBox ignored, origin unadjusted); pages where the box starts outside are
+  dropped, none left is `InvalidSignaturePositionException`; the upper-right corner is clipped.
+- `signaturePages` (wins over `signaturePage`): `all` or `append` as the first token (append adds
+  a blank page the size of page 1), else numbers and ranges `a-b`, negative from the end, clamped;
+  none valid means the last page. One field with the same widget on every page.
+- `signatureField` signs an existing empty `/FT /Sig` field in its own box; coordinates, rubric and
+  rotation are then ignored.
+- `layer2Text` placeholders: `$$SUBJECTCN$$`, `$$SUBJECTDN$$`, `$$ISSUERCN$$`, `$$CERTSERIAL$$`
+  (decimal), `$$GIVENNAME$$`, `$$SURNAME$$`, `$$ORGANIZATION$$`, `$$PSEUDONYM$$`, `$$OU$$`,
+  `$$OUS$$`, `$$TITLE$$`, `$$REASON$$`, `$$LOCATION$$`, `$$CONTACT$$`, and
+  `$$SIGNDATE=<SimpleDateFormat>$$` in the machine's zone. IDs in CN and DN are masked by default
+  (`obfuscateCertText=false` turns it off): runs of 3+ digits keep digits 4–7, `12345678Z` →
+  `***4567**`.
+- Default text (no `layer2Text`, no rubric): `Firmado por $$SUBJECTCN$$` / `Fecha: $$SIGNDATE=dd/MM/yyyy HH:mm:ss z$$`
+  (+ Motivo, Lugar), Courier 12, black, top-left, cut off when it doesn't fit. We draw our
+  handwritten signature instead (the product's choice: AutoFirma's default is plain).
+- `layer2FontFamily` 0 Courier (default) / 1 Helvetica / 2 Times; `layer2FontSize` (12);
+  `layer2FontStyle` bits 1 bold, 2 italic, 4 underline, 8 strikethrough; `layer2FontColor` black,
+  white, gray, red, pink (`lightGray`/`darkGray` render black in AutoFirma: a lower-casing bug; we
+  draw them).
+- `signatureRubricImage`: Base64 image made JPEG, centred and scaled to fit, the text drawn over it.
+- `signatureRotation`: any integer mod 360, the box stays; the content turns.
+
+**The user's part** (`ProtocolInvocationLauncherSign`, `SignPdfDialog`):
+
+- A site's box with no `visibleSignature`: **no preview**; AutoFirma signs right after the
+  certificate choice.
+- `visibleSignature=want|optional`: a dialog **before** the certificate: page preview, drag a
+  rectangle (or type it), current/all/selected pages, optionally a blank page; with
+  `visibleAppearance=custom` also text, font, size, style, colour, rotation and rubric. The site's
+  box doesn't prefill it. Cancel with `want` aborts (`VisibleSignatureMandatoryException`,
+  `AF501010`) unless the site gave a box **and** a page (then it signs there); with `optional` it
+  signs in the site's box, or invisibly.
+- The standalone app: a "firma visible" checkbox, a field chooser when the PDF has empty signature
+  fields, then the same dialog.
+
+**Our decision.** A site's fixed box is respected without letting the user move it (the site knows
+its form), but the approval card shows the document with the box where it will land, which costs
+no extra step. Only `want`/`optional`, and the agent's own-document signatures, let the user place
+it; the card starts at the site's box, an empty signature field, or the bottom-right corner of the
+last page. We have no appearance editor (`visibleAppearance=custom`): the site's text style is
+kept, otherwise our handwritten signature.

@@ -360,6 +360,24 @@ describe('documents', () => {
     expect(vault.getDocument(doc.id)?.name).toBe('DNI (anverso).jpg');
   });
 
+  it('replaces a document in place, keeping its id and name', async () => {
+    const { vault } = await openVault();
+    const doc = await vault.addDocument({
+      name: 'Contrato.pdf',
+      mimeType: 'application/pdf',
+      source: 'user',
+      bytes: Buffer.from('%PDF-1.7 original'),
+    });
+    const signedAt = new Date('2026-11-18T12:30:00Z');
+    const replaced = await vault.replaceDocument(doc.id, Buffer.from('%PDF-1.7 firmado'), {
+      signedAt,
+    });
+    expect(replaced).toEqual({ ...doc, size: 16, signedAt: signedAt.toISOString() });
+    expect((await vault.readDocument(doc.id)).toString()).toBe('%PDF-1.7 firmado');
+    expect(vault.listDocuments()).toHaveLength(1);
+    await expectVaultError(vault.replaceDocument('nope', Buffer.from('x')), 'not_found');
+  });
+
   it('validates document input', async () => {
     const { vault } = await openVault();
     const base = {

@@ -19,6 +19,7 @@
  */
 export type { DigestName, ResolvedAlgorithm, SignatureAlgorithm } from './algorithms';
 export { resolveAlgorithm } from './algorithms';
+export { displayName as signatureName } from './appearance';
 export {
   type CadesSignOptions,
   type CountersignTarget,
@@ -66,7 +67,13 @@ export {
   type P12Identity,
   readP12,
 } from './p12';
-export { createPades, type PadesSignOptions } from './pades';
+export {
+  createPades,
+  type PadesSignOptions,
+  type PadesVisibleSignature,
+  type PdfLayout,
+  pdfLayout,
+} from './pades';
 export { expandPolicy, FIRMA_AGE, readPolicy, type SignaturePolicy } from './policy';
 export {
   AUTOSCRIPT_SHIM_SOURCE,
@@ -84,5 +91,7 @@ export {
   installAutoscriptShim,
   installFnmtShim,
 } from './shim';
+export { type SignPdfOptions, signPdf } from './sign-pdf';
 export { batchSign, type TriphaseOptions, triphaseSign } from './triphase';
+export { defaultPlacement, maskIds } from './visible';
 export { createXades, type XadesSignOptions, xadesVariant } from './xades';

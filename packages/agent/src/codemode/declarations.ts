@@ -154,6 +154,10 @@ interface Documents {
   saveDownload(downloadId: string, name: string): Promise<{ documentId: string; name: string }>;
   /** Gives a saved document a short readable name ("DNI (anverso)"); its extension is kept. */
   rename(id: string, name: string): Promise<{ documentId: string; name: string }>;
+  /** Signs a saved PDF with the user's certificate or DNI, no website needed: the user places the
+   *  visible signature and approves it in the app (signed: false if they didn't). The signed PDF
+   *  replaces the document (same id). */
+  sign(id: string): Promise<{ documentId: string; name: string; signed: boolean }>;
 }
 interface Image { imageId: string; mimeType: string }`;
 

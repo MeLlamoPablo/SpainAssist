@@ -50,7 +50,7 @@ import {
 import { externalIdentity, p12Identity, type SignerIdentity } from './key';
 import { sniffMime } from './mime';
 import { openP12, P12Error } from './p12';
-import { createPades } from './pades';
+import { createPades, type PadesVisibleSignature, pdfLayout } from './pades';
 import { expandPolicy, type PolicyFormat, readPolicy } from './policy';
 import {
   type BatchRequest,
@@ -63,6 +63,13 @@ import {
   xmlBatchSign,
 } from './triphase';
 import { decodeBase64, toBase64 } from './util/base64';
+import {
+  finalPlacement,
+  initialPlacement,
+  placementRequest,
+  signatureAppearance,
+  visibleRequest,
+} from './visible';
 import { createXades } from './xades';
 
 // ---------------------------------------------------------------------------------------------
@@ -109,6 +116,8 @@ export interface AfirmaHandlerOptions {
   maxDataBytes?: number;
   /** Where to log notable choices (never data, hashes or signatures). Default: silent. */
   logger?: { info(msg: string, data?: unknown): void; warn?(msg: string, data?: unknown): void };
+  /** The script font of visible PDF signatures (TrueType); without it, Helvetica Oblique. */
+  signatureFont?: Uint8Array;
 }
 
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
@@ -195,7 +204,7 @@ function textPreview(data: Uint8Array): string | null {
   return text.length > 300 ? `${text.slice(0, 300)}…` : text;
 }
 
-function openCertificate(key: SigningKey): SignerIdentity {
+export function openCertificate(key: SigningKey): SignerIdentity {
   if (key.kind === 'external') return externalIdentity(key);
   try {
     return p12Identity(openP12(key.p12, key.passphrase));
@@ -217,7 +226,7 @@ function openCertificate(key: SigningKey): SignerIdentity {
   }
 }
 
-function checkValidity(identity: SignerIdentity, now: Date): void {
+export function checkValidity(identity: SignerIdentity, now: Date): void {
   const to = new Date(identity.info.validTo);
   const from = new Date(identity.info.validFrom);
   if (now > to || now < from) {
@@ -410,7 +419,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
   async function approve(
     ctx: AfirmaHandlerContext,
     summary: AfirmaSignatureSummary,
-  ): Promise<{ identity: SignerIdentity }> {
+  ): Promise<{ identity: SignerIdentity; key: SigningKey }> {
     const key = await ctx.approveSignature(summary);
     if (!key) throw AfirmaError.cancelled();
     let identity: SignerIdentity;
@@ -421,7 +430,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       if (key.kind === 'external') key.release(false);
       throw e;
     }
-    return { identity };
+    return { identity, key };
   }
 
   /** Runs `work` with the identity, then releases it (signed or not). */
@@ -567,9 +576,17 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       mimeType: sniffMime(subjectBytes).mimeType,
       data: subjectBytes,
     };
-    // The phone can check the signature covers the document: CAdES and PAdES built here.
+    // A visible PDF signature: the approval shows its box, or lets the user place it.
+    const visible =
+      !triphase && family === 'PAdES' && cop !== 'countersign'
+        ? visibleRequest(effective)
+        : undefined;
+    const layout = visible ? await pdfLayout(subjectBytes) : undefined;
+    // The phone can check the signature covers the document: CAdES and PAdES built here, as long
+    // as the PDF update adds no appearance stream (its check refuses any content stream).
     const verifiable =
       !triphase &&
+      !visible &&
       !params.precalculatedHashAlgorithm &&
       ((family === 'CAdES' && cop === 'sign') || (family === 'PAdES' && cop !== 'countersign'));
     // Reject an unsupported algorithm before the user is asked to approve.
@@ -579,7 +596,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       input.algorithm,
       sha1Reason({ cop, family, triphase, params, data, signature }),
     );
-    const { identity } = await approve(ctx, {
+    const { identity, key } = await approve(ctx, {
       method: call.method,
       format: requestedFormat,
       algorithm: algorithmName ?? '',
@@ -588,8 +605,34 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       dataSize: subjectBytes.length,
       documents: [document],
       verifiable,
+      ...(visible && layout
+        ? { placement: placementRequest(visible, initialPlacement(visible, layout)) }
+        : {}),
     });
     filteredCertificate(call, identity, filters, 'sign');
+    let padesVisible: PadesVisibleSignature | undefined;
+    if (visible && layout) {
+      try {
+        const where = finalPlacement(visible, layout, key.placement);
+        if (where) {
+          padesVisible = {
+            ...where,
+            ...(visible.rotation ? { rotation: visible.rotation } : {}),
+            appearance: signatureAppearance({
+              request: visible,
+              certificateDer: identity.certificateDer,
+              ...(key.displayName ? { displayName: key.displayName } : {}),
+              params: effective,
+              date: now(),
+              ...(options.signatureFont ? { scriptFont: options.signatureFont } : {}),
+            }),
+          };
+        }
+      } catch (e) {
+        identity.release(false);
+        throw e;
+      }
+    }
 
     const signed = await using(identity, () => {
       const algorithm = resolveAlgorithm(algorithmName, identity.keyType);
@@ -614,6 +657,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
             params: effective,
             now: now(),
             document: verifiable ? 0 : undefined,
+            visible: padesVisible,
           });
     });
 
@@ -643,6 +687,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
       now: Date;
       /** Index of the data among the approved documents, when the signer may check it. */
       document?: number;
+      visible?: PadesVisibleSignature;
     },
   ): Promise<Buffer> {
     const { identity, params, algorithm } = o;
@@ -711,6 +756,7 @@ export function createAfirmaHandler(options: AfirmaHandlerOptions = {}): AfirmaH
         policy,
         signingTime: o.now,
         document: o.document,
+        ...(o.visible ? { visible: o.visible } : {}),
       });
     }
     throw AfirmaError.unsupportedFormat(family);

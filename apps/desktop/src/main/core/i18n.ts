@@ -131,6 +131,31 @@ const STRINGS = {
     es: '{host} te pide firmar con tu certificado digital. La firma tiene validez legal: comprueba que es lo que esperas.',
     en: '{host} asks you to sign with your digital certificate. A signature is legally binding: check it is what you expect.',
   },
+  placeSignatureMessage: {
+    es: '{host} te pide firmar este PDF con tu certificado digital. Arrastra la firma a donde quieras que aparezca. La firma tiene validez legal: comprueba que es lo que esperas.',
+    en: '{host} asks you to sign this PDF with your digital certificate. Drag the signature to where it should appear. A signature is legally binding: check it is what you expect.',
+  },
+  fixedSignatureMessage: {
+    es: '{host} te pide firmar este PDF con tu certificado digital. La firma aparecerá donde ha indicado la web. La firma tiene validez legal: comprueba que es lo que esperas.',
+    en: '{host} asks you to sign this PDF with your digital certificate. The signature will appear where the website says. A signature is legally binding: check it is what you expect.',
+  },
+  ownSignatureMessage: {
+    es: 'Vas a firmar este PDF con tu certificado digital. Arrastra la firma a donde quieras que aparezca. La firma tiene validez legal.',
+    en: "You're about to sign this PDF with your digital certificate. Drag the signature to where it should appear. A signature is legally binding.",
+  },
+  ownDocuments: { es: 'Mis documentos', en: 'My documents' },
+  yourSignature: { es: 'Tu firma', en: 'Your signature' },
+  pdfDocument: { es: 'Documento PDF', en: 'PDF document' },
+  signDocumentWhat: { es: 'Firmar «{name}»', en: 'Sign “{name}”' },
+  signOnlyPdf: {
+    es: 'Solo se pueden firmar documentos PDF.',
+    en: 'Only PDF documents can be signed.',
+  },
+  documentNotSigned: {
+    es: 'El documento no se ha firmado.',
+    en: 'The document was not signed.',
+  },
+  documentSigned: { es: 'Firmado: {name}', en: 'Signed: {name}' },
   detailWhat: { es: 'Qué', en: 'What' },
   detailFor: { es: 'Para', en: 'For' },
   detailSize: { es: 'Tamaño', en: 'Size' },

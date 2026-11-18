@@ -462,6 +462,11 @@ export const DocumentMeta = z.object({
   /** Procedure that produced or uses this document, if any. */
   procedureId: z.string().optional(),
   createdAt: z.string(),
+  /**
+   * When the user last signed it in the app (ISO 8601). Signing replaces the document in place:
+   * a signed PDF still holds the original, untouched, before its signature.
+   */
+  signedAt: z.string().optional(),
 });
 export type DocumentMeta = z.infer<typeof DocumentMeta>;
 

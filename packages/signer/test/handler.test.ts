@@ -403,3 +403,71 @@ describe('certificate filters (filters=, filters.N=, filter=)', () => {
     );
   });
 });
+
+describe('AutoFirma visible PDF signatures', () => {
+  async function pdf(): Promise<Buffer> {
+    const doc = await PDFDocument.create();
+    doc.addPage([595, 842]);
+    doc.addPage([595, 842]);
+    return Buffer.from(await doc.save());
+  }
+  const padesCall = (data: Buffer, params: string): AfirmaCall => ({
+    ...call(),
+    args: [data.toString('base64'), 'SHA256withRSA', 'PAdES', params],
+  });
+  const BOX =
+    'signaturePositionOnPageLowerLeftX=50\nsignaturePositionOnPageLowerLeftY=60\n' +
+    'signaturePositionOnPageUpperRightX=250\nsignaturePositionOnPageUpperRightY=120';
+
+  it("shows the site's box in the approval and signs there, not verifiable by the phone", async () => {
+    const id = rsaIdentity();
+    const ctx = context(id);
+    const reply = await afirmaHandler(padesCall(await pdf(), `${BOX}\nsignaturePage=1`), ctx);
+    expect(reply.ok).toBe(true);
+    expect(ctx.approveSignature).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verifiable: false,
+        placement: {
+          mode: 'fixed',
+          initial: { page: 1, rect: [50, 60, 250, 120] },
+          appearance: 'handwritten',
+        },
+      }),
+    );
+    if (!reply.ok) return;
+    const signed = await PDFDocument.load(Buffer.from(String(reply.callbackArgs[0]), 'base64'));
+    expect(signed.getPage(0).node.Annots()?.size()).toBe(1);
+    expect(signed.getPage(1).node.Annots()).toBeUndefined();
+  });
+
+  it('lets the user place the box with visibleSignature=want, and aborts without one', async () => {
+    const id = rsaIdentity();
+    const ctx = context(id);
+    ctx.approveSignature = vi.fn(async () => ({
+      kind: 'p12' as const,
+      credentialId: 'test',
+      p12: id.p12,
+      passphrase: id.passphrase,
+      placement: { page: 2, rect: [300, 40, 480, 104] as [number, number, number, number] },
+      displayName: 'Pablo Rodríguez',
+    }));
+    const reply = await afirmaHandler(padesCall(await pdf(), 'visibleSignature=want'), ctx);
+    expect(reply.ok).toBe(true);
+    expect(ctx.approveSignature).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placement: expect.objectContaining({ mode: 'choose', appearance: 'handwritten' }),
+      }),
+    );
+    if (reply.ok) {
+      const signed = await PDFDocument.load(Buffer.from(String(reply.callbackArgs[0]), 'base64'));
+      expect(signed.getPage(0).node.Annots()).toBeUndefined();
+      expect(signed.getPage(1).node.Annots()?.size()).toBe(1);
+    }
+
+    // An approval that placed nothing: `want` without the site's own box fails like AutoFirma.
+    const plain = context(id);
+    const refused = await afirmaHandler(padesCall(await pdf(), 'visibleSignature=want'), plain);
+    expect(refused).toMatchObject({ ok: false });
+    expect(refused).toMatchObject({ errorCode: 'AF501010' });
+  });
+});

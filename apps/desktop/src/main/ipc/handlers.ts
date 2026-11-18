@@ -167,6 +167,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('chat.respond', S['chat.respond'], (itemId, response) =>
     s.chat.respond(itemId, response),
   );
+  router.register('chat.promptDocument', S['chat.promptDocument'], (itemId) =>
+    s.chat.promptDocument(itemId),
+  );
 
   router.register('vault.overview', S['vault.overview'], () => s.vault.overview());
   router.register('vault.setPersonal', S['vault.setPersonal'], (items) =>

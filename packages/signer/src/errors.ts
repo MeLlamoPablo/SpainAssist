@@ -64,6 +64,18 @@ export class AfirmaError extends Error {
     return AfirmaError.generic('AF510005', 'Los datos no son un documento PDF valido');
   }
 
+  /** `visibleSignature=want` without a box to sign in (AutoFirma's VisibleSignatureMandatoryException). */
+  static visibleSignatureMandatory(): AfirmaError {
+    return AfirmaError.generic('AF501010', 'Es obligatorio insertar una firma visible en el PDF');
+  }
+
+  /** The site's box starts outside every page it named. */
+  static invalidSignaturePosition(): AfirmaError {
+    return AfirmaError.invalidParameter(
+      'La posicion indicada para la firma visible queda fuera de la pagina',
+    );
+  }
+
   static notXml(): AfirmaError {
     return AfirmaError.generic('AF510002', 'Los datos no son un documento XML valido');
   }

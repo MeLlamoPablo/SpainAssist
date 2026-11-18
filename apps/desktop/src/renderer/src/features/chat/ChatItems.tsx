@@ -29,6 +29,7 @@ import { ConfirmPromptCard } from './prompts/ConfirmPromptCard';
 import { CredentialPromptCard } from './prompts/CredentialPromptCard';
 import { DnieSignaturePromptCard } from './prompts/DnieSignaturePromptCard';
 import { FormPromptCard } from './prompts/FormPromptCard';
+import { PdfSignaturePromptCard } from './prompts/PdfSignaturePromptCard';
 import { PhoneCallPromptCard } from './prompts/PhoneCallPromptCard';
 import { UserActionPromptCard } from './prompts/UserActionPromptCard';
 
@@ -234,5 +235,7 @@ export function PromptCard({ item, embedded }: { item: PromptItem; embedded?: bo
       return <PhoneCallPromptCard item={item} prompt={item.prompt} embedded={embedded} />;
     case 'dnie_signature':
       return <DnieSignaturePromptCard item={item} prompt={item.prompt} embedded={embedded} />;
+    case 'pdf_signature':
+      return <PdfSignaturePromptCard item={item} prompt={item.prompt} embedded={embedded} />;
   }
 }

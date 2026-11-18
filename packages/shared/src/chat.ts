@@ -372,6 +372,52 @@ export const DnieSignaturePrompt = z.object({
 });
 export type DnieSignaturePrompt = z.infer<typeof DnieSignaturePrompt>;
 
+/** A visible signature's box: a 1-based page and its corners in the page's user space (points). */
+export const SignatureBox = z.object({
+  page: z.number().int().min(1).max(100_000),
+  rect: z
+    .tuple([z.number(), z.number(), z.number(), z.number()])
+    .refine(
+      (r) => r.every((n) => Number.isFinite(n) && Math.abs(n) < 1e6) && r[2] > r[0] && r[3] > r[1],
+      { message: 'Expected a box with its lower-left corner first.' },
+    ),
+});
+export type SignatureBox = z.infer<typeof SignatureBox>;
+
+/**
+ * Signing a PDF with a visible signature (raised by the app). The card shows the document (its
+ * bytes come from `chat.promptDocument` while the prompt is pending) with the signature's box:
+ * fixed where the site put it, or moved and resized by the user (`choose`). With
+ * `approval: 'here'` the card is the signature's confirmation (then Touch ID when `biometric`);
+ * with `phone` it only places the box and the DNIe is approved on the phone next.
+ */
+export const PdfSignaturePrompt = z.object({
+  kind: z.literal('pdf_signature'),
+  title: z.string().min(1).max(160),
+  message: z.string().min(1).max(2000),
+  details: z
+    .array(z.object({ label: z.string().max(80), value: z.string().max(500) }))
+    .max(20)
+    .optional(),
+  documentName: z.string().max(260),
+  mode: z.enum(['fixed', 'choose']),
+  /** The user may sign with no visible signature (AutoFirma's `visibleSignature=optional`). */
+  optional: z.boolean().optional(),
+  initial: SignatureBox.optional(),
+  /** `handwritten`: our signature (previewed with `signer`); `text`: the site's own text. */
+  appearance: z.enum(['handwritten', 'text']),
+  signer: z.object({
+    name: z.string().max(200),
+    /** Already masked (`***4567**`). */
+    holderId: z.string().max(40).optional(),
+  }),
+  approval: z.enum(['here', 'phone']),
+  biometric: z.boolean().optional(),
+  confirmLabel: z.string().max(40).optional(),
+  rejectLabel: z.string().max(40).optional(),
+});
+export type PdfSignaturePrompt = z.infer<typeof PdfSignaturePrompt>;
+
 export const Prompt = z.discriminatedUnion('kind', [
   FormPrompt,
   ConfirmPrompt,
@@ -379,6 +425,7 @@ export const Prompt = z.discriminatedUnion('kind', [
   CredentialPrompt,
   PhoneCallPrompt,
   DnieSignaturePrompt,
+  PdfSignaturePrompt,
 ]);
 export type Prompt = z.infer<typeof Prompt>;
 
@@ -419,6 +466,12 @@ export const PromptResponse = z.discriminatedUnion('kind', [
     kind: z.literal('dnie_signature'),
     /** `cancelled` comes from the user; the app ends the prompt with `signed` or `failed`. */
     outcome: z.enum(['signed', 'failed', 'cancelled']),
+  }),
+  z.object({
+    kind: z.literal('pdf_signature'),
+    approved: z.boolean(),
+    /** Where the user left the box (`choose`); null: no visible signature (`optional`). */
+    placement: SignatureBox.nullable().optional(),
   }),
 ]);
 export type PromptResponse = z.infer<typeof PromptResponse>;

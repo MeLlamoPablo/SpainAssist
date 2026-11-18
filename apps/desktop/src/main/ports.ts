@@ -22,8 +22,11 @@ import type {
   ModelOption,
   ProviderOption,
   RedeemVoucherResponse,
+  SignaturePlacement,
+  SigningKey,
   VoucherCreditResponse,
 } from '@sa/shared';
+import type { PdfLayout } from '@sa/signer';
 import type { Vault } from '@sa/vault';
 
 export type VaultPort = Pick<
@@ -39,6 +42,7 @@ export type VaultPort = Pick<
   | 'addDocument'
   | 'readDocument'
   | 'renameDocument'
+  | 'replaceDocument'
   | 'deleteDocument'
   | 'listCredentials'
   | 'getCredential'
@@ -148,6 +152,20 @@ export interface SignerLib {
   fnmtShimSource?: string;
   /** Details of a DER certificate (the DNIe's, read by the phone). */
   certificateInfo(der: Uint8Array): CertificateInfo;
+  /** Pages and empty signature fields of a PDF (throws an AfirmaError when it isn't one). */
+  pdfLayout(pdf: Uint8Array): Promise<PdfLayout>;
+  /** Where a signature goes when nobody said (the first empty field, else bottom right). */
+  defaultPlacement(layout: PdfLayout): SignaturePlacement;
+  /** A visible PAdES signature on a PDF of the user's, with the approved key (released). */
+  signPdf(options: {
+    pdf: Uint8Array;
+    key: SigningKey;
+    placement: SignaturePlacement;
+  }): Promise<Buffer>;
+  /** A certificate's holder name as people write it ("Pablo Rodriguez"). */
+  signatureName(name: string): string;
+  /** AutoFirma's ID mask: `12345678Z` → `***4567**`. */
+  maskIds(text: string): string;
 }
 
 /** Touch ID (macOS) or nothing. */

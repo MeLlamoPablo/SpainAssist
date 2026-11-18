@@ -4,6 +4,7 @@ import {
   FileText,
   FolderOpen,
   Image as ImageIcon,
+  Signature,
   SquareArrowOutUpRight,
   Trash,
   Upload,
@@ -110,6 +111,18 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
           <span>{formatBytes(doc.size, lang)}</span>
           <span aria-hidden>·</span>
           <span>{formatDate(doc.createdAt, lang)}</span>
+          {doc.signedAt ? (
+            <>
+              <span aria-hidden>·</span>
+              <span
+                className="flex items-center gap-1 font-medium text-st-done-fg"
+                data-testid="document-signed"
+              >
+                <Signature size={12} aria-hidden />
+                {t.documents.signed(formatDate(doc.signedAt, lang))}
+              </span>
+            </>
+          ) : null}
           {procedure ? (
             <>
               <span aria-hidden>·</span>

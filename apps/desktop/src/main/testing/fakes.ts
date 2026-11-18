@@ -147,6 +147,22 @@ export class MemoryVault implements VaultPort {
     return Buffer.from(doc.bytes);
   }
 
+  async replaceDocument(
+    id: string,
+    bytes: Uint8Array,
+    options: { signedAt?: Date } = {},
+  ): Promise<DocumentMeta> {
+    const doc = this.documents.get(id);
+    if (!doc) throw new VaultError('not_found', 'Document not found');
+    doc.meta = {
+      ...doc.meta,
+      size: bytes.byteLength,
+      ...(options.signedAt ? { signedAt: options.signedAt.toISOString() } : {}),
+    };
+    doc.bytes = Buffer.from(bytes);
+    return { ...doc.meta };
+  }
+
   async renameDocument(id: string, name: string): Promise<DocumentMeta> {
     const doc = this.documents.get(id);
     if (!doc) throw new VaultError('not_found', 'Document not found');

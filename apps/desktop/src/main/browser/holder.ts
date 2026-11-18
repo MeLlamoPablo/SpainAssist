@@ -17,11 +17,13 @@ import {
   type FnmtReply,
   issuerName,
   type Language,
+  type SignaturePlacement,
   type SigningKey,
 } from '@sa/shared';
 import { openP12 } from '@sa/signer';
 import type { PromptManager } from '../chat/prompts';
 import type { CompanionService } from '../companion/service';
+import { UserError } from '../core/errors';
 import type { EventBus } from '../core/events';
 import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
@@ -32,6 +34,9 @@ import type { Biometric, BrowserFactory, SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
 import { DownloadStore, documentFileName } from './downloads';
 import { RoutedBrowser } from './routed';
+
+/** The origin of signatures on the user's own documents (no site asks): the app's own site. */
+const OWN_DOCUMENTS_ORIGIN = 'https://spainassist.es';
 
 export interface BrowserHolderDeps {
   factory: BrowserFactory;
@@ -398,18 +403,36 @@ export class BrowserHolder {
         chosen = certificates.find((c) => c.id === pick.values?.certificate);
       }
       if (!chosen) return null;
+      const displayName = this.signerName(chosen);
+      // A visible PDF signature: the card shows the document and its box (and places it).
+      let placement: SignaturePlacement | null | undefined;
+      const extras = () => ({
+        ...(placement !== undefined ? { placement } : {}),
+        ...(displayName ? { displayName } : {}),
+      });
       if (chosen.kind === 'dnie') {
         if (!deps.companion) return null;
+        // The phone approves; the desktop only lets the user place the box first.
+        if (summary.placement?.mode === 'choose') {
+          const placed = await this.signatureCard(procedureId, summary, chosen, 'phone');
+          if (!placed) return null;
+          placement = placed.placement;
+        }
         // The consent happens on the phone; the desktop asks for the CAN and the PIN.
-        return await deps.companion.approve(procedureId, summary, chosen);
+        const key = await deps.companion.approve(procedureId, summary, chosen);
+        return key ? { ...key, ...extras() } : null;
       }
-      if (!(await this.confirm(procedureId, summary, chosen))) return null;
+      if (summary.placement) {
+        const placed = await this.signatureCard(procedureId, summary, chosen, 'here');
+        if (!placed) return null;
+        placement = placed.placement;
+      } else if (!(await this.confirm(procedureId, summary, chosen))) return null;
       if (chosen.external) {
         // The key stays in the OS store, which may ask the user once more on first use.
         if (!deps.osCertificates) return null;
         const key = deps.osCertificates.signingKey(chosen.id);
         deps.logger.info('signature approved', { procedureId, format: summary.format, host });
-        return key;
+        return { ...key, ...extras() };
       }
       const secret = await vault.getCredentialSecret(chosen.id);
       if (secret.kind !== 'certificate') return null;
@@ -422,11 +445,147 @@ export class BrowserHolder {
         credentialId: chosen.id,
         p12: secret.p12,
         passphrase: secret.passphrase,
+        ...extras(),
       };
     } catch (err) {
       deps.logger.info('signature not approved', { procedureId, error: errorMessage(err) });
       return null;
     }
+  }
+
+  /**
+   * The signer's name for a visible signature: Mis datos' spelling (accents, capitals) when it is
+   * the certificate holder's name, else the certificate's, title-cased.
+   */
+  private signerName(chosen: CredentialSummary): string | undefined {
+    const { deps } = this;
+    const holder = chosen.certificate?.holderName;
+    if (!holder || !deps.signer) return undefined;
+    const vault = deps.vault();
+    const mine = ['givenName', 'surname1', 'surname2']
+      .map((key) => vault.getPersonal(key)?.value?.trim())
+      .filter(Boolean)
+      .join(' ');
+    const words = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toUpperCase()
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .sort()
+        .join(' ');
+    if (mine && words(mine) === words(holder)) return mine;
+    return deps.signer.signatureName(holder);
+  }
+
+  /**
+   * The card of a visible PDF signature: the document with its box. `here`: it is the signature's
+   * confirmation (+ Touch ID); `phone`: it only places the box before the phone approves.
+   * Resolves with where the user left the box (undefined: they didn't place it), null when they
+   * declined.
+   */
+  private async signatureCard(
+    procedureId: string,
+    summary: AfirmaSignatureSummary,
+    chosen: CredentialSummary,
+    approval: 'here' | 'phone',
+  ): Promise<{ placement: SignaturePlacement | null | undefined } | null> {
+    const { deps } = this;
+    const request = summary.placement;
+    const document = summary.documents[0];
+    if (!request || !document) return null;
+    const lang = deps.lang();
+    const own = summary.origin === OWN_DOCUMENTS_ORIGIN;
+    const host = hostOf(summary.origin);
+    const details: { label: string; value: string }[] = [
+      { label: t(lang, 'detailWhat'), value: summary.description.slice(0, 500) },
+      { label: t(lang, 'detailFor'), value: own ? t(lang, 'ownDocuments') : host },
+      { label: t(lang, 'detailCertificate'), value: describeCertificate(chosen, lang) },
+    ];
+    const holderId = chosen.certificate?.holderId;
+    const name = this.signerName(chosen) ?? t(lang, 'yourSignature');
+    const answer = await deps.prompts.ask(
+      procedureId,
+      {
+        kind: 'pdf_signature',
+        title: t(lang, 'signatureTitle'),
+        message: own
+          ? t(lang, 'ownSignatureMessage')
+          : request.mode === 'choose'
+            ? t(lang, 'placeSignatureMessage', { host })
+            : t(lang, 'fixedSignatureMessage', { host }),
+        details,
+        documentName: (document.name ?? t(lang, 'pdfDocument')).slice(0, 260),
+        mode: request.mode,
+        ...(request.optional ? { optional: true } : {}),
+        ...(request.initial ? { initial: request.initial } : {}),
+        appearance: request.appearance,
+        signer: {
+          name: name.slice(0, 200),
+          ...(holderId && deps.signer ? { holderId: deps.signer.maskIds(holderId) } : {}),
+        },
+        approval,
+        ...(approval === 'here' ? { biometric: deps.biometric.available() } : {}),
+        confirmLabel: t(lang, approval === 'here' ? 'signLabel' : 'continueLabel'),
+        rejectLabel: t(lang, 'dontSignLabel'),
+      },
+      { document: document.data },
+    );
+    if (answer.kind !== 'pdf_signature' || !answer.approved) return null;
+    if (approval === 'here' && !(await deps.biometric.prompt(t(lang, 'touchIdSignature')))) {
+      return null;
+    }
+    return { placement: answer.placement };
+  }
+
+  /**
+   * Signs a PDF of Mis documentos with a visible signature, with no site involved (the agent's
+   * `api.documents.sign`): the user picks the certificate, places the signature and approves it,
+   * then the signed PDF replaces the document (same id and name; the original is still inside it,
+   * before the signature's incremental update).
+   */
+  async signDocument(procedureId: string, documentId: string): Promise<DocumentMeta> {
+    const { deps } = this;
+    const lang = deps.lang();
+    const signer = deps.signer;
+    const vault = deps.vault();
+    const meta = vault.getDocument(documentId);
+    if (!meta) throw new UserError(t(lang, 'vaultNotFound'), 'not_found');
+    if (!signer || meta.mimeType !== 'application/pdf') {
+      throw new UserError(t(lang, 'signOnlyPdf'), 'bad_request');
+    }
+    const pdf = await vault.readDocument(documentId);
+    let layout: Awaited<ReturnType<SignerLib['pdfLayout']>>;
+    try {
+      layout = await signer.pdfLayout(pdf);
+    } catch {
+      throw new UserError(t(lang, 'signOnlyPdf'), 'bad_request');
+    }
+    const initial = signer.defaultPlacement(layout);
+    const key = await this.approveSignature(procedureId, {
+      method: 'sign',
+      format: 'PAdES',
+      algorithm: 'SHA256withRSA',
+      origin: OWN_DOCUMENTS_ORIGIN,
+      description: t(lang, 'signDocumentWhat', { name: meta.name }),
+      dataSize: meta.size,
+      documents: [{ name: meta.name, mimeType: meta.mimeType, data: pdf }],
+      // The phone can't check an update that draws a visible signature.
+      verifiable: false,
+      placement: { mode: 'choose', initial, appearance: 'handwritten' },
+    });
+    if (!key) throw new UserError(t(lang, 'documentNotSigned'), 'cancelled');
+    const signed = await signer.signPdf({ pdf, key, placement: key.placement ?? initial });
+    const updated = await vault.replaceDocument(documentId, signed, { signedAt: new Date() });
+    deps.events.emit({ type: 'vault.changed' });
+    deps.procedures.addNotice(
+      procedureId,
+      'success',
+      t(lang, 'documentSigned', { name: meta.name }),
+    );
+    deps.logger.info('document signed', { procedureId });
+    return updated;
   }
 
   /** The signature confirmation with what is signed, for whom and with what (+ Touch ID). */
