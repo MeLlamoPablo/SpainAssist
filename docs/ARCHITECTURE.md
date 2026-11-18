@@ -207,6 +207,13 @@ always visible, placed by the user, and the signed PDF replaces the document in 
 `signedAt`). Nothing of the original is lost: a PAdES signature is an incremental update, so the
 signed file still starts with the original bytes.
 
+Every PDF signed locally (AutoFirma or Mis documentos) is then made long-term (PAdES-B-LT), after
+the key is released: main's `net.fetch` asks a timestamp authority (the site's `tsaURL` first,
+then DigiCert, Sectigo's qualified TSA, Izenpe) and the certificate authorities' OCSP responders
+or CRLs, and the PDF stores all of it, so it validates without the network after the certificate
+expires. Network failures keep the signature as signed; a revoked signing certificate fails it.
+Off in e2e runs. Research and open items: `docs/research/pades-ltv.md`.
+
 ### FNMT certificates (Configurador replacement)
 FNMT's request page asks its Configurador for a key and a
 PKCS#10 through `FnmtCertRequest`; a shim (`@sa/signer`) answers instead. After the user approves,

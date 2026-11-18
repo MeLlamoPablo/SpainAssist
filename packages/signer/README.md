@@ -13,7 +13,7 @@ throughout PKCS#12 import and all local signing formats.
 | CAdES coSign/counterSign | Multiple signers; leaf/tree countersignatures |
 | NONE/PKCS#1 | Raw RSA PKCS#1 or DER ECDSA signature |
 | XAdES | Enveloping, Enveloped, internally Detached; BES/EPES, FirmaAGE |
-| PAdES | Incremental signature, invisible or visible (below); classic or stream xref, co-sign by appending |
+| PAdES | Incremental signature, invisible or visible (below); classic or stream xref, co-sign by appending; long-term B-LT (below) |
 | selectCertificate | Explicit approval then DER certificate in Base64, chosen by the certificate filters |
 | signBatchProcess | JSON local batches and remote JSON pre/post batches |
 | signBatch | Legacy XML `<signbatch>` against the site's BatchPresigner/BatchPostsigner; the page gets the Base64 result log |
@@ -21,7 +21,7 @@ throughout PKCS#12 import and all local signing formats.
 | AutoScript/MiniApplet utilities | Full 1.10.1 surface plus 1.8.x copies' setters, configuration no-ops, Base64 utilities; unknown methods of the page's own copy become no-ops reported as `AFIRMA_NOTICE` |
 
 Known gaps: no local smart-card readers (the DNIe signs on the phone through an
-`ExternalSigningKey`), no revocation checking, timestamp/LTV, local XML batch, FacturaE/ASiC local
+`ExternalSigningKey`), no CAdES-T/XAdES-T timestamps, local XML batch, FacturaE/ASiC local
 assembly, encrypted PDFs, PDF certification, a blank page appended for the signature
 (`signaturePages=append`), and underlined or struck-through `layer2FontStyle`. XAdES Detached without an
 explicit `format` parameter deliberately maps to Enveloping, matching AutoFirma's REG quirk.
@@ -57,6 +57,23 @@ Great Vibes under the OFL, subset to Latin). `signPdf` signs a PDF of the user's
 always visible, PAdES-BES, at the placement the user chose. `pdfLayout` lists a PDF's pages and
 empty signature fields, and `defaultPlacement` picks the first field or the bottom-right corner
 of the last page.
+
+## Long-term PDF signatures (PAdES-B-LT)
+
+With `longTerm` (`createAfirmaHandler`, `signPdf`), every PDF signed locally is upgraded once the
+key is released (`timestamping.ts`, `ltv.ts`): a signature timestamp from a TSA goes into the CMS
+(spliced into its raw DER, in `/Contents`, outside the byte range), then a `/DSS` update stores
+the signer's and the TSA's chains with an OCSP response or CRL for each certificate below the
+root (`revocation.ts`), with a `/VRI` entry. Every answer is verified before it is stored.
+
+- **TSAs.** The site's (`tsaURL`, `tsaPolicy`, `tsaHashAlgorithm`, `tsaUsr`/`tsaPwd`, configured
+  as AutoFirma does), then `DEFAULT_TSAS`: DigiCert, Sectigo's qualified TSA, Izenpe, all trusted
+  by Acrobat. `tsType` 2 or 3 adds a document timestamp (B-LTA).
+- **Failure.** Network trouble leaves the signature as signed (B-B, or B-T without revocation
+  data) and logs why; a signing certificate its CA says is revoked fails the signature.
+- **Not upgraded.** Triphase and batch PAdES (the site's server builds them), CAdES and XAdES.
+
+Why these TSAs, what was verified and what is open: docs/research/pades-ltv.md.
 
 ## Installing the shim
 

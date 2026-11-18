@@ -66,6 +66,7 @@ import {
 import { createMainServices, type MainServices } from './app/services';
 import { signatureFont } from './app/signature-font';
 import { bundledChromiumPath } from './browser/bundled';
+import { DNIE_AUTHORITIES } from './companion/dnie-chain';
 import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';
 import { errorMessage } from './core/util';
@@ -552,7 +553,19 @@ async function main(): Promise<void> {
     browserExecutable: bundledBrowser(log),
     ...(crlSets ? { crlSets } : {}),
     certificateOrigins,
-    signer: signerLib(log, signatureFont),
+    signer: signerLib(log, {
+      signatureFont,
+      // PAdES-B-LT: TSAs, OCSP responders and CRLs over Electron's network stack. Not in the
+      // e2e runs, which must not reach real services.
+      ...(env.e2e
+        ? {}
+        : {
+            longTerm: {
+              fetch: net.fetch as unknown as typeof fetch,
+              authorities: DNIE_AUTHORITIES,
+            },
+          }),
+    }),
     pii: piiLib,
     fetch,
     signerFetch: net.fetch as unknown as typeof fetch,

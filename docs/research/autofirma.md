@@ -721,3 +721,9 @@ no extra step. Only `want`/`optional`, and the agent's own-document signatures, 
 it; the card starts at the site's box, an empty signature field, or the bottom-right corner of the
 last page. We have no appearance editor (`visibleAppearance=custom`): the site's text style is
 kept, otherwise our handwritten signature.
+
+## Timestamps and long-term PAdES (2026-11-19)
+
+AutoFirma's TSA parameters (`tsaURL`, `tsaPolicy`, `tsaHashAlgorithm`, `tsaUsr`/`tsaPwd`,
+`tsType`, …) and what we do with them, the TSAs we use by default and why: research memo
+`docs/research/pades-ltv.md`.

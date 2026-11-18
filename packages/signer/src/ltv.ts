@@ -87,7 +87,7 @@ function isContext(block: asn1js.AsnType, n: number): boolean {
  * `cms` (a ContentInfo with SignedData) with `attribute` (DER) added to the unsigned attributes
  * of its first signer. Only lengths around it change.
  */
-export function addUnsignedAttribute(cms: Uint8Array, attribute: Buffer): Buffer {
+function addUnsignedAttribute(cms: Uint8Array, attribute: Buffer): Buffer {
   const parsed = asn1js.fromBER(cms);
   if (parsed.offset === -1) throw AfirmaError.notSignature();
   const [oid, explicit] = children(parsed.result);

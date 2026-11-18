@@ -51,8 +51,8 @@ import { externalIdentity, p12Identity, type SignerIdentity } from './key';
 import { sniffMime } from './mime';
 import { openP12, P12Error } from './p12';
 import { createPades, type PadesVisibleSignature, pdfLayout } from './pades';
-import { type LongTermOptions, makeLongTerm } from './timestamping';
 import { expandPolicy, type PolicyFormat, readPolicy } from './policy';
+import { type LongTermOptions, makeLongTerm } from './timestamping';
 import {
   type BatchRequest,
   type BatchResult,

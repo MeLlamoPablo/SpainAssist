@@ -47,7 +47,7 @@ const MAX_RESPONSE_BYTES = 512 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /** A TimeStampReq for `hash` (computed with `digest`), asking for the TSA's certificate. */
-export function timestampRequest(
+function timestampRequest(
   digest: DigestName,
   hash: Uint8Array,
   nonce: Uint8Array,
@@ -184,7 +184,7 @@ function tokenOfResponse(der: Uint8Array): Buffer {
 }
 
 /** One TSA, one request: the verified timestamp of `data`, or an error. */
-export async function requestTimestamp(
+async function requestTimestamp(
   tsa: TsaEndpoint,
   data: Uint8Array,
   o: TimestampOptions,
