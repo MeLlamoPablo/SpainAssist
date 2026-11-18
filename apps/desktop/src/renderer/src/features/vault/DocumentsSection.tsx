@@ -201,7 +201,7 @@ function SignedMark({ doc }: { doc: DocumentMeta }) {
           align="start"
           sideOffset={8}
           collisionPadding={16}
-          className="z-50 w-80 animate-pop-in rounded-xl border border-line bg-surface p-1.5 shadow-pop"
+          className="z-50 w-[22rem] animate-pop-in rounded-xl border border-line bg-surface p-1.5 shadow-pop"
           data-testid="document-signatures"
         >
           {signatures === null || signatures.length === 0 ? (
@@ -223,17 +223,16 @@ function SignedMark({ doc }: { doc: DocumentMeta }) {
                       <Signature size={15} aria-hidden />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <p className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
-                          {s.name}
-                        </p>
+                      <p className="break-words text-[13px] font-medium text-fg">{s.name}</p>
+                      <p className="mt-0.5 text-[12px] text-fg-subtle">
+                        {certificate(s)}
                         {s.signedAt ? (
-                          <span className="shrink-0 text-[11.5px] tabular-nums text-fg-subtle">
+                          <span className="whitespace-nowrap tabular-nums">
+                            {' · '}
                             {formatDateTime(s.signedAt, lang)}
                           </span>
                         ) : null}
-                      </div>
-                      <p className="mt-0.5 truncate text-[12px] text-fg-subtle">{certificate(s)}</p>
+                      </p>
                     </div>
                   </li>
                 ))}
