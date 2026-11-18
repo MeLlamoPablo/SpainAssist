@@ -1,4 +1,4 @@
-import type { DocumentMeta, VaultOverview } from '@sa/shared';
+import type { DocumentMeta, DocumentSignature, VaultOverview } from '@sa/shared';
 import {
   Download,
   FileText,
@@ -9,6 +9,7 @@ import {
   Trash,
   Upload,
 } from 'lucide-react';
+import { HoverCard } from 'radix-ui';
 import { useState } from 'react';
 import { Button, IconButton } from '../../components/ui/button';
 import { ConfirmDialog } from '../../components/ui/dialog';
@@ -17,7 +18,7 @@ import { useLang, useT } from '../../i18n';
 import { common } from '../../i18n/common';
 import { api, errorMessage } from '../../lib/api';
 import { pickFiles, uploadToVault } from '../../lib/files';
-import { formatBytes, formatDate } from '../../lib/format';
+import { formatBytes, formatDate, formatDateTime } from '../../lib/format';
 import { useAppStore } from '../../store/app';
 import { useProcedureStore } from '../../store/procedures';
 import { toast } from '../../store/toast';
@@ -114,13 +115,7 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
           {doc.signedAt ? (
             <>
               <span aria-hidden>·</span>
-              <span
-                className="flex items-center gap-1 font-medium text-st-done-fg"
-                data-testid="document-signed"
-              >
-                <Signature size={12} aria-hidden />
-                {t.documents.signed(formatDate(doc.signedAt, lang))}
-              </span>
+              <SignedMark doc={doc} />
             </>
           ) : null}
           {procedure ? (
@@ -162,5 +157,91 @@ function DocumentRow({ doc }: { doc: DocumentMeta }) {
         onConfirm={remove}
       />
     </div>
+  );
+}
+
+/** "Firmado", and on hover who signed the document, when and with which certificate. */
+function SignedMark({ doc }: { doc: DocumentMeta }) {
+  const t = useT(vaultDict);
+  const lang = useLang();
+  const [signatures, setSignatures] = useState<DocumentSignature[] | null>(null);
+  // Read again after the document is signed once more.
+  const [readFor, setReadFor] = useState<string>();
+  const version = `${doc.id}@${doc.signedAt}`;
+
+  const read = (open: boolean) => {
+    if (!open || readFor === version) return;
+    setReadFor(version);
+    setSignatures(null);
+    api.invoke('vault.documentSignatures', doc.id).then(setSignatures, () => setSignatures([]));
+  };
+
+  const certificate = (s: DocumentSignature) =>
+    s.dnie
+      ? t.documents.certificateDnie
+      : /FNMT/i.test(s.issuer)
+        ? t.documents.certificateFnmt
+        : t.documents.certificateOther(s.issuer);
+
+  return (
+    <HoverCard.Root openDelay={150} closeDelay={120} onOpenChange={read}>
+      <HoverCard.Trigger asChild>
+        <button
+          type="button"
+          className="flex cursor-default items-center gap-1 font-medium text-st-done-fg"
+          data-testid="document-signed"
+        >
+          <Signature size={12} aria-hidden />
+          {t.documents.signed}
+        </button>
+      </HoverCard.Trigger>
+      <HoverCard.Portal>
+        <HoverCard.Content
+          side="bottom"
+          align="start"
+          sideOffset={8}
+          collisionPadding={16}
+          className="z-50 w-80 animate-pop-in rounded-xl border border-line bg-surface p-1.5 shadow-pop"
+          data-testid="document-signatures"
+        >
+          {signatures === null || signatures.length === 0 ? (
+            <p className="px-2.5 py-2 text-[12.5px] text-fg-subtle">
+              {signatures === null ? t.documents.signaturesLoading : t.documents.signaturesNone}
+            </p>
+          ) : (
+            <>
+              <p className="px-2.5 pt-1.5 pb-1 text-[11.5px] font-medium text-fg-subtle">
+                {t.documents.signatures(signatures.length)}
+              </p>
+              <ul>
+                {signatures.map((s) => (
+                  <li
+                    key={`${s.signedAt}-${s.name}`}
+                    className="flex items-start gap-3 rounded-lg px-2.5 py-2"
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-st-done-bg text-st-done-fg">
+                      <Signature size={15} aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <p className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">
+                          {s.name}
+                        </p>
+                        {s.signedAt ? (
+                          <span className="shrink-0 text-[11.5px] tabular-nums text-fg-subtle">
+                            {formatDateTime(s.signedAt, lang)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 truncate text-[12px] text-fg-subtle">{certificate(s)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </HoverCard.Content>
+      </HoverCard.Portal>
+    </HoverCard.Root>
   );
 }

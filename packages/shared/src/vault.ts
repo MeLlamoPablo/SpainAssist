@@ -470,6 +470,22 @@ export const DocumentMeta = z.object({
 });
 export type DocumentMeta = z.infer<typeof DocumentMeta>;
 
+/** One signature of a signed PDF, read from the file (ours or anybody else's). */
+export const DocumentSignature = z.object({
+  /** The signer as people write it ("Pablo Rodríguez Caballero"), from the certificate. */
+  name: z.string(),
+  /**
+   * When it was signed (ISO 8601): a timestamp authority's time when the signature has one,
+   * else the signer's own clock.
+   */
+  signedAt: z.string().optional(),
+  /** Who issued the certificate (its CN, e.g. "AC FNMT Usuarios"). */
+  issuer: z.string(),
+  /** Signed with a DNIe. */
+  dnie: z.boolean(),
+});
+export type DocumentSignature = z.infer<typeof DocumentSignature>;
+
 // ---------------------------------------------------------------------------------------------
 // Credentials
 // ---------------------------------------------------------------------------------------------

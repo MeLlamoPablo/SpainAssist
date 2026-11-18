@@ -198,6 +198,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('vault.previewDocument', S['vault.previewDocument'], (id) =>
     s.vault.previewDocument(id),
   );
+  router.register('vault.documentSignatures', S['vault.documentSignatures'], (id) =>
+    s.vault.documentSignatures(id),
+  );
   router.register('vault.addClave', S['vault.addClave'], (input) => s.vault.addClave(input));
   router.register('vault.updateClave', S['vault.updateClave'], (id, input) =>
     s.vault.updateClave(id, input),

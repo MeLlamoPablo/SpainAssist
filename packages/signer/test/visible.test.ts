@@ -15,6 +15,7 @@ import { resolveAlgorithm } from '../src/algorithms';
 import { displayName } from '../src/appearance';
 import { keyObjectSigner } from '../src/key';
 import { createPades, type PadesVisibleSignature, pdfLayout } from '../src/pades';
+import { pdfSignatures } from '../src/pdf-signatures';
 import {
   defaultPlacement,
   displayToUser,
@@ -26,7 +27,7 @@ import {
   resolvePages,
   visibleRequest,
 } from '../src/visible';
-import { rsaIdentity } from './helpers/pki';
+import { createDnieCard, rsaIdentity } from './helpers/pki';
 import { pkijsVerify } from './helpers/verify';
 
 const FONT = new Uint8Array(
@@ -416,5 +417,48 @@ describe('AutoFirma visible-signature parameters', () => {
     expect(displayName('PABLO RODRIGUEZ DE LA FUENTE')).toBe('Pablo Rodriguez de la Fuente');
     expect(displayName('RODRIGUEZ CABALLERO, PABLO')).toBe('Pablo Rodriguez Caballero');
     expect(displayName('María José Ruiz')).toBe('María José Ruiz');
+  });
+});
+
+describe('reading the signatures of a PDF', () => {
+  it('lists every signer in signing order, with the time and the certificate', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([595, 842]);
+    const pdf = Buffer.from(await doc.save({ useObjectStreams: false }));
+    expect(await pdfSignatures(pdf)).toEqual([]);
+
+    const once = await sign(pdf, {
+      pages: [1],
+      rect: [375, 40, 555, 104],
+      appearance: handwritten(),
+    });
+    const dnie = createDnieCard();
+    const twice = await createPades({
+      pdf: once,
+      algorithm: resolveAlgorithm('SHA256', 'rsa'),
+      signer: keyObjectSigner(dnie.firma.privateKey, 'rsa'),
+      chain: [dnie.firma.certDer, dnie.caDer],
+      params: {},
+      signingTime: new Date('2026-11-19T09:15:00Z'),
+    });
+
+    expect(await pdfSignatures(twice)).toEqual([
+      {
+        name: 'Juan Español Español',
+        signedAt: new Date(2026, 10, 18, 12, 30).toISOString(),
+        issuer: 'AC FNMT Usuarios PRUEBAS',
+        dnie: false,
+      },
+      {
+        name: 'Juan Español Español',
+        signedAt: '2026-11-19T09:15:00.000Z',
+        issuer: 'AC DNIE 004',
+        dnie: true,
+      },
+    ]);
+  });
+
+  it('finds nothing in what is not a PDF', async () => {
+    expect(await pdfSignatures(Buffer.from('not a pdf'))).toEqual([]);
   });
 });

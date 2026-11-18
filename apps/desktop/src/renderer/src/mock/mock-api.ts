@@ -1403,6 +1403,28 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       return doc.name;
     },
     'vault.previewDocument': (id) => state.documentPreviews.get(id) ?? null,
+    'vault.documentSignatures': (id) => {
+      const doc = state.documents.find((d) => d.id === id);
+      if (!doc?.signedAt) return [];
+      const mine = {
+        name: 'Lucía Martín Ortega',
+        signedAt: doc.signedAt,
+        issuer: 'AC FNMT Usuarios',
+        dnie: false,
+      };
+      // The demo's rental contract came signed by the landlord.
+      if (id !== 'doc-contrato') return [mine];
+      const landlord = new Date(new Date(doc.signedAt).getTime() - 26 * 3600_000);
+      return [
+        {
+          name: 'Javier Ruiz Herrera',
+          signedAt: landlord.toISOString(),
+          issuer: 'AC DNIE 004',
+          dnie: true,
+        },
+        mine,
+      ];
+    },
     'vault.addClave': async (input) => {
       await sleep(500);
       const username = input.username.trim().toUpperCase();

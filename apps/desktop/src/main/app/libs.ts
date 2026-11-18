@@ -9,6 +9,7 @@ import {
   FNMT_SHIM_SOURCE,
   maskIds,
   pdfLayout,
+  pdfSignatures,
   signatureName,
   signPdf,
 } from '@sa/signer';
@@ -67,6 +68,7 @@ export function signerLib(logger: Logger, signatureFont?: Uint8Array): SignerLib
     fnmtShimSource: FNMT_SHIM_SOURCE,
     certificateInfo,
     pdfLayout,
+    pdfSignatures,
     defaultPlacement,
     signPdf: (options) => signPdf({ ...options, ...(signatureFont ? { signatureFont } : {}) }),
     signatureName,

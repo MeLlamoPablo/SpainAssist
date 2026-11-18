@@ -47,7 +47,6 @@ import {
   signerLib,
   testKeyProvider,
 } from './app/libs';
-import { signatureFont } from './app/signature-font';
 import { installMacApp } from './app/mac-install';
 import { createAppPaths } from './app/paths';
 import {
@@ -65,6 +64,7 @@ import {
   SELF_TEST_TIMEOUT_MS,
 } from './app/self-test';
 import { createMainServices, type MainServices } from './app/services';
+import { signatureFont } from './app/signature-font';
 import { bundledChromiumPath } from './browser/bundled';
 import { ensurePrivateDir } from './core/fs';
 import { createLogger, type Logger } from './core/logger';

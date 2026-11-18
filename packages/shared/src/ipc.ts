@@ -18,6 +18,7 @@ import type {
   CredentialPolicy,
   CredentialSummary,
   DocumentMeta,
+  DocumentSignature,
   PersonalDataInput,
   PersonalSaveIssue,
   VaultOverview,
@@ -237,6 +238,8 @@ export interface SaMethods {
   'vault.downloadDocument': [[id: string], string];
   /** Data URL for images (and PDFs' first page if supported), for previews. */
   'vault.previewDocument': [[id: string], string | null];
+  /** Who signed a PDF, when and with which certificate (read from the file), in signing order. */
+  'vault.documentSignatures': [[id: string], DocumentSignature[]];
   'vault.addClave': [[input: AddClaveInput], CredentialSummary];
   /** Corrects a saved Cl@ve Permanente (DNI/NIE and password), keeping its id and policy. */
   'vault.updateClave': [[id: string, input: AddClaveInput], CredentialSummary];

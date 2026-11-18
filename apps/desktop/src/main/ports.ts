@@ -19,6 +19,7 @@ import type {
   AfirmaHandler,
   CertificateInfo,
   ChatGPTKeyResponse,
+  DocumentSignature,
   ModelOption,
   ProviderOption,
   RedeemVoucherResponse,
@@ -154,6 +155,8 @@ export interface SignerLib {
   certificateInfo(der: Uint8Array): CertificateInfo;
   /** Pages and empty signature fields of a PDF (throws an AfirmaError when it isn't one). */
   pdfLayout(pdf: Uint8Array): Promise<PdfLayout>;
+  /** Who signed a PDF, when and with which certificate, in signing order (none if it isn't one). */
+  pdfSignatures(pdf: Uint8Array): Promise<DocumentSignature[]>;
   /** Where a signature goes when nobody said (the first empty field, else bottom right). */
   defaultPlacement(layout: PdfLayout): SignaturePlacement;
   /** A visible PAdES signature on a PDF of the user's, with the approved key (released). */

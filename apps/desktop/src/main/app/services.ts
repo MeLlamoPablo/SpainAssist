@@ -418,6 +418,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     onCredentialDeleted: () => browser.closeAll(),
     chooseSavePath: deps.chooseSavePath,
     ...(osCertificates ? { osCertificates } : {}),
+    ...(deps.signer ? { pdfSignatures: deps.signer.pdfSignatures } : {}),
   });
   // Remove plaintext copies left by versions that used userData/tmp.
   await rm(join(paths.userData, 'tmp'), { recursive: true, force: true }).catch((err) =>

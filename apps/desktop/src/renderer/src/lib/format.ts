@@ -39,6 +39,12 @@ export function formatDate(value: string | Date, lang: Lang): string {
   return d ? format(d, 'd MMM yyyy', { locale: DATE_LOCALE[lang] }) : String(value);
 }
 
+/** "14 nov 2026, 21:31" / "14 Nov 2026, 21:31". */
+export function formatDateTime(value: string | Date, lang: Lang): string {
+  const d = toDate(value);
+  return d ? format(d, 'd MMM yyyy, HH:mm', { locale: DATE_LOCALE[lang] }) : String(value);
+}
+
 /** "14 de noviembre de 2026" / "14 November 2026". */
 export function formatLongDate(value: string | Date, lang: Lang): string {
   const d = toDate(value);

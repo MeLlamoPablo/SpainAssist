@@ -8,6 +8,7 @@ import {
   type CredentialPolicy,
   type CredentialSummary,
   type DocumentMeta,
+  type DocumentSignature,
   type Language,
   type PersonalDataInput,
   type PersonalSaveIssue,
@@ -58,6 +59,8 @@ export interface VaultServiceDeps {
   osCertificates?: OsCertificates;
   /** Opens the program that manages the OS store's certificates; none where there isn't one. */
   openSystemCertificates?(): Promise<void>;
+  /** The signer's reading of a PDF's signatures; without it no document lists any. */
+  pdfSignatures?(pdf: Uint8Array): Promise<DocumentSignature[]>;
 }
 
 /** How often, at most, opening Mis datos reads the OS certificate store again. */
@@ -225,6 +228,18 @@ export class VaultService {
     } catch (err) {
       this.deps.logger.warn('preview failed', { error: errorMessage(err) });
       return null;
+    }
+  }
+
+  /** Who signed a PDF of Mis documentos, when and with which certificate. */
+  async documentSignatures(id: string): Promise<DocumentSignature[]> {
+    const meta = this.deps.vault.getDocument(id);
+    if (meta?.mimeType !== 'application/pdf' || !this.deps.pdfSignatures) return [];
+    try {
+      return await this.deps.pdfSignatures(await this.deps.vault.readDocument(id));
+    } catch (err) {
+      this.deps.logger.warn('reading signatures failed', { error: errorMessage(err) });
+      return [];
     }
   }
 

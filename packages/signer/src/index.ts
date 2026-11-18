@@ -74,6 +74,7 @@ export {
   type PdfLayout,
   pdfLayout,
 } from './pades';
+export { pdfSignatures } from './pdf-signatures';
 export { expandPolicy, FIRMA_AGE, readPolicy, type SignaturePolicy } from './policy';
 export {
   AUTOSCRIPT_SHIM_SOURCE,

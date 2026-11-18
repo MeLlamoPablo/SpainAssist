@@ -97,6 +97,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'vault.openDocument': z.tuple([id]),
   'vault.downloadDocument': z.tuple([id]),
   'vault.previewDocument': z.tuple([id]),
+  'vault.documentSignatures': z.tuple([id]),
   'vault.addClave': z.tuple([
     z.object({
       username: z.string().trim().min(1).max(64),
