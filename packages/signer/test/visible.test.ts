@@ -229,6 +229,89 @@ describe('visible PAdES signatures', () => {
   });
 });
 
+/** Every signature of the file verifies over its own byte range, in signing order. */
+async function verifiesEach(signed: Buffer): Promise<boolean[]> {
+  const text = signed.toString('latin1');
+  const ranges = [...text.matchAll(/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/g)];
+  return Promise.all(
+    ranges.map((m) => {
+      const [a, b, c, d] = m.slice(1).map(Number);
+      const data = Buffer.concat([signed.subarray(a, a + b), signed.subarray(c, c + d)]);
+      const cms = Buffer.from(signed.subarray(b + 1, c - 1).toString('ascii'), 'hex');
+      const count = cms[1] & 0x7f;
+      const length = cms[1] < 128 ? cms[1] + 2 : cms.readUIntBE(2, count) + count + 2;
+      return pkijsVerify(cms.subarray(0, length), 0, data);
+    }),
+  );
+}
+
+/** Names of the form's signature fields. */
+async function signatureFieldNames(signed: Buffer): Promise<string[]> {
+  const doc = await PDFDocument.load(signed);
+  const form = doc.catalog.lookup(PDFName.of('AcroForm'), PDFDict);
+  const fields = form.lookup(PDFName.of('Fields'), PDFArray);
+  return fields
+    .asArray()
+    .map((f) => doc.context.lookup(f, PDFDict).lookup(PDFName.of('T'), PDFString).decodeText());
+}
+
+describe('signing a PDF that is already signed', () => {
+  for (const useObjectStreams of [false, true]) {
+    it(`adds a second signature and keeps the first valid (object streams ${useObjectStreams})`, async () => {
+      const doc = await PDFDocument.create();
+      doc.addPage([595, 842]);
+      const pdf = Buffer.from(await doc.save({ useObjectStreams }));
+      const once = await sign(pdf, {
+        pages: [1],
+        rect: [375, 40, 555, 104],
+        appearance: handwritten(),
+      });
+      const twice = await sign(once, {
+        pages: [1],
+        rect: [40, 40, 220, 104],
+        appearance: handwritten('María López García'),
+      });
+
+      // The second signature is an update after the first, which stays byte for byte.
+      expect(twice.subarray(0, once.length)).toEqual(once);
+      expect(await verifiesEach(twice)).toEqual([true, true]);
+      expect(await signatureFieldNames(twice)).toEqual(['Signature1', 'Signature2']);
+      const [page] = await widgets(twice);
+      expect(page.map((w) => w.rect)).toEqual([
+        [375, 40, 555, 104],
+        [40, 40, 220, 104],
+      ]);
+      // A signed field is not offered as an empty one.
+      expect((await pdfLayout(twice)).signatureFields).toEqual([]);
+
+      // And a third, invisible one.
+      const thrice = await sign(twice);
+      expect(thrice.subarray(0, twice.length)).toEqual(twice);
+      expect(await verifiesEach(thrice)).toEqual([true, true, true]);
+      expect(await signatureFieldNames(thrice)).toEqual(['Signature1', 'Signature2', 'Signature3']);
+    });
+  }
+
+  it('refuses a PDF certified with no changes allowed', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([595, 842]);
+    const ctx = doc.context;
+    doc.catalog.set(
+      PDFName.of('Perms'),
+      ctx.obj({
+        DocMDP: ctx.obj({
+          Type: 'Sig',
+          Reference: [
+            ctx.obj({ TransformMethod: 'DocMDP', TransformParams: ctx.obj({ P: 1, V: '1.2' }) }),
+          ],
+        }),
+      }),
+    );
+    const pdf = Buffer.from(await doc.save({ useObjectStreams: false }));
+    await expect(sign(pdf)).rejects.toMatchObject({ errorCode: 'AF510007' });
+  });
+});
+
 describe('AutoFirma visible-signature parameters', () => {
   it('resolves signaturePages like AutoFirma', () => {
     expect(resolvePages(undefined, 5)).toEqual([5]);
