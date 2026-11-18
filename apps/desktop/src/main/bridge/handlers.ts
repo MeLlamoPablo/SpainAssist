@@ -23,7 +23,7 @@ import { t } from '../core/i18n';
 import { type Logger, truncate } from '../core/logger';
 import { errorMessage, hostOf } from '../core/util';
 import type { MediaStore } from '../media/store';
-import type { Biometric, BrowserPort, VaultPort } from '../ports';
+import type { Biometric, BrowserPort, SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
 import type { ProviderManager } from '../providers/manager';
 import type { FeedbackService } from '../remote/feedback';
@@ -46,6 +46,8 @@ export interface BridgeHandlerDeps {
   >;
   feedback: Pick<FeedbackService, 'search' | 'submit' | 'vote' | 'describeShared'>;
   biometric: Biometric;
+  /** Filling in PDFs (`vault.fillDocument`); without it that method is unavailable. */
+  signer?: Pick<SignerLib, 'fillPdf'>;
   /** Origins that commonly ask for a TLS client certificate (from @sa/browser). */
   certificateOrigins: readonly string[];
   logger: Logger;
@@ -480,6 +482,61 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       }
       vaultChanged();
       return { documentId: renamed.id, name: renamed.name };
+    },
+
+    'vault.fillDocument': async (params, ctx) => {
+      const vault = deps.vault();
+      const meta = vault.getDocument(params.documentId);
+      if (!meta) throw new BridgeError('not_found', `No document with id "${params.documentId}".`);
+      if (!deps.signer) throw new BridgeError('unavailable', 'Filling in PDFs is not available.');
+      if (meta.mimeType !== 'application/pdf')
+        throw new BridgeError('bad_request', 'Only PDF documents can be filled in.');
+      // A copy filled in earlier is filled in again from its blank, so every call has all values.
+      const blank = meta.filledFrom ? vault.getDocument(meta.filledFrom) : meta;
+      if (!blank)
+        throw new BridgeError(
+          'bad_request',
+          'The blank form this copy was filled in from is no longer in the documents.',
+        );
+      if (meta.filledFrom && meta.signedAt)
+        throw new BridgeError(
+          'bad_request',
+          'This copy is signed: filling it in again would remove the signature.',
+        );
+      let filled: Awaited<ReturnType<SignerLib['fillPdf']>>;
+      try {
+        filled = await deps.signer.fillPdf(await vault.readDocument(blank.id), params.values);
+      } catch (err) {
+        if (err instanceof Error && err.name === 'FillError')
+          throw new BridgeError('bad_request', truncate(err.message, 300));
+        throw err;
+      }
+      let saved: { id: string; name: string };
+      if (meta.filledFrom) {
+        saved = await vault.replaceDocument(meta.id, filled.pdf);
+        if (params.name)
+          saved = await vault.renameDocument(meta.id, documentFileName(params.name, meta.name));
+      } else {
+        const base = blank.name.replace(/\.pdf$/i, '');
+        saved = await vault.addDocument({
+          name: documentFileName(
+            params.name ?? t(lang(), 'filledDocumentName', { name: base }),
+            blank.name,
+          ),
+          mimeType: 'application/pdf',
+          source: 'agent',
+          bytes: filled.pdf,
+          procedureId: ctx.procedureId,
+          filledFrom: blank.id,
+        });
+      }
+      vaultChanged();
+      return {
+        documentId: saved.id,
+        name: saved.name,
+        pages: filled.pages,
+        warnings: filled.warnings,
+      };
     },
 
     'vault.signDocument': async (params, ctx) => {

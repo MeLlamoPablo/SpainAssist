@@ -135,6 +135,7 @@ export class MemoryVault implements VaultPort {
       size: opts.bytes.byteLength,
       source: opts.source,
       ...(opts.procedureId ? { procedureId: opts.procedureId } : {}),
+      ...(opts.filledFrom ? { filledFrom: opts.filledFrom } : {}),
       createdAt: now(),
     };
     this.documents.set(meta.id, { meta, bytes: Buffer.from(opts.bytes) });

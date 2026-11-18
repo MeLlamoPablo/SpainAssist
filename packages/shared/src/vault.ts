@@ -467,6 +467,11 @@ export const DocumentMeta = z.object({
    * a signed PDF still holds the original, untouched, before its signature.
    */
   signedAt: z.string().optional(),
+  /**
+   * The blank form this document was filled in from (`api.documents.fill`): filling it in again
+   * starts from that blank.
+   */
+  filledFrom: z.string().optional(),
 });
 export type DocumentMeta = z.infer<typeof DocumentMeta>;
 

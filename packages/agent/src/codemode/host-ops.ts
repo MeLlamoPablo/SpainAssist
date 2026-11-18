@@ -8,6 +8,7 @@ import {
   fetchDocument,
   fetchPublic,
   type HostResolver,
+  pdfImageSizes,
   pdfPage,
   pdfToText,
   readCapped,
@@ -379,9 +380,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           ...base,
           pages: page.pages,
           text: page.text,
-          ...(page.png
-            ? { image: deps.images.put('image/png', Buffer.from(page.png).toString('base64')) }
-            : {}),
+          ...(page.png ? { image: pageImage(page) } : {}),
         };
       }
       const pdf = await pdfToText(bytes);
@@ -405,6 +404,91 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
     if (doc.mimeType.startsWith('text/') || doc.mimeType === 'application/json')
       return { ...base, text: bytes.toString('utf8').slice(0, 100_000) };
     throw new HostOpError('bad_request', `Cannot read ${doc.mimeType} files.`, 'not_started');
+  }
+
+  /** A PDF page's image for the workflow, with its size (fill's points are its pixels). */
+  function pageImage(page: { png?: Uint8Array; width?: number; height?: number }) {
+    return {
+      ...deps.images.put('image/png', Buffer.from(page.png ?? []).toString('base64')),
+      width: page.width,
+      height: page.height,
+    };
+  }
+
+  async function fillDocument(a: Record<string, unknown>, signal: AbortSignal) {
+    if (!deps.imagesSupported)
+      throw new HostOpError(
+        'policy_denied',
+        'Filling in a PDF needs a model that can see its pages: ask the user to fill it in.',
+        'not_started',
+      );
+    const id = str(a.id, 'id', 120);
+    if (!Array.isArray(a.values) || a.values.length === 0)
+      throw new HostOpError('bad_request', 'values: a non-empty list.', 'not_started');
+    const doc = await bridge.call('vault.document', { documentId: id }, { signal });
+    if (doc.mimeType !== 'application/pdf')
+      throw new HostOpError('bad_request', 'Only PDF documents can be filled in.', 'not_started');
+    // The agent points in pixels of the page images documents.read gives; the app wants
+    // fractions of the page.
+    const sizes = await pdfImageSizes(Buffer.from(doc.dataBase64, 'base64'));
+    const values = (a.values as unknown[]).map((raw, i) => {
+      const v = (raw ?? {}) as Record<string, unknown>;
+      const where = `Value ${i + 1}`;
+      const page = Number(v.page);
+      const size = sizes[page - 1];
+      if (!Number.isInteger(page) || !size)
+        throw new HostOpError(
+          'bad_request',
+          `${where}: page ${String(v.page)} doesn't exist (this PDF has ${sizes.length}).`,
+          'not_started',
+        );
+      const x = Number(v.x);
+      const y = Number(v.y);
+      if (
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        x < 0 ||
+        y < 0 ||
+        x > size.width ||
+        y > size.height
+      )
+        throw new HostOpError(
+          'bad_request',
+          `${where}: (${String(v.x)}, ${String(v.y)}) is outside page ${page}'s image (${Math.floor(size.width)}×${Math.floor(size.height)} px).`,
+          'not_started',
+        );
+      const text = typeof v.text === 'string' ? v.text : undefined;
+      const check = v.check === true;
+      if (!check && !text?.trim())
+        throw new HostOpError('bad_request', `${where}: give text or check: true.`, 'not_started');
+      return {
+        page,
+        x: x / size.width,
+        y: y / size.height,
+        ...(check ? { check: true } : { text: text as string }),
+      };
+    });
+    const filled = await bridge.call(
+      'vault.fillDocument',
+      {
+        documentId: id,
+        values,
+        ...(typeof a.name === 'string' && a.name.trim() ? { name: str(a.name, 'name', 120) } : {}),
+      },
+      { signal, procedureId: primary() },
+    );
+    // The pages written on, to look at (a workflow shows at most four images).
+    const copy = await bridge.call('vault.document', { documentId: filled.documentId }, { signal });
+    const bytes = Buffer.from(copy.dataBase64, 'base64');
+    const pages = [];
+    for (const n of filled.pages.slice(0, 4))
+      pages.push({ page: n, image: pageImage(await pdfPage(bytes, n, { image: true })) });
+    return {
+      documentId: filled.documentId,
+      name: filled.name,
+      pages,
+      warnings: filled.warnings,
+    };
   }
 
   async function fetchUrl(a: Record<string, unknown>, signal: AbortSignal) {
@@ -603,6 +687,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           { documentId: str(a.id, 'id', 120), name: str(a.name, 'name', 120) },
           { signal },
         ),
+      'documents.fill': fillDocument,
       'documents.sign': (a, signal) =>
         bridge.call(
           'vault.signDocument',

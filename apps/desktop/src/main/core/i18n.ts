@@ -147,6 +147,7 @@ const STRINGS = {
   yourSignature: { es: 'Tu firma', en: 'Your signature' },
   pdfDocument: { es: 'Documento PDF', en: 'PDF document' },
   signDocumentWhat: { es: 'Firmar «{name}»', en: 'Sign “{name}”' },
+  filledDocumentName: { es: '{name} (rellenado)', en: '{name} (filled in)' },
   signOnlyPdf: {
     es: 'Solo se pueden firmar documentos PDF.',
     en: 'Only PDF documents can be signed.',

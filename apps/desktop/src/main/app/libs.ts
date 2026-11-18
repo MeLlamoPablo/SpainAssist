@@ -7,6 +7,7 @@ import {
   createAfirmaHandler,
   defaultPlacement,
   FNMT_SHIM_SOURCE,
+  fillPdf,
   type LongTermOptions,
   maskIds,
   pdfLayout,
@@ -60,16 +61,21 @@ export const certificateOrigins: readonly string[] = CERTIFICATE_ORIGINS;
 
 export interface SignerLibOptions {
   /**
-   * The script font of visible PDF signatures (`app/signature-font.ts`, which only the Electron
+   * The script font of visible PDF signatures (`app/pdf-fonts.ts`, which only the Electron
    * build can import); without it the name is drawn in Helvetica Oblique.
    */
   signatureFont?: Uint8Array;
+  /**
+   * The font for filled-in text Helvetica can't write (Ł, ș, Cyrillic…), Noto Sans; without it
+   * such text is left out with a warning to the agent.
+   */
+  formFont?: Uint8Array;
   /** Makes PDF signatures long-term (PAdES-B-LT); without it nothing is fetched. */
   longTerm?: Omit<LongTermOptions, 'logger'>;
 }
 
 export function signerLib(logger: Logger, o: SignerLibOptions = {}): SignerLib {
-  const { signatureFont, longTerm } = o;
+  const { signatureFont, formFont, longTerm } = o;
   return {
     shimSource: AUTOSCRIPT_SHIM_SOURCE,
     handler: createAfirmaHandler({
@@ -88,6 +94,7 @@ export function signerLib(logger: Logger, o: SignerLibOptions = {}): SignerLib {
         ...(signatureFont ? { signatureFont } : {}),
         ...(longTerm ? { longTerm: { ...longTerm, logger } } : {}),
       }),
+    fillPdf: (pdf, edits) => fillPdf(pdf, edits, formFont ? { unicodeFont: formFont } : {}),
     signatureName,
     maskIds,
   };

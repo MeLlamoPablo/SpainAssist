@@ -281,6 +281,7 @@ export function collectOthers(appDir = APP_DIR): Component[] {
   const electron = readJson(path.join(electronDir, 'package.json'));
   const font = path.join(appDir, 'src/renderer/src/assets/brand/OFL.txt');
   const signatureFont = path.join(appDir, '../../packages/signer/assets/OFL.txt');
+  const formFont = path.join(appDir, '../../packages/signer/assets/noto-sans-OFL.txt');
   const others: Component[] = [
     {
       name: 'electron',
@@ -297,6 +298,11 @@ export function collectOthers(appDir = APP_DIR): Component[] {
       name: 'Great Vibes (font, visible signatures)',
       license: 'OFL-1.1',
       files: [{ name: 'OFL.txt', text: readFileSync(signatureFont, 'utf8').trim() }],
+    },
+    {
+      name: 'Noto Sans (font, filled-in PDFs)',
+      license: 'OFL-1.1',
+      files: [{ name: 'OFL.txt', text: readFileSync(formFont, 'utf8').trim() }],
     },
   ];
   others.push({

@@ -207,6 +207,16 @@ always visible, placed by the user, and the signed PDF replaces the document in 
 `signedAt`). Nothing of the original is lost: a PAdES signature is an incremental update, so the
 signed file still starts with the original bytes.
 
+The agent fills in PDF forms the way a person does with a pen (`api.documents.fill` → bridge
+`vault.fillDocument` → `fillPdf` of `@sa/signer`): it looks at a page's image
+(`api.documents.read(id, { page })`, rendered by pdf.js in the agent host) and points at where
+each value goes, in that image's pixels. The value lands in what the PDF's geometry puts under the
+point: a form field, an empty box (its borders, from the page's drawing operators, with no printed
+text inside), a line to write on, or the point itself. No field names or labels reach the agent;
+it checks the filled pages' images and corrects by filling again. Each fill starts from the blank,
+which stays; the filled copy (`filledFrom`) is replaced in place. Research and the eval:
+`docs/research/pdf-forms.md`.
+
 Every PDF signed locally (AutoFirma or Mis documentos) is then made long-term (PAdES-B-LT), after
 the key is released: main's `net.fetch` asks a timestamp authority (the site's `tsaURL` first,
 then DigiCert, Sectigo's qualified TSA, Izenpe) and the certificate authorities' OCSP responders

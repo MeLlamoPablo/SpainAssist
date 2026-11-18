@@ -541,6 +541,9 @@ importers:
       pdf-lib:
         specifier: ^1.17.1
         version: 1.17.1
+      unpdf:
+        specifier: ^2.1.0
+        version: 2.1.0(@napi-rs/canvas@1.1.0)
       xml-crypto:
         specifier: ^6.4.0
         version: 6.4.0

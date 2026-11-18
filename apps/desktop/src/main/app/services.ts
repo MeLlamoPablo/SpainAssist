@@ -552,6 +552,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         providers,
         feedback,
         biometric: deps.biometric,
+        ...(deps.signer ? { signer: deps.signer } : {}),
         certificateOrigins: deps.certificateOrigins,
         logger: logger.child('bridge'),
         lang,

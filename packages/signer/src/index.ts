@@ -14,6 +14,7 @@
  *  - FNMT_SHIM_SOURCE / buildFnmtShimSource(): in-page stand-in for FNMT's Configurador
  *    (`FnmtCertRequest`), forwarding certificate requests and installs to FNMT_BINDING; with
  *    createCertificateRequest / parseIssuedCertificates / issuedCertificatePath for the broker.
+ *  - fillPdf(): fills in a PDF form where the agent pointed on a page (its fields, boxes or lines).
  *
  * Plain Node library; no Electron imports.
  */
@@ -40,6 +41,14 @@ export {
 export { type CompleteChainOptions, completeChain } from './chain';
 export { AfirmaError, CANCELLED_TYPE, GENERIC_TYPE } from './errors';
 export { type ExtraParams, parseExtraParams, storeExtraParams } from './extra-params';
+export {
+  type FillEdit,
+  FillError,
+  type FillErrorCode,
+  type FillPlacement,
+  type FillResult,
+  fillPdf,
+} from './fill';
 export {
   type AfirmaHandlerOptions,
   afirmaHandler,

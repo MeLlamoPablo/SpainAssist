@@ -360,6 +360,37 @@ describe('documents', () => {
     expect(vault.getDocument(doc.id)?.name).toBe('DNI (anverso).jpg');
   });
 
+  it('remembers the blank form a document was filled in from, across a reopen', async () => {
+    const { vault, dir } = await openVault();
+    const blank = await vault.addDocument({
+      name: 'EX-15.pdf',
+      mimeType: 'application/pdf',
+      source: 'user',
+      bytes: Buffer.from('%PDF blank'),
+    });
+    const filled = await vault.addDocument({
+      name: 'EX-15 (rellenado).pdf',
+      mimeType: 'application/pdf',
+      source: 'agent',
+      bytes: Buffer.from('%PDF filled'),
+      filledFrom: blank.id,
+    });
+    expect(filled.filledFrom).toBe(blank.id);
+    expect(blank).not.toHaveProperty('filledFrom');
+    const { vault: reopened } = await openVault(dir);
+    expect(reopened.getDocument(filled.id)?.filledFrom).toBe(blank.id);
+    await expectVaultError(
+      vault.addDocument({
+        name: 'x.pdf',
+        mimeType: 'application/pdf',
+        source: 'agent',
+        bytes: Buffer.from('%PDF'),
+        filledFrom: 'nope',
+      }),
+      'not_found',
+    );
+  });
+
   it('replaces a document in place, keeping its id and name', async () => {
     const { vault } = await openVault();
     const doc = await vault.addDocument({

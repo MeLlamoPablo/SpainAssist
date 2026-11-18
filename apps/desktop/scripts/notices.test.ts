@@ -57,6 +57,7 @@ describe('the desktop app’s third-party components', () => {
     expect(text).toContain('Copyright 2014 The PDFium Authors');
     expect(text).toContain('Instrument Serif (font): OFL-1.1');
     expect(text).toContain('Great Vibes (font, visible signatures): OFL-1.1');
+    expect(text).toContain('Noto Sans (font, filled-in PDFs): OFL-1.1');
     expect(text).toMatch(/Chrome for Testing .*@\d+\.\d+\.\d+\.\d+: LicenseRef-Chrome-for-Testing/);
   });
 });

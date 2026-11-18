@@ -105,6 +105,67 @@ describe('host operations', () => {
     });
   });
 
+  it('fill a PDF where the agent pointed on its page images, and show the pages filled', async () => {
+    const { run, calls } = ops({
+      'vault.document': PDF_DOCUMENT,
+      'vault.fillDocument': {
+        documentId: 'doc-2',
+        name: 'Tasas (rellenado).pdf',
+        pages: [2],
+        warnings: ['Value 1 ("Ana"): written smaller to fit.'],
+      },
+    });
+    const page = (await run('documents.read', { id: 'doc-1', page: 1 })) as {
+      image: { width: number; height: number };
+    };
+    // US Letter portrait: 612 × 792 points, 1600 px high.
+    expect(page.image).toMatchObject({ width: 1236, height: 1600 });
+
+    const filled = await run('documents.fill', {
+      id: 'doc-1',
+      values: [
+        { page: 1, x: 618.18, y: 400, text: 'Ana' },
+        { page: 2, x: 0, y: 1600, check: true },
+      ],
+      name: 'Tasas rellenas',
+    });
+    const fill = calls.find((c) => c.method === 'vault.fillDocument');
+    expect(fill).toMatchObject({
+      procedureId: 'p_aaaaaaaaaaaaaaaa',
+      params: { documentId: 'doc-1', name: 'Tasas rellenas' },
+    });
+    const values =
+      (fill?.params as { values: Record<string, unknown>[] } | undefined)?.values ?? [];
+    expect(values[0]).toMatchObject({ page: 1, text: 'Ana' });
+    expect(values[0]?.x).toBeCloseTo(0.5, 3);
+    expect(values[0]?.y).toBeCloseTo(0.25, 3);
+    expect(values[1]).toEqual({ page: 2, x: 0, y: 1, check: true });
+    expect(filled).toMatchObject({
+      documentId: 'doc-2',
+      name: 'Tasas (rellenado).pdf',
+      pages: [{ page: 2, image: { mimeType: 'image/png', width: 1236, height: 1600 } }],
+      warnings: ['Value 1 ("Ana"): written smaller to fit.'],
+    });
+
+    await expect(
+      run('documents.fill', { id: 'doc-1', values: [{ page: 1, x: 1300, y: 10, text: 'x' }] }),
+    ).rejects.toMatchObject({
+      code: 'bad_request',
+      message: "Value 1: (1300, 10) is outside page 1's image (1236×1600 px).",
+    });
+    await expect(
+      run('documents.fill', { id: 'doc-1', values: [{ page: 1, x: 10, y: 10 }] }),
+    ).rejects.toMatchObject({ code: 'bad_request', message: 'Value 1: give text or check: true.' });
+  });
+
+  it('fill nothing for a model that cannot see the pages', async () => {
+    const { run, calls } = ops({ 'vault.document': PDF_DOCUMENT }, undefined, false);
+    await expect(
+      run('documents.fill', { id: 'doc-1', values: [{ page: 1, x: 10, y: 10, text: 'x' }] }),
+    ).rejects.toMatchObject({ code: 'policy_denied' });
+    expect(calls).toEqual([]);
+  });
+
   it('read a PDF page as text only for a model that cannot see images', async () => {
     const { run } = ops({ 'vault.document': PDF_DOCUMENT }, undefined, false);
     const page = await run('documents.read', { id: 'doc-1', page: 1 });

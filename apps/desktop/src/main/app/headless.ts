@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -264,7 +265,7 @@ export async function createHeadlessApp(opts: HeadlessOptions): Promise<Headless
       browserFactory: opts.browserFactory ?? realBrowserFactory,
       ...(opts.startSidecar ? { startSidecar: opts.startSidecar } : {}),
       certificateOrigins,
-      signer: signerLib(logger),
+      signer: signerLib(logger, { formFont: headlessFormFont() }),
       pii: piiLib,
       fetch: opts.fetch ?? offlineFetch,
       ...(opts.places ? { places: opts.places } : {}),
@@ -316,4 +317,11 @@ export async function createHeadlessApp(opts: HeadlessOptions): Promise<Headless
       return closing;
     },
   };
+}
+
+/** Noto Sans for filled-in text, read from @sa/signer (the Electron build inlines it instead). */
+function headlessFormFont(): Uint8Array {
+  return new Uint8Array(
+    readFileSync(fileURLToPath(import.meta.resolve('@sa/signer/assets/noto-sans-regular.ttf'))),
+  );
 }

@@ -49,6 +49,7 @@ import {
 } from './app/libs';
 import { installMacApp } from './app/mac-install';
 import { createAppPaths } from './app/paths';
+import { formFont, signatureFont } from './app/pdf-fonts';
 import {
   APP_ENTRY_URL,
   APP_SCHEME,
@@ -64,7 +65,6 @@ import {
   SELF_TEST_TIMEOUT_MS,
 } from './app/self-test';
 import { createMainServices, type MainServices } from './app/services';
-import { signatureFont } from './app/signature-font';
 import { bundledChromiumPath } from './browser/bundled';
 import { DNIE_AUTHORITIES } from './companion/dnie-chain';
 import { ensurePrivateDir } from './core/fs';
@@ -555,6 +555,7 @@ async function main(): Promise<void> {
     certificateOrigins,
     signer: signerLib(log, {
       signatureFont,
+      formFont,
       // PAdES-B-LT: TSAs, OCSP responders and CRLs over Electron's network stack. Not in the
       // e2e runs, which must not reach real services.
       ...(env.e2e

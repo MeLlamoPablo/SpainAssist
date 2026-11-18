@@ -209,6 +209,27 @@ export const BridgeParams = {
    * where it goes and approves it in the app; the signed PDF replaces the document (same id).
    */
   'vault.signDocument': z.object({ documentId: z.string().min(1).max(120) }),
+  /**
+   * Fill in a saved PDF: each value goes where the agent pointed on the page (fractions of the
+   * displayed page, from its top left), into the form field, box or line there. A blank gives a
+   * new document; a copy filled earlier is filled again from its blank, in place.
+   */
+  'vault.fillDocument': z.object({
+    documentId: z.string().min(1).max(120),
+    values: z
+      .array(
+        z.object({
+          page: z.number().int().min(1).max(10_000),
+          x: z.number().min(0).max(1),
+          y: z.number().min(0).max(1),
+          text: z.string().max(2000).optional(),
+          check: z.boolean().optional(),
+        }),
+      )
+      .min(1)
+      .max(300),
+    name: z.string().trim().min(1).max(120).optional(),
+  }),
 
   // --- downloads (procedure agents) ----------------------------------------------------------
   /**
@@ -487,6 +508,7 @@ export interface BridgeResults {
   'vault.document': { id: string; name: string; mimeType: string; dataBase64: string };
   'vault.renameDocument': { documentId: string; name: string };
   'vault.signDocument': { documentId: string; name: string; signed: boolean };
+  'vault.fillDocument': { documentId: string; name: string; pages: number[]; warnings: string[] };
   'downloads.save': { documentId: string; name: string };
   'downloads.list': { downloads: BrowserObservation['downloads'] };
   'browser.open': BrowserObservation;

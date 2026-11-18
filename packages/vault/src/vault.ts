@@ -88,6 +88,8 @@ export interface AddDocumentOptions {
   source: DocumentSource;
   bytes: Uint8Array;
   procedureId?: string;
+  /** The blank form it was filled in from (a document id). */
+  filledFrom?: string;
 }
 
 export interface VaultOptions {
@@ -417,6 +419,8 @@ export class Vault {
       ) {
         throw invalid('Invalid procedure id');
       }
+      if (options.filledFrom !== undefined && !this.state.documents.has(options.filledFrom))
+        throw notFound('Document');
 
       const id = randomUUID();
       const meta: DocumentMeta = {
@@ -426,6 +430,7 @@ export class Vault {
         size: bytes.length,
         source: options.source,
         ...(options.procedureId ? { procedureId: options.procedureId } : {}),
+        ...(options.filledFrom ? { filledFrom: options.filledFrom } : {}),
         createdAt: this.now().toISOString(),
       };
       const path = this.documentPath(id);

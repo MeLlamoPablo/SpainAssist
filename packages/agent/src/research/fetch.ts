@@ -606,15 +606,20 @@ export async function pdfToText(
 /** The longer side, in pixels, of a page rendered by `pdfPage`. */
 const PAGE_IMAGE_SIDE = 1600;
 
+/** The scale `pdfPage` renders a page of this size (points, as displayed) at. */
+function pageImageScale(width: number, height: number): number {
+  return PAGE_IMAGE_SIDE / Math.max(width, height);
+}
+
 /**
- * One page (from 1) of a PDF: its text and, with `image`, the page as a PNG. Throws a RangeError
- * for a page the PDF doesn't have.
+ * One page (from 1) of a PDF: its text and, with `image`, the page as a PNG of `width` by
+ * `height` pixels. Throws a RangeError for a page the PDF doesn't have.
  */
 export async function pdfPage(
   bytes: Uint8Array,
   pageNumber: number,
   o: { image: boolean },
-): Promise<{ text: string; pages: number; png?: Uint8Array }> {
+): Promise<{ text: string; pages: number; png?: Uint8Array; width?: number; height?: number }> {
   const pdf = await getDocumentProxy(new Uint8Array(bytes));
   if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pdf.numPages)
     throw new RangeError(
@@ -624,11 +629,32 @@ export async function pdfPage(
   const text = tidyMarkdown((Array.isArray(texts) ? texts : [texts])[pageNumber - 1] ?? '');
   if (!o.image) return { text, pages: pdf.numPages };
   const { width, height } = (await pdf.getPage(pageNumber)).getViewport({ scale: 1 });
+  const scale = pageImageScale(width, height);
   const png = await renderPageAsImage(pdf, pageNumber, {
     canvasImport: () => import('@napi-rs/canvas'),
-    scale: PAGE_IMAGE_SIDE / Math.max(width, height),
+    scale,
   });
-  return { text, pages: pdf.numPages, png };
+  return {
+    text,
+    pages: pdf.numPages,
+    png,
+    width: Math.floor(width * scale),
+    height: Math.floor(height * scale),
+  };
+}
+
+/** Each page's size in `pdfPage`'s image (pixels, unrounded). */
+export async function pdfImageSizes(
+  bytes: Uint8Array,
+): Promise<{ width: number; height: number }[]> {
+  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const sizes = [];
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const { width, height } = (await pdf.getPage(n)).getViewport({ scale: 1 });
+    const scale = pageImageScale(width, height);
+    sizes.push({ width: width * scale, height: height * scale });
+  }
+  return sizes;
 }
 
 // ---------------------------------------------------------------------------------------------
