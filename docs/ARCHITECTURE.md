@@ -197,10 +197,11 @@ AutoFirma to sign, the user approves in the app, `@sa/signer` signs with the `.p
 or PAdES), and the site gets the result as if AutoFirma had produced it. Some sedes log in this way
 too.
 
-A visible PDF signature is approved in a `pdf_signature` card that shows the document (pdf.js,
-through `unpdf`, in the renderer; the bytes come from `chat.promptDocument` while the card is
-pending) with the signature's box: where the site put it, or where the user drags it when the site
-asks (`visibleSignature=want|optional`). The agent can also sign a PDF of Mis documentos with no
+A visible PDF signature is approved in a `pdf_signature` card that previews the signature's page
+(pdf.js, through `unpdf`, in the renderer; the bytes come from `chat.promptDocument` while the card
+is pending) and opens the document in full screen, with a sidebar of its pages, to see or place the
+signature: where the site put it, or where the user drags it when the site asks
+(`visibleSignature=want|optional`). The agent can also sign a PDF of Mis documentos with no
 site involved (`api.documents.sign` → bridge `vault.signDocument` → `BrowserHolder.signDocument`):
 always visible, placed by the user, and the signed PDF replaces the document in place (same id,
 `signedAt`). Nothing of the original is lost: a PAdES signature is an incremental update, so the

@@ -1,7 +1,16 @@
 import type { PdfSignaturePrompt, PromptItem, SignatureBox } from '@sa/shared';
 import signatureFontUrl from '@sa/signer/assets/great-vibes-latin.ttf?url';
-import { Check, FingerprintPattern, Signature } from 'lucide-react';
-import { Fragment, type PointerEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Check, FingerprintPattern, Maximize2, Signature } from 'lucide-react';
+import { Dialog } from 'radix-ui';
+import {
+  Fragment,
+  type PointerEvent,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { PDFDocumentProxy, PDFPageProxy } from 'unpdf/pdfjs';
 import { Button } from '../../../components/ui/button';
 import { useT } from '../../../i18n';
@@ -56,9 +65,10 @@ async function openPdf(bytes: Uint8Array): Promise<PDFDocumentProxy> {
 }
 
 /**
- * A visible PDF signature: the document's pages with the signature's box. In `choose` mode the
- * user clicks where to sign, drags the box and resizes it from its corner; in `fixed` mode the
- * site chose it. With `approval: 'here'` this is the signature's confirmation.
+ * A visible PDF signature: a preview of the signature's page, and the document in full screen,
+ * where in `choose` mode the user clicks where to sign, drags the box and resizes it from its
+ * corner; in `fixed` mode the site chose it. With `approval: 'here'` this is the signature's
+ * confirmation.
  */
 export function PdfSignaturePromptCard({
   item,
@@ -75,6 +85,8 @@ export function PdfSignaturePromptCard({
   const [failed, setFailed] = useState(false);
   const [box, setBox] = useState<SignatureBox | null>(prompt.initial ?? null);
   const [busy, setBusy] = useState<'yes' | 'no' | null>(null);
+  const [fullScreen, setFullScreen] = useState(false);
+  const pages = usePages(doc);
   const editable = prompt.mode === 'choose';
 
   useEffect(() => {
@@ -139,35 +151,23 @@ export function PdfSignaturePromptCard({
     >
       <Markdown text={prompt.message} className="text-[14px] text-fg" />
 
-      <div className="mt-4">
-        <PdfPages
-          doc={doc}
-          failed={failed}
-          box={box}
-          editable={editable}
-          onChange={setBox}
-          preview={prompt}
-          height={embedded ? 340 : 440}
-        />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-fg-muted">
-          <span>
-            {box
-              ? editable
-                ? t.prompt.pdfPlaceHint
-                : t.prompt.pdfFixedHint
-              : t.prompt.pdfNoVisibleHint}
-          </span>
-          {editable && prompt.optional ? (
-            <button
-              type="button"
-              className="font-medium text-accent-text hover:underline"
-              onClick={() => setBox(box ? null : (prompt.initial ?? null))}
-            >
-              {box ? t.prompt.pdfNoVisible : t.prompt.pdfAddVisible}
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <PagePreview
+        pages={pages}
+        failed={failed}
+        box={box}
+        prompt={prompt}
+        height={embedded ? 260 : 300}
+        onOpen={() => setFullScreen(true)}
+      />
+      <PdfFullScreen
+        open={fullScreen}
+        onClose={() => setFullScreen(false)}
+        pages={pages}
+        box={box}
+        editable={editable}
+        onChange={setBox}
+        prompt={prompt}
+      />
 
       {prompt.details?.length ? (
         <dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-[13.5px]">
@@ -219,39 +219,9 @@ interface PageInfo {
   number: number;
 }
 
-function PdfPages({
-  doc,
-  failed,
-  box,
-  editable,
-  onChange,
-  preview,
-  height,
-}: {
-  doc: PDFDocumentProxy | null;
-  failed: boolean;
-  box: SignatureBox | null;
-  editable: boolean;
-  onChange(box: SignatureBox | null): void;
-  preview: PdfSignaturePrompt;
-  height: number;
-}) {
-  const t = useT(chatDict);
-  const scroller = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
+/** The document's pages, loaded once for the preview and the full-screen view. */
+function usePages(doc: PDFDocumentProxy | null): PageInfo[] {
   const [pages, setPages] = useState<PageInfo[]>([]);
-  const [current, setCurrent] = useState(1);
-  const scrolledTo = useRef(false);
-
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
-    observer.observe(el);
-    setWidth(el.clientWidth);
-    return () => observer.disconnect();
-  }, []);
-
   useEffect(() => {
     if (!doc) return;
     let cancelled = false;
@@ -264,15 +234,171 @@ function PdfPages({
       cancelled = true;
     };
   }, [doc]);
+  return pages;
+}
 
-  // Start where the signature is.
+/** The width of an element, followed as it resizes. */
+function useWidth(ref: RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(0);
   useEffect(() => {
-    if (scrolledTo.current || !box || pages.length === 0 || width === 0) return;
-    const el = scroller.current?.querySelector<HTMLElement>(`[data-page="${box.page}"]`);
-    if (!el || !scroller.current) return;
-    scrolledTo.current = true;
-    scroller.current.scrollTop = Math.max(0, el.offsetTop - 12);
-  }, [box, pages, width]);
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
+    observer.observe(el);
+    setWidth(el.clientWidth);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
+}
+
+/**
+ * The card's look at the document: the signature's page, at the card's width, framed around the
+ * signature. A click (or the maximize button that shows on hover) opens the full-screen view.
+ */
+function PagePreview({
+  pages,
+  failed,
+  box,
+  prompt,
+  height,
+  onOpen,
+}: {
+  pages: PageInfo[];
+  failed: boolean;
+  box: SignatureBox | null;
+  prompt: PdfSignaturePrompt;
+  height: number;
+  onOpen(): void;
+}) {
+  const t = useT(chatDict);
+  const frame = useRef<HTMLButtonElement>(null);
+  const width = useWidth(frame);
+  const pageNumber = box?.page ?? prompt.initial?.page ?? 1;
+  const info = pages.find((p) => p.number === pageNumber) ?? pages[0];
+  const pageWidth = Math.max(0, width - 24);
+  // Scroll the page so the signature sits a little below the middle of the frame.
+  let offset = 0;
+  if (info && pageWidth > 0) {
+    const base = info.page.getViewport({ scale: 1 });
+    const viewport = info.page.getViewport({
+      scale: pageWidth / base.width,
+    }) as unknown as ViewportLike;
+    if (box) {
+      const screen = toScreen(box.rect, viewport);
+      offset = screen.top + screen.height / 2 - (height - 24) * 0.6;
+    }
+    offset = Math.min(Math.max(0, offset), Math.max(0, viewport.height - (height - 24)));
+  }
+  return (
+    <button
+      ref={frame}
+      type="button"
+      onClick={onOpen}
+      disabled={!info}
+      aria-label={t.prompt.pdfExpand}
+      className="group relative mt-4 block w-full overflow-hidden rounded-xl border border-line bg-surface-2 text-left focus-visible:outline-2 focus-visible:outline-accent enabled:cursor-zoom-in"
+      style={{ height }}
+      data-testid="pdf-preview"
+    >
+      {failed ? (
+        <p className="flex h-full items-center justify-center text-[13px] text-fg-muted">
+          {t.prompt.pdfFailed}
+        </p>
+      ) : !info || pageWidth === 0 ? (
+        <p className="flex h-full items-center justify-center text-[13px] text-fg-muted">
+          {t.prompt.pdfLoading}
+        </p>
+      ) : (
+        <div
+          className="pointer-events-none px-3 pt-3"
+          style={{ transform: `translateY(${-offset}px)` }}
+        >
+          <PdfPage
+            info={info}
+            width={pageWidth}
+            box={box?.page === info.number ? box.rect : null}
+            currentBox={box}
+            editable={false}
+            onPlace={() => undefined}
+            preview={prompt}
+          />
+        </div>
+      )}
+      {pages.length > 1 ? (
+        <span className="pointer-events-none absolute top-3 right-5 rounded-full bg-surface/90 px-2.5 py-1 text-[11.5px] font-medium text-fg-muted shadow-raised">
+          {t.prompt.pdfPage(info?.number ?? 1, pages.length)}
+        </span>
+      ) : null}
+      {info ? (
+        <span
+          className="pointer-events-none absolute right-3 bottom-3 flex size-8 items-center justify-center rounded-lg bg-surface/95 text-fg opacity-0 shadow-raised transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+          aria-hidden
+        >
+          <Maximize2 size={15} />
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
+/** Scrolls the full-screen view to a page. */
+function scrollToPage(scroller: HTMLElement | null, page: number, smooth = true): void {
+  const el = scroller?.querySelector<HTMLElement>(`[data-page="${page}"]`);
+  if (!el || !scroller) return;
+  scroller.scrollTo({ top: el.offsetTop - 24, behavior: smooth ? 'smooth' : 'auto' });
+}
+
+/**
+ * The document in full screen: the pages on the left to jump between them, and the pages
+ * themselves, where the user clicks to place the signature, drags it or resizes it (`choose`).
+ */
+function PdfFullScreen({
+  open,
+  onClose,
+  pages,
+  box,
+  editable,
+  onChange,
+  prompt,
+}: {
+  open: boolean;
+  onClose(): void;
+  pages: PageInfo[];
+  box: SignatureBox | null;
+  editable: boolean;
+  onChange(box: SignatureBox | null): void;
+  prompt: PdfSignaturePrompt;
+}) {
+  const t = useT(chatDict);
+  const scroller = useRef<HTMLDivElement>(null);
+  const [current, setCurrent] = useState(box?.page ?? 1);
+  const [width, setWidth] = useState(0);
+
+  // The scroller exists only while the dialog is open: measure it then.
+  const measure = (el: HTMLDivElement | null) => {
+    scroller.current = el;
+    if (el) setWidth(el.clientWidth);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const onResize = () => setWidth(scroller.current?.clientWidth ?? 0);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [open]);
+
+  // Open on the signature's page (once per opening, when the pages have a width).
+  const startPage = box?.page ?? 1;
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      opened.current = false;
+      return;
+    }
+    if (opened.current || width === 0) return;
+    opened.current = true;
+    setCurrent(startPage);
+    requestAnimationFrame(() => scrollToPage(scroller.current, startPage, false));
+  }, [open, width, startPage]);
 
   const onScroll = () => {
     const el = scroller.current;
@@ -286,47 +412,117 @@ function PdfPages({
     }
   };
 
-  const pageWidth = Math.max(0, width - 24);
+  const pageWidth = Math.min(Math.max(0, width - 64), 880);
   return (
-    <div className="relative overflow-hidden rounded-xl border border-line bg-surface-2">
-      <div
-        ref={scroller}
-        onScroll={onScroll}
-        className="overflow-y-auto px-3 py-3"
-        style={{ height }}
-        data-testid="pdf-pages"
-      >
-        {failed ? (
-          <p className="flex h-full items-center justify-center text-[13px] text-fg-muted">
-            {t.prompt.pdfFailed}
-          </p>
-        ) : pages.length === 0 || pageWidth === 0 ? (
-          <p className="flex h-full items-center justify-center text-[13px] text-fg-muted">
-            {t.prompt.pdfLoading}
-          </p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {pages.map((p) => (
-              <PdfPage
-                key={p.number}
-                info={p}
-                width={pageWidth}
-                box={box?.page === p.number ? box.rect : null}
-                editable={editable}
-                onPlace={(rect) => onChange({ page: p.number, rect })}
-                currentBox={box}
-                preview={preview}
-              />
-            ))}
+    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay backdrop-blur-[2px] data-[state=open]:animate-fade-in" />
+        <Dialog.Content
+          className="fixed inset-4 z-50 flex flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-pop focus:outline-none data-[state=open]:animate-pop-in"
+          data-testid="pdf-fullscreen"
+        >
+          <header className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
+            <Dialog.Title className="min-w-0 flex-1 truncate text-[14px] font-semibold text-fg">
+              {prompt.documentName}
+            </Dialog.Title>
+            <Dialog.Description className="sr-only">{prompt.title}</Dialog.Description>
+            {pages.length > 1 ? (
+              <span className="shrink-0 text-[12.5px] text-fg-muted">
+                {t.prompt.pdfPage(current, pages.length)}
+              </span>
+            ) : null}
+            {editable && prompt.optional ? (
+              <Button
+                variant="secondary"
+                onClick={() => onChange(box ? null : (prompt.initial ?? null))}
+              >
+                {box ? t.prompt.pdfNoVisible : t.prompt.pdfAddVisible}
+              </Button>
+            ) : null}
+            <Dialog.Close asChild>
+              <Button variant="primary" icon={Check} data-testid="pdf-fullscreen-done">
+                {t.prompt.pdfDone}
+              </Button>
+            </Dialog.Close>
+          </header>
+          <div className="flex min-h-0 flex-1">
+            {pages.length > 1 ? (
+              <nav
+                aria-label={t.prompt.pdfPages}
+                className="w-[168px] shrink-0 overflow-y-auto border-r border-line bg-surface-2 px-4 py-4"
+              >
+                <ol className="flex flex-col gap-4">
+                  {pages.map((p) => (
+                    <li key={p.number}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrent(p.number);
+                          scrollToPage(scroller.current, p.number);
+                        }}
+                        aria-current={current === p.number ? 'page' : undefined}
+                        className="group flex w-full flex-col items-center gap-1.5"
+                        data-testid="pdf-thumb"
+                      >
+                        <span
+                          className={cn(
+                            'pointer-events-none block rounded-sm ring-offset-2 ring-offset-surface-2',
+                            current === p.number
+                              ? 'ring-2 ring-accent'
+                              : 'group-hover:ring-1 group-hover:ring-line-strong',
+                          )}
+                        >
+                          <PdfPage
+                            info={p}
+                            width={120}
+                            box={box?.page === p.number ? box.rect : null}
+                            currentBox={box}
+                            editable={false}
+                            onPlace={() => undefined}
+                            preview={prompt}
+                          />
+                        </span>
+                        <span
+                          className={cn(
+                            'text-[12px] font-medium',
+                            current === p.number ? 'text-fg' : 'text-fg-muted',
+                          )}
+                        >
+                          {p.number}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            ) : null}
+            <div
+              ref={measure}
+              onScroll={onScroll}
+              className="min-w-0 flex-1 overflow-y-auto bg-surface-2 px-8 py-6"
+              data-testid="pdf-pages"
+            >
+              {pageWidth > 0 ? (
+                <div className="flex flex-col items-center gap-6">
+                  {pages.map((p) => (
+                    <PdfPage
+                      key={p.number}
+                      info={p}
+                      width={pageWidth}
+                      box={box?.page === p.number ? box.rect : null}
+                      editable={editable}
+                      onPlace={(rect) => onChange({ page: p.number, rect })}
+                      currentBox={box}
+                      preview={prompt}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
-        )}
-      </div>
-      {pages.length > 1 ? (
-        <span className="pointer-events-none absolute top-3 right-5 rounded-full bg-surface/90 px-2.5 py-1 text-[11.5px] font-medium text-fg-muted shadow-raised">
-          {t.prompt.pdfPage(current, pages.length)}
-        </span>
-      ) : null}
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
