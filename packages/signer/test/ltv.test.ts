@@ -161,6 +161,7 @@ describe('PAdES-B-LT', () => {
     // Mis documentos reads the TSA's time.
     const [listed] = await pdfSignatures(pdf);
     expect(listed.signedAt).toBe(info.genTime.toISOString());
+    expect(listed.timestamped).toBe(true);
   });
 
   it('tries the next TSA when one fails', async () => {

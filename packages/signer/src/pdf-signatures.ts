@@ -93,13 +93,12 @@ function readSignature(value: PDFDict): DocumentSignature | undefined {
     nameAttribute(subject, OID_ORGANIZATION);
   if (!name) return undefined;
 
-  const signedAt =
-    timestampTime(signerInfo) ??
-    pdfDateValue(value.get(PDFName.of('M'))) ??
-    signingTime(signerInfo);
+  const timestamp = timestampTime(signerInfo);
+  const signedAt = timestamp ?? pdfDateValue(value.get(PDFName.of('M'))) ?? signingTime(signerInfo);
   return {
     name: displayName(name),
     ...(signedAt ? { signedAt: signedAt.toISOString() } : {}),
+    timestamped: timestamp !== undefined,
     issuer: nameAttribute(issuer, OID_COMMON_NAME) ?? nameAttribute(issuer, OID_ORGANIZATION) ?? '',
     dnie: isDnie(issuer),
   };

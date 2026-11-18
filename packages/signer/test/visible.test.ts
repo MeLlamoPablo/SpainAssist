@@ -446,12 +446,14 @@ describe('reading the signatures of a PDF', () => {
       {
         name: 'Juan Español Español',
         signedAt: new Date(2026, 10, 18, 12, 30).toISOString(),
+        timestamped: false,
         issuer: 'AC FNMT Usuarios PRUEBAS',
         dnie: false,
       },
       {
         name: 'Juan Español Español',
         signedAt: '2026-11-19T09:15:00.000Z',
+        timestamped: false,
         issuer: 'AC DNIE 004',
         dnie: true,
       },

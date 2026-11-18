@@ -1,5 +1,6 @@
 import type { DocumentMeta, DocumentSignature, VaultOverview } from '@sa/shared';
 import {
+  BadgeCheck,
   Download,
   FileText,
   FolderOpen,
@@ -14,6 +15,7 @@ import { useState } from 'react';
 import { Button, IconButton } from '../../components/ui/button';
 import { ConfirmDialog } from '../../components/ui/dialog';
 import { Card, EmptyState } from '../../components/ui/misc';
+import { Tooltip } from '../../components/ui/tooltip';
 import { useLang, useT } from '../../i18n';
 import { common } from '../../i18n/common';
 import { api, errorMessage } from '../../lib/api';
@@ -230,6 +232,18 @@ function SignedMark({ doc }: { doc: DocumentMeta }) {
                           <span className="whitespace-nowrap tabular-nums">
                             {' · '}
                             {formatDateTime(s.signedAt, lang)}
+                            {s.timestamped ? (
+                              <Tooltip content={t.documents.timestamped} side="top">
+                                <span
+                                  className="ml-1 inline-flex translate-y-[2px] text-st-done-fg"
+                                  role="img"
+                                  aria-label={t.documents.timestamped}
+                                  data-testid="signature-timestamped"
+                                >
+                                  <BadgeCheck size={13} aria-hidden />
+                                </span>
+                              </Tooltip>
+                            ) : null}
                           </span>
                         ) : null}
                       </p>

@@ -111,7 +111,12 @@ it('shows the PDF to place the signature, then replaces the document with the si
   // Mis documentos lists who signed it, read from the file.
   const [signature, ...others] = await app.invoke('vault.documentSignatures', doc.id);
   expect(others).toEqual([]);
-  expect(signature).toMatchObject({ dnie: false, issuer: expect.any(String) });
+  // Tests make no network calls, so no timestamp.
+  expect(signature).toMatchObject({
+    dnie: false,
+    issuer: expect.any(String),
+    timestamped: false,
+  });
   // The demo certificate's holder (the fake vault's summary has a made-up one).
   expect(signature.name).toBe('Carmen Española Española');
   expect(Math.abs(Date.parse(signature.signedAt!) - Date.parse(meta!.signedAt!))).toBeLessThan(

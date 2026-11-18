@@ -479,6 +479,8 @@ export const DocumentSignature = z.object({
    * else the signer's own clock.
    */
   signedAt: z.string().optional(),
+  /** A timestamp authority vouches for `signedAt` (PAdES-B-T or more). */
+  timestamped: z.boolean(),
   /** Who issued the certificate (its CN, e.g. "AC FNMT Usuarios"). */
   issuer: z.string(),
   /** Signed with a DNIe. */

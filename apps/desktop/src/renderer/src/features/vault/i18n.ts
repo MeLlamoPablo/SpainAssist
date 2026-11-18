@@ -92,6 +92,7 @@ export const vaultDict = defineDict({
       certificateDnie: 'DNI electrónico',
       certificateFnmt: 'Certificado de la FNMT',
       certificateOther: (issuer: string) => `Certificado de ${issuer}`,
+      timestamped: 'Hora certificada por una autoridad de sellado de tiempo',
     },
     credentials: {
       lead: 'Delega en el asistente el acceso a las webs oficiales.',
@@ -292,6 +293,7 @@ export const vaultDict = defineDict({
       certificateDnie: 'Electronic DNI',
       certificateFnmt: 'FNMT certificate',
       certificateOther: (issuer: string) => `Certificate from ${issuer}`,
+      timestamped: 'Time certified by a timestamp authority',
     },
     credentials: {
       lead: 'Let the assistant sign in to official websites for you.',

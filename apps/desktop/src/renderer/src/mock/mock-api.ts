@@ -1409,6 +1409,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       const mine = {
         name: 'Lucía Martín Ortega',
         signedAt: doc.signedAt,
+        timestamped: true,
         issuer: 'AC FNMT Usuarios',
         dnie: false,
       };
@@ -1419,6 +1420,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         {
           name: 'Javier Ruiz Herrera',
           signedAt: landlord.toISOString(),
+          timestamped: false,
           issuer: 'AC DNIE 004',
           dnie: true,
         },
