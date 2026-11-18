@@ -95,6 +95,11 @@ function pkiCert(der: Buffer): pkijs.Certificate {
 export interface TrustWorldOptions {
   /** Signer's leaf key type (default RSA, as most Spanish certificates). */
   signerKey?: 'rsa' | 'ec';
+  /**
+   * The TSA sends a cross-signed copy of the root (same name and key, issued by an older root)
+   * instead of the root itself, as DigiCert's does.
+   */
+  crossSignedRoot?: boolean;
 }
 
 export interface TrustWorld {
@@ -105,6 +110,9 @@ export interface TrustWorld {
   responder: Party;
   signer: Party;
   tsaUrl: string;
+  /** The older root and the cross-signed copy of `root` (with `crossSignedRoot`). */
+  oldRoot?: Party;
+  crossRoot?: Buffer;
   fetch: typeof fetch;
   /** Every URL requested, in order. */
   calls: string[];
@@ -136,6 +144,39 @@ export function createTrustWorld(o: TrustWorldOptions = {}): TrustWorld {
       ca: true,
     }),
   };
+  let oldRoot: Party | undefined;
+  let crossRoot: Buffer | undefined;
+  if (o.crossSignedRoot) {
+    const oldKeys = ecKeys();
+    oldRoot = {
+      name: 'oldRoot',
+      key: oldKeys.privateKey,
+      der: issueCertificate({
+        subject: [
+          ['2.5.4.6', 'ES'],
+          ['2.5.4.10', 'Pruebas de confianza'],
+          ['2.5.4.3', 'Raíz antigua de pruebas'],
+        ],
+        publicKey: oldKeys.publicKey,
+        signingKey: oldKeys.privateKey,
+        ca: true,
+      }),
+    };
+    crossRoot = issueCertificate({
+      subject: [
+        ['2.5.4.6', 'ES'],
+        ['2.5.4.10', 'Pruebas de confianza'],
+        ['2.5.4.3', 'Raíz de pruebas'],
+      ],
+      publicKey: rootKeys.publicKey,
+      issuer: { certDer: oldRoot.der, key: oldRoot.key },
+      ca: true,
+      extensions: [
+        aia(undefined, 'http://ca.test/oldRoot.cer'),
+        crlPoint('http://crl.test/oldRoot.crl'),
+      ],
+    });
+  }
   const subCa = (name: string, cn: string): Party => {
     const keys = ecKeys();
     return {
@@ -225,7 +266,7 @@ export function createTrustWorld(o: TrustWorldOptions = {}): TrustWorld {
     }),
   };
 
-  const cas: Record<string, Party> = { root, signerCa, tsaCa };
+  const cas: Record<string, Party> = { root, signerCa, tsaCa, ...(oldRoot ? { oldRoot } : {}) };
   const world: TrustWorld = {
     root,
     signerCa,
@@ -234,6 +275,8 @@ export function createTrustWorld(o: TrustWorldOptions = {}): TrustWorld {
     responder,
     signer,
     tsaUrl: 'http://tsa.test/tsr',
+    ...(oldRoot ? { oldRoot } : {}),
+    ...(crossRoot ? { crossRoot } : {}),
     calls: [],
     revoked: new Set(),
     down: new Set(),
@@ -378,7 +421,15 @@ async function timestampAnswer(world: TrustWorld, body: Buffer): Promise<ArrayBu
         }),
       }),
     ],
-    ...(request.certReq ? { certificates: [tsaCert, pkiCert(world.tsaCa.der)] } : {}),
+    ...(request.certReq
+      ? {
+          certificates: [
+            tsaCert,
+            pkiCert(world.tsaCa.der),
+            ...(world.crossRoot ? [pkiCert(world.crossRoot)] : []),
+          ],
+        }
+      : {}),
   });
   await signedData.sign(await webKey(world.tsa.key), 0, 'SHA-256');
   // pkijs writes eContent as a constructed OCTET STRING; TSAs (and validators) use the

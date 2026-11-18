@@ -292,6 +292,20 @@ describe('PAdES-B-LT', () => {
     expect(await pdfSignatures(pdf)).toHaveLength(1);
   });
 
+  it("ends the TSA's chain at the self-signed root, not a cross-signed copy", async () => {
+    const crossed = createTrustWorld({ crossSignedRoot: true });
+    const pdf = await signWith(crossed, await onePage());
+    const { pdf: out, level } = await upgradePades(pdf, {
+      fetch: crossed.fetch,
+      tsas: [{ url: crossed.tsaUrl }],
+    });
+    expect(level).toBe('B-LT');
+    const certs = (await dss(out))?.certs ?? [];
+    expect(certs.some((c) => c.equals(crossed.root.der))).toBe(true);
+    expect(certs.some((c) => c.equals(crossed.crossRoot as Buffer))).toBe(false);
+    expect(subjectsOf(certs)).not.toContain('CN=Raíz antigua de pruebas');
+  });
+
   it('keeps the validation data of earlier signatures', async () => {
     const first = (
       await upgradePades(signed, { fetch: world.fetch, tsas: [{ url: world.tsaUrl }] })

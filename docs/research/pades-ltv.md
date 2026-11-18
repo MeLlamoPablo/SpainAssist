@@ -109,6 +109,13 @@ extensions and TLS client certificates aren't supported: those requests fall bac
   data for each whole chain.
 - `test/long-term.test.ts`: the AutoFirma handler (site TSA first, `tsType=3`, nothing fetched
   without the option, revoked certificate fails) and `signPdf`.
+- **Live, once, by hand** (not a test: tests never reach real services): a test signer with the
+  fake PKI's revocation, timestamped by the real DigiCert TSA, reached B-LT in 2.2–2.7 s with
+  DigiCert's real OCSP and CRL data. pyHanko validated DigiCert's whole TSA chain from the stored
+  data alone, anchored at the self-signed Trusted Root G4. That run found a real-world detail:
+  DigiCert's token carries only a cross-signed copy of G4, so the chain builder now prefers the
+  self-signed root from the certificate's CA-issuers URL (regression test with a cross-signed
+  root in the fake PKI).
 - **pyHanko 0.38** on exported samples (classic and stream xref; B-LT and B-LTA):
   - the signature and both timestamps are "cryptographically sound"; every later revision is
     "signature maintenance compatible with the document modification policy";

@@ -346,23 +346,27 @@ export async function collectValidationData(
   };
 
   const issuerOf = async (c: Cert): Promise<Cert | undefined> => {
-    // Prefer a self-signed root over a cross-signed copy of it (DigiCert's TSA sends both):
-    // the path then ends at the anchor validators trust.
-    const candidates = [...known.values()].filter((k) => k !== c && issuedBy(c.x, k.x));
-    const local = candidates.find(isRoot) ?? candidates[0];
-    if (local) return local;
+    // A self-signed root wins over a cross-signed copy of it: the path then ends at the anchor
+    // validators trust (DigiCert's TSA sends only the cross-signed G4; its CA-issuers URL has
+    // the self-signed one).
+    const local = [...known.values()].filter((k) => k !== c && issuedBy(c.x, k.x));
+    const root = local.find(isRoot);
+    if (root) return root;
+    let downloaded: Cert | undefined;
     for (const url of accessUrls(c, OID_AD_CA_ISSUERS)) {
       try {
         const data = await cached(url, () => download(url, o, MAX_CERTIFICATE_BYTES));
         for (const der of certificatesOf(data)) {
           const found = add(der);
-          if (found && issuedBy(c.x, found.x)) return found;
+          if (!found || !issuedBy(c.x, found.x)) continue;
+          if (isRoot(found)) return found;
+          downloaded ??= found;
         }
       } catch (e) {
         o.logger?.warn?.('CA certificate download failed', { url, error: String(e) });
       }
     }
-    return undefined;
+    return local[0] ?? downloaded;
   };
 
   // Pairs (certificate, issuer) needing an answer.
