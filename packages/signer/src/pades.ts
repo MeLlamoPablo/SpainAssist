@@ -18,7 +18,6 @@
  *
  * Not supported (documented gaps): encrypted PDFs, certification (DocMDP), timestamps / LTV.
  */
-import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import {
   PDFArray,
@@ -39,6 +38,7 @@ import { AfirmaError } from './errors';
 import { type ExtraParams, isTrue } from './extra-params';
 import type { KeySigner } from './key';
 import { isPdf } from './mime';
+import { PdfUpdate } from './pdf-update';
 import type { SignaturePolicy } from './policy';
 
 export interface PadesSignOptions {
@@ -76,6 +76,8 @@ export interface PadesVisibleSignature {
 }
 
 const DEFAULT_RESERVED_BYTES = 27000;
+/** A timestamp token with its TSA's chain: a few KB, rarely more than 10. */
+const DOCUMENT_TIMESTAMP_RESERVED_BYTES = 20000;
 const SUBFILTERS = new Set(['ETSI.CAdES.detached', 'adbe.pkcs7.detached']);
 
 /** PDF date: D:YYYYMMDDHHmmSS+HH'mm' (local time). */
@@ -100,26 +102,6 @@ function pdfNumber(n: number): string {
 function pdfText(text: string): PDFObject {
   if (/^[\x20-\x7e]*$/.test(text) && !/[()\\]/.test(text)) return PDFString.of(text);
   return PDFHexString.fromText(text);
-}
-
-function findStartXref(pdf: Buffer): number {
-  const tail = pdf.subarray(Math.max(0, pdf.length - 4096)).toString('latin1');
-  const all = [...tail.matchAll(/startxref\s+(\d+)/g)];
-  const last = all[all.length - 1];
-  if (!last) throw AfirmaError.notPdf();
-  return Number(last[1]);
-}
-
-function previousSize(pdf: Buffer, startXref: number): number {
-  const chunk = pdf
-    .subarray(startXref, Math.min(pdf.length, startXref + 64 * 1024))
-    .toString('latin1');
-  if (chunk.startsWith('xref')) {
-    const m = /trailer[\s\S]*?\/Size\s+(\d+)/.exec(chunk);
-    return m ? Number(m[1]) : 0;
-  }
-  const m = /\/Size\s+(\d+)/.exec(chunk.slice(0, 4096));
-  return m ? Number(m[1]) : 0;
 }
 
 function lookupDict(doc: PDFDocument, obj: PDFObject | undefined): PDFDict | undefined {
@@ -300,9 +282,19 @@ export async function pdfLayout(pdf: Uint8Array): Promise<PdfLayout> {
   return { pages, signatureFields };
 }
 
-interface PendingObject {
-  ref: PDFRef;
-  body: Buffer;
+/** What an appended signature dictionary is: a signature (CMS) or a document timestamp. */
+interface SignatureDictionary {
+  type: 'Sig' | 'DocTimeStamp';
+  subFilter: string;
+  /** Extra entries (/M, /Name, /Reason…), already serialized. */
+  extra: string[];
+  /** Bytes reserved for /Contents. */
+  reserved: number;
+  /** The /Contents value for the bytes the ByteRange covers. */
+  contents(
+    signedBytes: Buffer,
+    update: { original: Buffer; out: Buffer; byteRange: [number, number, number, number] },
+  ): Promise<Buffer>;
 }
 
 export async function createPades(opts: PadesSignOptions): Promise<Buffer> {
@@ -319,48 +311,95 @@ export async function createPades(opts: PadesSignOptions): Promise<Buffer> {
     throw AfirmaError.invalidParameter('signReservedSize debe estar entre 1024 y 1048576 bytes');
   }
 
-  let doc: PDFDocument;
-  try {
-    doc = await PDFDocument.load(opts.pdf, {
-      ignoreEncryption: true,
-      updateMetadata: false,
-      throwOnInvalidObject: false,
-    });
-  } catch {
-    throw AfirmaError.notPdf();
+  const leaf = parseCertificate(opts.chain[0]);
+  const signerName = nameAttribute(leaf.tbsCertificate.subject, OID_COMMON_NAME);
+  const time = opts.signingTime ?? new Date();
+  const extra: string[] = [];
+  extra.push(`/M ${PDFString.of(pdfDate(time)).toString()}`);
+  if (signerName) extra.push(`/Name ${pdfText(signerName).toString()}`);
+  if (params.signReason && !opts.policy)
+    extra.push(`/Reason ${pdfText(params.signReason).toString()}`);
+  if (params.signatureProductionCity) {
+    extra.push(`/Location ${pdfText(params.signatureProductionCity).toString()}`);
   }
-  if (doc.isEncrypted || doc.context.trailerInfo.Encrypt) {
+  if (params.signerContact) extra.push(`/ContactInfo ${pdfText(params.signerContact).toString()}`);
+
+  return appendSignature(opts.pdf, params, opts.visible, String(time.getTime()), {
+    type: 'Sig',
+    subFilter,
+    extra,
+    reserved,
+    contents: (signedBytes, update) =>
+      createCades({
+        data: signedBytes,
+        implicit: false,
+        algorithm: opts.algorithm,
+        signer: opts.signer,
+        chain: opts.chain,
+        // The signed PDF is the original plus this incremental update (placeholder still zeros).
+        ...(opts.document !== undefined
+          ? {
+              binding: {
+                kind: 'pades' as const,
+                document: opts.document,
+                update: Buffer.from(update.out.subarray(update.original.length)),
+                byteRange: update.byteRange,
+              },
+            }
+          : {}),
+        includeOnlySigningCertificate: isTrue(params.includeOnlySignningCertificate),
+        attributes: {
+          policy: opts.policy,
+          signingTime: null,
+          contentHints: null,
+          claimedRoles: params.signerClaimedRoles?.split('|').filter(Boolean),
+          includeCertificatePolicies: !isTrue(params.doNotIncludePolicyOnSigningCertificate),
+        },
+      }),
+  });
+}
+
+/**
+ * A document timestamp (PAdES /DocTimeStamp, SubFilter ETSI.RFC3161): an invisible field whose
+ * /Contents is a timestamp token over the whole file so far. `timestamp` gets the bytes the
+ * ByteRange covers and returns the token.
+ */
+export async function addDocumentTimestamp(
+  pdf: Buffer,
+  timestamp: (signedBytes: Buffer) => Promise<Buffer>,
+  reserved = DOCUMENT_TIMESTAMP_RESERVED_BYTES,
+): Promise<Buffer> {
+  return appendSignature(pdf, {}, undefined, `doc-ts-${Date.now()}`, {
+    type: 'DocTimeStamp',
+    subFilter: 'ETSI.RFC3161',
+    extra: [],
+    reserved,
+    contents: (signedBytes) => timestamp(signedBytes),
+  });
+}
+
+async function appendSignature(
+  pdf: Buffer,
+  params: ExtraParams,
+  visible: PadesVisibleSignature | undefined,
+  idSeed: string,
+  dict: SignatureDictionary,
+): Promise<Buffer> {
+  const update = await PdfUpdate.open(pdf);
+  const { doc, ctx, rootRef, catalog } = update;
+  if (doc.isEncrypted || ctx.trailerInfo.Encrypt) {
     throw AfirmaError.unsupportedOperation('firma de PDF cifrados (ownerPassword/userPassword)');
   }
-  const ctx = doc.context;
-  const rootRef = ctx.trailerInfo.Root;
-  if (!(rootRef instanceof PDFRef)) throw AfirmaError.notPdf();
-  const catalog = ctx.lookup(rootRef, PDFDict);
   checkCertification(doc, catalog, params);
   const pages = doc.getPages();
   if (pages.length === 0) throw AfirmaError.notPdf();
 
-  const original = opts.pdf;
-  const prevXref = findStartXref(original);
-  const prevIsStream = original.subarray(prevXref, prevXref + 4).toString('latin1') !== 'xref';
-  let nextNumber = Math.max(ctx.largestObjectNumber + 1, previousSize(original, prevXref));
-  const newRef = () => PDFRef.of(nextNumber++, 0);
-  const pending: PendingObject[] = [];
-  const write = (ref: PDFRef, obj: PDFObject | string) =>
-    pending.push({ ref, body: Buffer.from(obj.toString(), 'latin1') });
-  const writeStream = (ref: PDFRef, dict: string, data: Buffer) =>
-    pending.push({
-      ref,
-      body: Buffer.concat([
-        Buffer.from(`<< ${dict} /Length ${data.length} >>\nstream\n`, 'latin1'),
-        data,
-        Buffer.from('\nendstream', 'latin1'),
-      ]),
-    });
+  const original = pdf;
+  const newRef = () => update.newRef();
+  const write = (ref: PDFRef, obj: PDFObject | string) => update.write(ref, obj);
+  const writeStream = (ref: PDFRef, d: string, data: Buffer) => update.writeStream(ref, d, data);
   let pendingFieldName: string | undefined;
-
   const sigRef = newRef();
-  const visible = opts.visible;
   const existing = visible?.field ? findSignatureField(doc, catalog, visible.field) : undefined;
   if (visible?.field && !existing) {
     throw AfirmaError.invalidParameter(`No existe el campo de firma vacío ${visible.field}`);
@@ -549,94 +588,17 @@ export async function createPades(opts: PadesSignOptions): Promise<Buffer> {
   }
 
   // Signature dictionary with placeholders
-  const leaf = parseCertificate(opts.chain[0]);
-  const signerName = nameAttribute(leaf.tbsCertificate.subject, OID_COMMON_NAME);
-  const time = opts.signingTime ?? new Date();
+  const { reserved } = dict;
   const contentsPlaceholder = `<${'0'.repeat(reserved * 2)}>`;
   const byteRangePlaceholder = `[0 ${'0'.repeat(10)} ${'0'.repeat(10)} ${'0'.repeat(10)}]`;
-  const extra: string[] = [];
-  extra.push(`/M ${PDFString.of(pdfDate(time)).toString()}`);
-  if (signerName) extra.push(`/Name ${pdfText(signerName).toString()}`);
-  if (params.signReason && !opts.policy)
-    extra.push(`/Reason ${pdfText(params.signReason).toString()}`);
-  if (params.signatureProductionCity) {
-    extra.push(`/Location ${pdfText(params.signatureProductionCity).toString()}`);
-  }
-  if (params.signerContact) extra.push(`/ContactInfo ${pdfText(params.signerContact).toString()}`);
   const sigBody =
-    `<<\n/Type /Sig\n/Filter /Adobe.PPKLite\n/SubFilter /${subFilter}\n` +
-    `/ByteRange ${byteRangePlaceholder}\n/Contents ${contentsPlaceholder}\n${extra.join('\n')}\n>>`;
+    `<<\n/Type /${dict.type}\n/Filter /Adobe.PPKLite\n/SubFilter /${dict.subFilter}\n` +
+    `/ByteRange ${byteRangePlaceholder}\n/Contents ${contentsPlaceholder}\n${dict.extra.join('\n')}\n>>`;
   write(sigRef, sigBody);
 
-  // Assemble the incremental update
-  const parts: Buffer[] = [original];
-  let offset = original.length;
-  const lastByte = original[original.length - 1];
-  if (lastByte !== 0x0a && lastByte !== 0x0d) {
-    parts.push(Buffer.from('\n'));
-    offset += 1;
-  }
-  const offsets = new Map<number, { offset: number; gen: number }>();
-  let sigObjectOffset = -1;
-  for (const obj of pending) {
-    const head = Buffer.from(`${obj.ref.objectNumber} ${obj.ref.generationNumber} obj\n`, 'latin1');
-    const tail = Buffer.from('\nendobj\n', 'latin1');
-    offsets.set(obj.ref.objectNumber, { offset, gen: obj.ref.generationNumber });
-    if (obj.ref === sigRef) sigObjectOffset = offset + head.length;
-    parts.push(head, obj.body, tail);
-    offset += head.length + obj.body.length + tail.length;
-  }
-
-  const id0 = (() => {
-    const id = ctx.trailerInfo.ID;
-    const arr = id instanceof PDFArray ? id : undefined;
-    const first = arr?.get(0);
-    return first ? first.toString() : `<${crypto.randomBytes(16).toString('hex')}>`;
-  })();
-  const id1 = `<${crypto.createHash('md5').update(original).update(String(time.getTime())).digest('hex')}>`;
-  const info = ctx.trailerInfo.Info ? `/Info ${ctx.trailerInfo.Info.toString()}\n` : '';
-  const xrefStart = offset;
-  if (prevIsStream) {
-    const xrefRef = newRef();
-    offsets.set(xrefRef.objectNumber, { offset: xrefStart, gen: 0 });
-    const numbers = [...offsets.keys()].sort((a, b) => a - b);
-    const rows = numbers.map((num) => {
-      const e = offsets.get(num) as { offset: number; gen: number };
-      const row = Buffer.alloc(7);
-      row[0] = 1;
-      row.writeUInt32BE(e.offset, 1);
-      row.writeUInt16BE(e.gen, 5);
-      return row;
-    });
-    const data = Buffer.concat(rows);
-    const index = numbers.map((num) => `${num} 1`).join(' ');
-    const dict =
-      `<<\n/Type /XRef\n/Size ${nextNumber}\n/W [1 4 2]\n/Index [${index}]\n/Root ${rootRef.toString()}\n` +
-      `${info}/ID [${id0} ${id1}]\n/Prev ${prevXref}\n/Length ${data.length}\n>>`;
-    parts.push(
-      Buffer.from(`${xrefRef.objectNumber} 0 obj\n${dict}\nstream\n`, 'latin1'),
-      data,
-      Buffer.from(`\nendstream\nendobj\nstartxref\n${xrefStart}\n%%EOF\n`, 'latin1'),
-    );
-  } else {
-    const numbers = [...offsets.keys()].sort((a, b) => a - b);
-    let table = 'xref\n';
-    for (let i = 0; i < numbers.length; ) {
-      let j = i;
-      while (j + 1 < numbers.length && numbers[j + 1] === numbers[j] + 1) j++;
-      table += `${numbers[i]} ${j - i + 1}\n`;
-      for (let k = i; k <= j; k++) {
-        const e = offsets.get(numbers[k]) as { offset: number; gen: number };
-        table += `${String(e.offset).padStart(10, '0')} ${String(e.gen).padStart(5, '0')} n\r\n`;
-      }
-      i = j + 1;
-    }
-    table +=
-      `trailer\n<<\n/Size ${nextNumber}\n/Root ${rootRef.toString()}\n${info}` +
-      `/ID [${id0} ${id1}]\n/Prev ${prevXref}\n>>\nstartxref\n${xrefStart}\n%%EOF\n`;
-    parts.push(Buffer.from(table, 'latin1'));
-  }
-  const out = Buffer.concat(parts);
+  const finished = update.finish(idSeed);
+  const out = finished.pdf;
+  const sigObjectOffset = finished.bodyOffset(sigRef);
 
   // ByteRange and signature
   const sigText = out.subarray(sigObjectOffset, sigObjectOffset + 256).toString('latin1');
@@ -645,39 +607,19 @@ export async function createPades(opts: PadesSignOptions): Promise<Buffer> {
   if (brRel < 0 || contentsRel < 0) throw AfirmaError.internal('Error preparando la firma PDF');
   const contentsStart = sigObjectOffset + contentsRel + '/Contents '.length;
   const contentsEnd = contentsStart + contentsPlaceholder.length;
-  const byteRange = [0, contentsStart, contentsEnd, out.length - contentsEnd];
+  const byteRange: [number, number, number, number] = [
+    0,
+    contentsStart,
+    contentsEnd,
+    out.length - contentsEnd,
+  ];
   const brText = `[${byteRange.join(' ')}`;
   const brSlot = sigObjectOffset + brRel + '/ByteRange '.length;
   out.write(brText.padEnd(byteRangePlaceholder.length - 1, ' '), brSlot, 'latin1');
 
   const signedBytes = Buffer.concat([out.subarray(0, contentsStart), out.subarray(contentsEnd)]);
-  const cms = await createCades({
-    data: signedBytes,
-    implicit: false,
-    algorithm: opts.algorithm,
-    signer: opts.signer,
-    chain: opts.chain,
-    // The signed PDF is the original plus this incremental update (placeholder still zeros).
-    ...(opts.document !== undefined
-      ? {
-          binding: {
-            kind: 'pades' as const,
-            document: opts.document,
-            update: Buffer.from(out.subarray(original.length)),
-            byteRange: byteRange as [number, number, number, number],
-          },
-        }
-      : {}),
-    includeOnlySigningCertificate: isTrue(params.includeOnlySignningCertificate),
-    attributes: {
-      policy: opts.policy,
-      signingTime: null,
-      contentHints: null,
-      claimedRoles: params.signerClaimedRoles?.split('|').filter(Boolean),
-      includeCertificatePolicies: !isTrue(params.doNotIncludePolicyOnSigningCertificate),
-    },
-  });
-  const hex = cms.toString('hex');
+  const contents = await dict.contents(signedBytes, { original, out, byteRange });
+  const hex = contents.toString('hex');
   if (hex.length > reserved * 2) {
     throw AfirmaError.invalidParameter(
       'La firma no cabe en el espacio reservado (signReservedSize)',
