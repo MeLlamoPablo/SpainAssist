@@ -279,7 +279,7 @@ export class PlaywrightBrowserService implements BrowserService {
   snapshot(procedureId: string): Promise<BrowserObservation> {
     return this.act(procedureId, { action: 'snapshot', args: {} }, async (s) => {
       await this.pageFor(s);
-      return this.observe(s, { initialWait: 0 });
+      return this.observe(s, { initialWait: 0, condense: !!this.opts.condenseSnapshot });
     });
   }
 
@@ -1711,7 +1711,7 @@ export class PlaywrightBrowserService implements BrowserService {
 
   private async observe(
     s: Session,
-    opts: { initialWait?: number } = {},
+    opts: { initialWait?: number; condense?: boolean } = {},
   ): Promise<BrowserObservation> {
     const first = this.livePage(s);
     if (!first)
@@ -1732,7 +1732,7 @@ export class PlaywrightBrowserService implements BrowserService {
       json = [];
       snapshotError = undefined;
       try {
-        json = await this.captureSnapshot(page);
+        json = await this.captureSnapshot(page, opts.condense);
       } catch (err) {
         snapshotError = cleanPlaywrightMessage(errorMessage(err));
       }
@@ -1750,6 +1750,13 @@ export class PlaywrightBrowserService implements BrowserService {
       secrets: s.secretVariants,
       passwordValues: [...before.values, ...after.values],
     });
+    if (opts.condense && this.opts.condenseSnapshot && rendered.text) {
+      const slim = await this.opts.condenseSnapshot(rendered.text, json, () =>
+        this.takeScreenshot(page, { quality: 70 }, 5_000),
+      );
+      rendered.truncated ||= slim !== rendered.text;
+      rendered.text = slim;
+    }
     s.lastRefs = rendered.refs;
     const url = page.url();
     if (isHttpUrl(url)) s.lastUrl = url;
@@ -1859,11 +1866,11 @@ export class PlaywrightBrowserService implements BrowserService {
     }
   }
 
-  private async captureSnapshot(page: Page): Promise<unknown> {
+  private async captureSnapshot(page: Page, boxes = false): Promise<unknown> {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await page.ariaSnapshotJSON({ mode: 'ai', timeout: 10_000 });
+        return await page.ariaSnapshotJSON({ mode: 'ai', boxes, timeout: 10_000 });
       } catch (err) {
         lastError = err;
         if (page.isClosed()) break;

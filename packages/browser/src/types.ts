@@ -24,6 +24,12 @@ export interface DownloadedFile {
 }
 
 export interface BrowserServiceOptions {
+  /** Eval-only transformation of explicit snapshots. The JPEG uses the normal secret masks. */
+  condenseSnapshot?: (
+    text: string,
+    tree: unknown,
+    screenshot: () => Promise<Buffer>,
+  ) => Promise<string>;
   /** Default false: a visible window the user can watch and take over. */
   headless?: boolean;
   /** Keep headed windows minimized except while the user is helping. */

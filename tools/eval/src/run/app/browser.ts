@@ -25,11 +25,13 @@
  *     host to SpainBench and fails every other one like a dead domain (logged). Without it, it is
  *     denied (and logged), and a triphase signature fails.
  */
+
 import { join } from 'node:path';
 import { createBrowserService } from '@sa/browser';
 import type { HeadlessOptions } from '@sa/desktop/headless';
 import { z } from 'zod';
 import { createEgressGuard, type EvalNetwork, type NetLog } from '../../net';
+import { createOrionSnapshot } from './orion-snapshot';
 
 type BrowserFactory = NonNullable<HeadlessOptions['browserFactory']>;
 type BrowserOptions = Parameters<BrowserFactory>[0];
@@ -125,6 +127,9 @@ export function createEvalBrowserFactory(options: EvalBrowserOptions): BrowserFa
     return createBrowserService({
       ...opts,
       certificates: options.network,
+      ...(process.env.SA_EVAL_ORION_KEY_FILE && !process.env.VITEST
+        ? { condenseSnapshot: createOrionSnapshot(process.env.SA_EVAL_ORION_KEY_FILE) }
+        : {}),
       ignoreHTTPSErrors: false,
       headless: true,
       initScripts: [...clockScripts, ...(opts.initScripts ?? []), WEBRTC_BLOCK],
