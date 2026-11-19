@@ -191,10 +191,12 @@ function chosenLicense(expression: string): string | undefined {
   return options.length > 1 ? options.find((option) => isPermissive(option)) : undefined;
 }
 
-function licenseOf(pkg: PackageJson): string {
+function licenseOf(pkg: PackageJson, files: Component['files']): string {
   if (typeof pkg.license === 'string') return pkg.license;
   if (pkg.license?.type) return pkg.license.type;
   if (pkg.licenses?.length) return pkg.licenses.map((l) => l.type).join(' OR ');
+  // Some packages only say it in their licence file (png-js: "MIT License").
+  if (files.some((f) => /^MIT License\b/.test(f.text))) return 'MIT';
   return 'UNKNOWN';
 }
 
@@ -241,12 +243,13 @@ export function collectPackages(appDir = APP_DIR): Component[] {
     visited.add(dir);
     const pkg = readJson(path.join(dir, 'package.json'));
     if (!isWorkspacePackage(dir)) {
+      const files = noticeFiles(dir);
       found.set(dir, {
         name: pkg.name,
         version: pkg.version,
-        license: licenseOf(pkg),
+        license: licenseOf(pkg, files),
         author: authorOf(pkg),
-        files: noticeFiles(dir),
+        files,
       });
       for (const embedded of EMBEDDED[pkg.name]?.(dir) ?? []) {
         found.set(`${dir}#${embedded.name}`, embedded);
@@ -282,12 +285,14 @@ export function collectOthers(appDir = APP_DIR): Component[] {
   const font = path.join(appDir, 'src/renderer/src/assets/brand/OFL.txt');
   const signatureFont = path.join(appDir, '../../packages/signer/assets/OFL.txt');
   const formFont = path.join(appDir, '../../packages/signer/assets/noto-sans-OFL.txt');
+  const documentFont = path.join(appDir, '../../packages/signer/assets/source-serif-4-OFL.txt');
+  const electronFiles = noticeFiles(electronDir);
   const others: Component[] = [
     {
       name: 'electron',
       version: electron.version,
-      license: licenseOf(electron),
-      files: noticeFiles(electronDir),
+      license: licenseOf(electron, electronFiles),
+      files: electronFiles,
     },
     {
       name: 'Instrument Serif (font)',
@@ -303,6 +308,11 @@ export function collectOthers(appDir = APP_DIR): Component[] {
       name: 'Noto Sans (font, filled-in PDFs)',
       license: 'OFL-1.1',
       files: [{ name: 'OFL.txt', text: readFileSync(formFont, 'utf8').trim() }],
+    },
+    {
+      name: 'Source Serif 4 (font, documents the agent writes)',
+      license: 'OFL-1.1',
+      files: [{ name: 'OFL.txt', text: readFileSync(documentFont, 'utf8').trim() }],
     },
   ];
   others.push({

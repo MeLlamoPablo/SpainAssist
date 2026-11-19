@@ -15,6 +15,7 @@
  *    (`FnmtCertRequest`), forwarding certificate requests and installs to FNMT_BINDING; with
  *    createCertificateRequest / parseIssuedCertificates / issuedCertificatePath for the broker.
  *  - fillPdf(): fills in a PDF form where the agent pointed on a page (its fields, boxes or lines).
+ *  - createDocument(): writes a new PDF from Markdown, with fillable blanks and columns.
  *
  * Plain Node library; no Electron imports.
  */
@@ -39,6 +40,7 @@ export {
   requestKeySpec,
 } from './certificate-request';
 export { type CompleteChainOptions, completeChain } from './chain';
+export { type CreateResult, createDocument, type DocumentFonts } from './create';
 export { AfirmaError, CANCELLED_TYPE, GENERIC_TYPE } from './errors';
 export { type ExtraParams, parseExtraParams, storeExtraParams } from './extra-params';
 export {

@@ -46,8 +46,9 @@ export interface BridgeHandlerDeps {
   >;
   feedback: Pick<FeedbackService, 'search' | 'submit' | 'vote' | 'describeShared'>;
   biometric: Biometric;
-  /** Filling in PDFs (`vault.fillDocument`); without it that method is unavailable. */
-  signer?: Pick<SignerLib, 'fillPdf'>;
+  /** Filling in and writing PDFs (`vault.fillDocument`, `vault.createDocument`); without it
+   *  those methods are unavailable. */
+  signer?: Pick<SignerLib, 'fillPdf' | 'createPdf'>;
   /** Origins that commonly ask for a TLS client certificate (from @sa/browser). */
   certificateOrigins: readonly string[];
   logger: Logger;
@@ -537,6 +538,26 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
         pages: filled.pages,
         warnings: filled.warnings,
       };
+    },
+
+    'vault.createDocument': async (params, ctx) => {
+      if (!deps.signer) throw new BridgeError('unavailable', 'Writing PDFs is not available.');
+      const name = documentFileName(params.name, 'document.pdf');
+      let created: Awaited<ReturnType<SignerLib['createPdf']>>;
+      try {
+        created = await deps.signer.createPdf(params.markdown, name.replace(/\.pdf$/i, ''));
+      } catch (err) {
+        throw new BridgeError('bad_request', truncate(errorMessage(err), 300));
+      }
+      const saved = await deps.vault().addDocument({
+        name,
+        mimeType: 'application/pdf',
+        source: 'agent',
+        bytes: created.pdf,
+        procedureId: ctx.procedureId,
+      });
+      vaultChanged();
+      return { documentId: saved.id, name: saved.name, pages: created.pages };
     },
 
     'vault.signDocument': async (params, ctx) => {

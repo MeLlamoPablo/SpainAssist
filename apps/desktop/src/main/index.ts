@@ -49,7 +49,7 @@ import {
 } from './app/libs';
 import { installMacApp } from './app/mac-install';
 import { createAppPaths } from './app/paths';
-import { formFont, signatureFont } from './app/pdf-fonts';
+import { documentFonts, formFont, signatureFont } from './app/pdf-fonts';
 import {
   APP_ENTRY_URL,
   APP_SCHEME,
@@ -556,6 +556,7 @@ async function main(): Promise<void> {
     signer: signerLib(log, {
       signatureFont,
       formFont,
+      documentFonts,
       // PAdES-B-LT: TSAs, OCSP responders and CRLs over Electron's network stack. Not in the
       // e2e runs, which must not reach real services.
       ...(env.e2e

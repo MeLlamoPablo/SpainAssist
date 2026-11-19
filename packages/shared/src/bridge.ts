@@ -231,6 +231,12 @@ export const BridgeParams = {
     name: z.string().trim().min(1).max(120).optional(),
   }),
 
+  /** Write a new PDF in the user's documents from Markdown (with fillable blanks and columns). */
+  'vault.createDocument': z.object({
+    name: z.string().trim().min(1).max(120),
+    markdown: z.string().min(1).max(200_000),
+  }),
+
   // --- downloads (procedure agents) ----------------------------------------------------------
   /**
    * Move one of this procedure's temporary downloads into the vault under a readable name.
@@ -509,6 +515,7 @@ export interface BridgeResults {
   'vault.renameDocument': { documentId: string; name: string };
   'vault.signDocument': { documentId: string; name: string; signed: boolean };
   'vault.fillDocument': { documentId: string; name: string; pages: number[]; warnings: string[] };
+  'vault.createDocument': { documentId: string; name: string; pages: number };
   'downloads.save': { documentId: string; name: string };
   'downloads.list': { downloads: BrowserObservation['downloads'] };
   'browser.open': BrowserObservation;

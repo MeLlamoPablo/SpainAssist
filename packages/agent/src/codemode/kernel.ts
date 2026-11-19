@@ -739,6 +739,7 @@ export const KERNEL = String.raw`
       saveDownload: function (downloadId, name) { return call('documents.saveDownload', { downloadId: downloadId, name: name }); },
       rename: function (id, name) { return call('documents.rename', { id: id, name: name }); },
       fill: function (id, values, options) { return call('documents.fill', Object.assign({ id: id, values: values }, options || {})); },
+      create: function (name, markdown) { return call('documents.create', { name: name, markdown: markdown }); },
       sign: function (id) { return call('documents.sign', { id: id }); },
     },
     feedback: {

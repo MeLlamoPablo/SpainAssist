@@ -27,7 +27,7 @@ import type {
   SigningKey,
   VoucherCreditResponse,
 } from '@sa/shared';
-import type { FillEdit, FillResult, PdfLayout } from '@sa/signer';
+import type { CreateResult, FillEdit, FillResult, PdfLayout } from '@sa/signer';
 import type { Vault } from '@sa/vault';
 
 export type VaultPort = Pick<
@@ -167,6 +167,8 @@ export interface SignerLib {
   }): Promise<Buffer>;
   /** Fills in a PDF where the agent pointed (throws a FillError when it can't be filled). */
   fillPdf(pdf: Uint8Array, edits: FillEdit[]): Promise<FillResult>;
+  /** A new PDF written from Markdown, with fillable blanks (throws when there is nothing to write). */
+  createPdf(markdown: string, title: string): Promise<CreateResult>;
   /** A certificate's holder name as people write it ("Pablo Rodriguez"). */
   signatureName(name: string): string;
   /** AutoFirma's ID mask: `12345678Z` → `***4567**`. */

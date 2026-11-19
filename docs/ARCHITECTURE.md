@@ -217,6 +217,14 @@ it checks the filled pages' images and corrects by filling again. Each fill star
 which stays; the filled copy (`filledFrom`) is replaced in place. Research and the eval:
 `docs/research/pdf-forms.md`.
 
+The agent writes new documents (a private contract, a letter) from Markdown
+(`api.documents.create` → bridge `vault.createDocument` → `createDocument` of `@sa/signer`):
+`marked` reads it and pdfmake lays it out on A4 in Source Serif 4, with no network or file access.
+A blank `___[Label]` becomes an AcroForm text field named after its label (pdfmake draws an
+underlined run carrying a private link; pdf-lib swaps each link for a field), and `:::columns` /
+`|||` / `:::` set blocks side by side, kept with the paragraph before them (signatures). Its doc
+tells the agent to research what the document legally requires first.
+
 Every PDF signed locally (AutoFirma or Mis documentos) is then made long-term (PAdES-B-LT), after
 the key is released: main's `net.fetch` asks a timestamp authority (the site's `tsaURL` first,
 then DigiCert, Sectigo's qualified TSA, Izenpe) and the certificate authorities' OCSP responders

@@ -688,6 +688,12 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           { signal },
         ),
       'documents.fill': fillDocument,
+      'documents.create': (a, signal) =>
+        bridge.call(
+          'vault.createDocument',
+          { name: str(a.name, 'name', 120), markdown: str(a.markdown, 'markdown', 200_000) },
+          { signal, procedureId: primary() },
+        ),
       'documents.sign': (a, signal) =>
         bridge.call(
           'vault.signDocument',
