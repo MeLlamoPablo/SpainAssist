@@ -72,7 +72,7 @@ export interface SignerLibOptions {
    * such text is left out with a warning to the agent.
    */
   formFont?: Uint8Array;
-  /** The font of documents the agent writes (Source Serif 4); without it, Helvetica. */
+  /** The font of documents the agent writes (Lora); without it, Helvetica. */
   documentFonts?: DocumentFonts;
   /** Makes PDF signatures long-term (PAdES-B-LT); without it nothing is fetched. */
   longTerm?: Omit<LongTermOptions, 'logger'>;

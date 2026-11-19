@@ -6,12 +6,12 @@ import { createDocument, type DocumentFonts } from '../src/create';
 import { fillPdf } from '../src/fill';
 
 const font = (name: string) =>
-  new Uint8Array(readFileSync(new URL(`../assets/source-serif-4-${name}.ttf`, import.meta.url)));
+  new Uint8Array(readFileSync(new URL(`../assets/lora-${name}.ttf`, import.meta.url)));
 const FONTS: DocumentFonts = {
   regular: font('regular'),
   italic: font('italic'),
-  bold: font('semibold'),
-  boldItalic: font('semibold-italic'),
+  bold: font('bold'),
+  boldItalic: font('bold-italic'),
 };
 
 async function textOf(pdf: Uint8Array): Promise<string> {
@@ -47,7 +47,7 @@ describe('createDocument', () => {
         String((o as { get?: (n: PDFName) => unknown }).get?.(PDFName.of('BaseFont')) ?? ''),
       )
       .filter(Boolean);
-    expect(fontNames.some((n) => n.includes('SourceSerif4'))).toBe(true);
+    expect(fontNames.some((n) => n.includes('Lora-Regular'))).toBe(true);
   });
 
   it('turns blanks into labelled fields in reading order, which fill can fill in', async () => {

@@ -219,7 +219,7 @@ which stays; the filled copy (`filledFrom`) is replaced in place. Research and t
 
 The agent writes new documents (a private contract, a letter) from Markdown
 (`api.documents.create` → bridge `vault.createDocument` → `createDocument` of `@sa/signer`):
-`marked` reads it and pdfmake lays it out on A4 in Source Serif 4, with no network or file access.
+`marked` reads it and pdfmake lays it out on A4 in Lora, with no network or file access.
 A blank `___[Label]` becomes an AcroForm text field named after its label (pdfmake draws an
 underlined run carrying a private link; pdf-lib swaps each link for a field), and `:::columns` /
 `|||` / `:::` set blocks side by side, kept with the paragraph before them (signatures). Its doc

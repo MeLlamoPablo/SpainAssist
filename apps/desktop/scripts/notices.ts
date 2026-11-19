@@ -285,7 +285,7 @@ export function collectOthers(appDir = APP_DIR): Component[] {
   const font = path.join(appDir, 'src/renderer/src/assets/brand/OFL.txt');
   const signatureFont = path.join(appDir, '../../packages/signer/assets/OFL.txt');
   const formFont = path.join(appDir, '../../packages/signer/assets/noto-sans-OFL.txt');
-  const documentFont = path.join(appDir, '../../packages/signer/assets/source-serif-4-OFL.txt');
+  const documentFont = path.join(appDir, '../../packages/signer/assets/lora-OFL.txt');
   const electronFiles = noticeFiles(electronDir);
   const others: Component[] = [
     {
@@ -310,7 +310,7 @@ export function collectOthers(appDir = APP_DIR): Component[] {
       files: [{ name: 'OFL.txt', text: readFileSync(formFont, 'utf8').trim() }],
     },
     {
-      name: 'Source Serif 4 (font, documents the agent writes)',
+      name: 'Lora (font, documents the agent writes)',
       license: 'OFL-1.1',
       files: [{ name: 'OFL.txt', text: readFileSync(documentFont, 'utf8').trim() }],
     },

@@ -33,7 +33,7 @@ export interface CreateResult {
 }
 
 const FIELD_LINK = 'sa-field:';
-const INK = '#1c1c1c';
+const INK = '#090909';
 const RULE = '#8a8a8a';
 
 const HELVETICA = {
@@ -113,11 +113,11 @@ export async function createDocument(
         headlineLevel?: number;
         startPosition: { verticalRatio: number };
       }) => !!node.headlineLevel && node.startPosition.verticalRatio > 0.85,
-      defaultStyle: { font: 'Doc', fontSize: 10.5, lineHeight: 1.3, color: INK },
+      defaultStyle: { font: 'Doc', fontSize: 11, lineHeight: 1.5, color: INK },
       footer: (page: number, pages: number) =>
         pages > 1
           ? {
-              text: `${page} / ${pages}`,
+              text: String(page),
               alignment: 'center',
               fontSize: 8,
               color: RULE,
@@ -224,7 +224,7 @@ function convert(tokens: Token[], blanks: { length: number }[], columns: number)
         out.push({
           text: inline(p.tokens ?? [{ type: 'text', raw: p.text, text: p.text }], blanks, columns),
           alignment: columns > 1 ? 'left' : 'justify',
-          margin: [0, 0, 0, t.type === 'paragraph' ? 7 : 2],
+          margin: [0, 0, 0, t.type === 'paragraph' ? 12 : 2],
         });
         break;
       }
@@ -234,7 +234,7 @@ function convert(tokens: Token[], blanks: { length: number }[], columns: number)
         out.push({
           [l.ordered ? 'ol' : 'ul']: items,
           ...(l.ordered && typeof l.start === 'number' ? { start: l.start } : {}),
-          margin: [0, 0, 0, 7],
+          margin: [0, 0, 0, 12],
         });
         break;
       }
@@ -285,7 +285,7 @@ function convert(tokens: Token[], blanks: { length: number }[], columns: number)
       case 'code':
         out.push({
           text: (t as Tokens.Code).text,
-          margin: [0, 0, 0, 7],
+          margin: [0, 0, 0, 12],
           preserveLeadingSpaces: true,
         });
         break;
@@ -294,7 +294,7 @@ function convert(tokens: Token[], blanks: { length: number }[], columns: number)
         break;
       default:
         if ('text' in t && typeof t.text === 'string')
-          out.push({ text: t.text, margin: [0, 0, 0, 7] });
+          out.push({ text: t.text, margin: [0, 0, 0, 12] });
     }
   }
   return out;

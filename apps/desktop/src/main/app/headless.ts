@@ -268,10 +268,10 @@ export async function createHeadlessApp(opts: HeadlessOptions): Promise<Headless
       signer: signerLib(logger, {
         formFont: headlessFormFont(),
         documentFonts: {
-          regular: signerAsset('source-serif-4-regular.ttf'),
-          italic: signerAsset('source-serif-4-italic.ttf'),
-          bold: signerAsset('source-serif-4-semibold.ttf'),
-          boldItalic: signerAsset('source-serif-4-semibold-italic.ttf'),
+          regular: signerAsset('lora-regular.ttf'),
+          italic: signerAsset('lora-italic.ttf'),
+          bold: signerAsset('lora-bold.ttf'),
+          boldItalic: signerAsset('lora-bold-italic.ttf'),
         },
       }),
       pii: piiLib,
