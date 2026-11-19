@@ -311,6 +311,20 @@ the recorded research is that answer, with its personal details replaced:
     Scored: her name and address in Sevilla, the coordinator says it still has to be paid, her NIE asked at
     most once, no cash 790-012 generated.
 
+Two more on-demand fixtures measure how well agents fill in a PDF form by pointing at its page
+(`api.documents.fill`, `docs/research/pdf-forms.md`), with no website: the real EX-15 is in the
+user's documents, a file of SpainBench's (`forms/`, the `blankForm` document kind, pinned by
+SHA-256). The prompt asks to fill it in for a NIE (economic interests, a stay, handed in at a
+comisaría); the user is Agnieszka Wiśniewska (synthetic), a Polish citizen with everything the
+form asks for saved, no second surname, no NIE and no representative.
+
+15. `pdf-ex15`: the EX-15 with its own form fields. Required: a filled-in copy. Scored, one point
+    each, as a person reads the printed page: 19 values in their boxes, 6 tick groups (the right box
+    and no other), nothing written in the NIE, the second surname, the representatives' parts or the
+    signature box, the final link.
+16. `pdf-ex15-plano`: the same pages without the form (dotted lines, □ and table cells), same rules;
+    a value counts when its text is drawn inside the fillable original's box.
+
 **Documents.** A fixture's papers are `seed.documents`: specs, not files, drawn the same way every
 time by `tools/eval/src/documents` (phone photos of paper as JPEG; PDFs with real text, as
 downloaded). The `saved` ones are in the vault before the run; the others the user simulator
