@@ -66,9 +66,6 @@ describe('createDocument', () => {
     const field = form.getField('Domicilio del prestatario') as PDFTextField;
     expect(field).toBeInstanceOf(PDFTextField);
     expect(field.acroField.dict.get(PDFName.of('TU'))?.toString()).toContain('FEFF');
-    // The blank's underscores are gone: they are an underlined field now.
-    expect(await textOf(pdf)).not.toContain('___');
-
     const page = (await PDFDocument.load(pdf)).getPage(0);
     const rect = field.acroField.getWidgets()[0]!.getRectangle();
     const { width, height } = page.getSize();
@@ -83,6 +80,29 @@ describe('createDocument', () => {
     expect(filled.placements).toEqual([
       { edit: 0, target: 'field', field: 'Domicilio del prestatario' },
     ]);
+  });
+
+  it('keeps a blank at the end of a line whole, without squashing the line', async () => {
+    // Blanks of spaces counted as trimmable whitespace: this line overfilled (its words ran
+    // together) and its last blank split into two fields.
+    const { pdf, fields } = await createDocument(
+      'De una parte, D. Pablo Rodríguez, mayor de edad, con DNI ___ y domicilio en ___, en adelante el prestamista.',
+      { fonts: FONTS },
+    );
+    expect(fields).toEqual(['con DNI', 'y domicilio en']);
+    const page = await (await getDocumentProxy(new Uint8Array(pdf))).getPage(1);
+    const items = (await page.getTextContent()).items as {
+      str: string;
+      width: number;
+      transform: number[];
+    }[];
+    const y = items.find((i) => i.str.startsWith('De'))!.transform[5];
+    const line = items.filter((i) => i.str.trim() && i.transform[5] === y);
+    expect(line.length).toBeGreaterThan(5);
+    for (let i = 1; i < line.length; i++) {
+      const prev = line[i - 1]!;
+      expect(line[i]!.transform[4]).toBeGreaterThanOrEqual(prev.transform[4] + prev.width - 0.01);
+    }
   });
 
   async function sideBySide(markdown: string) {

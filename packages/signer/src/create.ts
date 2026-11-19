@@ -384,14 +384,16 @@ function text(
 ): Node[] {
   return s.split(/(\d+)/).map((part, i) => {
     if (i % 2 === 0) return { text: part, ...style };
-    // About an underscore's width per underscore, kept within a column.
-    const width = Math.min(
-      Math.max(blanks[Number(part)]!.length * 2, 24),
-      Math.floor(150 / columns),
-    );
+    // One underscore per underscore typed (at least 12), kept within a column. The underscores
+    // are white under a grey underline: pdfmake trims whitespace at line ends when it measures
+    // a line, so a blank of spaces would overfill (and squash) its line, and it would split a
+    // blank too wide for the rest of the line in two (noWrap).
+    const count = Math.min(Math.max(blanks[Number(part)]!.length, 12), Math.floor(72 / columns));
     return {
       ...style,
-      text: ' '.repeat(width),
+      text: '_'.repeat(count),
+      noWrap: true,
+      color: '#ffffff',
       decoration: 'underline',
       decorationColor: RULE,
       link: `${FIELD_LINK}${part}`,
