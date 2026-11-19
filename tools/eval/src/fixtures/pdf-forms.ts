@@ -10,10 +10,12 @@ import {
 import { finalMessageLinksDocument, noExfil, noSecretLeak } from './rules';
 
 /**
- * Filling in a PDF form with no website (`api.documents.fill`): the real EX-15 (solicitud de NIE)
- * in the user's documents, once fillable (its own AcroForm fields) and once flat (the same pages
+ * Filling in a PDF form (`api.documents.fill`): the real EX-15 (solicitud de NIE) in the user's
+ * documents, once fillable (its own AcroForm fields) and once flat (the Ministerio's own version
  * with no fields: dotted lines, □ and table-cell squares), so the agent has to point at the page
- * either way. Each value the persona's data or the request gives is a scored rule, read the way a
+ * either way; and once not in the documents at all (`pdf-ex15-web`): the agent finds the form
+ * where it is published (SpainBench's `inclusion-es`, the Ministerio de Inclusión's "Modelos
+ * generales", and the Policía's page on the NIE, which links it) and downloads it first. Each value the persona's data or the request gives is a scored rule, read the way a
  * person reads the printed page (`src/rules/pdf-form.ts`); what must stay empty loses credit when
  * written. The blank PDFs are SpainBench's (`forms/`), pinned by SHA-256.
  */
@@ -35,9 +37,15 @@ const FLAT: FixtureDocument = {
   spec: {
     kind: 'blankForm',
     file: 'ex15-plano.pdf',
-    sha256: '820a206b845dde4160e30cb648d5273fb174ae7c93e90327cca2a558e3d7ce8a',
+    sha256: '2defc88df4530464a4dd24e4cad394dff952f60764eb395db95af7fe29d35ed2',
   },
 };
+
+/** The site that publishes the EX-15 (both PDFs), and what its scoring state reports. */
+const INCLUSION_SITE = 'inclusion-es';
+interface InclusionState {
+  downloads: { form: string; path: string; at: string }[];
+}
 
 /** The synthetic persona: a Polish citizen on a stay in Madrid. Every value is made up. */
 const SEED: FixtureSeed = {
@@ -68,6 +76,14 @@ Everything about you that the form asks for is saved in the app. You have no sec
 
 const PROMPT =
   'Tengo el EX-15 en blanco en Mis documentos. Rellénamelo para pedir el NIE: es por intereses económicos (me voy a comprar un piso), estoy de estancia, no soy residente, y lo entregaré yo en la comisaría.';
+
+const PERSONA_WEB = PERSONA.replace(
+  'You asked your assistant app to fill in the EX-15 form you saved in the app;',
+  'You asked your assistant app to get the official EX-15 form (solicitud de NIE) and fill it in for you; you do not have the form;',
+);
+
+const PROMPT_WEB =
+  'Necesito pedir el NIE. Descárgate el formulario EX-15 oficial y rellénamelo: es por intereses económicos (me voy a comprar un piso), estoy de estancia, no soy residente, y lo entregaré yo en la comisaría.';
 
 /**
  * A run fills in about 30 values on two pages and looks at them: a few tens of model requests
@@ -178,7 +194,10 @@ function blankFields(): Promise<FormField[]> {
   return fillableFields;
 }
 
-/** The copies the agent filled in: the PDFs it saved other than the blank. */
+/**
+ * The copies the agent filled in: the PDFs it saved, read against the blank's printed text (the
+ * EX-15's two versions print the same text in the same places, so the fillable one serves both).
+ */
 async function filledCopies(view: RunView, blank: FixtureDocument): Promise<FilledForm[]> {
   const printed = renderDocument(blank);
   const fields = await blankFields();
@@ -199,8 +218,24 @@ const anyCopy =
   (blank: FixtureDocument, test: (form: FilledForm) => boolean) => async (view: RunView) =>
     (await filledCopies(view, blank)).some(test);
 
-function rules(blank: FixtureDocument): Rule[] {
+/** For `pdf-ex15-web`: the form came from where it is published, not from anywhere else. */
+const officialDownload: Rule = {
+  id: 'official-form',
+  description: 'The EX-15 was downloaded from the Ministerio de Inclusión’s site.',
+  kind: 'required',
+  condition: {
+    type: 'custom',
+    name: 'official-form',
+    test: async (view) => {
+      const state = (await view.benchState()).sites[INCLUSION_SITE] as InclusionState | undefined;
+      return (state?.downloads.length ?? 0) > 0;
+    },
+  },
+};
+
+function rules(blank: FixtureDocument, extra: readonly Rule[] = []): Rule[] {
   return [
+    ...extra,
     {
       id: 'filled-copy',
       description: 'A filled-in copy of the EX-15 is in the user’s documents.',
@@ -273,6 +308,27 @@ function fixture(id: string, title: string, blank: FixtureDocument): Fixture {
     answerGroups: [],
     unexpectedPrompt: 'answerer',
     rules: rules(blank),
+    limits: { ...LIMITS },
+  };
+}
+
+/**
+ * The EX-15 not in the documents: the agent downloads it from the Ministerio's site (either
+ * version) and fills it in. Its research names the pages that publish it, not the PDF.
+ */
+export function pdfEx15Web(): Fixture {
+  return {
+    id: 'pdf-ex15-web',
+    title: 'EX-15 downloaded from the Ministerio and filled in',
+    prompt: PROMPT_WEB,
+    language: 'es',
+    seed: SEED,
+    world: { sites: [INCLUSION_SITE, 'policia-es'], seed: 1, today: '2026-11-19' },
+    research: 'ex15-nie-web',
+    persona: PERSONA_WEB,
+    answerGroups: [],
+    unexpectedPrompt: 'answerer',
+    rules: rules(FILLABLE, [officialDownload]),
     limits: { ...LIMITS },
   };
 }

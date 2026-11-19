@@ -5,7 +5,7 @@ import {
   dniRenovacionSinDatos,
 } from './dni-renovacion';
 import { ilpBorealFirma } from './ilp-boreal';
-import { pdfEx15, pdfEx15Plano } from './pdf-forms';
+import { pdfEx15, pdfEx15Plano, pdfEx15Web } from './pdf-forms';
 import { tasa790012 } from './tasa-790-012';
 import {
   transferenciaCiclomotor,
@@ -56,6 +56,7 @@ const ON_DEMAND: readonly Fixture[] = [
   tasa790012(),
   pdfEx15(),
   pdfEx15Plano(),
+  pdfEx15Web(),
 ].map(assertValidFixture);
 
 const byId = new Map(

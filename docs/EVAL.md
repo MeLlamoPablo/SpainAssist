@@ -311,10 +311,10 @@ the recorded research is that answer, with its personal details replaced:
     Scored: her name and address in Sevilla, the coordinator says it still has to be paid, her NIE asked at
     most once, no cash 790-012 generated.
 
-Two more on-demand fixtures measure how well agents fill in a PDF form by pointing at its page
-(`api.documents.fill`, `docs/research/pdf-forms.md`), with no website: the real EX-15 is in the
-user's documents, a file of SpainBench's (`forms/`, the `blankForm` document kind, pinned by
-SHA-256). The prompt asks to fill it in for a NIE (economic interests, a stay, handed in at a
+Three more on-demand fixtures measure how well agents fill in a PDF form by pointing at its page
+(`api.documents.fill`, `docs/research/pdf-forms.md`). In two, with no website, the real EX-15 is in
+the user's documents, a file of SpainBench's (`forms/`, the `blankForm` document kind, pinned by
+SHA-256); in the third the agent gets it from where it is published. The prompt asks to fill it in for a NIE (economic interests, a stay, handed in at a
 comisaría); the user is Agnieszka Wiśniewska (synthetic), a Polish citizen with everything the
 form asks for saved, no second surname, no NIE and no representative.
 
@@ -322,8 +322,15 @@ form asks for saved, no second surname, no NIE and no representative.
     each, as a person reads the printed page: 19 values in their boxes, 6 tick groups (the right box
     and no other), nothing written in the NIE, the second surname, the representatives' parts or the
     signature box, the final link.
-16. `pdf-ex15-plano`: the same pages without the form (dotted lines, □ and table cells), same rules;
-    a value counts when its text is drawn inside the fillable original's box.
+16. `pdf-ex15-plano`: the Ministerio's EX-15 that is not editable: the same pages without a form
+    (dotted lines, □ and table cells), same rules; a value counts when its text is drawn inside the
+    fillable original's box.
+17. `pdf-ex15-web`: nothing in the documents; the prompt asks to download the official EX-15 and fill
+    it in. SpainBench's `inclusion-es` serves the Ministerio de Inclusión's portal ("Modelos
+    generales", both PDFs at their real addresses) and `policia-es` the Policía's page on the NIE,
+    which links it; the research (written by hand) names those pages, not the PDF. Required: a PDF
+    downloaded from the Ministerio's site (its scoring state) and a filled-in copy; the rest as 15,
+    whichever version it filled.
 
 **Documents.** A fixture's papers are `seed.documents`: specs, not files, drawn the same way every
 time by `tools/eval/src/documents` (phone photos of paper as JPEG; PDFs with real text, as

@@ -73,9 +73,12 @@ Details that matter:
 
 ## The eval
 
-Two on-demand fixtures (`tools/eval/src/fixtures/pdf-forms.ts`): the real EX-15 in Mis
-documentos, fillable (`pdf-ex15`) and flat (`pdf-ex15-plano`: the same pages without the
-AcroForm, so values must land on dotted lines, □ glyphs and table cells). The blank PDFs are
+Three on-demand fixtures (`tools/eval/src/fixtures/pdf-forms.ts`): the real EX-15 in Mis
+documentos, fillable (`pdf-ex15`) and flat (`pdf-ex15-plano`: the Ministerio's own version without
+a form, so values must land on dotted lines, □ glyphs and table cells; until 2026-11-19 a copy of
+the fillable one with its AcroForm removed), and not in the documents at all (`pdf-ex15-web`: the
+agent downloads it from SpainBench's `inclusion-es`, the Ministerio de Inclusión's "Modelos
+generales", or follows the Policía's page on the NIE, `policia-es`, which links it). The blank PDFs are
 SpainBench's (`forms/`), pinned by SHA-256. The persona is a Polish citizen on a stay in Madrid
 (Wiśniewska: the Unicode path), with no second surname, no NIE and no representative.
 
@@ -115,6 +118,21 @@ Runs `pdf62-*` in the eval runs folder; answerer gpt-6.2-sol too.
   to fill at once and leave optional and hand-written details blank; the next six runs did.
 - Unscored but worth knowing: two runs wrote the purchase ("COMPRA DE UN PISO") in the
   "(Especificar)" line, which belongs to "Por otros motivos".
+
+Then, with the forms on the web (2026-11-19, later the same day; `pdf-ex15-plano` now on the
+Ministerio's flat PDF):
+
+| Run | Fixture | Score | Requests | Time | Fills |
+| --- | --- | --- | --- | --- | --- |
+| `pdf62-web-1` | web | 96.7% | 9 | 2 min 14 s | 1 |
+| `pdf62-web-2` | web | 100% | 10 | 1 min 57 s | 1 |
+| `pdf62-web-3` | web | 95.0% (100% of the rules; a wrong turn) | 12 | 3 min 9 s | 2 |
+| `pdf62-planoof-1` | flat (official) | 96.7% | 9 | 1 min 34 s | 2 |
+
+- Every run got the official form: once through "Modelos generales" (then its flat PDF), twice
+  straight to the PDF's address (once the editable one, once the flat one), saved it and filled it.
+- The wrong turn: `www.policia.es`'s page on the NIE, which SpainBench doesn't serve.
+- The points lost are again the nationality written `POL`.
 
 A replay by mistake (`pdf62-plano-replayed-from-ex15`, kept apart): the flat fixture replaying
 the fillable run's model answers, i.e. the same points on the flat copy, scored 96.7%: the same
