@@ -60,6 +60,8 @@ export const chatDict = defineDict({
       nextOne: 'Siguiente pregunta',
       writeInstead: 'Escribir un mensaje',
       backToQuestion: 'Volver a la pregunta',
+      rewind: 'Rebobinar',
+      rewindHint: 'Borra este mensaje y lo que le sigue, y te lo deja para editarlo (desarrollo)',
       welcome: {
         title: '¿En qué te ayudo?',
         points: [
@@ -236,6 +238,8 @@ export const chatDict = defineDict({
       nextOne: 'Next question',
       writeInstead: 'Write a message',
       backToQuestion: 'Back to the question',
+      rewind: 'Rewind',
+      rewindHint: 'Deletes this message and what follows, and puts it back to edit (development)',
       welcome: {
         title: 'How can I help?',
         points: [

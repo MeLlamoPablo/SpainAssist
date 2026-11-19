@@ -20,6 +20,10 @@ import type { ProcedureService } from '../procedures/service';
 import type { CodemodeAgents } from './agents';
 import type { WorkflowEnd, WorkflowRecord, WorkflowService } from './workflows';
 
+/** How the blocks that open a user's message start (`decorateUserMessage`; `dev/rewind.ts` strips them). */
+export const PROCEDURES_PREFACE = '[Procedures';
+export const INTERRUPTED_NOTE = '[Interrupted workflows';
+
 /** Upward messages stay short: the coordinator's context lives forever. */
 const MAX_REPORT_CHARS = 800;
 const MAX_RESULT_CHARS = 4_000;
@@ -76,8 +80,8 @@ export class CodemodeCoordinator {
     this.digests.set(agentId, digest);
     const fresh = agentId === ASSISTANT_AGENT_ID ? 'procedure_read' : 'api.procedures.list()';
     return lines.length
-      ? `[Procedures (as the user sees them; ${fresh} for fresh ones)]\n${lines.join('\n')}\n\n`
-      : '[Procedures: none yet]\n\n';
+      ? `${PROCEDURES_PREFACE} (as the user sees them; ${fresh} for fresh ones)]\n${lines.join('\n')}\n\n`
+      : `${PROCEDURES_PREFACE}: none yet]\n\n`;
   }
 
   /** Workflows of this agent interrupted while it was away (it decides what to do). */
@@ -86,7 +90,7 @@ export class CodemodeCoordinator {
       .list()
       .filter((w) => w.agentId === agentId && w.status === 'interrupted');
     if (!list.length) return '';
-    return `[Interrupted workflows (the app or your process restarted while they ran; memoized steps are kept, re-run with the same id to continue): ${list.map((w) => `"${w.id}"${w.title ? ` (${w.title})` : ''}`).join(', ')}]\n\n`;
+    return `${INTERRUPTED_NOTE} (the app or your process restarted while they ran; memoized steps are kept, re-run with the same id to continue): ${list.map((w) => `"${w.id}"${w.title ? ` (${w.title})` : ''}`).join(', ')}]\n\n`;
   }
 
   /**
@@ -105,6 +109,14 @@ export class CodemodeCoordinator {
       return `"${w.id}"${w.title ? ` (${w.title})` : ''}: ${keys.join(', ')}`;
     });
     return `[Your interfaces the user still sees (if this message answers one or makes it obsolete, cancel its workflow with api.workflows.cancel and continue with the answer): ${items.join('; ')}]\n\n`;
+  }
+
+  /**
+   * Forgets which procedures the agent was sent, so that its next message carries them again
+   * (its context lost them: `chat.rewind`).
+   */
+  forgetProcedures(agentId: string): void {
+    this.digests.delete(agentId);
   }
 
   /** The user's chat message as the coordinator reads it. */

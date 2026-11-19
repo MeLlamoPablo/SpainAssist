@@ -43,8 +43,8 @@ export interface ComposerProps {
   focusTick?: number;
   autoFocus?: boolean;
   procedureId?: string;
-  /** Optional text to prefill (e.g. suggestion chips). */
-  draft?: { text: string; tick: number };
+  /** Optional text to prefill (e.g. suggestion chips), with documents to attach. */
+  draft?: { text: string; attachments?: Attachment[]; tick: number };
 }
 
 export function Composer({
@@ -76,6 +76,7 @@ export function Composer({
   useEffect(() => {
     if (!draft) return;
     setText(draft.text);
+    if (draft.attachments) setAttachments(draft.attachments);
     requestAnimationFrame(() => {
       const el = ref.current;
       if (!el) return;

@@ -24,6 +24,9 @@ function applyEvent(event: SaEvent): void {
     case 'chat.state':
       useChatStore.getState().setState(event.state);
       return;
+    case 'chat.reset':
+      useChatStore.getState().replaceItems(event.items);
+      return;
     case 'providers.status':
       useAppStore.setState({ provider: event.status });
       return;

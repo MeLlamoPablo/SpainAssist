@@ -75,6 +75,9 @@ export interface SendMessageInput {
   attachments?: Attachment[];
 }
 
+/** `chat.rewind` (development builds only): the removed message, to edit and send again. */
+export type RewoundMessage = SendMessageInput;
+
 export interface AddDocumentInput {
   name: string;
   mimeType: string;
@@ -221,6 +224,12 @@ export interface SaMethods {
   'chat.respond': [[promptItemId: string, response: PromptResponse], void];
   /** The PDF a pending `pdf_signature` prompt shows (null once it is answered). */
   'chat.promptDocument': [[promptItemId: string], Uint8Array | null];
+  /**
+   * Development builds only (main refuses it otherwise): stops the coordinator and deletes this
+   * user message and everything after it, from the chat and from the model's session. Returns
+   * the message, for the composer.
+   */
+  'chat.rewind': [[userItemId: string], RewoundMessage];
 
   'vault.overview': [[], VaultOverview];
   'vault.setPersonal': [[items: PersonalDataInput[]], VaultOverview];
@@ -351,6 +360,8 @@ export type SaEvent =
   /** Append text to a streaming assistant item of the conversation. */
   | { type: 'chat.delta'; itemId: string; delta: string }
   | { type: 'chat.state'; state: ConversationState }
+  /** The conversation was cut short (`chat.rewind`): these are all its items now. */
+  | { type: 'chat.reset'; items: ChatItem[] }
   | { type: 'providers.status'; status: ProviderStatus }
   /** `userCode`: device-code logins (the user types it at `url`). */
   | { type: 'providers.loginProgress'; message: string; url?: string; userCode?: string }

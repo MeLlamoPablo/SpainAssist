@@ -1,5 +1,6 @@
 import type {
   AppInfo,
+  Attachment,
   CompanionStatus,
   DataImportStatus,
   ProviderStatus,
@@ -44,14 +45,14 @@ interface AppState {
   focusedProcedure: { id: string; tick: number } | null;
   /** Bumped to ask the chat composer to take focus (e.g. ⌘N). */
   composerFocusTick: number;
-  /** Text to put in the composer (suggestions). */
-  draft: { text: string; tick: number } | null;
+  /** Text to put in the composer (suggestions, a rewound message with its documents). */
+  draft: { text: string; attachments?: Attachment[]; tick: number } | null;
 
   navigate: (view: View) => void;
   setShowArchived: (show: boolean) => void;
   /** Show a procedure's card in "Mis trámites". */
   focusProcedure: (id: string) => void;
-  focusComposer: (text?: string) => void;
+  focusComposer: (text?: string, attachments?: Attachment[]) => void;
 }
 
 export const useAppStore = create<AppState>()((set) => ({
@@ -77,9 +78,17 @@ export const useAppStore = create<AppState>()((set) => ({
       view: { kind: 'procedures' },
       focusedProcedure: { id, tick: (s.focusedProcedure?.tick ?? 0) + 1 },
     })),
-  focusComposer: (text) =>
+  focusComposer: (text, attachments) =>
     set((s) => ({
       composerFocusTick: s.composerFocusTick + 1,
-      ...(text !== undefined ? { draft: { text, tick: (s.draft?.tick ?? 0) + 1 } } : {}),
+      ...(text !== undefined
+        ? {
+            draft: {
+              text,
+              ...(attachments ? { attachments } : {}),
+              tick: (s.draft?.tick ?? 0) + 1,
+            },
+          }
+        : {}),
     })),
 }));

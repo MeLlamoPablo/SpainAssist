@@ -42,6 +42,7 @@ import {
 } from './ChatItems';
 import { Composer } from './Composer';
 import { chatDict } from './i18n';
+import { rewindHandler } from './rewind';
 import { buildRows, type ChatRow, isProcedureEvent, pendingPrompts } from './rows';
 
 /**
@@ -205,7 +206,7 @@ function Row({ row }: { row: ChatRow }) {
   const item = row.item;
   switch (item.type) {
     case 'user':
-      return <UserMessage item={item} />;
+      return <UserMessage item={item} onRewind={rewindHandler} />;
     case 'assistant':
       return <AssistantMessage item={item} />;
     case 'notice':

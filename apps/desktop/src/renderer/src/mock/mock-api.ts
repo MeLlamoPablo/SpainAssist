@@ -1285,6 +1285,24 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     'chat.abort': () => {
       abortAssistant();
     },
+    'chat.rewind': (userItemId) => {
+      const index = state.conversation.findIndex((i) => i.id === userItemId);
+      const item = state.conversation[index];
+      if (item?.type !== 'user')
+        throw new Error(
+          tr(
+            'Solo se puede volver a un mensaje tuyo.',
+            'You can only rewind to one of your messages.',
+          ),
+        );
+      abortAssistant();
+      state.conversation.splice(index);
+      emit({ type: 'chat.reset', items: structuredClone(state.conversation) });
+      return {
+        text: item.text,
+        ...(item.attachments?.length ? { attachments: item.attachments } : {}),
+      };
+    },
     'chat.respond': (promptItemId, response) => {
       const item = findPrompt(promptItemId);
       if (item?.status !== 'pending')

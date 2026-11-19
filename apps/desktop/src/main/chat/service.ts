@@ -20,6 +20,9 @@ import type { PromptManager } from './prompts';
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 4;
+/** What the coordinator reads after the text of a message with documents (`dev/rewind.ts` too). */
+export const ATTACHMENTS_HEADER = '[Documents attached by the user (stored in their data)]';
+export const NO_TEXT = '(no text)';
 
 export interface ChatServiceDeps {
   conversation: ConversationService;
@@ -39,6 +42,8 @@ export interface ChatServiceDeps {
  */
 export class ChatService {
   private readonly deliveries = new Set<Promise<void>>();
+  /** Bumped by `dropDeliveries`: deliveries of an older generation never reach the agent. */
+  private generation = 0;
 
   constructor(private readonly deps: ChatServiceDeps) {}
 
@@ -91,10 +96,20 @@ export class ChatService {
     return out;
   }
 
+  /**
+   * Messages still being prepared (reading their attachments) are never delivered: the chat was
+   * rewound past them (`chat.rewind`).
+   */
+  dropDeliveries(): void {
+    this.generation++;
+  }
+
   private async deliver(text: string, attachments: Attachment[]): Promise<void> {
     const { conversation } = this.deps;
+    const generation = this.generation;
     try {
       const { promptText, images } = await this.buildPrompt(text, attachments);
+      if (generation !== this.generation) return;
       await this.deps.agents.send(
         ASSISTANT_AGENT_ID,
         this.deps.decorate(promptText),
@@ -134,9 +149,8 @@ export class ChatService {
         images.push({ mimeType: doc.mimeType, dataBase64: Buffer.from(bytes).toString('base64') });
       }
     }
-    const header = '[Documents attached by the user (stored in their data)]';
     return {
-      promptText: `${text || '(no text)'}\n\n${header}\n${lines.join('\n')}`,
+      promptText: `${text || NO_TEXT}\n\n${ATTACHMENTS_HEADER}\n${lines.join('\n')}`,
       images,
     };
   }

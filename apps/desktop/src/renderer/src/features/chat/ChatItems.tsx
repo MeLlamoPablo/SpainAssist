@@ -13,9 +13,11 @@ import {
   FileText,
   Info,
   TriangleAlert,
+  Undo2,
 } from 'lucide-react';
 import { memo } from 'react';
 import { Spinner } from '../../components/ui/misc';
+import { Tooltip } from '../../components/ui/tooltip';
 import { useLang, useT } from '../../i18n';
 import { activityLabel } from '../../lib/activity';
 import { cn } from '../../lib/cn';
@@ -33,9 +35,33 @@ import { PdfSignaturePromptCard } from './prompts/PdfSignaturePromptCard';
 import { PhoneCallPromptCard } from './prompts/PhoneCallPromptCard';
 import { UserActionPromptCard } from './prompts/UserActionPromptCard';
 
-export const UserMessage = memo(function UserMessage({ item }: { item: UserItem }) {
+/**
+ * `onRewind`: development builds only (`chat.rewind`), a button under the bubble on hover that
+ * cuts the chat back to before this message.
+ */
+export const UserMessage = memo(function UserMessage({
+  item,
+  onRewind,
+}: {
+  item: UserItem;
+  onRewind?: (itemId: string) => void;
+}) {
+  const t = useT(chatDict);
   return (
-    <div className="flex justify-end pl-12">
+    <div className="group relative flex justify-end pl-12">
+      {onRewind ? (
+        <Tooltip content={t.panel.rewindHint}>
+          <button
+            type="button"
+            onClick={() => onRewind(item.id)}
+            className="absolute top-full right-0 z-10 mt-0.5 flex h-6 items-center gap-1 rounded-md px-1.5 text-[12px] font-medium text-fg-subtle opacity-0 transition-opacity duration-150 hover:bg-surface-3/70 hover:text-fg-muted focus-visible:opacity-100 group-hover:opacity-100"
+            data-testid="chat-rewind"
+          >
+            <Undo2 size={13} aria-hidden />
+            {t.panel.rewind}
+          </button>
+        </Tooltip>
+      ) : null}
       <div className="max-w-full rounded-2xl rounded-br-md bg-surface-3 px-4 py-2.5 text-[15px] leading-relaxed text-fg">
         <p className="selectable whitespace-pre-wrap break-words">{item.text}</p>
         {item.attachments?.length ? (

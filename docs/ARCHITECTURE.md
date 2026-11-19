@@ -320,6 +320,11 @@ or rating learnings (searching still works).
   browsing (HAR, page HTML, actions, trace) to build offline mock sites. Typed secrets are
   scrubbed, but **personal data is kept**: use it only with synthetic or throwaway accounts.
   Captures never leave the device.
+- **Chat rewind** (development builds only: the button behind `import.meta.env.DEV`, and main
+  registers `chat.rewind` but refuses it unless `appInfo.isDev`). "Rebobinar" on a user message
+  stops the coordinator and cuts transcript.json and its pi session back to before that message
+  (`dev/rewind.ts`), then puts the message in the composer. Chat state only: procedures,
+  documents, background agents and workflows stay, and their later reports land after the cut.
 - **Headless app and eval hooks.** `createHeadlessApp` (`@sa/desktop/headless`) runs the app's
   logic without a window or the internet. `HostHooks` let a harness stub the agent host's network.
   The SpainBench eval suite builds on both (`docs/EVAL.md`). Neither ships in the packaged app.

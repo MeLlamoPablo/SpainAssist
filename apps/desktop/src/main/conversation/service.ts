@@ -155,6 +155,22 @@ export class ConversationService implements TranscriptSink {
     return this.writer.flush();
   }
 
+  /**
+   * Development builds (`chat.rewind`): drops this item and every later one, saves at once and
+   * hands the renderer the whole, shorter transcript. The assistant is idle afterwards.
+   */
+  async truncateFrom(itemId: string): Promise<void> {
+    const index = this.items.findIndex((i) => i.id === itemId);
+    if (index < 0) return;
+    this.items.splice(index);
+    this.running = false;
+    this.error = undefined;
+    this.emitState();
+    this.persist();
+    await this.flush();
+    this.deps.events.emit({ type: 'chat.reset', items: structuredClone(this.items) });
+  }
+
   /** Forgets everything (wipe). */
   async clear(): Promise<void> {
     await this.writer.cancel('');

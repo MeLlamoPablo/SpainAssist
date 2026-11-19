@@ -65,6 +65,8 @@ export interface TestAppOptions {
   signer?: SignerLib;
   /** The OS save dialog. Default: none, so certificate exports are unavailable. */
   chooseSavePath?: MainDeps['chooseSavePath'];
+  /** A development build (default) or a packaged one. */
+  isDev?: boolean;
 }
 
 export type TestApp = Awaited<ReturnType<typeof createTestApp>>;
@@ -155,7 +157,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
       version: '0.0.0-test',
       platform: 'darwin',
       installChannel: 'dev',
-      isDev: true,
+      isDev: opts.isDev ?? true,
       isE2E: true,
       features: {
         dniePhone: 'release',

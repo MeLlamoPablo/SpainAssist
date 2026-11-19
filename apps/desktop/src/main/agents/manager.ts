@@ -309,6 +309,14 @@ export class AgentManager {
     });
   }
 
+  /**
+   * Runs `fn` with the agent's deliveries held: messages sent meanwhile wait in its queue and go
+   * out after it (to a new process, if `fn` stopped this one).
+   */
+  exclusive<T>(agentId: string, fn: () => Promise<T>): Promise<T> {
+    return this.queue.run(agentId, fn);
+  }
+
   /** Stops the current run and cancels its prompts without approving or completing them. */
   async abort(agentId: string): Promise<void> {
     const record = this.agents.get(agentId);

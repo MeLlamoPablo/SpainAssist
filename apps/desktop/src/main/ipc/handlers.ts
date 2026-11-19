@@ -3,6 +3,7 @@ import type {
   ChatItem,
   CodemodeAgentInfo,
   MapPoint,
+  RewoundMessage,
   UiEvent,
   WindowControlsStyle,
   WorkflowInfo,
@@ -31,6 +32,11 @@ export interface IpcServices {
   providers: ProviderManager;
   procedures: ProcedureService;
   chat: ChatService;
+  /**
+   * Development builds only (absent when packaged): cuts the coordinator's chat back to just
+   * before one of the user's messages (`dev/rewind.ts`).
+   */
+  rewindChat?(userItemId: string): Promise<RewoundMessage>;
   vault: VaultService;
   media: MediaStore;
   browser: BrowserHolder;
@@ -170,6 +176,11 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('chat.promptDocument', S['chat.promptDocument'], (itemId) =>
     s.chat.promptDocument(itemId),
   );
+  // Registered in every build so the renderer API stays the same; only development builds have it.
+  router.register('chat.rewind', S['chat.rewind'], (itemId) => {
+    if (!s.rewindChat) throw new UserError(t(lang(), 'devOnly'), 'unavailable');
+    return s.rewindChat(itemId);
+  });
 
   router.register('vault.overview', S['vault.overview'], () => s.vault.overview());
   router.register('vault.setPersonal', S['vault.setPersonal'], (items) =>

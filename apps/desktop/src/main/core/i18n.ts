@@ -412,6 +412,15 @@ const STRINGS = {
     en: 'That question is no longer active.',
   },
   emptyMessage: { es: 'Escribe un mensaje.', en: 'Write a message.' },
+  /** Development tools (`chat.rewind`) in a packaged build. */
+  devOnly: {
+    es: 'Solo está disponible en las versiones de desarrollo.',
+    en: 'Only available in development builds.',
+  },
+  rewindNotUserMessage: {
+    es: 'Solo se puede volver a un mensaje tuyo.',
+    en: 'You can only rewind to one of your messages.',
+  },
   invalidRequest: { es: 'La petición no es válida.', en: 'Invalid request.' },
   onlyHttps: {
     es: 'Solo se pueden abrir enlaces seguros (https).',

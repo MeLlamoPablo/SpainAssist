@@ -79,6 +79,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
   'chat.abort': none,
   'chat.respond': z.tuple([id, PromptResponse]),
   'chat.promptDocument': z.tuple([id]),
+  'chat.rewind': z.tuple([id]),
 
   'vault.overview': none,
   'vault.setPersonal': z.tuple([z.array(PersonalDataInput).min(1).max(100)]),

@@ -17,6 +17,8 @@ interface ChatState {
   setState: (state: ConversationState) => void;
   applyItem: (item: ChatItem) => void;
   applyDelta: (itemId: string, delta: string) => void;
+  /** Main cut the conversation short (`chat.reset`): these are all its items now. */
+  replaceItems: (items: ChatItem[]) => void;
 }
 
 /** Upsert by id, keeping the original position of existing items. */
@@ -72,4 +74,5 @@ export const useChatStore = create<ChatState>()((set) => ({
       const items = appendDelta(s.conversation.items, itemId, delta);
       return items === s.conversation.items ? s : { conversation: { ...s.conversation, items } };
     }),
+  replaceItems: (items) => set({ conversation: { status: 'loaded', items } }),
 }));

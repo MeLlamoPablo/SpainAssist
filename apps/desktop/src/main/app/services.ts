@@ -33,6 +33,7 @@ import { t } from '../core/i18n';
 import type { Logger } from '../core/logger';
 import { type Clock, errorMessage, type IdFactory, newId, systemClock } from '../core/util';
 import type { CrlSetStore } from '../crlset/store';
+import { createChatRewind } from '../dev/rewind';
 import { exportTranscripts } from '../export/transcripts';
 import { FNMT_AUTHORITIES } from '../fnmt/authorities';
 import { FnmtBroker } from '../fnmt/broker';
@@ -667,6 +668,20 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     providers,
     procedures,
     chat,
+    // Development builds only: packaged ones never get it, and main refuses `chat.rewind`.
+    ...(deps.appInfo.isDev
+      ? {
+          rewindChat: createChatRewind({
+            conversation,
+            agents,
+            chat,
+            coordinator: codemodeCoordinator,
+            sessionFile: assistant.sessionFile(CHAT_VERSION),
+            logger: logger.child('rewind'),
+            lang,
+          }),
+        }
+      : {}),
     vault,
     media,
     browser,
