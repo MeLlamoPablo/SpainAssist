@@ -133,7 +133,20 @@ export interface FacturaSpec {
   vatRate: number;
 }
 
+/**
+ * A blank official form (the EX-15…): a real PDF, so it is a file of SpainBench's
+ * (`SPAINBENCH_DIR/forms/<file>`, where captured material stays), pinned by its SHA-256.
+ */
+export interface BlankFormSpec {
+  kind: 'blankForm';
+  /** The file's name in SpainBench's `forms/`. */
+  file: string;
+  /** Hex SHA-256 of the file. */
+  sha256: string;
+}
+
 export type DocumentSpec =
+  | BlankFormSpec
   | ContratoSpec
   | PermisoSpec
   | FichaSpec

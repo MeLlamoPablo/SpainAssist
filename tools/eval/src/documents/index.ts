@@ -4,6 +4,7 @@
  */
 import { createHash } from 'node:crypto';
 import { stripDiacritics } from '../answers/text';
+import { readBlankForm } from './forms';
 import { renderFactura, renderModelo621, renderTasa791 } from './pdf';
 import { renderPhoto } from './photo';
 import { type DocumentSpec, documentMimeType, type FixtureDocument } from './spec';
@@ -33,6 +34,8 @@ function draw(spec: DocumentSpec): Uint8Array {
       return renderTasa791(spec);
     case 'factura':
       return renderFactura(spec);
+    case 'blankForm':
+      return readBlankForm(spec);
   }
 }
 

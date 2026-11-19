@@ -5,6 +5,7 @@ import {
   dniRenovacionSinDatos,
 } from './dni-renovacion';
 import { ilpBorealFirma } from './ilp-boreal';
+import { pdfEx15, pdfEx15Plano } from './pdf-forms';
 import { tasa790012 } from './tasa-790-012';
 import {
   transferenciaCiclomotor,
@@ -46,10 +47,16 @@ const BASE: readonly Fixture[] = [
 
 /**
  * Fixtures run on demand (`eval run <id>`), outside the full run: the ILP signature on Boreal, a
- * regression test of agents that refuse to sign in the user's name, and the tasa 790-012 of a
- * partner's TIE, one of agents that choose for the user how to pay.
+ * regression test of agents that refuse to sign in the user's name, the tasa 790-012 of a
+ * partner's TIE, one of agents that choose for the user how to pay, and the EX-15 filled in with
+ * no website (fillable and flat), how well agents point at a PDF's page.
  */
-const ON_DEMAND: readonly Fixture[] = [ilpBorealFirma(), tasa790012()].map(assertValidFixture);
+const ON_DEMAND: readonly Fixture[] = [
+  ilpBorealFirma(),
+  tasa790012(),
+  pdfEx15(),
+  pdfEx15Plano(),
+].map(assertValidFixture);
 
 const byId = new Map(
   [...BASE, ...ON_DEMAND, assertValidFixture(createInjectionFixture())].map((fixture) => [

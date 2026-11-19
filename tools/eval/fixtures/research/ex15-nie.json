@@ -1,0 +1,22 @@
+{
+  "format": "sa-eval-research/1",
+  "recordedAt": "2026-11-19T01:30:00Z",
+  "source": "written by hand for the pdf-ex15 fixtures (no real search was run) from the EX-15's own instructions and the Ministerio de Inclusión's page on the NIE; only what the form's sections ask for, nothing about the persona",
+  "request": {
+    "input": "Cómo rellenar el formulario EX-15 (solicitud de NIE) para un ciudadano de la UE no residente que necesita el NIE por intereses económicos y lo presenta en una comisaría de policía: qué va en cada apartado, qué casillas marcar y qué dejar en blanco.",
+    "mode": "fast"
+  },
+  "run": {
+    "id": "00000000-0000-4000-8000-0000000e1515"
+  },
+  "output": {
+    "type": "text",
+    "content": "## Resultado\n\nEl EX-15 tiene cuatro apartados y se presenta firmado, con el pasaporte o documento de identidad y la tasa 790 código 012 pagada.\n\n1. **Datos de la persona extranjera**: pasaporte, apellidos y nombre, sexo (X, H o M), fecha y lugar de nacimiento, país, nacionalidad, estado civil (S soltero, C casado, V viudo, D divorciado, Sp separado), nombre del padre y de la madre, domicilio en España (calle, número, piso, localidad, código postal, provincia), teléfono y correo. El N.I.E. solo se rellena si ya se tiene uno. «Representante legal» solo para menores o personas con la capacidad modificada.\n2. **Datos del representante a efectos de presentación**: solo si otra persona presenta la solicitud en su nombre; si la presenta el propio interesado, se deja en blanco.\n3. **Domicilio a efectos de notificaciones**: opcional; puede repetirse el domicilio o dejarse en blanco si es el mismo.\n4. **Datos relativos a la solicitud**: 4.1 tipo de documento (marque «Número de Identidad de Extranjero (NIE)» para pedir el número; «Certificado» es otra cosa), 4.2 motivo (económicos, profesionales, sociales u otros, en ese caso especificándolo), 4.3 lugar de presentación (Oficina de Extranjería, Comisaría de Policía u Oficina Consular), 4.4 situación en España (estancia si no se es residente, residencia si se es).\n\nAl final, lugar y fecha, y la firma del solicitante, que debe ser manuscrita o electrónica del propio interesado.",
+    "basis": [
+      {
+        "url": "https://www.inclusion.gob.es/web/migraciones/w/numero-de-identidad-de-extranjero-nie-",
+        "title": "Número de Identidad de Extranjero (NIE) - Ministerio de Inclusión, Seguridad Social y Migraciones"
+      }
+    ]
+  }
+}
