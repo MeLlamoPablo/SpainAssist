@@ -74,7 +74,9 @@ interface Ui {
 // vaultKey="email" (a Mis datos key, or "custom.<slug>") on TextField, Select, Choice or Province: when the
 //   interface closes, the app saves the field's value to Mis datos itself (unless it has an error). Never add a
 //   "save my data" checkbox or call api.vault.save for these answers. Prefill value from api.vault.read.
-// Ask everything you need in one interface. Offer a way out ("Saltar"/"No lo sé") when the answer may not exist.`;
+// Ask everything you need in one interface, each thing once: a follow-up field renders only for the answer that
+//   needs it ({choice === "x" && <TextField …/>}), never labelled "(si …)", and close returns only what is shown.
+//   Offer a way out ("Saltar"/"No lo sé") when the answer may not exist.`;
 
 const PROCEDURES = `
 /** A procedure as the user sees it in the app. Updates use optimistic concurrency: they throw "conflict"
