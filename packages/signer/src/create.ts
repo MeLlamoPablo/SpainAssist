@@ -7,8 +7,9 @@
  *   AcroForm text field named after its label (else the words before it), with the label as its
  *   tooltip. pdfmake can't draw fields, so the blank is an underlined run carrying a private link;
  *   pdf-lib then swaps each link annotation for a field of the same size.
- * - `:::columns`, `|||` between columns and `:::`, each on a line of its own: blocks side by side
- *   (a contract's signatures).
+ * - `<div class="columns">` with a child `<div>` per column, Markdown in each: blocks side by side
+ *   (a contract's signatures). `<div style="display: flex">` (or grid) works too. That's the only
+ *   HTML: any other tag stays text.
  *
  * No images and no network or file access: nothing in the Markdown can make it load anything.
  */
@@ -165,25 +166,57 @@ export async function createDocument(
   return { pdf: await pdf.save(), pages: pdf.getPageCount(), fields };
 }
 
-/** The Markdown, with `:::columns` sections split into their columns. */
+/** A `<div>` that sets its children side by side: `class="columns"` (or cols, row, grid, flex),
+ *  or a style with `display: flex` or `grid`. */
+const COLUMNS_DIV =
+  /<div\b(?=[^>]*?(?:\bclass\s*=\s*["']?[^"'>]*?\b(?:columns|cols|row|grid|flex)\b|\bstyle\s*=\s*["']?[^"'>]*?\bdisplay\s*:\s*(?:inline-)?(?:flex|grid)\b))[^>]*>/i;
+const DIV_TAG = /<(\/?)div\b[^>]*>/gi;
+
+/** The Markdown, with each columns `<div>` split into its child `<div>`s, Markdown each. */
 function blocks(markdown: string): (string | string[])[] {
   const out: (string | string[])[] = [];
-  let text: string[] = [];
-  let columns: string[][] | null = null;
-  for (const line of markdown.split('\n')) {
-    if (!columns && /^:::\s*columns\s*$/i.test(line)) {
-      out.push(text.join('\n'));
-      text = [];
-      columns = [[]];
-    } else if (columns && /^\|\|\|\s*$/.test(line)) columns.push([]);
-    else if (columns && /^:::\s*$/.test(line)) {
-      out.push(columns.map((c) => c.join('\n')));
-      columns = null;
-    } else (columns ? columns[columns.length - 1]! : text).push(line);
+  let rest = markdown;
+  for (let m = COLUMNS_DIV.exec(rest); m; m = COLUMNS_DIV.exec(rest)) {
+    out.push(rest.slice(0, m.index));
+    const columns: string[] = [];
+    let depth = 1;
+    let from = m.index + m[0].length;
+    let end = rest.length;
+    DIV_TAG.lastIndex = from;
+    for (let t = DIV_TAG.exec(rest); t; t = DIV_TAG.exec(rest)) {
+      const closing = t[1] === '/';
+      // A column opens or closes (depth 1 ↔ 2), or the columns end; deeper divs stay inside.
+      if (depth === 1 || (depth === 2 && closing)) {
+        columns.push(rest.slice(from, t.index));
+        from = t.index + t[0].length;
+      }
+      depth += closing ? -1 : 1;
+      if (depth === 0) {
+        end = from;
+        break;
+      }
+    }
+    if (depth > 0) columns.push(rest.slice(from));
+    out.push(columns.map(column).filter(Boolean));
+    rest = rest.slice(end);
   }
-  if (columns) out.push(columns.map((c) => c.join('\n')));
-  out.push(text.join('\n'));
+  out.push(rest);
   return out.filter((b) => (typeof b === 'string' ? b.trim() : b.length));
+}
+
+/** A column's Markdown: the tags of divs inside it dropped, unindented (else it reads as code). */
+function column(html: string): string {
+  const lines = html.replace(DIV_TAG, '').split('\n');
+  const indent = Math.min(
+    ...lines
+      .slice(1)
+      .filter((l) => l.trim())
+      .map((l) => /^[ \t]*/.exec(l)![0].length),
+  );
+  return lines
+    .map((l, i) => (i > 0 && Number.isFinite(indent) ? l.slice(indent) : l))
+    .join('\n')
+    .trim();
 }
 
 /** A blank's name when it has no label: the last words before it on its line ("con DNI"). */

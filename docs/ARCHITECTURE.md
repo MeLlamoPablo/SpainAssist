@@ -221,8 +221,9 @@ The agent writes new documents (a private contract, a letter) from Markdown
 (`api.documents.create` → bridge `vault.createDocument` → `createDocument` of `@sa/signer`):
 `marked` reads it and pdfmake lays it out on A4 in Lora, with no network or file access.
 A blank `___[Label]` becomes an AcroForm text field named after its label (pdfmake draws an
-underlined run carrying a private link; pdf-lib swaps each link for a field), and `:::columns` /
-`|||` / `:::` set blocks side by side, kept with the paragraph before them (signatures). Its doc
+underlined run carrying a private link; pdf-lib swaps each link for a field), and a
+`<div class="columns">` (or a flex/grid `<div>`) sets its child `<div>`s side by side, Markdown in
+each, kept with the paragraph before them (signatures); any other HTML stays text. Its doc
 tells the agent to research what the document legally requires first.
 
 Every PDF signed locally (AutoFirma or Mis documentos) is then made long-term (PAdES-B-LT), after
