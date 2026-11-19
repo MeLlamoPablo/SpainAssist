@@ -224,7 +224,8 @@ A blank `___[Label]` becomes an AcroForm text field named after its label (pdfma
 underlined run carrying a private link; pdf-lib swaps each link for a field), and a
 `<div class="columns">` (or a flex/grid `<div>`) sets its child `<div>`s side by side, Markdown in
 each, kept with the paragraph before them (signatures); any other HTML stays text. Its doc
-tells the agent to research what the document legally requires first.
+tells the agent to research what the document legally requires first, and it refuses until the
+agent has read search results in an earlier run ([codemode.md](codemode.md), "The API").
 
 Every PDF signed locally (AutoFirma or Mis documentos) is then made long-term (PAdES-B-LT), after
 the key is released: main's `net.fetch` asks a timestamp authority (the site's `tsaURL` first,

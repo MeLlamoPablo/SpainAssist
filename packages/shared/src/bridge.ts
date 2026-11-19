@@ -377,6 +377,8 @@ export const BridgeParams = {
       code: z.string().max(40).optional(),
       /** console output and the user's notes, for an agent that hears the outcome later. */
       logs: z.string().max(10_000).optional(),
+      /** The run's search results main didn't return, for the agent to read (shown in full). */
+      searches: z.string().max(20_000).optional(),
     }),
     deliver: z.boolean().default(false),
   }),

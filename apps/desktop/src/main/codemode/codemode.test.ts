@@ -1140,13 +1140,14 @@ describe('a workflow outcome delivered later', () => {
         status: 'succeeded',
         value: '{"captcha":false}',
         logs: '[user] On "Escribe el código" the user noted: X7K2',
+        searches: "Searches main didn't return (read them):\n\n### api.search: q\nModelo 600",
       },
       deliver: true,
     });
     await vi.waitFor(() =>
       expect(received(clientOf(agentLib, agent.agentId))).toContainEqual(
         expect.stringContaining(
-          'Result:\n{"captcha":false}\n\nLogs:\n[user] On "Escribe el código" the user noted: X7K2',
+          'Result:\n{"captcha":false}\n\nLogs:\n[user] On "Escribe el código" the user noted: X7K2\n\nSearches main didn\'t return (read them):\n\n### api.search: q\nModelo 600',
         ),
       ),
     );

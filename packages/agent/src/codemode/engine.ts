@@ -27,6 +27,22 @@ export interface EngineOutcome {
   status: RunOutcome['status'] | 'detached';
   outcome?: RunOutcome;
   openUi: string[];
+  /** What this run's api.search calls found (memoized ones are not searched again). */
+  searches: Search[];
+}
+
+export interface Search {
+  query: string;
+  text: string;
+}
+
+/**
+ * Whether the model has seen search results in an earlier report (see `markResearched`). The
+ * host keeps it in the agent's session, so it survives the process ending.
+ */
+export interface ResearchLog {
+  has(): boolean;
+  add(): void;
 }
 
 export interface EngineDeps
@@ -35,6 +51,8 @@ export interface EngineDeps
   images: ImageStore;
   /** Return after this long even without an interface (steering stays possible). */
   detachAfterMs: number;
+  /** Where "search results reached the model" is kept; in memory without it. */
+  researchLog?: ResearchLog;
 }
 
 interface LiveRun {
@@ -42,6 +60,7 @@ interface LiveRun {
   runId: string;
   workflowId: string;
   deliver: boolean;
+  searches: Search[];
   /** Dispatches the events that wait for an interface to open (set by `pollEvents`). */
   flushWaiting?: () => void;
 }
@@ -50,8 +69,21 @@ export class WorkflowEngine {
   private readonly live = new Map<string, LiveRun>();
   private resumer?: ReturnType<typeof setInterval>;
   private resuming = false;
+  private researchedHere = false;
 
   constructor(private readonly deps: EngineDeps) {}
+
+  /** Search results have reached the model in a report of an earlier run. */
+  researched(): boolean {
+    return this.researchedHere || (this.deps.researchLog?.has() ?? false);
+  }
+
+  /** A report the model gets (tool result or message) holds search results. */
+  markResearched(): void {
+    if (this.researched()) return;
+    this.researchedHere = true;
+    this.deps.researchLog?.add();
+  }
 
   /** Workflows running in this process. */
   running(): string[] {
@@ -137,10 +169,15 @@ export class WorkflowEngine {
         ),
     };
 
+    // documents.create needs search results the model read before this run was written: the
+    // run's own searches never count (docs/codemode.md, "Research before documents").
+    const researched = this.researched();
+    const searches: Search[] = [];
     const baseOps = createHostOps({
       ...this.deps,
       runId: () => runId,
       procedures: () => procedures,
+      researched: () => researched,
     });
     let uiChanged: () => void = () => {};
     const run = new WorkflowRun({
@@ -151,6 +188,8 @@ export class WorkflowEngine {
       store,
       call: async (op, args, ctx) => {
         const result = await baseOps(op, args, ctx);
+        if (op === 'search' && typeof result === 'string')
+          searches.push({ query: searchQuery(args), text: result });
         if (op === 'procedures.getOrCreate') {
           const id = (result as { id?: string }).id;
           if (id && !procedures.includes(id)) procedures.push(id);
@@ -163,7 +202,7 @@ export class WorkflowEngine {
         setTimeout(() => live.flushWaiting?.(), 0);
       },
     });
-    const live: LiveRun = { run, runId, workflowId: input.workflowId, deliver: false };
+    const live: LiveRun = { run, runId, workflowId: input.workflowId, deliver: false, searches };
     this.live.set(input.workflowId, live);
     void this.pollEvents(live).catch((err) =>
       hostLog('warn', `events of ${input.workflowId} stopped: ${String(err)}`),
@@ -176,7 +215,13 @@ export class WorkflowEngine {
     void run.start();
 
     const detach = options.detach ?? false;
-    const base = { workflowId: input.workflowId, runId, resumed: begin.resumed, memoReused };
+    const base = {
+      workflowId: input.workflowId,
+      runId,
+      resumed: begin.resumed,
+      memoReused,
+      searches,
+    };
     if (detach) {
       live.deliver = true;
       return { ...base, status: 'detached', openUi: run.openUis() };
@@ -208,14 +253,28 @@ export class WorkflowEngine {
 
   private async finish(live: LiveRun, outcome: RunOutcome): Promise<void> {
     if (this.live.get(live.workflowId) === live) this.live.delete(live.workflowId);
+    const value =
+      outcome.status === 'succeeded' && outcome.value !== undefined
+        ? outcome.value.slice(0, 100_000)
+        : undefined;
+    const logs = outcome.logs.length ? outcome.logs.join('\n').slice(-10_000) : undefined;
+    // The agent hears this outcome as a message (its tool call returned): with the searches it
+    // didn't return, as the tool result shows them.
+    let searches: string | undefined;
+    if (live.deliver && live.searches.length) {
+      searches = unreturnedSearches(
+        live.searches,
+        // What main's message shows of them (coordinator.ts clips value and logs).
+        `${value?.slice(0, DELIVERED_CHARS) ?? ''}\n${logs?.slice(0, DELIVERED_CHARS) ?? ''}`,
+      );
+      this.markResearched();
+    }
     try {
       await this.deps.bridge.call('workflow.end', {
         runId: live.runId,
         outcome: {
           status: outcome.status,
-          ...(outcome.status === 'succeeded' && outcome.value !== undefined
-            ? { value: outcome.value.slice(0, 100_000) }
-            : {}),
+          ...(value !== undefined ? { value } : {}),
           ...(outcome.status === 'failed'
             ? {
                 error: outcome.error.slice(0, 10_000),
@@ -224,7 +283,8 @@ export class WorkflowEngine {
               }
             : {}),
           ...(outcome.status === 'cancelled' ? { error: outcome.reason.slice(0, 10_000) } : {}),
-          ...(outcome.logs.length ? { logs: outcome.logs.join('\n').slice(-10_000) } : {}),
+          ...(logs ? { logs } : {}),
+          ...(searches ? { searches } : {}),
         },
         deliver: live.deliver,
       });
@@ -330,4 +390,43 @@ export class WorkflowEngine {
   cancelAll(reason: string): void {
     for (const live of this.live.values()) live.run.cancel(reason);
   }
+}
+
+/** How much of a delivered outcome's value and logs main's message shows (coordinator.ts). */
+const DELIVERED_CHARS = 4_000;
+/** Of each search shown because main didn't return it. */
+const SEARCH_SHOWN_CHARS = 4_000;
+const SEARCHES_SHOWN_CHARS = 16_000;
+
+function searchQuery(args: unknown): string {
+  const a = (args ?? {}) as { prompt?: unknown; query?: unknown };
+  const query = typeof a.prompt === 'string' ? a.prompt : a.query;
+  return typeof query === 'string' ? query.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+}
+
+/** `report` shows the search: whole, cut, or as a JSON string inside a returned object. */
+function shows(report: string, text: string): boolean {
+  const probe = text.trim().slice(0, 200);
+  return !probe || report.includes(probe) || report.includes(JSON.stringify(probe).slice(1, -1));
+}
+
+/**
+ * The run's searches that `report` (what the model reads of the run) doesn't show, for it to
+ * read: a search found what the model must know, and a workflow can't make sense of prose
+ * itself. Empty when it returned them all.
+ */
+export function unreturnedSearches(searches: Search[], report: string): string {
+  const missing = searches.filter((s) => !shows(report, s.text));
+  if (!missing.length) return '';
+  const blocks = missing.map((s) => {
+    const text =
+      s.text.length > SEARCH_SHOWN_CHARS
+        ? `${s.text.slice(0, SEARCH_SHOWN_CHARS)}\n… ${s.text.length - SEARCH_SHOWN_CHARS} more characters: return it to read all.`
+        : s.text;
+    return `### api.search: ${s.query}\n${text}`;
+  });
+  const section = `Searches main didn't return (read them):\n\n${blocks.join('\n\n')}`;
+  return section.length > SEARCHES_SHOWN_CHARS
+    ? `${section.slice(0, SEARCHES_SHOWN_CHARS)}\n… cut: return what you need.`
+    : section;
 }

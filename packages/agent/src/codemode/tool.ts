@@ -6,7 +6,7 @@ import {
   errorResult,
   type ToolResult,
 } from '../tools/common';
-import type { EngineOutcome, WorkflowEngine } from './engine';
+import { type EngineOutcome, unreturnedSearches, type WorkflowEngine } from './engine';
 import type { ImageStore } from './host-ops';
 
 /** The model-facing name of the only tool of codemode agents. */
@@ -99,7 +99,7 @@ function pretty(value: string): string {
 
 function renderOutcome(
   outcome: EngineOutcome,
-  options: Pick<CodemodeToolOptions, 'images' | 'imagesSupported'>,
+  options: Pick<CodemodeToolOptions, 'engine' | 'images' | 'imagesSupported'>,
 ): ToolResult {
   const head = `Workflow "${outcome.workflowId}"`;
   const resumed = outcome.resumed
@@ -129,7 +129,14 @@ function renderOutcome(
     parts.push(`${head} was cancelled: ${run.reason}`);
   }
   if (run.logs.length) parts.push(`Logs:\n${run.logs.join('\n')}`);
-  const content: ToolResult['content'] = [{ type: 'text', text: clip(parts.join('\n\n')) }];
+  let text = clip(parts.join('\n\n'));
+  // The model reads every search of the run: what main returned, or else here.
+  if (outcome.searches.length) {
+    const searches = unreturnedSearches(outcome.searches, text);
+    if (searches) text = `${text}\n\n${searches}`;
+    options.engine.markResearched();
+  }
+  const content: ToolResult['content'] = [{ type: 'text', text }];
   if (options.imagesSupported)
     for (const id of run.images.slice(0, 4)) {
       const image = options.images.get(id);

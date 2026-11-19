@@ -93,6 +93,8 @@ export interface WorkflowEnd {
     error?: string;
     code?: string;
     logs?: string;
+    /** Search results the agent didn't return, for it to read. */
+    searches?: string;
   };
   deliver: boolean;
 }

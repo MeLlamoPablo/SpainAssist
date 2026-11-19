@@ -127,6 +127,18 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
 
 Errors are `CodemodeError { code, message, op, effect: "not_started" | "applied" | "unknown" }`.
 
+**Research before documents.** `api.documents.create` throws (`bad_request`, "Research first…")
+until the model has read `api.search` results in an earlier run: one whose report (its tool
+result, or the message of a detached run's end) reached the model before the current run started.
+The current run's own searches never count, so a workflow can't search and write the document
+from a template in one go, as Haiku did (the search only in private notes, the Modelo 600 never
+read). Every executed search reaches the model once: main's return value or logs if they show it
+(its first 200 characters, raw or JSON-escaped), else appended to the report ("Searches main
+didn't return", 4 k characters each, 16 k in all). Memoized searches aren't executed again, so
+they aren't shown again. The flag is a pi custom entry in the agent's session
+(`spainassist.research_seen`, outside the model's context), so it survives the agent's process
+ending and lasts the conversation; with no research backend there is no gate.
+
 ## The coordinator
 
 The chat's agent only delegates. It has no codemode: one call per turn needs no workflow, and a

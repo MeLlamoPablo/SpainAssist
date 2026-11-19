@@ -23,7 +23,12 @@ import type { HostHooks } from './hooks';
 import { hostLog } from './log';
 import { configureModel, LITELLM_PROVIDER_ID, needsPromptCacheKey } from './model';
 import { promptResearch, researchBackend } from './research';
-import { prepareSessionFile, recordResearchUsage, recordSessionSelection } from './session';
+import {
+  prepareSessionFile,
+  recordResearchUsage,
+  recordSessionSelection,
+  sessionResearchLog,
+} from './session';
 
 /**
  * Agent host: one process per active agent (the coordinator, or a background agent). Reads its
@@ -174,6 +179,7 @@ export async function runHost(
       ...(hooks.egress?.resolveHost ? { resolveHost: hooks.egress.resolveHost } : {}),
       ...(hooks.egress?.onBlocked ? { onBlocked: hooks.egress.onBlocked } : {}),
       detachAfterMs: 2 * 60_000,
+      researchLog: sessionResearchLog(() => sessionManager),
     });
     tools.push(codemodeTool({ engine, images, imagesSupported, language: config.language }));
   }

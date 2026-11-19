@@ -53,6 +53,11 @@ export interface HostOpsDeps {
   procedures(): string[];
   /** Web research as a tool (web_research, or exa_search for BYOK), when configured. */
   research?: { kind: 'web_research' | 'exa'; search: AnyToolDefinition };
+  /**
+   * With research: whether the model read search results before this run (an earlier run's
+   * report showed them). documents.create refuses until then.
+   */
+  researched?: () => boolean;
   imagesSupported: boolean;
   allowPrivateHosts?: boolean;
   fetchImpl?: typeof fetch;
@@ -152,6 +157,10 @@ function str(value: unknown, what: string, max = 10_000): string {
     throw new HostOpError('bad_request', `${what} is too long.`, 'not_started');
   return value;
 }
+
+/** documents.create before the model read any search results (HostOpsDeps.researched). */
+export const RESEARCH_FIRST =
+  'Research first, in a run of its own: api.search what this kind of document legally requires (content, formalities, what must be done afterwards, like taxes or registration). Read the results, then create the document following them in a later run.';
 
 export function createHostOps(deps: HostOpsDeps): HostOp {
   const { bridge } = deps;
@@ -688,12 +697,15 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           { signal },
         ),
       'documents.fill': fillDocument,
-      'documents.create': (a, signal) =>
-        bridge.call(
+      'documents.create': async (a, signal) => {
+        if (deps.research && deps.researched && !deps.researched())
+          throw new HostOpError('bad_request', RESEARCH_FIRST, 'not_started');
+        return bridge.call(
           'vault.createDocument',
           { name: str(a.name, 'name', 120), markdown: str(a.markdown, 'markdown', 200_000) },
           { signal, procedureId: primary() },
-        ),
+        );
+      },
       'documents.sign': (a, signal) =>
         bridge.call(
           'vault.signDocument',

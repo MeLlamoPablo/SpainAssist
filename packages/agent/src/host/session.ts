@@ -2,6 +2,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, realpathSync } f
 import { homedir, tmpdir } from 'node:os';
 import { dirname, parse, resolve } from 'node:path';
 import type { SessionManager } from '@earendil-works/pi-coding-agent';
+import type { ResearchLog } from '../codemode/engine';
 import type { ResearchUsage } from '../research/chatgpt-research';
 
 /**
@@ -44,6 +45,28 @@ export function recordSessionSelection(
   if (lastThinking?.thinkingLevel !== thinkingLevel) {
     sessionManager.appendThinkingLevelChange(thinkingLevel);
   }
+}
+
+/** Custom entry: search results reached the model (WorkflowEngine.markResearched). */
+const RESEARCH_SEEN = 'spainassist.research_seen';
+
+/**
+ * "The model has read search results" kept in the agent's session file, as a custom entry that
+ * isn't part of the model's context: it survives the agent's process ending (idle, a restart)
+ * and lasts as long as the conversation.
+ */
+export function sessionResearchLog(
+  sessionManager: () => Pick<SessionManager, 'getBranch' | 'appendCustomEntry'>,
+): ResearchLog {
+  return {
+    has: () =>
+      sessionManager()
+        .getBranch()
+        .some((entry) => entry.type === 'custom' && entry.customType === RESEARCH_SEEN),
+    add: () => {
+      sessionManager().appendCustomEntry(RESEARCH_SEEN);
+    },
+  };
 }
 
 /** Kind of the pi `usage` entry of a web research request (see recordResearchUsage). */

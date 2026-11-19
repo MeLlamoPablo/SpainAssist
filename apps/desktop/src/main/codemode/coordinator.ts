@@ -321,7 +321,8 @@ export class CodemodeCoordinator {
           ? `Error:\n${clip(end.outcome.error ?? 'unknown', MAX_RESULT_CHARS)}\nFix the module and re-run it with the same id: memoized steps and closed interfaces are kept.`
           : `Cancelled${end.outcome.error ? `: ${end.outcome.error}` : ''}.`;
     const logs = end.outcome.logs ? `\n\nLogs:\n${clip(end.outcome.logs, MAX_RESULT_CHARS)}` : '';
-    const text = `${WORKFLOW_RESULT_PREFIX} "${w.id}"${title} ${end.outcome.status}]\n${body}${logs}`;
+    const searches = end.outcome.searches ? `\n\n${end.outcome.searches}` : '';
+    const text = `${WORKFLOW_RESULT_PREFIX} "${w.id}"${title} ${end.outcome.status}]\n${body}${logs}${searches}`;
     this.track(this.send(end.agentId, text, { followUp: true }));
   }
 

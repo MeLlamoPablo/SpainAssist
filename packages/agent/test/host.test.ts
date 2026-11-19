@@ -10,7 +10,7 @@ import { parseHostConfig } from '../src/config';
 import { BridgeCredentialStore, normalizeCredential } from '../src/host/credentials';
 import { linkedDocumentIds, unknownDocumentsMessage } from '../src/host/document-links';
 import { templateFor } from '../src/host/model';
-import { prepareSessionFile, recordResearchUsage } from '../src/host/session';
+import { prepareSessionFile, recordResearchUsage, sessionResearchLog } from '../src/host/session';
 import { agentHostPath, buildAgentLaunch } from '../src/launch';
 import { buildCoordinatorPrompt } from '../src/prompt/coordinator';
 import { formatToday } from '../src/prompt/system';
@@ -256,6 +256,21 @@ describe('session file', () => {
       note: 'mode=deep thinking=high searches=7 durationMs=93200 stop=stop',
     });
     expect(session.buildSessionContext().messages).toEqual(context);
+  });
+
+  it('keeps "search results reached the model" in the session, outside its context', () => {
+    dir = mkdtempSync(join(tmpdir(), 'sa-session-'));
+    const file = prepareSessionFile(join(dir, 'p1.jsonl'));
+    const session = SessionManager.open(file, dir, dir);
+    session.appendMessage({ role: 'user', content: 'Un contrato de préstamo', timestamp: 1 });
+    const context = session.buildSessionContext().messages;
+    const log = sessionResearchLog(() => session);
+    expect(log.has()).toBe(false);
+    log.add();
+    expect(log.has()).toBe(true);
+    expect(session.buildSessionContext().messages).toEqual(context);
+    // A new process reads it back from the file.
+    expect(sessionResearchLog(() => SessionManager.open(file, dir, dir)).has()).toBe(true);
   });
 });
 
