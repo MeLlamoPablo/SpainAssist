@@ -56,6 +56,7 @@ const WAITS_FOR_USER: ReadonlySet<string> = new Set([
   'browser.loginClave',
   'browser.fillFromUser',
   'browser.useCertificate',
+  'vault.signDocument',
   // Codemode: a poll waits for the user.
   'workflow.events',
   // Map lookups of an interface may take a moment.

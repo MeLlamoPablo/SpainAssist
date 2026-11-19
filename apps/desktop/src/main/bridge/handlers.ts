@@ -546,7 +546,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
         throw new BridgeError('bad_request', 'Only PDF documents can be signed.');
       }
       try {
-        const signed = await deps.browser.signDocument(ctx.procedureId, meta.id);
+        const signed = await deps.browser.signDocument(ctx.procedureId, meta.id, ctx.signal);
         return { documentId: signed.id, name: signed.name, signed: true };
       } catch (err) {
         if (err instanceof UserError && err.code === 'cancelled') {

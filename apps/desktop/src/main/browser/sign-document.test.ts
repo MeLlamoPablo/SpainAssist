@@ -146,6 +146,20 @@ it('leaves the document as it was when the user does not sign', async () => {
   expect(app.vault.getDocument(doc.id)?.signedAt).toBeUndefined();
 });
 
+it('withdraws the card when the agent stops waiting, so a retry shows only one', async () => {
+  const { pdf, doc } = await addPdf();
+  const controller = new AbortController();
+  const call = app
+    .rpc('vault.signDocument', { documentId: doc.id }, token, { signal: controller.signal })
+    .catch(() => undefined);
+  await app.waitFor(() => !!app.pendingPrompt(procedureId));
+  controller.abort();
+  await call;
+  await app.waitFor(() => !app.pendingPrompt(procedureId));
+  expect(await app.vault.readDocument(doc.id)).toEqual(pdf);
+  expect(touchIds).toBe(0);
+});
+
 it('refuses documents that are not PDFs', async () => {
   const doc = await app.vault.addDocument({
     name: 'Foto.jpg',

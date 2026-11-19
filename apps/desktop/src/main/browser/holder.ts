@@ -355,11 +355,13 @@ export class BrowserHolder {
    * with the details of what is signed (+ Touch ID when available). Signatures with a `.p12`
    * always ask, whatever the credential's policy. The DNI is approved on the phone instead
    * (`CompanionService.approve`), after the desktop asks for its CAN and PIN when it doesn't
-   * have them. Returns null when declined / cancelled / no certificate.
+   * have them. Returns null when declined / cancelled / no certificate. `signal` withdraws the
+   * desktop's cards when whoever asked stops waiting.
    */
   async approveSignature(
     procedureId: string,
     summary: AfirmaSignatureSummary,
+    signal?: AbortSignal,
   ): Promise<SigningKey | null> {
     const { deps } = this;
     const lang = deps.lang();
@@ -381,24 +383,28 @@ export class BrowserHolder {
     try {
       let chosen: CredentialSummary | undefined = certificates[0];
       if (certificates.length > 1) {
-        const pick = await deps.prompts.ask(procedureId, {
-          kind: 'form',
-          title: t(lang, 'pickCertificateTitle'),
-          fields: [
-            {
-              key: 'certificate',
-              label: t(lang, 'detailCertificate'),
-              type: 'select',
-              required: true,
-              options: certificates.map((c) => ({
-                value: c.id,
-                label: describeCertificate(c, lang),
-              })),
-            },
-          ],
-          submitLabel: t(lang, 'continueLabel'),
-          allowDismiss: false,
-        });
+        const pick = await deps.prompts.ask(
+          procedureId,
+          {
+            kind: 'form',
+            title: t(lang, 'pickCertificateTitle'),
+            fields: [
+              {
+                key: 'certificate',
+                label: t(lang, 'detailCertificate'),
+                type: 'select',
+                required: true,
+                options: certificates.map((c) => ({
+                  value: c.id,
+                  label: describeCertificate(c, lang),
+                })),
+              },
+            ],
+            submitLabel: t(lang, 'continueLabel'),
+            allowDismiss: false,
+          },
+          { signal },
+        );
         if (pick.kind !== 'form' || pick.dismissed) return null;
         chosen = certificates.find((c) => c.id === pick.values?.certificate);
       }
@@ -414,7 +420,7 @@ export class BrowserHolder {
         if (!deps.companion) return null;
         // The phone approves; the desktop only lets the user place the box first.
         if (summary.placement?.mode === 'choose') {
-          const placed = await this.signatureCard(procedureId, summary, chosen, 'phone');
+          const placed = await this.signatureCard(procedureId, summary, chosen, 'phone', signal);
           if (!placed) return null;
           placement = placed.placement;
         }
@@ -423,10 +429,10 @@ export class BrowserHolder {
         return key ? { ...key, ...extras() } : null;
       }
       if (summary.placement) {
-        const placed = await this.signatureCard(procedureId, summary, chosen, 'here');
+        const placed = await this.signatureCard(procedureId, summary, chosen, 'here', signal);
         if (!placed) return null;
         placement = placed.placement;
-      } else if (!(await this.confirm(procedureId, summary, chosen))) return null;
+      } else if (!(await this.confirm(procedureId, summary, chosen, signal))) return null;
       if (chosen.external) {
         // The key stays in the OS store, which may ask the user once more on first use.
         if (!deps.osCertificates) return null;
@@ -490,6 +496,7 @@ export class BrowserHolder {
     summary: AfirmaSignatureSummary,
     chosen: CredentialSummary,
     approval: 'here' | 'phone',
+    signal?: AbortSignal,
   ): Promise<{ placement: SignaturePlacement | null | undefined } | null> {
     const { deps } = this;
     const request = summary.placement;
@@ -530,7 +537,7 @@ export class BrowserHolder {
         confirmLabel: t(lang, approval === 'here' ? 'signLabel' : 'continueLabel'),
         rejectLabel: t(lang, 'dontSignLabel'),
       },
-      { document: document.data },
+      { document: document.data, signal },
     );
     if (answer.kind !== 'pdf_signature' || !answer.approved) return null;
     if (approval === 'here' && !(await deps.biometric.prompt(t(lang, 'touchIdSignature')))) {
@@ -545,7 +552,11 @@ export class BrowserHolder {
    * then the signed PDF replaces the document (same id and name; the original is still inside it,
    * before the signature's incremental update).
    */
-  async signDocument(procedureId: string, documentId: string): Promise<DocumentMeta> {
+  async signDocument(
+    procedureId: string,
+    documentId: string,
+    signal?: AbortSignal,
+  ): Promise<DocumentMeta> {
     const { deps } = this;
     const lang = deps.lang();
     const signer = deps.signer;
@@ -563,19 +574,25 @@ export class BrowserHolder {
       throw new UserError(t(lang, 'signOnlyPdf'), 'bad_request');
     }
     const initial = signer.defaultPlacement(layout);
-    const key = await this.approveSignature(procedureId, {
-      method: 'sign',
-      format: 'PAdES',
-      algorithm: 'SHA256withRSA',
-      origin: OWN_DOCUMENTS_ORIGIN,
-      description: t(lang, 'signDocumentWhat', { name: meta.name }),
-      dataSize: meta.size,
-      documents: [{ name: meta.name, mimeType: meta.mimeType, data: pdf }],
-      // The phone can't check an update that draws a visible signature.
-      verifiable: false,
-      placement: { mode: 'choose', initial, appearance: 'handwritten' },
-    });
+    const key = await this.approveSignature(
+      procedureId,
+      {
+        method: 'sign',
+        format: 'PAdES',
+        algorithm: 'SHA256withRSA',
+        origin: OWN_DOCUMENTS_ORIGIN,
+        description: t(lang, 'signDocumentWhat', { name: meta.name }),
+        dataSize: meta.size,
+        documents: [{ name: meta.name, mimeType: meta.mimeType, data: pdf }],
+        // The phone can't check an update that draws a visible signature.
+        verifiable: false,
+        placement: { mode: 'choose', initial, appearance: 'handwritten' },
+      },
+      signal,
+    );
     if (!key) throw new UserError(t(lang, 'documentNotSigned'), 'cancelled');
+    // The agent stopped waiting while Touch ID or the phone answered: don't sign behind its back.
+    if (signal?.aborted) throw new UserError(t(lang, 'documentNotSigned'), 'cancelled');
     const signed = await signer.signPdf({ pdf, key, placement: key.placement ?? initial });
     const updated = await vault.replaceDocument(documentId, signed, { signedAt: new Date() });
     deps.events.emit({ type: 'vault.changed' });
@@ -593,6 +610,7 @@ export class BrowserHolder {
     procedureId: string,
     summary: AfirmaSignatureSummary,
     chosen: CredentialSummary,
+    signal?: AbortSignal,
   ): Promise<boolean> {
     const { deps } = this;
     const lang = deps.lang();
@@ -607,16 +625,20 @@ export class BrowserHolder {
       label: t(lang, 'detailCertificate'),
       value: describeCertificate(chosen, lang),
     });
-    const confirm = await deps.prompts.ask(procedureId, {
-      kind: 'confirm',
-      confirmKind: 'signature',
-      title: t(lang, 'signatureTitle'),
-      message: t(lang, 'signatureMessage', { host }),
-      details,
-      confirmLabel: t(lang, 'signLabel'),
-      rejectLabel: t(lang, 'dontSignLabel'),
-      biometric: deps.biometric.available(),
-    });
+    const confirm = await deps.prompts.ask(
+      procedureId,
+      {
+        kind: 'confirm',
+        confirmKind: 'signature',
+        title: t(lang, 'signatureTitle'),
+        message: t(lang, 'signatureMessage', { host }),
+        details,
+        confirmLabel: t(lang, 'signLabel'),
+        rejectLabel: t(lang, 'dontSignLabel'),
+        biometric: deps.biometric.available(),
+      },
+      { signal },
+    );
     if (confirm.kind !== 'confirm' || !confirm.approved) return false;
     return deps.biometric.prompt(t(lang, 'touchIdSignature'));
   }

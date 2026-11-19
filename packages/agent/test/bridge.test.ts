@@ -64,6 +64,7 @@ describe('BridgeClient', () => {
   it('applies timeouts except to methods that wait for the user', async () => {
     expect(defaultBridgeTimeoutMs('prompt.confirm')).toBe(0);
     expect(defaultBridgeTimeoutMs('browser.fillFromUser')).toBe(0);
+    expect(defaultBridgeTimeoutMs('vault.signDocument')).toBe(0);
     expect(defaultBridgeTimeoutMs('procs.update')).toBeGreaterThan(0);
     bridge = await createFakeBridge({ 'workflows.list': hang });
     const client = new BridgeClient({ url: bridge.url, token: bridge.token });
