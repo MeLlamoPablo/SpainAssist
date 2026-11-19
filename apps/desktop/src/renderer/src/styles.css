@@ -361,14 +361,10 @@
     scrollbar-gutter: stable both-edges;
   }
 
+  /* `color-scheme: dark` already draws the icon light; inverting it would make it black. */
   input[type="date"]::-webkit-calendar-picker-indicator {
     opacity: 0.55;
     cursor: pointer;
-  }
-  @media (prefers-color-scheme: dark) {
-    input[type="date"]::-webkit-calendar-picker-indicator {
-      filter: invert(1);
-    }
   }
 }
 
