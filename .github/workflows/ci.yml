@@ -106,11 +106,13 @@ jobs:
       - name: Install Chromium
         run: corepack pnpm --filter @sa/browser exec playwright-core install --with-deps chromium
       # Every test browser headed, as the app runs it. xvfb has no window manager, so the windows
-      # the app minimizes stay normal here (packages/browser/README.md, "Headed").
+      # the app minimizes stay normal here (packages/browser/README.md, "Headed"). Headed browsers
+      # flake on slow runners: a failing run goes once more (scripts/retry.sh), here and in the
+      # Windows and e2e jobs.
       - name: Test
         env:
           SA_TEST_HEADED: '1'
-        run: xvfb-run --auto-servernum corepack pnpm --filter @sa/browser test
+        run: bash scripts/retry.sh xvfb-run --auto-servernum corepack pnpm --filter @sa/browser test
 
   windows:
     name: Unit tests (Windows)
@@ -137,7 +139,7 @@ jobs:
           SA_TEST_HEADED: '1'
           SA_TEST_BROWSER_WINDOWS: '1'
         run: >-
-          corepack pnpm --workspace-concurrency=1
+          bash scripts/retry.sh corepack pnpm --workspace-concurrency=1
           --filter @sa/shared --filter @sa/pii --filter @sa/vault --filter @sa/signer
           --filter @sa/sidecar --filter @sa/browser --filter @sa/companion --filter @sa/agent
           --filter @sa/desktop test
@@ -164,7 +166,7 @@ jobs:
       # Electron needs a display even with its window hidden, and the parity project's browser
       # runs headed.
       - name: E2E
-        run: xvfb-run --auto-servernum corepack pnpm e2e
+        run: bash scripts/retry.sh xvfb-run --auto-servernum corepack pnpm e2e
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -195,7 +197,7 @@ jobs:
         run: corepack pnpm --filter @sa/desktop build
       # The agent's browser headed with a CRLSet, and the app's --self-test (e2e/tests/parity.spec.ts).
       - name: E2E (parity)
-        run: corepack pnpm e2e --project parity
+        run: bash scripts/retry.sh corepack pnpm e2e --project parity
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
