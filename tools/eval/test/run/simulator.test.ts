@@ -1091,6 +1091,33 @@ describe('document fields', () => {
     expect(t.app.order.filter((step) => step.startsWith('addDocument'))).toHaveLength(2);
   });
 
+  it('attaches the documents when the answerer rightly left the only other field empty', async () => {
+    const answerer = fakeAnswerer([() => ({ type: 'values', values: {}, skipped: ['motivo'] })]);
+    const t = setup(
+      { answerGroups: [], unexpectedPrompt: 'answerer', seed: { documents: onHand() } },
+      { answerer },
+    );
+    t.show(
+      papers('form-optional', [
+        {
+          key: 'motivo',
+          type: 'select',
+          label: 'Motivo (opcional)',
+          required: false,
+          options: [{ value: 'herencia', label: 'Herencia' }],
+        },
+      ]),
+    );
+    await t.sim.settled();
+    expect(t.fatal).toEqual([]);
+    expect(t.app.responses[0]!.response).toMatchObject({
+      kind: 'form',
+      values: { impuesto: 'doc-1', tasa: 'doc-2' },
+      dismissed: false,
+    });
+    expect(t.answered()).toMatchObject([{ itemId: 'form-optional', by: 'answerer' }]);
+  });
+
   it('gives each document once per form and notes a required field nothing answers', async () => {
     const t = setup({
       answerGroups: [],

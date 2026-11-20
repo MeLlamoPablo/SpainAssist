@@ -411,10 +411,9 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
     if (checked.issues.length > 0) {
       note(`answerer values dropped for ${describePrompt(prompt)}: ${checked.issues.join('; ')}`);
     }
-    const values =
-      Object.keys(checked.values).length === 0
-        ? {}
-        : { ...checked.values, ...(await documentValues(prompt, checked.values)) };
+    // The persona's documents are attached even when the answerer filled no other field (an
+    // optional select it rightly left empty): only a form with neither is dismissed.
+    const values = { ...checked.values, ...(await documentValues(prompt, checked.values)) };
     if (stopped) return;
     const response = Object.keys(values).length === 0 ? dismissal() : formResponse(prompt, values);
     await send(prompt, response, { by: 'answerer', ...(answerId ? { answerId } : {}) });
