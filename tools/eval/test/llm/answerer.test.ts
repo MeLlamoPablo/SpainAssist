@@ -474,6 +474,127 @@ describe('answerer: the model call', () => {
   });
 });
 
+describe('answerer: transient failures', () => {
+  const ask = { persona: PERSONA, prompt: { ...form, fields: [form.fields![0]!] } };
+  const failing = (status: number, message: string, times?: number) => ({
+    when: {},
+    reply: { error: { status, message } },
+    ...(times ? { times } : {}),
+  });
+  /** Instant pauses, remembered. */
+  const pauses = () => {
+    const waited: number[] = [];
+    return { waited, sleep: async (ms: number) => void waited.push(ms) };
+  };
+
+  it('retries an overloaded server twice, after 5 s and 20 s, and says so', async () => {
+    env = await startEnv({
+      mock: {
+        scenario: {
+          rules: [failing(503, 'service_unavailable_error: server_is_overloaded', 2)],
+          fallback: { text: '{"fullName": "María"}' },
+        },
+        litellm: {},
+      },
+    });
+    const { waited, sleep } = pauses();
+    const retries: unknown[] = [];
+    const sunk: AnswererRecord[] = [];
+    const { answerer } = await answererFor({
+      sleep,
+      onRetry: (r) => retries.push(r),
+      sink: (r) => void sunk.push(r),
+    });
+    expect(await answerer.answer(ask)).toMatchObject({ values: { fullName: 'María' } });
+    expect(waited).toEqual([5_000, 20_000]);
+    expect(retries).toMatchObject([
+      { n: 1, retry: 1, of: 2, delayMs: 5_000, error: expect.stringMatching(/overloaded/) },
+      { n: 1, retry: 2, of: 2, delayMs: 20_000 },
+    ]);
+    expect(sunk.map((r) => [r.attempt, r.error ? 'error' : 'ok'])).toEqual([
+      [1, 'error'],
+      [2, 'error'],
+      [3, 'ok'],
+    ]);
+  });
+
+  it('retries a call that timed out', async () => {
+    env = await startEnv({
+      mock: {
+        scenario: {
+          rules: [{ when: {}, reply: { text: '{"fullName": "Tarde"}', delayMs: 2_000 }, times: 1 }],
+          fallback: { text: '{"fullName": "María"}' },
+        },
+        litellm: {},
+      },
+    });
+    const { waited, sleep } = pauses();
+    const { answerer } = await answererFor({ sleep, timeoutMs: 300 });
+    expect(await answerer.answer(ask)).toMatchObject({ values: { fullName: 'María' } });
+    expect(waited).toEqual([5_000]);
+  });
+
+  it('gives up after two retries with the last error', async () => {
+    env = await startEnv({
+      mock: { scenario: { rules: [failing(503, 'server_is_overloaded')] }, litellm: {} },
+    });
+    const { waited, sleep } = pauses();
+    const { answerer } = await answererFor({ sleep, retryDelaysMs: [1, 2] });
+    await expect(answerer.answer(ask)).rejects.toMatchObject({
+      code: 'model_error',
+      message: expect.stringMatching(/overloaded/),
+    });
+    expect(waited).toEqual([1, 2]);
+    expect(env.llm.requests()).toHaveLength(3);
+  });
+
+  it('never retries a refusal: budget, auth, a bad request, a replay miss', async () => {
+    for (const [status, message, code] of [
+      [402, 'Key limit exceeded', 'budget'],
+      [401, 'invalid api key', 'model_error'],
+      [400, 'bad request: unknown parameter', 'model_error'],
+    ] as const) {
+      env = await startEnv({
+        mock: { scenario: { rules: [failing(status, message)] }, litellm: {} },
+      });
+      const { waited, sleep } = pauses();
+      const { answerer } = await answererFor({ sleep });
+      await expect(answerer.answer(ask)).rejects.toMatchObject({ code });
+      expect(waited).toEqual([]);
+      expect(env.llm.requests()).toHaveLength(1);
+      await env.close();
+    }
+    env = await startEnv();
+    const { waited, sleep } = pauses();
+    const { answerer } = await answererFor({ sleep }, env.openRun({ cache: 'replay' }));
+    await expect(answerer.answer(ask)).rejects.toMatchObject({ code: 'replay_miss' });
+    expect(waited).toEqual([]);
+  });
+
+  it('records only the take that worked: the run replays with no failure in it', async () => {
+    env = await startEnv({
+      mock: {
+        scenario: {
+          rules: [failing(503, 'server_is_overloaded', 1)],
+          fallback: { text: '{"fullName": "María García"}' },
+        },
+        litellm: {},
+      },
+    });
+    const { sleep } = pauses();
+    const { answerer: live } = await answererFor({ sleep }, env.openRun({ cache: 'record' }));
+    const first = await live.answer(ask);
+    const replayRun = env.openRun({ cache: 'replay' });
+    const { answerer: replayed } = await answererFor(
+      { sleep, credentials: createCredentialSource({ provider: 'voucher', cache: 'replay' }) },
+      replayRun,
+    );
+    expect(await replayed.answer(ask)).toEqual(first);
+    expect(env.llm.requests()).toHaveLength(2);
+    expect(replayRun.usage().cacheHits).toBe(1);
+  });
+});
+
 describe('answerer: secrets and transcripts', () => {
   const PASSWORD = 'hunter2-clave-password';
 

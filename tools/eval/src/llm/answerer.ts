@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import type {
   AssistantMessage,
   Credential,
@@ -26,8 +27,11 @@ import { SecretRegistry } from './redact';
  * form values. It calls pi's `ModelRuntime.completeSimple` in process, like
  * `tools/scan-eval`, through the meter with the agent key `answerer`, so it is capped, metered
  * and cacheable like every other model call and works for both providers. Output is strict JSON,
- * validated with zod, with one repair retry. Every model call is written to a transcript sink
- * (the run's `answerer/` directory). Nothing in a prompt, a transcript or an error ever carries a
+ * validated with zod, with one repair retry. A transient failure of the model call (overloaded,
+ * 5xx, 429, network, timeout) is retried twice after a pause; a budget, cap, replay miss or auth
+ * refusal never is. A failed call is never recorded by the meter's cache, so a retry under
+ * `--cache record` records only the take that worked. Every model call is written to a transcript
+ * sink (the run's `answerer/` directory). Nothing in a prompt, a transcript or an error ever carries a
  * secret: registered secrets are refused before the call and masked everywhere they could appear.
  */
 
@@ -96,8 +100,8 @@ export interface AnswererResult {
 export interface AnswererRecord {
   /** Number of the answer (1-based), shared by its attempts. */
   n: number;
-  /** 1, or 2 for the repair retry. */
-  attempt: 1 | 2;
+  /** The answer's model calls so far (1-based): repair and transient retries count too. */
+  attempt: number;
   at: string;
   provider: EvalProvider;
   model: string;
@@ -148,6 +152,24 @@ export interface AnswererOptions {
   /** Per model call; default 60 s, and 10 minutes for a local model (`LOCAL_TIMEOUT_MS`). */
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** The pauses before each retry of a transient failure; default 5 s, then 20 s. */
+  retryDelaysMs?: readonly number[];
+  /** Waits `ms` (tests make it instant). Default a timer that the run's signal cuts short. */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** A transient failure is about to be retried (the run notes it). */
+  onRetry?: (retry: AnswererRetry) => void;
+}
+
+interface AnswererRetry {
+  /** Number of the answer (1-based). */
+  n: number;
+  /** 1 for the first retry. */
+  retry: number;
+  /** Retries this answer may take at most. */
+  of: number;
+  delayMs: number;
+  /** Why the call failed (redacted). */
+  error: string;
 }
 
 export interface Answerer {
@@ -321,6 +343,7 @@ function validate(fields: Field[], text: string): AnswererResult {
 // ---------------------------------------------------------------------------------------------
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_RETRY_DELAYS_MS = [5_000, 20_000];
 /**
  * A model on the developer's own machine reads a long conversation slowly (over a minute per
  * request for a small quantized model on a laptop): a gateway's timeout would end the run.
@@ -365,8 +388,25 @@ function errorFor(message: string): AnswererError {
     return new AnswererError('budget', message);
   }
   if (/replay cache miss/i.test(message)) return new AnswererError('replay_miss', message);
+  if (classifyAgentError(message) === 'quota') return new AnswererError('budget', message);
   return new AnswererError('model_error', message);
 }
+
+/** A failure worth another try: an overloaded or failing server, a rate limit, the network. */
+function transient(message: string): boolean {
+  const kind = classifyAgentError(message);
+  return (
+    kind === 'provider' ||
+    kind === 'rate_limit' ||
+    kind === 'network' ||
+    (kind === 'unknown' && /\btime(?:d\s*)?out\b/i.test(message))
+  );
+}
+
+const sleepFor = async (ms: number, signal?: AbortSignal): Promise<void> => {
+  // A run that ends during the pause stops waiting (the caller sees its signal aborted).
+  await delay(ms, undefined, signal ? { signal } : {}).catch(() => {});
+};
 
 export async function createAnswerer(options: AnswererOptions): Promise<Answerer> {
   const piProvider = PI_PROVIDER[options.provider];
@@ -393,12 +433,16 @@ export async function createAnswerer(options: AnswererOptions): Promise<Answerer
   const thinking = clampThinkingLevel(model, options.thinking ?? DEFAULT_ANSWERER_THINKING);
   const timeoutMs =
     options.timeoutMs ?? (options.provider === 'local' ? LOCAL_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
+  const retryDelays = options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
+  const sleep = options.sleep ?? sleepFor;
   let answers = 0;
 
-  const call = (system: string, messages: Message[]): Promise<AssistantMessage> => {
-    const signal = AbortSignal.any(
-      [AbortSignal.timeout(timeoutMs), options.signal].filter((s): s is AbortSignal => !!s),
-    );
+  const call = (
+    system: string,
+    messages: Message[],
+    timeout: AbortSignal,
+  ): Promise<AssistantMessage> => {
+    const signal = AbortSignal.any([timeout, options.signal].filter((s): s is AbortSignal => !!s));
     return runtime.completeSimple(
       model,
       { systemPrompt: system, messages },
@@ -409,6 +453,17 @@ export async function createAnswerer(options: AnswererOptions): Promise<Answerer
       },
     );
   };
+
+  const responseOf = (message: AssistantMessage): NonNullable<AnswererRecord['response']> => ({
+    text: textOf(message),
+    stopReason: message.stopReason,
+    usage: {
+      input: message.usage.input,
+      output: message.usage.output,
+      cacheRead: message.usage.cacheRead,
+      cacheWrite: message.usage.cacheWrite,
+    },
+  });
 
   const record = async (entry: AnswererRecord): Promise<void> => {
     await options.sink?.(JSON.parse(secrets.redact(JSON.stringify(entry))) as AnswererRecord);
@@ -452,46 +507,58 @@ export async function createAnswerer(options: AnswererOptions): Promise<Answerer
       const messages: Message[] = [first];
 
       let lastProblem = '';
-      for (const attempt of [1, 2] as const) {
-        const base: AnswererRecord = {
-          n,
-          attempt,
-          at: new Date().toISOString(),
-          provider: options.provider,
-          model: modelId,
-          thinking,
-          request: { system, messages: snapshot(messages) },
-        };
-        let message: AssistantMessage;
-        try {
-          message = await call(system, messages);
-        } catch (error) {
-          const text = secrets.redact(error instanceof Error ? error.message : String(error));
-          await record({ ...base, error: text });
-          throw new AnswererError('model_error', text);
+      let calls = 0;
+      for (const pass of [1, 2] as const) {
+        let base!: AnswererRecord;
+        let message!: AssistantMessage;
+        for (let retry = 0; ; retry++) {
+          base = {
+            n,
+            attempt: ++calls,
+            at: new Date().toISOString(),
+            provider: options.provider,
+            model: modelId,
+            thinking,
+            request: { system, messages: snapshot(messages) },
+          };
+          const timeout = AbortSignal.timeout(timeoutMs);
+          let problem: string;
+          let response: AnswererRecord['response'] | undefined;
+          try {
+            const reply = await call(system, messages, timeout);
+            if (reply.stopReason !== 'error' && reply.stopReason !== 'aborted') {
+              message = reply;
+              break;
+            }
+            response = responseOf(reply);
+            problem = secrets.redact(reply.errorMessage ?? `the model call ${reply.stopReason}`);
+          } catch (error) {
+            problem = secrets.redact(error instanceof Error ? error.message : String(error));
+          }
+          await record({ ...base, ...(response ? { response } : {}), error: problem });
+          const failure = errorFor(problem);
+          const timedOut = timeout.aborted && !options.signal?.aborted;
+          const pause = retryDelays[retry];
+          if (
+            failure.code !== 'model_error' ||
+            !(timedOut || transient(problem)) ||
+            pause === undefined ||
+            options.signal?.aborted
+          ) {
+            throw failure;
+          }
+          options.onRetry?.({
+            n,
+            retry: retry + 1,
+            of: retryDelays.length,
+            delayMs: pause,
+            error: problem,
+          });
+          await sleep(pause, options.signal);
+          if (options.signal?.aborted) throw failure;
         }
         const text = textOf(message);
-        const response = {
-          text,
-          stopReason: message.stopReason,
-          usage: {
-            input: message.usage.input,
-            output: message.usage.output,
-            cacheRead: message.usage.cacheRead,
-            cacheWrite: message.usage.cacheWrite,
-          },
-        };
-        if (message.stopReason === 'error' || message.stopReason === 'aborted') {
-          const problem = secrets.redact(
-            message.errorMessage ?? `the model call ${message.stopReason}`,
-          );
-          await record({ ...base, response, error: problem });
-          const failure = errorFor(problem);
-          if (failure.code === 'model_error' && classifyAgentError(problem) === 'quota') {
-            throw new AnswererError('budget', problem);
-          }
-          throw failure;
-        }
+        const response = responseOf(message);
         try {
           const result = validate(fields, text);
           await record({ ...base, response, parsed: result });
@@ -499,7 +566,7 @@ export async function createAnswerer(options: AnswererOptions): Promise<Answerer
         } catch (error) {
           lastProblem = secrets.redact((error as Error).message);
           await record({ ...base, response, error: `invalid output: ${lastProblem}` });
-          if (attempt === 2) break;
+          if (pass === 2) break;
           messages.push(message, {
             role: 'user',
             content: `Your reply was not valid: ${lastProblem}. Reply again with only the JSON object.`,

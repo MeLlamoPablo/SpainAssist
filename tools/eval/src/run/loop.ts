@@ -659,6 +659,10 @@ class FixtureRun {
       sink: createDirectorySink(join(this.paths.dir, 'answerer'), secrets),
       secrets,
       signal: this.controller.signal,
+      onRetry: (retry) =>
+        this.warn(
+          `answerer: the model call for answer ${retry.n} failed (${retry.error}); retry ${retry.retry} of ${retry.of} in ${Math.round(retry.delayMs / 1000)} s`,
+        ),
     });
   }
 
