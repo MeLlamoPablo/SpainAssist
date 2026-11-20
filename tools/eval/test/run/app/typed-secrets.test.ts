@@ -1,6 +1,6 @@
 /**
  * Secrets in a run: a password the user types goes to the page and nowhere else; one that reaches
- * the model, a workflow or a stranger is found by `secretLeaks()`, and no file of the run keeps it
+ * the model, a run or a stranger is found by `secretLeaks()`, and no file of the run keeps it
  * (the browser's recording, which the run asks for, is the one place that does, and says so).
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -138,7 +138,7 @@ browserSuite('typed secrets', () => {
     }, 180_000);
   });
 
-  describe('the password reaches the model, a workflow and a stranger', () => {
+  describe('the password reaches the model, a run and a stranger', () => {
     it('is found in the arguments, the result, the request and the message, and never shown', async () => {
       const stack = await startStack({
         hostBundle: host.bundle,

@@ -23,9 +23,9 @@ export interface AgentManagerDeps {
   workDir(agentId: string): string;
   /** A run ended (or the process died during one). Not called for runs of stopped agents. */
   onRunEnd?(agentId: string, result: RunResult): void;
-  /** An agent's process ended: stopped, idle or crashed (its workflow runs end). */
+  /** An agent's process ended: stopped, idle or crashed (its codemode runs end). */
   onGone?(agentId: string): void;
-  /** The agent must not be stopped as idle (one of its workflows runs). */
+  /** The agent must not be stopped as idle (one of its codemode runs goes on). */
   keepAlive?(agentId: string): boolean;
   /** Resolved agent host script (throws if it is not built). */
   hostScript(): string;
@@ -299,8 +299,8 @@ export class AgentManager {
   }
 
   /**
-   * Starts the agent's process without a message (its host resumes the workflows
-   * that wait for the user). A no-op when it runs.
+   * Starts the agent's process without a message (its host resumes the runs that wait for
+   * the user). A no-op when it runs.
    */
   wake(agentId: string): Promise<void> {
     return this.queue.run(agentId, async () => {

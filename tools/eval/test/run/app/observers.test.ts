@@ -673,7 +673,7 @@ describe('the leak check', () => {
   });
 });
 
-describe('workflows', () => {
+describe('runs', () => {
   const agent: AgentIdentity = { ...procedure, agentKey: 'procedure-a_00000000000000bb' };
 
   it('makes an agent’s bridge calls tool starts named by their method', () => {
@@ -684,7 +684,7 @@ describe('workflows', () => {
       procedureId: 'p_00000000000000aa',
       role: 'agent',
     });
-    // The coordinator's calls come from its own tools (their events), not from workflows.
+    // The coordinator's calls come from its own tools (their events), not from runs.
     r.observers.bridgeCall({
       method: 'agents.start',
       params: { title: 'Vida laboral', brief: 'Descarga el informe.' },
@@ -725,13 +725,8 @@ describe('workflows', () => {
     ]);
   });
 
-  it('leaves out the workflow bookkeeping, the prompts and the agents’ credentials', () => {
-    for (const method of [
-      'workflow.memo',
-      'workflows.list',
-      'prompt.confirm',
-      'agent.credential',
-    ]) {
+  it('leaves out the runs’ bookkeeping, the prompts and the agents’ credentials', () => {
+    for (const method of ['run.memo', 'run.cancel', 'prompt.confirm', 'agent.credential']) {
       r.observers.bridgeCall({
         method,
         params: {},
@@ -743,16 +738,16 @@ describe('workflows', () => {
     expect(r.observed).toEqual([]);
   });
 
-  it('makes a workflow result that reaches its agent that agent’s tool result', () => {
+  it('makes a run result that reaches its agent that agent’s tool result', () => {
     r.observers.agentMessage(agent, 'Sigue, por favor.');
-    r.observers.agentMessage(agent, '[Workflow "vida-laboral" succeeded]\nResult:\n{"ok":true}');
+    r.observers.agentMessage(agent, '[Run run_1 succeeded]\nResult:\n{"ok":true}');
     expect(r.observed).toMatchObject([
       {
         type: 'tool_end',
         agent: 'procedure',
         tool: 'codemode',
         isError: false,
-        text: '[Workflow "vida-laboral" succeeded]\nResult:\n{"ok":true}',
+        text: '[Run run_1 succeeded]\nResult:\n{"ok":true}',
       },
     ]);
   });

@@ -115,8 +115,8 @@ browserSuite('a Codex run', () => {
         .find((r) => r.channel === 'web_research');
       expect(research).toMatchObject({ host: 'research.invalid', route: 'mapped', method: 'POST' });
       expect(new URL(research?.url ?? '').pathname).toBe('/v1/responses');
-      // The workflow read the answer: its result goes on with the rest.
-      const result = stack.of('tool_end').find((o) => o.toolCallId.startsWith('workflow-result-'));
+      // The run read the answer: its result goes on with the rest.
+      const result = stack.of('tool_end').find((o) => o.toolCallId.startsWith('run-result-'));
       expect(result?.text).toMatch(/succeeded\]/);
     });
   });

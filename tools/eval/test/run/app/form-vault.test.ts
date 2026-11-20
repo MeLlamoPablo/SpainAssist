@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getFixture } from '../../../src/fixtures';
 import { createUserSimulator } from '../../../src/run';
 import { PROFILE_KEY_SEED } from '../../../src/run/app/eval-app';
-import { AGENT, sequence, workflow } from '../../../src/scenarios/kit';
+import { AGENT, codemode, sequence } from '../../../src/scenarios/kit';
 import { coordinatorRules } from './scripts';
 import {
   expectNoEgress,
@@ -43,9 +43,8 @@ function dniScenario(): ScenarioInput {
       ...coordinatorRules,
       ...sequence(AGENT, 'p', [
         {
-          id: 'workflow',
-          call: workflow(
-            'dni',
+          id: 'run',
+          call: codemode(
             `const procedure = await api.procedures.getOrCreate({ id: 'vida-laboral', title: 'Vida laboral' });
   const dni = await api.ui.present('dni', () => <DniForm api={api} />);
   const saved = await api.vault.save([{ key: 'dniNumber', value: dni }]);
@@ -126,9 +125,9 @@ describe('a form answered by the simulated user', () => {
     expect(vault.listPersonal().find((item) => item.key === 'dniNumber')?.value).toBe(DNI);
   });
 
-  it('gives the workflow the answer, and the agent can read it back', () => {
-    const result = stack.of('tool_end').find((o) => o.toolCallId.startsWith('workflow-result-'));
-    expect(result?.text).toMatch(/^\[Workflow "dni" succeeded\]/);
+  it('gives the run the answer, and the agent can read it back', () => {
+    const result = stack.of('tool_end').find((o) => o.toolCallId.startsWith('run-result-'));
+    expect(result?.text).toMatch(/^\[Run run_[a-f0-9]+ succeeded\]/);
     expect(result?.text).toContain(`"dni":"${DNI}"`);
     expect(result?.text).toContain('"saved":["dniNumber"]');
     expect(result?.text).toMatch(/"key":"dniNumber"[^}]*"value":"53918274H"/);

@@ -58,9 +58,9 @@ const WAITS_FOR_USER: ReadonlySet<string> = new Set([
   'browser.useCertificate',
   'vault.signDocument',
   // Codemode: a poll waits for the user.
-  'workflow.events',
+  'run.events',
   // Map lookups of an interface may take a moment.
-  'workflow.ui',
+  'run.ui',
 ]);
 
 export function defaultBridgeTimeoutMs(method: string): number {

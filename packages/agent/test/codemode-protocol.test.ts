@@ -1,5 +1,5 @@
 /**
- * Formal verification of the codemode workflow protocol (docs/codemode.md): bounded explicit-
+ * Formal verification of the codemode run protocol (docs/codemode.md): bounded explicit-
  * state model checking of main's and the hosts' rules (helpers/protocol-model.ts), then a
  * randomized check of the same properties on the real runtime.
  */
@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { findNode, handlerOf, MemoryStore, startRun, until } from './helpers/codemode';
 import { check, FIXED, ORIGINAL } from './helpers/protocol-model';
 
-describe('the workflow protocol (model checking)', () => {
+describe('the run protocol (model checking)', () => {
   it('keeps every property in every reachable state, with crashes, restarts, lost runs and concurrent updates', () => {
     const result = check(FIXED, { crashes: 2, restarts: 1, zombies: 1, bumps: 1 });
     expect(result.violations).toEqual([]);
@@ -15,11 +15,11 @@ describe('the workflow protocol (model checking)', () => {
     expect(result.states).toBeGreaterThan(100_000);
   });
 
-  it('finds the stuck workflow of the original rules: a run lost by its host and never resumed', () => {
+  it('finds the stuck run of the original rules: a run lost by its host and never resumed', () => {
     const result = check(ORIGINAL);
     expect(result.violations.length).toBeGreaterThan(0);
     expect(result.violations[0]).toEqual({
-      property: 'the workflow can never end',
+      property: 'the run can never end',
       trace: ['codemode 0', 'zombie 0'],
     });
     // Waiting for the user, the same loss leaves the interface unanswerable.
@@ -41,7 +41,7 @@ function rng(seed: number) {
 }
 
 /**
- * A random workflow: groups of memoized steps run in parallel (Promise.all) with random host
+ * A random module: groups of memoized steps run in parallel (Promise.all) with random host
  * latencies, interfaces between groups. Every memoized function counts its executions in a host
  * ledger; the run is cancelled ("the app quits") at a random point and resumed from what the
  * store kept, until it ends.

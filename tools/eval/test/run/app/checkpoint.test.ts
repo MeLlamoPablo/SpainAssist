@@ -112,7 +112,7 @@ browserSuite('checkpoints', () => {
       expect(taken.profileDir).toBe(join(checkpointDir, 'profile'));
       expect(taken.browserStateFile).toBe(join(checkpointDir, 'browser-state.json'));
 
-      // The state of the app: the card, the agent with its session and its workflow, the
+      // The state of the app: the card, the agent with its session and its runs' state, the
       // coordinator's session.
       for (const file of [
         'settings.json',
@@ -121,7 +121,7 @@ browserSuite('checkpoints', () => {
         `procedures/${procedureId}/procedure.json`,
         `agents/${agentId}/agent.json`,
         `agents/${agentId}/session.jsonl`,
-        'workflows/vida-laboral.json',
+        `agents/${agentId}/state.json`,
         'vault/vault.bin',
         'vault/key.bin',
       ]) {
@@ -238,7 +238,7 @@ browserSuite('checkpoints', () => {
   });
 
   describe('a profile with a question pending', () => {
-    it('brings the interface back, announces it, and resumes the workflow when it is answered', async () => {
+    it('brings the interface back, announces it, and resumes the run when it is answered', async () => {
       const fixture = testFixture('vida-laboral-con-datos');
       const first = await startStack({
         hostBundle: host.bundle,
@@ -250,7 +250,7 @@ browserSuite('checkpoints', () => {
       try {
         await first.app.send('sácame la vida laboral');
         const asked = await waitFor(() => first.app.pendingPrompts()[0], 'the question');
-        // A checkpoint needs an idle app; a restart does not: the workflow keeps its interface.
+        // A checkpoint needs an idle app; a restart does not: the run keeps its interface.
         await first.app.close();
         copy = mkdtempSync(join(tmpdir(), 'sa-eval-pending-'));
         await copyProfile(join(first.runDir, 'profile'), copy);
@@ -262,7 +262,7 @@ browserSuite('checkpoints', () => {
           restoreFrom: { profileDir: copy },
         });
         const { app } = second;
-        // The workflow's interface, as the restored app shows it (no process runs the workflow).
+        // The run's interface, as the restored app shows it (no process runs it).
         await waitFor(() => app.pendingPrompts()[0], 'the interface to come back');
         expect(app.pendingPrompts()).toEqual([asked]);
         expect(app.idle()).toBe(false);

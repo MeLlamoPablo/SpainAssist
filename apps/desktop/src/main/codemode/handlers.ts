@@ -8,10 +8,10 @@ import { errorMessage } from '../core/util';
 import type { ProcedureService } from '../procedures/service';
 import type { CodemodeAgents } from './agents';
 import type { CodemodeCoordinator } from './coordinator';
-import type { WorkflowService } from './workflows';
+import type { RunService } from './runs';
 
 export interface CodemodeHandlerDeps {
-  workflows: WorkflowService;
+  runs: RunService;
   procedures: ProcedureService;
   directory: CodemodeAgents;
   coordinator: CodemodeCoordinator;
@@ -19,12 +19,12 @@ export interface CodemodeHandlerDeps {
 }
 
 /**
- * The procedure of a workflow's key: the same id on every run of that workflow, whoever runs it
- * (an agent that replaces another finds it). A full procedure id passes through.
+ * The procedure of an agent's key: the same id on every run of that agent. A full procedure id
+ * passes through, so two agents can share a card by its id.
  */
-export function procedureIdFor(workflowId: string, key: string): string {
+export function procedureIdFor(agentId: string, key: string): string {
   if (/^p_[a-f0-9]{16}$/.test(key)) return key;
-  return `p_${createHash('sha256').update(`${workflowId}\0${key}`).digest('hex').slice(0, 16)}`;
+  return `p_${createHash('sha256').update(`${agentId}\0${key}`).digest('hex').slice(0, 16)}`;
 }
 
 /** A card as agents read it: no runtime state. */
@@ -35,16 +35,18 @@ function card(p: Procedure | ProcedureListItem): Procedure {
 
 /** Codemode bridge methods (docs/codemode.md). Roles are checked by the server before. */
 export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandlers {
-  const { workflows, procedures, directory, coordinator } = deps;
+  const { runs, procedures, directory, coordinator } = deps;
 
-  const requireProcedure = (id: string): Procedure => {
+  /** The procedure the caller means: a full id, or one of its own keys. */
+  const requireProcedure = (ctx: BridgeContext, idOrKey: string): Procedure => {
+    const id = procedureIdFor(ctx.agentId, idOrKey);
     const p = procedures.get(id);
     if (!p)
       throw new BridgeError(
         'not_found',
-        /^p_/.test(id)
+        id === idOrKey
           ? `No procedure "${id}". api.procedures.list() lists them.`
-          : `No procedure "${id}": ids look like "p_…". api.procedures.getOrCreate({ id: ${JSON.stringify(id)}, title }) returns the one this workflow made with that key; api.procedures.list() lists them all.`,
+          : `No procedure of yours with the key ${JSON.stringify(idOrKey)} (${id}). api.procedures.getOrCreate({ id: ${JSON.stringify(idOrKey)}, title }) creates it; api.procedures.list() lists them all.`,
       );
     return p;
   };
@@ -53,10 +55,10 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
     if (ctx.agentId !== ASSISTANT_AGENT_ID) directory.touchProcedure(ctx.agentId, procedureId);
   };
 
-  const mayManage = (ctx: BridgeContext, workflowAgent: string): boolean =>
+  const mayManage = (ctx: BridgeContext, runAgent: string): boolean =>
     ctx.agentId === ASSISTANT_AGENT_ID ||
-    workflowAgent === ctx.agentId ||
-    directory.get(workflowAgent)?.parentId === ctx.agentId;
+    runAgent === ctx.agentId ||
+    directory.get(runAgent)?.parentId === ctx.agentId;
 
   async function browserCall<T>(fn: () => Promise<T>): Promise<T> {
     try {
@@ -68,109 +70,64 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
   }
 
   return {
-    'workflow.begin': async (params, ctx) => {
-      for (const id of params.procedures ?? []) requireProcedure(id);
-      const { runId, record, resumed } = await workflows.begin(ctx.agentId, params);
-      for (const id of record.procedures) if (procedures.has(id)) touch(ctx, id);
-      return {
-        runId,
-        resumed,
-        procedures: [...record.procedures],
-        state: workflows.stateOf(record),
-      };
+    'run.begin': async (params, ctx) => {
+      for (const id of params.procedures ?? []) {
+        requireProcedure(ctx, id);
+        touch(ctx, id);
+      }
+      // The run's default procedure (prompts, documents, the page) is the agent's latest.
+      const touched = directory.get(ctx.agentId)?.procedures ?? [];
+      const own = [...new Set([...(params.procedures ?? []), ...touched])].filter((id) =>
+        procedures.has(id),
+      );
+      return { ...(await runs.begin(ctx.agentId, params)), procedures: own };
     },
-    'workflow.memo': async (params, ctx) => {
-      await workflows.memo(ctx.agentId, params.runId, params.key, params.value, !!params.delete);
+    'run.memo': async (params, ctx) => {
+      await runs.memo(ctx.agentId, params.runId, params.key, params.value, !!params.delete);
       return {};
     },
-    'workflow.ui': async (params, ctx) => {
+    'run.ui': async (params, ctx) => {
       const { runId, key } = params;
       switch (params.action) {
         case 'open':
-          await workflows.openUi(ctx.agentId, runId, key, params.tree, params.rev ?? 1, ctx.signal);
+          await runs.openUi(ctx.agentId, runId, key, params.tree, params.rev ?? 1, ctx.signal);
           break;
         case 'render':
-          await workflows.renderUi(
-            ctx.agentId,
-            runId,
-            key,
-            params.tree,
-            params.rev ?? 0,
-            ctx.signal,
-          );
+          await runs.renderUi(ctx.agentId, runId, key, params.tree, params.rev ?? 0, ctx.signal);
           break;
         case 'durable':
           if (!params.name) throw new BridgeError('bad_request', 'durable needs a name.');
-          workflows.durable(ctx.agentId, runId, key, params.name, params.value);
+          runs.durable(ctx.agentId, runId, key, params.name, params.value);
           break;
         case 'close':
-          await workflows.closeUi(ctx.agentId, runId, key, params.result ?? null);
+          await runs.closeUi(ctx.agentId, runId, key, params.result ?? null);
           break;
       }
       return {};
     },
-    'workflow.setStatus': async (params, ctx) => {
+    'run.setStatus': async (params, ctx) => {
       directory.setStatus(ctx.agentId, params.status);
       return {};
     },
-    'workflow.events': (params, ctx) =>
-      workflows.events(ctx.agentId, params.runId, params.after, ctx.signal),
-    'workflow.end': async (params, ctx) => {
-      await workflows.end(ctx.agentId, params.runId, params.outcome, params.deliver);
+    'run.events': (params, ctx) => runs.events(ctx.agentId, params.runId, params.after, ctx.signal),
+    'run.end': async (params, ctx) => {
+      await runs.end(ctx.agentId, params.runId, params.outcome, params.deliver);
       return {};
     },
-    'workflow.resumable': async (_params, ctx) => ({
-      workflows: workflows.resumable(ctx.agentId).map((w) => ({
-        workflowId: w.id,
-        ...(w.title ? { title: w.title } : {}),
-        source: w.source,
-        procedures: w.procedures.filter((id) => procedures.has(id)),
+    'run.resumable': async (_params, ctx) => ({
+      runs: runs.resumable(ctx.agentId).map((r) => ({
+        runId: r.id,
+        ...(r.title ? { title: r.title } : {}),
+        source: r.source,
+        procedures: r.procedures.filter((id) => procedures.has(id)),
       })),
     }),
-    'workflows.list': async () => ({
-      workflows: workflows
-        .list()
-        .slice(0, 50)
-        .map((w) => ({
-          id: w.id,
-          ...(w.title ? { title: w.title } : {}),
-          status: w.status,
-          agentId: w.agentId,
-          procedures: w.procedures,
-          openUi: Object.values(w.ui)
-            .filter((u) => u.status === 'open')
-            .map((u) => u.key),
-        })),
-    }),
-    'workflows.get': async (params) => {
-      const w = workflows.get(params.id);
-      if (!w) throw new BridgeError('not_found', `No workflow "${params.id}".`);
-      let result: unknown;
-      try {
-        result = w.result === undefined ? undefined : JSON.parse(w.result);
-      } catch {
-        result = w.result;
-      }
-      return {
-        id: w.id,
-        ...(w.title ? { title: w.title } : {}),
-        status: w.status,
-        agentId: w.agentId,
-        procedures: w.procedures,
-        memoKeys: Object.keys(w.memo),
-        openUi: Object.values(w.ui)
-          .filter((u) => u.status === 'open')
-          .map((u) => u.key),
-        ...(result !== undefined ? { result } : {}),
-        ...(w.error ? { error: w.error.slice(0, 2000) } : {}),
-      };
-    },
-    'workflows.cancel': async (params, ctx) => {
-      const w = workflows.get(params.id);
-      if (!w) throw new BridgeError('not_found', `No workflow "${params.id}".`);
-      if (!mayManage(ctx, w.agentId))
+    'run.cancel': async (params, ctx) => {
+      const run = runs.get(params.runId);
+      if (!run) throw new BridgeError('not_found', `No run ${params.runId}.`);
+      if (!mayManage(ctx, run.agentId))
         throw new BridgeError('policy_denied', 'Only its agent or the coordinator may cancel it.');
-      return { cancelled: await workflows.cancel(params.id, params.reason, ctx.agentId) };
+      return { cancelled: await runs.cancel(params.runId, params.reason, ctx.agentId) };
     },
 
     'procs.list': async (params) => ({
@@ -179,34 +136,25 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
         .filter((p) => params.includeArchived || !p.archived)
         .map(card),
     }),
-    'procs.get': async (params) => card(requireProcedure(params.id)),
+    'procs.get': async (params, ctx) => card(requireProcedure(ctx, params.id)),
     'procs.getOrCreate': async (params, ctx) => {
-      const workflow = workflows.workflowOfRun(params.runId, ctx.agentId);
-      const { runId: _, id: key, title, ...initial } = params;
-      const id = procedureIdFor(workflow.id, key);
+      const { id: key, title, ...initial } = params;
+      const id = procedureIdFor(ctx.agentId, key);
       const { procedure, created } = await procedures.getOrCreate(id, title, initial);
-      workflows.addProcedure(workflow.id, id);
       touch(ctx, id);
       return { ...card(procedure), created };
     },
     'procs.update': async (params, ctx) => {
-      requireProcedure(params.id);
-      const updated = procedures.applyVersionedUpdate(
-        params.id,
-        params.expectedVersion,
-        params.patch,
-      );
-      touch(ctx, params.id);
+      const { id } = requireProcedure(ctx, params.id);
+      const updated = procedures.applyVersionedUpdate(id, params.expectedVersion, params.patch);
+      touch(ctx, id);
       return card(updated);
     },
-    'procs.context': async (params) => {
-      requireProcedure(params.id);
-      return procedures.context(params.id);
-    },
+    'procs.context': async (params, ctx) => procedures.context(requireProcedure(ctx, params.id).id),
     'procs.setContext': async (params, ctx) => {
-      requireProcedure(params.id);
-      await procedures.setContext(params.id, params.context);
-      touch(ctx, params.id);
+      const { id } = requireProcedure(ctx, params.id);
+      await procedures.setContext(id, params.context);
+      touch(ctx, id);
       return {};
     },
 
@@ -224,7 +172,7 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
     'agents.list': async () => ({ agents: coordinator.listAgents() }),
 
     'browser.query': async (params, ctx) => {
-      requireProcedure(ctx.procedureId);
+      requireProcedure(ctx, ctx.procedureId);
       const value = await browserCall(() =>
         deps.browser.get().query(ctx.procedureId, params.target, params.op, params.args),
       );
@@ -234,11 +182,11 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
       return { value };
     },
     'browser.reload': async (_params, ctx) => {
-      requireProcedure(ctx.procedureId);
+      requireProcedure(ctx, ctx.procedureId);
       return browserCall(() => deps.browser.get().reload(ctx.procedureId));
     },
     'browser.info': async (_params, ctx) => {
-      requireProcedure(ctx.procedureId);
+      requireProcedure(ctx, ctx.procedureId);
       return browserCall(() => deps.browser.get().info(ctx.procedureId));
     },
   };

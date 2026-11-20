@@ -38,15 +38,15 @@ import { describeFailure, reportUiFailure } from './failures';
 import { codemodeDict } from './i18n';
 
 /**
- * Renders a workflow's interface (a tree of `@spainassist/ui` components, validated by main)
- * with the app's own controls. The workflow keeps the components' code in its sandbox; here every
+ * Renders a run's interface (a tree of `@spainassist/ui` components, validated by main)
+ * with the app's own controls. The run keeps the components' code in its sandbox; here every
  * handler is an id, and acting sends `codemode.uiEvent`. Inputs keep what the user types locally
- * so typing never waits for a round trip; the next tree from the workflow catches up. A node the
- * app can't draw fails the whole interface: main tells its workflow, whose `present` throws.
+ * so typing never waits for a round trip; the next tree from the run catches up. A node the
+ * app can't draw fails the whole interface: main tells its run, whose `present` throws.
  */
 
 interface UiContext {
-  workflowId: string;
+  runId: string;
   uiKey: string;
   rev: number;
   send(handler: UiHandler | undefined, value?: UiEvent['value']): Promise<void>;
@@ -62,12 +62,12 @@ function useUi(): UiContext {
 }
 
 export function UiRenderer({
-  workflowId,
+  runId,
   uiKey,
   tree,
   rev,
 }: {
-  workflowId: string;
+  runId: string;
   uiKey: string;
   tree: UiNode;
   rev: number;
@@ -79,7 +79,7 @@ export function UiRenderer({
     async (handler: UiHandler | undefined, value?: UiEvent['value']) => {
       if (!handler) return;
       try {
-        const delivered = await api.invoke('codemode.uiEvent', workflowId, uiKey, {
+        const delivered = await api.invoke('codemode.uiEvent', runId, uiKey, {
           handler: handler.$handler,
           rev: revRef.current,
           ...(value !== undefined ? { value } : {}),
@@ -89,26 +89,26 @@ export function UiRenderer({
         toast.error(errorMessage(err));
       }
     },
-    [workflowId, uiKey, t.closed],
+    [runId, uiKey, t.closed],
   );
   const [failedRev, setFailedRev] = useState<number | null>(null);
   const fail = useCallback(
     (node: UiElement, error: unknown) => {
       setFailedRev(revRef.current);
-      reportUiFailure(workflowId, uiKey, revRef.current, describeFailure(node, error));
+      reportUiFailure(runId, uiKey, revRef.current, describeFailure(node, error));
     },
-    [workflowId, uiKey],
+    [runId, uiKey],
   );
   // Trees saved before main checked them all (one showing nothing, say) are reported the same way.
   const problem = useMemo(() => uiTreeProblem(tree), [tree]);
   useEffect(() => {
-    if (problem) reportUiFailure(workflowId, uiKey, rev, describeFailure(undefined, problem));
-  }, [problem, workflowId, uiKey, rev]);
-  // Main takes it off the screen; a newer tree from the workflow may draw.
+    if (problem) reportUiFailure(runId, uiKey, rev, describeFailure(undefined, problem));
+  }, [problem, runId, uiKey, rev]);
+  // Main takes it off the screen; a newer tree from the run may draw.
   if (problem || failedRev === rev) return <Unshowable what="question">{t.unshowable}</Unshowable>;
   return (
-    <Ctx.Provider value={{ workflowId, uiKey, rev, send, fail }}>
-      <div className="flex flex-col gap-4" data-testid="workflow-ui" data-key={uiKey}>
+    <Ctx.Provider value={{ runId, uiKey, rev, send, fail }}>
+      <div className="flex flex-col gap-4" data-testid="run-ui" data-key={uiKey}>
         <Nodes nodes={typeof tree === 'string' ? [tree] : tree.children} path="r" />
       </div>
     </Ctx.Provider>
@@ -120,7 +120,7 @@ function Nodes({ nodes, path }: { nodes: UiNode[]; path: string }) {
   return (
     <>
       {nodes
-        // Siblings are identified by their place in the tree, as the workflow's renderer does.
+        // Siblings are identified by their place in the tree, as the run's renderer does.
         .map((node, index) => ({ node, at: `${path}.${index}` }))
         .map(({ node, at }) =>
           typeof node === 'string' ? (
@@ -284,12 +284,12 @@ function Node({ node, path }: { node: UiElement; path: string }): ReactNode {
   }
 }
 
-/** The value the user is choosing: theirs while they act, the workflow's otherwise. */
+/** The value the user is choosing: theirs while they act, the run's otherwise. */
 function useLocalValue<T>(node: UiElement, name = 'value', fallback: T): [T, (v: T) => void] {
   const ui = useUi();
   const fromTree = (prop<T>(node, name) ?? fallback) as T;
   const [local, setLocal] = useState<{ value: T; rev: number } | null>(null);
-  // A newer tree from the workflow wins once it reflects (or replaces) what the user did.
+  // A newer tree from the run wins once it reflects (or replaces) what the user did.
   useEffect(() => {
     if (local && ui.rev > local.rev && JSON.stringify(fromTree) === JSON.stringify(local.value))
       setLocal(null);
@@ -305,7 +305,7 @@ function useLocalValue<T>(node: UiElement, name = 'value', fallback: T): [T, (v:
 function UiButton({ node }: { node: UiElement }) {
   const ui = useUi();
   const [pending, setPending] = useState<number | null>(null);
-  // Pending until the workflow answers with a new tree (or closes the interface).
+  // Pending until the run answers with a new tree (or closes the interface).
   useEffect(() => {
     if (pending !== null && ui.rev > pending) setPending(null);
   }, [ui.rev, pending]);
@@ -544,8 +544,8 @@ function UiMap({ node }: { node: UiElement }) {
   const addressKey = addresses.join('\n');
   // biome-ignore lint/correctness/useExhaustiveDependencies: the addresses are what matter
   const loadPins = useCallback(
-    () => api.invoke('codemode.pins', ui.workflowId, ui.uiKey, addresses),
-    [ui.workflowId, ui.uiKey, addressKey],
+    () => api.invoke('codemode.pins', ui.runId, ui.uiKey, addresses),
+    [ui.runId, ui.uiKey, addressKey],
   );
   const field = asField(node, 'map-options', key);
   return (
@@ -554,7 +554,7 @@ function UiMap({ node }: { node: UiElement }) {
     >
       {({ id, describedBy, invalid }) => (
         <MapOptionsPicker
-          promptId={`${ui.workflowId}/${ui.uiKey}`}
+          promptId={`${ui.runId}/${ui.uiKey}`}
           field={field}
           value={value}
           onChange={setValue}

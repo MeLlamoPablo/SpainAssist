@@ -1,11 +1,11 @@
 /**
  * `eval` with a scripted model that takes a minute to answer: the stand-in for a long run that
  * `real-run.test.ts` interrupts. Run through tsx like the real entry (`src/cli.ts`); the scenario
- * source is the only difference. With `SA_EVAL_TEST_SLOW=browser` the agent's workflow opens the
+ * source is the only difference. With `SA_EVAL_TEST_SLOW=browser` the agent's run opens the
  * mock's page in Chromium first and then the agent waits: a run interrupted while the browser is up.
  */
 import { main } from '../../../src/cli/main';
-import { AGENT, COORDINATOR, INFO_URL, workflow } from '../../../src/scenarios';
+import { AGENT, COORDINATOR, codemode, INFO_URL } from '../../../src/scenarios';
 
 const slow = { name: 'slow', fallback: { text: 'Un momento...', delayMs: 60_000 } };
 
@@ -39,8 +39,7 @@ const browserThenWait = {
       set: { p: 1 },
       reply: {
         toolCalls: [
-          workflow(
-            'vida-laboral',
+          codemode(
             `  await api.procedures.getOrCreate({ id: 'vida-laboral', title: 'Vida laboral' });
   const page = await api.browser.currentPage();
   await page.goto('${INFO_URL}');

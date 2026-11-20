@@ -6,12 +6,12 @@ const MAX_NUDGES = 2;
 
 /** What the model reads when its reply was all thinking. */
 const THINKING_CUTOFF_MESSAGE =
-  'Your last reply hit the output limit while you were still thinking: nothing was written and no tool ran. Act now with less deliberation: take the next step you already know, in a short workflow if it is code. Do not mention this.';
+  'Your last reply hit the output limit while you were still thinking: nothing was written and no tool ran. Act now with less deliberation: take the next step you already know, in a short run if it is code. Do not mention this.';
 
 /**
  * A reply that hit the output token limit before any text or tool call: pi re-asks for a cut
  * tool call, but a reply that is all thinking ends the run as if the work were done, with no
- * report. Haiku did this while planning a long workflow. The host has the model go on instead.
+ * report. Haiku did this while planning a long module. The host has the model go on instead.
  */
 export function registerThinkingCutoffCheck(pi: ExtensionAPI): void {
   let nudges = 0;

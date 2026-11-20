@@ -97,11 +97,10 @@ describe('BOE open-data search', () => {
     );
   });
 
-  it('api.boe.search returns the laws to a workflow', async () => {
+  it('api.boe.search returns the laws to a run', async () => {
     const call = createHostOps({
       bridge: { call: async () => ({}) as never },
       images: createImageStore(),
-      runId: () => 'run_1',
       procedures: () => [],
       imagesSupported: true,
       boeBaseUrl: base,

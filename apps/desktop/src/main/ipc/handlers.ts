@@ -4,9 +4,9 @@ import type {
   CodemodeAgentInfo,
   MapPoint,
   RewoundMessage,
+  RunInfo,
   UiEvent,
   WindowControlsStyle,
-  WorkflowInfo,
 } from '@sa/shared';
 import type { BrowserHolder } from '../browser/holder';
 import type { ChatService } from '../chat/service';
@@ -64,15 +64,14 @@ export interface IpcServices {
   exportTranscripts(): Promise<string>;
   deleteProcedure(id: string): Promise<void>;
   wipeAll(): Promise<void>;
-  /** Agents and their workflows (docs/codemode.md). */
+  /** Agents and their runs (docs/codemode.md). */
   codemode: {
-    state(): { agents: CodemodeAgentInfo[]; workflows: WorkflowInfo[] };
-    uiEvent(workflowId: string, key: string, event: UiEvent): boolean;
-    pins(workflowId: string, key: string, addresses: string[]): Promise<(MapPoint | null)[]>;
+    state(): { agents: CodemodeAgentInfo[]; runs: RunInfo[] };
+    uiEvent(runId: string, key: string, event: UiEvent): boolean;
+    pins(runId: string, key: string, addresses: string[]): Promise<(MapPoint | null)[]>;
     agentLog(agentId: string): Promise<ChatItem[]>;
     stopAgent(agentId: string): Promise<void>;
-    cancelWorkflow(workflowId: string): Promise<void>;
-    uiFailed(workflowId: string, key: string, rev: number, detail: string): boolean;
+    uiFailed(runId: string, key: string, rev: number, detail: string): boolean;
   };
 }
 
@@ -266,11 +265,11 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
 
   const codemode = () => s.codemode;
   router.register('codemode.state', S['codemode.state'], () => s.codemode.state());
-  router.register('codemode.uiEvent', S['codemode.uiEvent'], (workflowId, key, event) =>
-    codemode().uiEvent(workflowId, key, event),
+  router.register('codemode.uiEvent', S['codemode.uiEvent'], (runId, key, event) =>
+    codemode().uiEvent(runId, key, event),
   );
-  router.register('codemode.pins', S['codemode.pins'], (workflowId, key, addresses) =>
-    codemode().pins(workflowId, key, addresses),
+  router.register('codemode.pins', S['codemode.pins'], (runId, key, addresses) =>
+    codemode().pins(runId, key, addresses),
   );
   router.register('codemode.agentLog', S['codemode.agentLog'], (agentId) =>
     codemode().agentLog(agentId),
@@ -278,11 +277,8 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   router.register('codemode.stopAgent', S['codemode.stopAgent'], (agentId) =>
     codemode().stopAgent(agentId),
   );
-  router.register('codemode.uiFailed', S['codemode.uiFailed'], (workflowId, key, rev, detail) =>
-    codemode().uiFailed(workflowId, key, rev, detail),
-  );
-  router.register('codemode.cancelWorkflow', S['codemode.cancelWorkflow'], (workflowId) =>
-    codemode().cancelWorkflow(workflowId),
+  router.register('codemode.uiFailed', S['codemode.uiFailed'], (runId, key, rev, detail) =>
+    codemode().uiFailed(runId, key, rev, detail),
   );
 
   router.register('media.get', S['media.get'], (id) => s.media.dataUrl(id));

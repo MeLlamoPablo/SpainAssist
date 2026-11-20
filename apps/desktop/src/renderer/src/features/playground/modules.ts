@@ -1,6 +1,6 @@
 import type { Language } from '@sa/shared';
 
-export interface PlaygroundWorkflow {
+export interface PlaygroundModule {
   id: string;
   label: string;
   /** What it shows off. */
@@ -10,11 +10,11 @@ export interface PlaygroundWorkflow {
 }
 
 /**
- * Example workflows for the playground: what codemode agents write, in the user's language,
+ * Example modules for the playground: what codemode agents write, in the user's language,
  * against the playground's stand-in host (runner.ts). Together they use every component of
  * `@spainassist/ui` (examples.test.ts checks it).
  */
-export function playgroundWorkflows(language: Language): PlaygroundWorkflow[] {
+export function playgroundModules(language: Language): PlaygroundModule[] {
   const t = (es: string, en: string) => (language === 'es' ? es : en);
   /** A string literal for the source. */
   const q = (es: string, en: string) => JSON.stringify(t(es, en));
@@ -405,7 +405,7 @@ export async function main(api) {
 
 // Main checks every tree before the user sees it: links must be https, so present() throws
 // a CodemodeError (code "bad_request") that says which component is wrong. The run fails here
-// unless the workflow catches it.
+// unless the module catches it.
 export async function main(api) {
   return api.ui.present("source", () => (
     <Form title=${q('Dónde lo he leído', 'Where I read it')}>

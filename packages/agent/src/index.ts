@@ -8,7 +8,7 @@
  *    extensions/skills/context files, PI_OFFLINE / PI_TELEMETRY=0, and a CredentialStore that
  *    asks the app for credentials over the host bridge (nothing secret on disk or in env).
  *  - Tools (inline pi extension): the coordinator's `agent_*` and `procedure_*` tools; a background
- *    agent's single `codemode` tool, whose workflows reach the app over the bridge (procedures,
+ *    agent's single `codemode` tool, whose runs reach the app over the bridge (procedures,
  *    prompts, vault, browser, feedback) or run locally (fetch, BOE API). Web research: our key
  *    server for voucher users (Parallel), OpenAI's web search on ChatGPT plans, Exa's keyless
  *    tier for BYOK and custom endpoints.
@@ -19,6 +19,7 @@
  * This entry point is light (no HTML/PDF libraries): those live only in dist/host.js.
  */
 
+export { RESULT_CHARS } from './codemode/engine';
 export {
   type AgentHostConfig,
   AgentHostConfigSchema,
@@ -32,7 +33,7 @@ export {
   buildAgentLaunch,
   INHERITED_ENV_VARS,
 } from './launch';
-export { AGENT_REPORT_PREFIX, WORKFLOW_RESULT_PREFIX } from './prompt/codemode';
+export { AGENT_REPORT_PREFIX, RUN_RESULT_PREFIX } from './prompt/codemode';
 export {
   CHATGPT_ENDPOINTS,
   type ChatGPTEndpoints,

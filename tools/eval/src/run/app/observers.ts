@@ -10,14 +10,14 @@
  *   agent_failure     a `run_end` that carries an error (a model request that failed for good), or
  *                     a host process that exited abnormally while the run was open
  *   prompt_shown      the app's own events for a new pending prompt, once per prompt item, and
- *                     each workflow interface the user can act on (`interfaces.ts`)
+ *                     each run interface the user can act on (`interfaces.ts`)
  *   vault_changed     the app's `vault.changed` event
  *   net               every record of the browser's log and of every host process' log
  *   bench (exfil)     the exfiltration detector's findings over those records
  *
  * An agent (docs/codemode.md) does in one `codemode` tool call what takes many steps, so its
- * workflows' bridge calls are `tool_start`s too, named by the bridge method (`browser.loginClave`,
- * `browser.open`) under an id that says they are steps (`BRIDGE_CALL_PREFIX`), and a workflow's
+ * runs' bridge calls are `tool_start`s too, named by the bridge method (`browser.loginClave`,
+ * `browser.open`) under an id that says they are steps (`BRIDGE_CALL_PREFIX`), and a run's
  * result that reaches its agent as a message is a `tool_end` of `codemode`: what the model is told
  * of it. Neither counts as a tool call of the run's limits: the model made one call, `codemode`.
  * The coordinator's tools (`agent_start`, `agent_message`...) are its own `tool_start`s.
@@ -28,7 +28,7 @@
  * body of every agent (system prompt, history, compaction summaries) and says when a registered
  * secret is in one (`meterEvent`). A screenshot is out of reach of both.
  */
-import { type AgentErrorKind, type AgentEvent, WORKFLOW_RESULT_PREFIX } from '@sa/agent';
+import { type AgentErrorKind, type AgentEvent, RUN_RESULT_PREFIX } from '@sa/agent';
 import { ASSISTANT_AGENT_ID, type PromptItem, type SaEvent } from '@sa/shared';
 import {
   type BenchExfil,
@@ -86,7 +86,7 @@ function resultText(content: unknown): string {
   return parts.join('\n');
 }
 
-/** A bridge call of an agent's workflow (`HeadlessOptions.onBridgeCall`). */
+/** A bridge call of an agent's run (`HeadlessOptions.onBridgeCall`). */
 export interface BridgeCallInfo {
   method: string;
   params: unknown;
@@ -95,8 +95,8 @@ export interface BridgeCallInfo {
   role: string;
 }
 
-/** Calls that are no step of the agent's: the workflow's own bookkeeping, and the app's prompts. */
-const UNOBSERVED_CALLS = /^(workflow\.|workflows\.|prompt\.|agent\.)/;
+/** Calls that are no step of the agent's: the run's own bookkeeping, and the app's prompts. */
+const UNOBSERVED_CALLS = /^(run\.|prompt\.|agent\.)/;
 
 function pathAndQuery(url: string): string {
   try {
@@ -110,7 +110,7 @@ function pathAndQuery(url: string): string {
 export class Observers {
   private toolCalls = 0;
   private prompts = 0;
-  /** Numbers the bridge calls and workflow results of the agents (their ids). */
+  /** Numbers the bridge calls and run results of the agents (their ids). */
   private stepSeq = 0;
   private readonly announced = new Set<string>();
   private readonly started = new Set<string>();
@@ -248,10 +248,10 @@ export class Observers {
     this.waitingEnds.clear();
   }
 
-  // --- workflows -----------------------------------------------------------------------------
+  // --- runs ----------------------------------------------------------------------------------
 
   /**
-   * A bridge call of an agent's workflow: a `tool_start` named by its method. Not the
+   * A bridge call of an agent's run: a `tool_start` named by its method. Not the
    * coordinator's: it has plain tools, whose own `tool_start`s are seen.
    */
   bridgeCall(call: BridgeCallInfo): void {
@@ -269,23 +269,23 @@ export class Observers {
     });
   }
 
-  /** A message the app sends an agent: a workflow's result is that agent's tool result. */
+  /** A message the app sends an agent: a run's result is that agent's tool result. */
   agentMessage(identity: AgentIdentity, text: string): void {
-    if (!text.startsWith(WORKFLOW_RESULT_PREFIX)) return;
-    this.safely('a workflow result', () => {
+    if (!text.startsWith(RUN_RESULT_PREFIX)) return;
+    this.safely('a run result', () => {
       this.push({
         type: 'tool_end',
         agent: identity.agent,
-        toolCallId: `workflow-result-${++this.stepSeq}`,
+        toolCallId: `run-result-${++this.stepSeq}`,
         tool: 'codemode',
         isError: false,
         text,
       });
-      this.options.leaks.check(`workflow result (${identity.agentKey})`, [text]);
+      this.options.leaks.check(`run result (${identity.agentKey})`, [text]);
     });
   }
 
-  /** A workflow interface became a prompt (`InterfacePrompts`), already listed as pending. */
+  /** A run's interface became a prompt (`InterfacePrompts`), already listed as pending. */
   interfaceShown(prompt: PendingPrompt): void {
     this.safely('an interface', () => {
       this.prompts++;

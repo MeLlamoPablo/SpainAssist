@@ -1,15 +1,15 @@
 import type {
   CodemodeAgentInfo,
   ProcedureListItem,
+  RunInfo,
   SaEvent,
   UiEvent,
   UiNode,
-  WorkflowInfo,
 } from '@sa/shared';
 
 /**
- * The codemode harness in the web preview: two workflows waiting for the user,
- * rendered from local state the way a workflow's sandbox would (a tree per render, handlers by
+ * The codemode harness in the web preview: two runs waiting for the user,
+ * rendered from local state the way a run's sandbox would (a tree per render, handlers by
  * id), and the agents of the progress meter. No sandbox and no model: the trees are built here.
  */
 
@@ -33,8 +33,8 @@ export interface CodemodeMockDeps {
   now(): string;
 }
 
-interface SimWorkflow {
-  info: WorkflowInfo;
+interface SimRun {
+  info: RunInfo;
   /** Builds the tree of an open interface from the simulated durable state. */
   render: Record<string, () => El>;
   handle: Record<string, (handler: string, value: UiEvent['value']) => void>;
@@ -43,32 +43,32 @@ interface SimWorkflow {
 export function createCodemodeMock(deps: CodemodeMockDeps) {
   const tr = (es: string, en: string) => (deps.lang() === 'en' ? en : es);
   const ago = (s: number) => new Date(Date.now() - s * 1000).toISOString();
-  const workflows = new Map<string, SimWorkflow>();
+  const runs = new Map<string, SimRun>();
   const agents = new Map<string, CodemodeAgentInfo>();
 
-  const emitWorkflow = (w: SimWorkflow) => {
+  const emitRun = (w: SimRun) => {
     w.info = { ...w.info, updatedAt: deps.now() };
-    deps.emit({ type: 'codemode.workflow', workflow: structuredClone(w.info) });
+    deps.emit({ type: 'codemode.run', run: structuredClone(w.info) });
   };
-  const rerender = (w: SimWorkflow, key: string) => {
+  const rerender = (w: SimRun, key: string) => {
     const ui = w.info.ui.find((u) => u.key === key);
     const render = w.render[key];
     if (!ui || !render) return;
     ui.tree = render();
     ui.rev += 1;
-    emitWorkflow(w);
+    emitRun(w);
   };
-  const close = (w: SimWorkflow, key: string) => {
+  const close = (w: SimRun, key: string) => {
     w.info.ui = w.info.ui.filter((u) => u.key !== key);
     if (!w.info.ui.length) w.info.status = 'running';
-    emitWorkflow(w);
+    emitRun(w);
   };
-  const open = (w: SimWorkflow, key: string) => {
+  const open = (w: SimRun, key: string) => {
     const render = w.render[key];
     if (!render) return;
     w.info.ui.push({ key, status: 'open', tree: render(), rev: 1, openedAt: deps.now() });
     w.info.status = 'waiting_user';
-    emitWorkflow(w);
+    emitRun(w);
   };
   const setAgent = (id: string, patch: Partial<CodemodeAgentInfo>) => {
     const agent = agents.get(id);
@@ -103,7 +103,7 @@ export function createCodemodeMock(deps: CodemodeMockDeps) {
     }
     return out;
   })();
-  const citaWorkflow: SimWorkflow = {
+  const citaRun: SimRun = {
     info: {
       id: 'cita-dni',
       title: tr('Pedir cita para el DNI', 'Book the DNI appointment'),
@@ -202,7 +202,7 @@ export function createCodemodeMock(deps: CodemodeMockDeps) {
         else if (handler.endsWith('Cita/1#onChange')) cita.time = String(value);
         else if (handler.endsWith('Cita/2#onChange')) cita.from = String(value);
         else if (handler.endsWith('#onClick')) {
-          close(citaWorkflow, 'donde-cuando');
+          close(citaRun, 'donde-cuando');
           setAgent('a_dni', {
             activity: 'working',
             status: tr(
@@ -213,28 +213,28 @@ export function createCodemodeMock(deps: CodemodeMockDeps) {
           });
           window.setTimeout(() => {
             setAgent('a_dni', { activity: 'waiting_user' });
-            open(citaWorkflow, 'huecos');
+            open(citaRun, 'huecos');
           }, 2200);
           return;
         }
-        rerender(citaWorkflow, 'donde-cuando');
+        rerender(citaRun, 'donde-cuando');
       },
       huecos: (handler, value) => {
         if (handler.endsWith('#onChange')) {
           if (value === 'more') return;
           cita.slot = String(value);
-          rerender(citaWorkflow, 'huecos');
+          rerender(citaRun, 'huecos');
           return;
         }
-        close(citaWorkflow, 'huecos');
+        close(citaRun, 'huecos');
         setAgent('a_dni', {
           activity: 'working',
           status: tr('Reservando la cita…', 'Booking the appointment…'),
           since: deps.now(),
         });
         window.setTimeout(() => {
-          citaWorkflow.info.status = 'succeeded';
-          emitWorkflow(citaWorkflow);
+          citaRun.info.status = 'succeeded';
+          emitRun(citaRun);
           setAgent('a_dni', { activity: 'idle' });
           const p = deps.getProcedure(deps.dniProcedureId);
           if (p) {
@@ -261,14 +261,14 @@ export function createCodemodeMock(deps: CodemodeMockDeps) {
       },
     },
   };
-  citaWorkflow.info.ui.push({
+  citaRun.info.ui.push({
     key: 'donde-cuando',
     status: 'open',
-    tree: citaWorkflow.render['donde-cuando']?.(),
+    tree: citaRun.render['donde-cuando']?.(),
     rev: 1,
     openedAt: ago(30),
   });
-  workflows.set(citaWorkflow.info.id, citaWorkflow);
+  runs.set(citaRun.info.id, citaRun);
 
   agents.set('a_dni', {
     id: 'a_dni',
@@ -296,34 +296,27 @@ export function createCodemodeMock(deps: CodemodeMockDeps) {
   return {
     state: () => ({
       agents: [...agents.values()].map((a) => structuredClone(a)),
-      workflows: [...workflows.values()]
+      runs: [...runs.values()]
         .filter((w) => w.info.ui.length || w.info.status === 'running')
         .map((w) => structuredClone(w.info)),
     }),
-    uiEvent: (workflowId: string, key: string, event: UiEvent): boolean => {
-      const w = workflows.get(workflowId);
+    uiEvent: (runId: string, key: string, event: UiEvent): boolean => {
+      const w = runs.get(runId);
       const handle = w?.handle[key];
       if (!w || !handle || !w.info.ui.some((u) => u.key === key)) return false;
       if (!deps.freeze) window.setTimeout(() => handle(event.handler, event.value), 60);
       else handle(event.handler, event.value);
       return true;
     },
-    pins: (_workflowId: string, _key: string, addresses: string[]) =>
+    pins: (_runId: string, _key: string, addresses: string[]) =>
       addresses.map((a) => deps.places[a] ?? null),
     stopAgent: (agentId: string) => setAgent(agentId, { activity: 'idle' }),
-    uiFailed: (workflowId: string, key: string): boolean => {
-      const w = workflows.get(workflowId);
+    uiFailed: (runId: string, key: string): boolean => {
+      const w = runs.get(runId);
       if (!w?.info.ui.some((u) => u.key === key)) return false;
       w.info.ui = w.info.ui.filter((u) => u.key !== key);
-      emitWorkflow(w);
+      emitRun(w);
       return true;
-    },
-    cancelWorkflow: (workflowId: string) => {
-      const w = workflows.get(workflowId);
-      if (!w) return;
-      w.info.ui = [];
-      w.info.status = 'cancelled';
-      emitWorkflow(w);
     },
   };
 }

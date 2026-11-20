@@ -47,7 +47,6 @@ function ops(
   const call = createHostOps({
     bridge,
     images,
-    runId: () => 'run_1',
     procedures: () => procedures,
     imagesSupported,
   });
@@ -173,7 +172,7 @@ describe('host operations', () => {
     expect(page).not.toHaveProperty('image');
   });
 
-  it('act on the workflow’s procedure: its browser and its prompts', async () => {
+  it('act on the run’s procedure: its browser and its prompts', async () => {
     const { run, calls } = ops({
       'browser.type': OBSERVATION,
       'downloads.list': { downloads: OBSERVATION.downloads },

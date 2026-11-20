@@ -3,7 +3,7 @@ import {
   type ChatMessage,
   type ChatRequest,
   createMockLlm,
-  DEMO_WORKFLOW,
+  DEMO_MODULE,
   type MockLlm,
   type RecordedRequest,
   type ScenarioInput,
@@ -284,7 +284,7 @@ describe('mock LLM', () => {
     expect(await json(await fetch(`${llm.url}/__requests`))).toEqual([]);
   });
 
-  it('plays a codemode agent in the demo scenario: one workflow, then its report', async () => {
+  it('plays a codemode agent in the demo scenario: one run, then its report', async () => {
     const tools = { tools: [{ type: 'function', function: { name: 'codemode' } }] };
     const brief = user(
       '[Procedures: none yet]\n\n[Brief from the coordinator]\nEl usuario quiere renovar el DNI.',
@@ -292,8 +292,8 @@ describe('mock LLM', () => {
     const start = await readStream(await chat(llm, [brief], tools));
     expect(start.toolCalls.map((c) => c.name)).toEqual(['codemode']);
     const args = JSON.parse(start.toolCalls[0]?.arguments ?? '{}') as Record<string, string>;
-    expect(args.workflow).toBe('renovar-dni');
-    expect(args.source).toBe(DEMO_WORKFLOW);
+    expect(args.workflow).toBeUndefined();
+    expect(args.source).toBe(DEMO_MODULE);
     expect(args.source).toContain("api.ui.present('datos'");
     expect(args.source).toContain("id: 'renovar-dni'");
 
@@ -309,7 +309,7 @@ describe('mock LLM', () => {
       {
         role: 'tool',
         tool_call_id: 't1',
-        content: 'Workflow "renovar-dni" is waiting for the user (interface: datos).',
+        content: 'Run run_1 is waiting for the user (interface: datos).',
       },
     ];
     const waiting = await readStream(await chat(llm, history, tools));
@@ -323,7 +323,7 @@ describe('mock LLM', () => {
           ...history,
           { role: 'assistant', content: waiting.text },
           user(
-            '[Workflow "renovar-dni" (Renovar el DNI) succeeded]\nResult:\n{"province":"Madrid","expiry":null}',
+            '[Run run_1 (Renovar el DNI) succeeded]\nResult:\n{"province":"Madrid","expiry":null}',
           ),
         ],
         tools,
@@ -335,7 +335,7 @@ describe('mock LLM', () => {
     const skipped = await readStream(
       await chat(
         llm,
-        [user('[Workflow "renovar-dni" (Renovar el DNI) succeeded]\nResult:\n{"skipped":true}')],
+        [user('[Run run_1 (Renovar el DNI) succeeded]\nResult:\n{"skipped":true}')],
         tools,
       ),
     );

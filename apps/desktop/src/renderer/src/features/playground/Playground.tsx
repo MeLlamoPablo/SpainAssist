@@ -21,7 +21,7 @@ import {
   playgroundExamples,
 } from './examples';
 import { playgroundDict } from './i18n';
-import { WorkflowExample } from './WorkflowExample';
+import { ModuleExample } from './ModuleExample';
 
 const GROUPS: ExampleGroup[] = [
   'interfaces',
@@ -226,7 +226,7 @@ export function Playground() {
 }
 
 function ExampleView({ example }: { example: PlaygroundExample }) {
-  if (example.source !== undefined) return <WorkflowExample example={example} />;
+  if (example.source !== undefined) return <ModuleExample example={example} />;
   if (example.item?.type === 'prompt') return <PromptExample item={example.item} />;
   if (example.procedureId) return <ProcedureExample example={example} />;
   if (example.agents) return <AgentsExample example={example} />;
@@ -349,7 +349,7 @@ function AgentsExample({ example }: { example: PlaygroundExample }) {
     // Working for a few seconds, whenever the page opens.
     const since = new Date(Date.now() - 42_000).toISOString();
     const agents = (example.agents ?? []).map((a) => (a.since ? { ...a, since } : a));
-    store.setAll({ agents, workflows: [] });
+    store.setAll({ agents, runs: [] });
     setPlaygroundCodemode({
       uiEvent: () => false,
       uiFailed: () => false,
@@ -360,7 +360,7 @@ function AgentsExample({ example }: { example: PlaygroundExample }) {
     });
     return () => {
       setPlaygroundCodemode(undefined);
-      useCodemodeStore.getState().setAll({ agents: [], workflows: [] });
+      useCodemodeStore.getState().setAll({ agents: [], runs: [] });
     };
   }, [example.agents]);
   return (

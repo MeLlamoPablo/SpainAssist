@@ -3,7 +3,7 @@ import { type UiNode, uiTreeAddresses, uiTreeProblem } from '../src/codemode';
 
 const root = (...children: UiNode[]): UiNode => ({ type: 'Root', props: {}, children });
 
-describe('interface trees from workflows', () => {
+describe('interface trees from runs', () => {
   it('accept native components with valid props', () => {
     expect(
       uiTreeProblem(

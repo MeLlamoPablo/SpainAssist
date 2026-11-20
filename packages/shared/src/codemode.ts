@@ -3,13 +3,14 @@ import { APPOINTMENT_MAX_SLOTS, APPOINTMENT_MORE, APPOINTMENT_SLOT } from './cha
 import { hiddenFromAgents, PersonalFieldKey } from './vault';
 
 /**
- * Codemode (the `codemode` feature flag): agents write JavaScript workflows instead of calling
- * one tool per step. A workflow is a durable record with a stable id; it serves procedures, keeps
- * memoized results and the state of the interfaces it shows the user, and resumes from them after
- * a restart. Design and decisions: docs/codemode.md.
+ * Codemode: agents write JavaScript modules instead of calling one tool per step. Each
+ * `codemode` call is a run of one module; the durable state a run uses (memoized results and the
+ * interfaces it shows the user) belongs to the agent and is shared by all its runs. A run that
+ * waits for the user keeps a record, so the app resumes it after a restart. Design and decisions:
+ * docs/codemode.md.
  *
  * This file holds what main, the agent host and the renderer share: the native UI components a
- * workflow may render (`@spainassist/ui`), the tree it sends, and the records the renderer shows.
+ * run may render (`@spainassist/ui`), the tree it sends, and the records the renderer shows.
  */
 
 // ---------------------------------------------------------------------------------------------
@@ -70,7 +71,7 @@ export const UI_COMPONENT_PROPS = {
       .refine((href) => href.startsWith('https://'), 'Links must be https.'),
   }),
   Divider: z.object({}),
-  /** A working indicator, e.g. while the workflow looks up options. */
+  /** A working indicator, e.g. while the run looks up options. */
   Progress: z.object({ label: Label.optional() }),
   TextField: z.object({
     label: Label,
@@ -204,7 +205,7 @@ export const UI_LIMITS = {
 } as const;
 
 /**
- * Checks a tree from a workflow: known components, valid props, within limits. Returns the
+ * Checks a tree from a run: known components, valid props, within limits. Returns the
  * first problem in plain words, or null. Main runs it on every tree before the renderer sees it.
  */
 export function uiTreeProblem(tree: unknown): string | null {
@@ -279,7 +280,7 @@ export interface UiAnswer {
 
 /**
  * What a closing interface saves to Mis datos, from its last tree: the value of every field with
- * a `vaultKey` that the user filled in and the workflow doesn't flag (`error`). The last field of
+ * a `vaultKey` that the user filled in and the run doesn't flag (`error`). The last field of
  * a key wins.
  */
 export function uiTreeAnswers(tree: UiNode | undefined): UiAnswer[] {
@@ -299,7 +300,7 @@ export function uiTreeAnswers(tree: UiNode | undefined): UiAnswer[] {
   return [...answers.values()];
 }
 
-/** An event the user caused on a rendered tree, sent back to the workflow. */
+/** An event the user caused on a rendered tree, sent back to the run. */
 export const UiEvent = z.object({
   /** The handler id from the tree (`{$handler}`). */
   handler: z.string().min(1).max(400),
@@ -320,30 +321,23 @@ export type UiEvent = z.infer<typeof UiEvent>;
 export const UI_FAILED = '$failed';
 
 // ---------------------------------------------------------------------------------------------
-// Workflows and agents, as the renderer sees them
+// Runs and agents, as the renderer sees them
 // ---------------------------------------------------------------------------------------------
 
-/** A stable, model-chosen name: lower-case letters, digits and dashes. */
-export const CodemodeSlug = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z0-9][a-z0-9-]*$/, 'Use lower-case letters, digits and dashes.');
-
-export const WorkflowStatus = z.enum([
+export const RunStatus = z.enum([
   'running',
-  /** Blocked on the user (an interface is open); safe to resume from its state. */
+  /** Blocked on the user (an interface is open); safe to resume from the agent's state. */
   'waiting_user',
   'succeeded',
   'failed',
   'cancelled',
-  /** Its process ended while it ran; memoized steps are kept, the owner decides what's next. */
+  /** Its process ended while it ran; memoized steps are kept, its agent decides what's next. */
   'interrupted',
 ]);
-export type WorkflowStatus = z.infer<typeof WorkflowStatus>;
+export type RunStatus = z.infer<typeof RunStatus>;
 
-/** An interface a workflow shows the user (`api.ui.present`). */
-export interface WorkflowUi {
+/** An interface a run shows the user (`api.ui.present`). */
+export interface RunUi {
   key: string;
   status: 'open' | 'closed';
   /** Latest tree; open interfaces only. */
@@ -352,17 +346,16 @@ export interface WorkflowUi {
   openedAt: string;
 }
 
-export interface WorkflowInfo {
+export interface RunInfo {
   id: string;
   title?: string;
-  status: WorkflowStatus;
-  /** The agent that last ran it. */
+  status: RunStatus;
   agentId: string;
   /**
    * Open interfaces only, oldest first. Not tied to procedures: the renderer shows them in
-   * "Para ti" without saying which procedures their workflow serves (docs/codemode.md, decision 5).
+   * "Para ti" without saying which procedures their run serves (docs/codemode.md, decision 5).
    */
-  ui: WorkflowUi[];
+  ui: RunUi[];
   /** Whether a process is executing it right now (events reach it at once). */
   attached: boolean;
   createdAt: string;

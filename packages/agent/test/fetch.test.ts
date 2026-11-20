@@ -208,7 +208,6 @@ describe('api.fetchUrl', () => {
     createHostOps({
       bridge: { call: async () => ({}) as never },
       images: createImageStore(),
-      runId: () => 'run_1',
       procedures: () => [],
       imagesSupported: true,
       allowPrivateHosts,

@@ -127,7 +127,7 @@ e2eSuite('checkpoint and resume on the real SpainBench', () => {
     );
 
     // What the second run did: the coordinator passed "go on" to the agent it had started, whose
-    // workflow opened the logged-in page, which showed it (the cookies came back with the world).
+    // run opened the logged-in page, which showed it (the cookies came back with the world).
     const later = after.events.filter((event) => event.seq > manifest.atSeq);
     expect(toolNames(later).slice(0, 2)).toEqual(['assistant:agent_message', 'procedure:codemode']);
     const steps = observations(later, 'tool_start').filter((e) =>

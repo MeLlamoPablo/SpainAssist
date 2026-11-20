@@ -6,14 +6,14 @@ import type {
   CodemodeAgentInfo,
   ProcedureListItem,
   PromptItem,
-  WorkflowInfo,
-  WorkflowUi,
+  RunInfo,
+  RunUi,
 } from '@sa/shared';
 import { expect, type Harness, invoke, test } from './fixtures';
 
 /**
  * The app runs one conversation with the coordinator (the chat's agent), which starts background
- * agents; each agent's only tool is `codemode`, which runs a workflow module (docs/codemode.md).
+ * agents; each agent's only tool is `codemode`, which runs a module (docs/codemode.md).
  * Mock LLM rules tell them apart by the tools each declares.
  */
 export const COORDINATOR = '^agent_start$';
@@ -22,7 +22,7 @@ export const AGENT = '^codemode$';
 /**
  * The coordinator starts one agent on the first message and relays its reports: `reply` for the
  * report whose text matches `done`, a holding answer for any other (the agent's turn ended while
- * its workflow waits for the user).
+ * its run waits for the user).
  */
 export function coordinatorRules(brief: string, reply: string, done: string): RuleSpec[] {
   return [
@@ -47,19 +47,18 @@ export function coordinatorRules(brief: string, reply: string, done: string): Ru
   ];
 }
 
-export interface WorkflowSpec {
-  workflow: string;
+export interface RunSpec {
   title: string;
   /** The module: `export async function main(api) { … }`. */
   source: string;
 }
 
 /**
- * The agent runs one workflow on its first message and reports `report` once it ended (in its
- * `codemode` call, or later as a `[Workflow …]` message after it waited for the user).
+ * The agent runs one module on its first message and reports `report` once it ended (in its
+ * `codemode` call, or later as a `[Run …]` message after it waited for the user).
  */
-export function agentRules(spec: WorkflowSpec, report: string): RuleSpec[] {
-  const ended = `\\[Workflow "${spec.workflow}"`;
+export function agentRules(spec: RunSpec, report: string): RuleSpec[] {
+  const ended = '\\[Run ';
   return [
     {
       when: { hasTool: AGENT, lastUser: `${ended}[^\\]]*succeeded` },
@@ -85,7 +84,7 @@ export function agentRules(spec: WorkflowSpec, report: string): RuleSpec[] {
   ];
 }
 
-export function codemodeCall(spec: WorkflowSpec) {
+export function codemodeCall(spec: RunSpec) {
   return { name: 'codemode', arguments: { ...spec } };
 }
 
@@ -105,7 +104,7 @@ async function attachDebug(h: Harness) {
     state.agents.map(async (a) => ({ ...a, log: await invoke(h.page, 'codemode.agentLog', a.id) })),
   );
   await test.info().attach('agents.json', {
-    body: JSON.stringify({ agents: logs, workflows: state.workflows }, null, 2),
+    body: JSON.stringify({ agents: logs, runs: state.runs }, null, 2),
     contentType: 'application/json',
   });
   await test.info().attach('requests.json', {
@@ -137,24 +136,21 @@ export async function procedureTitled(h: Harness, title: string): Promise<Proced
   return found as ProcedureListItem;
 }
 
-/** Waits for the open interface `key` of some workflow (what "Para ti" shows). */
-export async function openUi(
-  h: Harness,
-  key: string,
-): Promise<{ workflow: WorkflowInfo; ui: WorkflowUi }> {
-  let found: { workflow: WorkflowInfo; ui: WorkflowUi } | undefined;
+/** Waits for the open interface `key` of some run (what "Para ti" shows). */
+export async function openUi(h: Harness, key: string): Promise<{ run: RunInfo; ui: RunUi }> {
+  let found: { run: RunInfo; ui: RunUi } | undefined;
   await debugOnFailure(h, () =>
     expect
       .poll(async () => {
-        for (const workflow of (await invoke(h.page, 'codemode.state')).workflows) {
-          const ui = workflow.ui.find((u) => u.key === key && u.tree);
-          if (ui) found = { workflow, ui };
+        for (const run of (await invoke(h.page, 'codemode.state')).runs) {
+          const ui = run.ui.find((u) => u.key === key && u.tree);
+          if (ui) found = { run, ui };
         }
         return Boolean(found);
       })
       .toBe(true),
   );
-  return found as { workflow: WorkflowInfo; ui: WorkflowUi };
+  return found as { run: RunInfo; ui: RunUi };
 }
 
 /** Waits for a host prompt (approval, secret code…) an agent showed for a procedure. */

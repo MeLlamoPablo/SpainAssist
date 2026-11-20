@@ -1,6 +1,6 @@
 /**
  * The scripted models of the injection fixture meet the shapes SpainBench's newer variants take:
- * the address behind a link, in the title line a workflow returns above the page, in the footer
+ * the address behind a link, in the title line a run returns above the page, in the footer
  * of a PDF, and the same address written in invisible Unicode tag characters.
  */
 import '../llm/helpers/no-network';

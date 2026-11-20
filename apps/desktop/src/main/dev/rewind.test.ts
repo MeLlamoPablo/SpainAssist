@@ -63,7 +63,7 @@ describe('cutSession', () => {
       user('[Report from agent a_1 "DNI"]\nDone.'),
       reply('Tu agente terminó.'),
       user(
-        '[Procedures (as the user sees them; procedure_read for fresh ones)]\n- p_1 v2 "DNI" · active\n\n[Interrupted workflows (…): "w1"]\n\nRenueva mi DNI',
+        '[Procedures (as the user sees them; procedure_read for fresh ones)]\n- p_1 v2 "DNI" · active\n\n[Interrupted runs (…): run_1]\n\nRenueva mi DNI',
       ),
       reply('Vale.'),
       { type: 'message', message: { role: 'toolResult', content: [{ type: 'text', text: 'ok' }] } },

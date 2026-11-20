@@ -1,6 +1,6 @@
 /**
  * Codemode end to end: the real app (createHeadlessApp), the real agent host process with its
- * QuickJS workflows, the real bridge, and a scripted model. The user is played through the
+ * QuickJS runs, the real bridge, and a scripted model. The user is played through the
  * renderer API, as the renderer would.
  */
 import { execFileSync } from 'node:child_process';
@@ -40,13 +40,12 @@ afterAll(async () => {
 });
 
 describe('codemode end to end', () => {
-  it('answers "¿tengo que hacer la renta?" through an agent with one workflow: the question at once, the decision without another turn', async () => {
+  it('answers "¿tengo que hacer la renta?" through an agent with one run: the question at once, the decision without another turn', async () => {
     const { app } = real;
     await app.invoke('chat.send', { text: RENTA_QUESTION });
 
-    const { workflow, tree, rev } = await openInterface(app, 'income');
-    expect(workflow).toMatchObject({
-      id: 'renta-obligacion',
+    const { run, tree, rev } = await openInterface(app, 'income');
+    expect(run).toMatchObject({
       title: 'Saber si tienes que hacer la renta',
       status: 'waiting_user',
     });
@@ -54,8 +53,8 @@ describe('codemode end to end', () => {
     expect(procedures.map((p) => [p.title, p.status])).toEqual([
       ['Obligación de presentar la renta', 'researching'],
     ]);
-    // The workflow records the procedure it serves (main only: the renderer never gets it).
-    expect(app.services.codemode?.workflows.get(workflow.id)?.procedures).toEqual([
+    // The agent touched the procedure it created (main only: the renderer never gets it).
+    expect(app.services.codemode?.directory.get(run.agentId)?.procedures).toEqual([
       procedures[0]?.id,
     ]);
 
@@ -70,15 +69,14 @@ describe('codemode end to end', () => {
     );
     const turnsBeforeAnswer = llm.requests().length;
 
-    await app.invoke('codemode.uiEvent', workflow.id, 'income', {
+    await app.invoke('codemode.uiEvent', run.id, 'income', {
       handler: handler(findNode(tree, 'TextField'), 'onChange'),
       rev,
       value: '18000',
     });
     const updated = await waitFor(
       async () => {
-        const ui = (await app.invoke('codemode.state')).workflows.find((w) => w.id === workflow.id)
-          ?.ui[0];
+        const ui = (await app.invoke('codemode.state')).runs.find((w) => w.id === run.id)?.ui[0];
         return ui && ui.rev > rev && findNode(ui.tree, 'Button', 'Seguir')?.props.disabled === false
           ? ui
           : undefined;
@@ -86,7 +84,7 @@ describe('codemode end to end', () => {
       30_000,
       'the re-render',
     );
-    await app.invoke('codemode.uiEvent', workflow.id, 'income', {
+    await app.invoke('codemode.uiEvent', run.id, 'income', {
       handler: handler(findNode(updated.tree, 'Button', 'Seguir'), 'onClick'),
       rev: updated.rev,
     });
@@ -109,20 +107,17 @@ describe('codemode end to end', () => {
       'the final answer',
     );
 
-    // Model calls: the coordinator starts an agent and says so; the agent writes the workflow and
+    // Model calls: the coordinator starts an agent and says so; the agent writes the module and
     // reports the question; the coordinator relays it; then the agent's report and the
-    // coordinator's final answer. Answering the question cost no workflow turn.
+    // coordinator's final answer. Answering the question cost no model turn.
     const requests = llm.requests().filter((r) => r.path.endsWith('/chat/completions'));
     expect(requests).toHaveLength(7);
     expect(llm.requests().length - turnsBeforeAnswer).toBe(2);
     expect(requests.some((r) => JSON.stringify(r.body).includes('"name":"agent_start"'))).toBe(
       true,
     );
-    expect(app.services.codemode?.workflows.get('renta-obligacion')).toMatchObject({
-      status: 'succeeded',
-    });
-    expect(
-      JSON.parse(app.services.codemode?.workflows.get('renta-obligacion')?.result ?? '{}'),
-    ).toEqual({ verdict: 'no-exempt', income: 18000 });
+    // The run is over: its record went; its result reached the agent as a message.
+    expect(app.services.codemode?.runs.get(run.id)).toBeUndefined();
+    expect(JSON.stringify(llm.requests())).toContain('\\"verdict\\":\\"no-exempt\\"');
   }, 180_000);
 });

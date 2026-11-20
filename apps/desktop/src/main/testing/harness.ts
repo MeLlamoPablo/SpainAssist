@@ -219,7 +219,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     }) as Promise<SaResult<M>>;
   }
 
-  /** The procedure each agent token acts on (sent as the procedure header, as workflows do). */
+  /** The procedure each agent token acts on (sent as the procedure header, as runs do). */
   const tokenProcedures = new Map<string, string>();
 
   /**
@@ -306,7 +306,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
   /**
    * Starts a background agent the way the coordinator does (bridge `agents.start` with the
    * coordinator's token), waits until its process got the brief, and creates a procedure for it
-   * as its workflow would (`procs.getOrCreate`). `rpc` with the agent's token names the procedure.
+   * as its run would (`procs.getOrCreate`). `rpc` with the agent's token names the procedure.
    */
   async function startProcedure(title = 'Renovar el DNI', brief = 'Quiere renovar el DNI.') {
     const coordinator = services.tokens.issue(ASSISTANT_AGENT_ID);

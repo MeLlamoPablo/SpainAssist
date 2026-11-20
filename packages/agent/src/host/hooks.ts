@@ -16,7 +16,7 @@ import type { ResearchBackend } from './research';
 /** Where the host's own HTTP requests go. */
 export interface HostEgress {
   /**
-   * All outbound HTTP of workflows' `api.fetchUrl`, `api.fetch` and `api.boe.search`. Receives
+   * All outbound HTTP of runs' `api.fetchUrl`, `api.fetch` and `api.boe.search`. Receives
    * the real URL the agent asked for (a `URL` object from the first two, a string from BOE) and the
    * init the tool built (`redirect: 'manual'` from the first two: they follow redirects
    * themselves; BOE relies on the platform default).

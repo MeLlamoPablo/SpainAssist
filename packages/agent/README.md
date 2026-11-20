@@ -2,7 +2,7 @@
 
 Everything pi-specific in SpainAssist: the **agent host** (one process per active agent: the
 coordinator behind the chat, or a background agent), the **tools** the model can call (the
-coordinator's, and the background agents' `codemode` with its workflow API), the **system
+coordinator's, and the background agents' `codemode` with its run API), the **system
 prompts**, the **RPC client** the desktop app uses to drive a host, and **provider helpers**
 (Sign in with ChatGPT, vouchers, BYOK, credit).
 
@@ -17,7 +17,7 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
      ▲   │                                     │  pi SDK: ModelRuntime + AgentSession + runRpcMode
      │   └── PiRpcClient ◄── stdio JSONL ─────►│  inline extension: the tools + exact system prompt
      │                                         │
-     └──── host bridge (HTTP, bearer token) ◄──┘  background agents: workflow.*, procs.*,
+     └──── host bridge (HTTP, bearer token) ◄──┘  background agents: run.*, procs.*,
                                                   prompts/vault/browser/feedback; the
                                                   coordinator: agents.*, procs.* (role in config);
                                                   credentials (agent.credential)
@@ -59,17 +59,17 @@ desktop main ──spawn (buildAgentLaunch)──► dist/host.js   (Electron as
 ## Codemode
 
 Background agents (role `agent`, `docs/codemode.md`) have one tool, `codemode`, which runs a
-workflow module in QuickJS (`src/codemode/`). Everything they do is a call of the workflow API
-(`api.*`, declared in the system prompt): research (`api.search`, `api.fetchUrl`, `api.fetch`,
+module in QuickJS (`src/codemode/`). Everything they do is a call of the run's API (`api.*`,
+declared in the system prompt): research (`api.search`, `api.fetchUrl`, `api.fetch`,
 `api.boe.search`), procedures, vault and documents, the browser, the user's prompts and
-interfaces, community learnings. A workflow that waits for the user detaches: the tool returns,
-and the run's outcome reaches the agent as a message through the app.
+interfaces, community learnings. A run that waits for the user detaches: the tool returns, and
+the run's outcome reaches the agent as a message through the app.
 
 | File | What |
 | --- | --- |
 | `kernel.ts` | JavaScript evaluated in every run: `api`, `@spainassist/ui`, durable state, the hooks renderer, event dispatch |
 | `transform.ts` | sucrase: JSX and ESM to the kernel's module format, keeping line numbers |
-| `workflow-run.ts` | One run in a fresh QuickJS instance: host calls, CPU slices, cancellation |
+| `run.ts` | One run in a fresh QuickJS instance: host calls, CPU slices, cancellation |
 | `host-ops.ts` | What each `api.*` operation does: bridge calls (with the procedure header), research, fetch |
 | `engine.ts` | Runs in the host: begin/end with main, event long-poll, detaching, periodic resume |
 | `tool.ts`, `declarations.ts` | The tool, the API's `.d.ts` per role |
@@ -131,7 +131,7 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 - **Abort.** The bridge connection of a pending `prompt.*` / `browser.*` request is closed: mark
   the PromptItem cancelled.
 - **Bridge timeouts (host side).** None for `prompt.*`, `browser.loginClave`,
-  `browser.fillFromUser`, `browser.useCertificate` and `workflow.events` (they may wait for the
+  `browser.fillFromUser`, `browser.useCertificate` and `run.events` (they may wait for the
   user); 3 min for
   other `browser.*` calls (so a click must not block on a signature approval); 60 s for
   research/feedback; 30 s otherwise. Requests use plain `node:http` (no undici 300 s limits).

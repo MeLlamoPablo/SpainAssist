@@ -2,27 +2,26 @@ import type { BridgeResults, UiEvent, UiNode } from '@sa/shared';
 import { BridgeError, type BridgeTransport } from '../bridge/client';
 import { hostLog } from '../host/log';
 import { createHostOps, type HostOpsDeps, type ImageStore } from './host-ops';
-import { type DurableStore, type RunOutcome, WorkflowRun } from './workflow-run';
+import { CodeRun, type DurableStore, type RunOutcome } from './run';
 
 /**
- * Runs codemode workflows in the agent host: one WorkflowRun per workflow, its durable state in
- * the app (bridge `workflow.*`), the user's events long-polled from the app and dispatched into
- * the run. A run outlives the tool call that started it when it waits for the user (or runs
+ * Runs codemode modules in the agent host: one CodeRun per `codemode` call, the agent's durable
+ * state in the app (bridge `run.*`), the user's events long-polled from the app and dispatched
+ * into the run. A run outlives the tool call that started it when it waits for the user (or runs
  * long): the tool returns, and the app hands its outcome to the agent as a message.
  */
 
 export interface StartInput {
-  workflowId: string;
   source: string;
   procedures?: string[];
   title?: string;
+  /** Resume this run of the agent's (it waits for the user) instead of starting a new one. */
+  runId?: string;
 }
 
 export interface EngineOutcome {
-  workflowId: string;
   runId: string;
-  resumed: boolean;
-  memoReused: number;
+  title?: string;
   /** `detached`: still running (waiting for the user, or long); its outcome comes as a message. */
   status: RunOutcome['status'] | 'detached';
   outcome?: RunOutcome;
@@ -45,8 +44,7 @@ export interface ResearchLog {
   add(): void;
 }
 
-export interface EngineDeps
-  extends Omit<HostOpsDeps, 'runId' | 'procedures' | 'images' | 'bridge'> {
+export interface EngineDeps extends Omit<HostOpsDeps, 'procedures' | 'images' | 'bridge'> {
   bridge: BridgeTransport;
   images: ImageStore;
   /** Return after this long even without an interface (steering stays possible). */
@@ -56,16 +54,15 @@ export interface EngineDeps
 }
 
 interface LiveRun {
-  run: WorkflowRun;
+  run: CodeRun;
   runId: string;
-  workflowId: string;
   deliver: boolean;
   searches: Search[];
   /** Dispatches the events that wait for an interface to open (set by `pollEvents`). */
   flushWaiting?: () => void;
 }
 
-export class WorkflowEngine {
+export class RunEngine {
   private readonly live = new Map<string, LiveRun>();
   private resumer?: ReturnType<typeof setInterval>;
   private resuming = false;
@@ -85,13 +82,13 @@ export class WorkflowEngine {
     this.deps.researchLog?.add();
   }
 
-  /** Workflows running in this process. */
+  /** Runs executing in this process. */
   running(): string[] {
     return [...this.live.keys()];
   }
 
   /**
-   * Starts (or resumes) a workflow. Resolves when it ends, or detaches as `deps` says.
+   * Starts (or resumes) a run. Resolves when it ends, or detaches as `deps` says.
    * `signal` (the tool call aborted) cancels a run that has not detached yet.
    */
   async start(
@@ -101,10 +98,10 @@ export class WorkflowEngine {
   ): Promise<EngineOutcome> {
     const { bridge } = this.deps;
     const begin = await bridge.call(
-      'workflow.begin',
+      'run.begin',
       {
-        workflowId: input.workflowId,
         source: input.source,
+        ...(input.runId ? { runId: input.runId } : {}),
         ...(input.title ? { title: input.title } : {}),
         ...(input.procedures?.length ? { procedures: input.procedures } : {}),
       },
@@ -112,7 +109,6 @@ export class WorkflowEngine {
     );
     const runId = begin.runId;
     const procedures = [...begin.procedures];
-    const memoReused = Object.keys(begin.state.memo).length;
     const pendingRender = new Map<string, { tree: UiNode; rev: number }>();
     const pendingDurable = new Map<string, unknown>();
     let uiChain: Promise<unknown> = Promise.resolve();
@@ -122,12 +118,11 @@ export class WorkflowEngine {
       return next;
     };
     const store: DurableStore = {
-      setMemo: (key, value) =>
-        bridge.call('workflow.memo', { runId, key, value }).then(() => undefined),
+      setMemo: (key, value) => bridge.call('run.memo', { runId, key, value }).then(() => undefined),
       deleteMemo: (key) =>
-        bridge.call('workflow.memo', { runId, key, delete: true }).then(() => undefined),
+        bridge.call('run.memo', { runId, key, delete: true }).then(() => undefined),
       openUi: (key, tree, rev) =>
-        serial(() => bridge.call('workflow.ui', { runId, action: 'open', key, tree, rev })).then(
+        serial(() => bridge.call('run.ui', { runId, action: 'open', key, tree, rev })).then(
           () => undefined,
         ),
       renderUi: (key, tree, rev) => {
@@ -138,16 +133,14 @@ export class WorkflowEngine {
           const latest = pendingRender.get(key);
           pendingRender.delete(key);
           if (!latest) return;
-          await bridge.call('workflow.ui', {
+          await bridge.call('run.ui', {
             runId,
             action: 'render',
             key,
             tree: latest.tree,
             rev: latest.rev,
           });
-        }).catch((err) =>
-          hostLog('warn', `render of ${input.workflowId}/${key} failed: ${String(err)}`),
-        );
+        }).catch((err) => hostLog('warn', `render of ${runId}/${key} failed: ${String(err)}`));
       },
       setDurable: (key, name, value) => {
         // Only the latest value of each waits to be sent: a loop of updates keeps one, not all.
@@ -158,13 +151,13 @@ export class WorkflowEngine {
         void serial(() => {
           const latest = pendingDurable.get(id);
           pendingDurable.delete(id);
-          return bridge.call('workflow.ui', { runId, action: 'durable', key, name, value: latest });
+          return bridge.call('run.ui', { runId, action: 'durable', key, name, value: latest });
         }).catch((err) =>
-          hostLog('warn', `durable value of ${input.workflowId}/${key} not saved: ${String(err)}`),
+          hostLog('warn', `durable value of ${runId}/${key} not saved: ${String(err)}`),
         );
       },
       closeUi: (key, result) =>
-        serial(() => bridge.call('workflow.ui', { runId, action: 'close', key, result })).then(
+        serial(() => bridge.call('run.ui', { runId, action: 'close', key, result })).then(
           () => undefined,
         ),
     };
@@ -175,13 +168,11 @@ export class WorkflowEngine {
     const searches: Search[] = [];
     const baseOps = createHostOps({
       ...this.deps,
-      runId: () => runId,
       procedures: () => procedures,
       researched: () => researched,
     });
     let uiChanged: () => void = () => {};
-    const run = new WorkflowRun({
-      workflowId: input.workflowId,
+    const run = new CodeRun({
       source: input.source,
       state: begin.state,
       procedures,
@@ -190,22 +181,24 @@ export class WorkflowEngine {
         const result = await baseOps(op, args, ctx);
         if (op === 'search' && typeof result === 'string')
           searches.push({ query: searchQuery(args), text: result });
-        if (op === 'procedures.getOrCreate') {
+        if (op === 'procedures.getOrCreate' || op === 'procedures.update') {
+          // The procedure touched last comes first: the run's default for prompts and documents.
           const id = (result as { id?: string }).id;
-          if (id && !procedures.includes(id)) procedures.push(id);
+          if (id)
+            procedures.splice(0, procedures.length, id, ...procedures.filter((p) => p !== id));
         }
         return result;
       },
       onUiChange: () => {
         uiChanged();
-        // Out of the state operation that opened it: dispatch runs workflow code.
+        // Out of the state operation that opened it: dispatch runs module code.
         setTimeout(() => live.flushWaiting?.(), 0);
       },
     });
-    const live: LiveRun = { run, runId, workflowId: input.workflowId, deliver: false, searches };
-    this.live.set(input.workflowId, live);
+    const live: LiveRun = { run, runId, deliver: false, searches };
+    this.live.set(runId, live);
     void this.pollEvents(live).catch((err) =>
-      hostLog('warn', `events of ${input.workflowId} stopped: ${String(err)}`),
+      hostLog('warn', `events of ${runId} stopped: ${String(err)}`),
     );
     run.done.then(
       (outcome) => this.finish(live, outcome),
@@ -215,13 +208,7 @@ export class WorkflowEngine {
     void run.start();
 
     const detach = options.detach ?? false;
-    const base = {
-      workflowId: input.workflowId,
-      runId,
-      resumed: begin.resumed,
-      memoReused,
-      searches,
-    };
+    const base = { runId, ...(input.title ? { title: input.title } : {}), searches };
     if (detach) {
       live.deliver = true;
       return { ...base, status: 'detached', openUi: run.openUis() };
@@ -252,12 +239,12 @@ export class WorkflowEngine {
   }
 
   private async finish(live: LiveRun, outcome: RunOutcome): Promise<void> {
-    if (this.live.get(live.workflowId) === live) this.live.delete(live.workflowId);
+    if (this.live.get(live.runId) === live) this.live.delete(live.runId);
     const value =
       outcome.status === 'succeeded' && outcome.value !== undefined
-        ? outcome.value.slice(0, 100_000)
+        ? outcome.value.slice(0, RESULT_CHARS)
         : undefined;
-    const logs = outcome.logs.length ? outcome.logs.join('\n').slice(-10_000) : undefined;
+    const logs = outcome.logs.length ? outcome.logs.join('\n').slice(-RESULT_CHARS) : undefined;
     // The agent hears this outcome as a message (its tool call returned): with the searches it
     // didn't return, as the tool result shows them.
     let searches: string | undefined;
@@ -265,12 +252,12 @@ export class WorkflowEngine {
       searches = unreturnedSearches(
         live.searches,
         // What main's message shows of them (coordinator.ts clips value and logs).
-        `${value?.slice(0, DELIVERED_CHARS) ?? ''}\n${logs?.slice(0, DELIVERED_CHARS) ?? ''}`,
+        `${value ?? ''}\n${logs ?? ''}`,
       );
       this.markResearched();
     }
     try {
-      await this.deps.bridge.call('workflow.end', {
+      await this.deps.bridge.call('run.end', {
         runId: live.runId,
         outcome: {
           status: outcome.status,
@@ -278,7 +265,7 @@ export class WorkflowEngine {
           ...(outcome.status === 'failed'
             ? {
                 error: outcome.error.slice(0, 10_000),
-                // Workflow code chooses it; the bridge takes 40 characters.
+                // Module code chooses it; the bridge takes 40 characters.
                 ...(outcome.code ? { code: outcome.code.slice(0, 40) } : {}),
               }
             : {}),
@@ -289,7 +276,7 @@ export class WorkflowEngine {
         deliver: live.deliver,
       });
     } catch (err) {
-      hostLog('warn', `workflow.end of ${live.workflowId} failed: ${String(err)}`);
+      hostLog('warn', `run.end of ${live.runId} failed: ${String(err)}`);
     }
   }
 
@@ -313,9 +300,9 @@ export class WorkflowEngine {
     };
     live.flushWaiting = flushWaiting;
     while (!ended) {
-      let response: BridgeResults['workflow.events'];
+      let response: BridgeResults['run.events'];
       try {
-        response = await bridge.call('workflow.events', { runId: live.runId, after });
+        response = await bridge.call('run.events', { runId: live.runId, after });
       } catch (err) {
         if (ended) return;
         // The app ended the run (it no longer knows it): stop it here too.
@@ -323,7 +310,7 @@ export class WorkflowEngine {
           live.run.cancel('The app ended this run');
           return;
         }
-        hostLog('warn', `workflow.events of ${live.workflowId} failed: ${String(err)}`);
+        hostLog('warn', `run.events of ${live.runId} failed: ${String(err)}`);
         await new Promise((r) => setTimeout(r, 1_000));
         continue;
       }
@@ -341,7 +328,7 @@ export class WorkflowEngine {
     }
   }
 
-  /** Resumes this agent's workflows that wait for the user (after the process started). */
+  /** Resumes this agent's runs that wait for the user (after the process started). */
   async resumeAll(): Promise<void> {
     if (this.resuming) return;
     this.resuming = true;
@@ -353,31 +340,24 @@ export class WorkflowEngine {
   }
 
   private async resumeOnce(): Promise<void> {
-    let list: { workflowId: string; title?: string; source: string; procedures: string[] }[] = [];
+    let list: BridgeResults['run.resumable']['runs'] = [];
     try {
-      list = (await this.deps.bridge.call('workflow.resumable', {})).workflows;
+      list = (await this.deps.bridge.call('run.resumable', {})).runs;
     } catch (err) {
-      hostLog('warn', `could not list workflows to resume: ${String(err)}`);
+      hostLog('warn', `could not list runs to resume: ${String(err)}`);
       return;
     }
-    for (const w of list) {
-      if (this.live.has(w.workflowId)) continue;
-      await this.start(
-        {
-          workflowId: w.workflowId,
-          source: w.source,
-          procedures: w.procedures,
-          ...(w.title ? { title: w.title } : {}),
-        },
-        undefined,
-        { detach: true },
-      ).catch((err) => hostLog('warn', `could not resume ${w.workflowId}: ${String(err)}`));
+    for (const r of list) {
+      if (this.live.has(r.runId)) continue;
+      await this.start(r, undefined, { detach: true }).catch((err) =>
+        hostLog('warn', `could not resume ${r.runId}: ${String(err)}`),
+      );
     }
   }
 
   /**
-   * Looks for workflows to resume now and then while the process runs, not only at startup:
-   * one whose run went stale in main, or that waits while this process stayed up, would
+   * Looks for runs to resume now and then while the process runs, not only at startup: one
+   * whose live run went stale in main, or that waits while this process stayed up, would
    * otherwise never continue (found by the protocol's model checker, docs/codemode.md).
    */
   startResuming(everyMs = 15_000): void {
@@ -392,8 +372,11 @@ export class WorkflowEngine {
   }
 }
 
-/** How much of a delivered outcome's value and logs main's message shows (coordinator.ts). */
-const DELIVERED_CHARS = 4_000;
+/**
+ * The one limit on what the model reads of a run: the tool result, and the value and logs of
+ * the message main sends when a run ended after its call returned (coordinator.ts).
+ */
+export const RESULT_CHARS = 50_000;
 /** Of each search shown because main didn't return it. */
 const SEARCH_SHOWN_CHARS = 4_000;
 const SEARCHES_SHOWN_CHARS = 16_000;
@@ -412,7 +395,7 @@ function shows(report: string, text: string): boolean {
 
 /**
  * The run's searches that `report` (what the model reads of the run) doesn't show, for it to
- * read: a search found what the model must know, and a workflow can't make sense of prose
+ * read: a search found what the model must know, and a module can't make sense of prose
  * itself. Empty when it returned them all.
  */
 export function unreturnedSearches(searches: Search[], report: string): string {

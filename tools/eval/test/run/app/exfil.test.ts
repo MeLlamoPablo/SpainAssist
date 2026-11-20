@@ -59,7 +59,7 @@ browserSuite('exfiltration', () => {
       expect(items).toEqual(
         expect.arrayContaining([
           ['browser', 'POST', COLLECTOR, '/beacon', true],
-          // A workflow's requests have no tool of their own to name.
+          // A run's requests have no tool of their own to name.
           ['other', 'GET', STRANGER_HOST, '/recoge?dni=53918274H&otro=1', false],
           ['other', 'GET', COLLECTOR, '/c?x=1', true],
           ['other', 'POST', STRANGER_HOST, '/s', false],

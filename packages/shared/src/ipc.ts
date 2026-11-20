@@ -1,6 +1,6 @@
 import type { BrowserLiveInput } from './bridge';
 import type { Attachment, ChatItem, ConversationState, PromptResponse } from './chat';
-import type { CodemodeAgentInfo, UiEvent, WorkflowInfo } from './codemode';
+import type { CodemodeAgentInfo, RunInfo, UiEvent } from './codemode';
 import type { ProcedureListItem } from './procedure';
 import type {
   ByokInput,
@@ -310,26 +310,21 @@ export interface SaMethods {
    */
   'companion.unlock': [[promptItemId: string, values: DnieUnlockValues], void];
 
-  /**
-   * Codemode: the agents (the progress meter) and the workflows with open interfaces or still
-   * running.
-   */
-  'codemode.state': [[], { agents: CodemodeAgentInfo[]; workflows: WorkflowInfo[] }];
-  /** The user acted on a workflow's interface. False when it is no longer open. */
-  'codemode.uiEvent': [[workflowId: string, key: string, event: UiEvent], boolean];
+  /** Codemode: the agents (the progress meter) and the runs with open interfaces or still running. */
+  'codemode.state': [[], { agents: CodemodeAgentInfo[]; runs: RunInfo[] }];
+  /** The user acted on a run's interface. False when it is no longer open. */
+  'codemode.uiEvent': [[runId: string, key: string, event: UiEvent], boolean];
   /** Pins of a Map of an open interface, in the order given (null: not found). */
-  'codemode.pins': [[workflowId: string, key: string, addresses: string[]], (MapPoint | null)[]];
+  'codemode.pins': [[runId: string, key: string, addresses: string[]], (MapPoint | null)[]];
   /** What an agent did (its activity log). */
   'codemode.agentLog': [[agentId: string], ChatItem[]];
-  /** Stops a background agent (its workflows keep their state; their interfaces stay). */
+  /** Stops a background agent (its runs keep their state; their interfaces stay). */
   'codemode.stopAgent': [[agentId: string], void];
   /**
    * The renderer could not draw an open interface (`detail`: which component, what it threw). Its
-   * workflow hears it at the line that presented it. False when that tree is no longer shown.
+   * run hears it at the line that presented it. False when that tree is no longer shown.
    */
-  'codemode.uiFailed': [[workflowId: string, key: string, rev: number, detail: string], boolean];
-  /** Withdraws a workflow's interfaces and stops it. */
-  'codemode.cancelWorkflow': [[workflowId: string], void];
+  'codemode.uiFailed': [[runId: string, key: string, rev: number, detail: string], boolean];
 
   /** Data URL of a stored media item (e.g. screenshot) or null. */
   'media.get': [[id: string], string | null];
@@ -370,7 +365,7 @@ export type SaEvent =
   | { type: 'companion.changed'; status: CompanionStatus }
   | { type: 'codemode.agent'; agent: CodemodeAgentInfo }
   | { type: 'codemode.agentLog'; agentId: string; item: ChatItem }
-  | { type: 'codemode.workflow'; workflow: WorkflowInfo }
+  | { type: 'codemode.run'; run: RunInfo }
   | { type: 'updates.status'; status: UpdateStatus }
   /** A frame of a live view (`browser.live.start`): a base64 JPEG of a `width` × `height` page. */
   | { type: 'browser.frame'; procedureId: string; jpeg: string; width: number; height: number }

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgentLaunch, PiRpcClient } from '@sa/agent';
 import { createHeadlessApp, type HeadlessApp } from '@sa/desktop/headless';
-import type { SaEvent, UiNode, WorkflowInfo } from '@sa/shared';
+import type { RunInfo, SaEvent, UiNode } from '@sa/shared';
 
 /**
  * A real app for codemode tests (docs/codemode.md, "Verification"):
@@ -121,18 +121,18 @@ export function handler(node: Exclude<UiNode, string> | undefined, prop: string)
   return value.$handler;
 }
 
-/** The open interface of a workflow, once it is on screen. */
+/** The open interface of a run, once it is on screen. */
 export async function openInterface(
   app: HeadlessApp,
   key: string,
   ms = 60_000,
-): Promise<{ workflow: WorkflowInfo; tree: UiNode; rev: number }> {
+): Promise<{ run: RunInfo; tree: UiNode; rev: number }> {
   return waitFor(
     async () => {
       const state = await app.invoke('codemode.state');
-      for (const workflow of state.workflows) {
-        const ui = workflow.ui.find((u) => u.key === key);
-        if (ui?.tree) return { workflow, tree: ui.tree, rev: ui.rev };
+      for (const run of state.runs) {
+        const ui = run.ui.find((u) => u.key === key);
+        if (ui?.tree) return { run, tree: ui.tree, rev: ui.rev };
       }
       return undefined;
     },

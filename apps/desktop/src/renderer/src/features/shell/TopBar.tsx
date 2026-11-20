@@ -50,10 +50,10 @@ export function TopBar() {
   const t = useT(dict);
   const view = useAppStore((s) => s.view);
   const navigate = useAppStore((s) => s.navigate);
-  // Only the workflows' open forms (codemode) count: a card's "Siguiente" is not a reason to
+  // Only the runs' open forms (codemode) count: a card's "Siguiente" is not a reason to
   // badge the tab.
   const waiting = useCodemodeStore((s) =>
-    Object.values(s.workflows).reduce((n, w) => n + w.ui.length, 0),
+    Object.values(s.runs).reduce((n, w) => n + w.ui.length, 0),
   );
 
   return (

@@ -445,7 +445,7 @@ describe('background agents', () => {
       type: 'tool_start',
       toolCallId: 't1',
       tool: 'codemode',
-      args: { workflow: 'w' },
+      args: { source: 's' },
     });
     expect(infoOf(agentId)).toMatchObject({ activity: 'working' });
     c.emit({
@@ -619,7 +619,7 @@ describe('background agents', () => {
 });
 
 describe('questions across app restarts', () => {
-  it('none survives: each is cancelled, and the workflow that asked asks again when it resumes', async () => {
+  it('none survives: each is cancelled, and the run that asked asks again when it resumes', async () => {
     await withProvider();
     const { procedureId, agent } = await app.startProcedure();
     const requests = [

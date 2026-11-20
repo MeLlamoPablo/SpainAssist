@@ -12,23 +12,23 @@ import { KERNEL } from './kernel';
 import { transformError, transformModule } from './transform';
 
 /**
- * Executes one run of a codemode workflow: the module's `main(api)` in a fresh QuickJS
- * (WebAssembly) instance, with durable state restored from `state`. A run stays alive while the
- * workflow waits for the user (an open interface keeps its component closures), and ends when
- * `main` settles or the run is cancelled.
+ * Executes one codemode run: the module's `main(api)` in a fresh QuickJS (WebAssembly)
+ * instance, with the agent's durable state restored from `state`. A run stays alive while it
+ * waits for the user (an open interface keeps its component closures), and ends when `main`
+ * settles or the run is cancelled.
  *
  * Resuming is re-running: memoized values (`api.state.memo`) and closed interfaces come from
  * `state`, open interfaces re-render with their durable state. See docs/codemode.md.
  */
 
 interface UiState {
-  status: 'open' | 'closed';
+  status: 'open' | 'closed' | 'withdrawn';
   result?: unknown;
   durable?: Record<string, unknown>;
   rev?: number;
 }
 
-export interface WorkflowState {
+export interface DurableState {
   memo: Record<string, { value?: unknown }>;
   ui: Record<string, UiState>;
 }
@@ -45,7 +45,7 @@ export interface DurableStore {
   closeUi(key: string, result: unknown): Promise<void>;
 }
 
-/** A failure of a host operation, as the workflow sees it (`CodemodeError`). */
+/** A failure of a host operation, as the module sees it (`CodemodeError`). */
 export class HostOpError extends Error {
   constructor(
     readonly code: string,
@@ -62,10 +62,9 @@ export class HostOpError extends Error {
 export type HostOp = (op: string, args: unknown, ctx: { signal: AbortSignal }) => Promise<unknown>;
 
 export interface RunOptions {
-  workflowId: string;
   source: string;
-  state: WorkflowState;
-  /** Procedures the workflow serves, primary first. */
+  state: DurableState;
+  /** Procedures the run serves, primary first. */
   procedures: string[];
   /** Every operation except durable state and interfaces, which go to `store`. */
   call: HostOp;
@@ -79,7 +78,7 @@ export interface RunOptions {
 export interface RunLimits {
   /** QuickJS heap. Default 64 MB. */
   memoryBytes: number;
-  /** Longest synchronous stretch of workflow code. Default 5 s. */
+  /** Longest synchronous stretch of module code. Default 5 s. */
   sliceMs: number;
   /** Host operations in flight at once; the rest wait. Default 8. */
   concurrency: number;
@@ -116,7 +115,7 @@ const JOB_BATCH = 1000;
 /** Ops the runtime answers itself (durable state and interfaces). */
 const STATE_OPS = new Set(['state.set', 'state.delete', 'ui.open', 'ui.close']);
 
-export class WorkflowRun {
+export class CodeRun {
   readonly done: Promise<RunOutcome>;
   private resolveDone!: (outcome: RunOutcome) => void;
   private readonly limits: RunLimits;
@@ -194,7 +193,7 @@ export class WorkflowRun {
       outcome = context.getString(result.value) as typeof outcome;
       result.value.dispose();
     } catch (error) {
-      // Workflow code shares the kernel's realm and can break what it calls: this run fails,
+      // Module code shares the kernel's realm and can break what it calls: this run fails,
       // never the process (the chat and the agent's other runs live there).
       this.finish({ status: 'failed', error: messageOf(error), code: 'handler' });
       return 'closed';
@@ -311,7 +310,6 @@ export class WorkflowRun {
     const bootJson = this.newString(
       context,
       JSON.stringify({
-        workflowId: this.options.workflowId,
         procedures: [...this.options.procedures],
         state: this.options.state,
         components: UI_COMPONENTS,
@@ -329,7 +327,7 @@ export class WorkflowRun {
 
     // Same first line as the module, so error positions match the model's line numbers.
     const factory = this.enter(() =>
-      context.evalCode(`(function (module, exports, require) {${code}\n})`, 'workflow.js'),
+      context.evalCode(`(function (module, exports, require) {${code}\n})`, 'module.js'),
     );
     if (factory.error) {
       const message = takeErrorText(context, factory.error);
@@ -565,7 +563,7 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * The text of what the workflow threw, releasing its handle. Workflow code chooses what it
+ * The text of what the module threw, releasing its handle. Module code chooses what it
  * throws (even a Promise, whose dump releases handles itself): reading it never throws here.
  */
 function takeErrorText(context: QuickJSContext, handle: QuickJSHandle): string {
@@ -605,7 +603,7 @@ function errorText(context: QuickJSContext, handle: QuickJSHandle): string {
     const head = `${name ?? 'Error'}${code ? ` [${code}${op ? ` in ${op}` : ''}]` : ''}: ${message ?? ''}`;
     const frames = (stack ?? '')
       .split('\n')
-      .filter((line) => line.includes('workflow.js'))
+      .filter((line) => line.includes('module.js'))
       .map((line) => line.trim())
       .slice(0, 6);
     return frames.length ? `${head}\n${frames.join('\n')}` : head;
@@ -615,6 +613,6 @@ function errorText(context: QuickJSContext, handle: QuickJSHandle): string {
 
 function interrupted(message: string, sliceMs: number): string {
   return /InternalError: interrupted/.test(message)
-    ? `Stopped: the workflow ran for more than ${Math.round(sliceMs / 1000)} s without waiting for anything (an endless loop?).`
+    ? `Stopped: the run went on for more than ${Math.round(sliceMs / 1000)} s without waiting for anything (an endless loop?).`
     : message;
 }

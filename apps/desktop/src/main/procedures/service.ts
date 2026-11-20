@@ -119,7 +119,7 @@ export class ProcedureService {
 
   /**
    * Codemode: the procedure with this id, created with `title` (and `initial`) when it does not
-   * exist. Ids come from the workflow's key (see codemode/handlers.ts), so a re-run finds it.
+   * exist. Ids come from the agent's key (see codemode/handlers.ts), so a later run finds it.
    */
   async getOrCreate(
     id: string,

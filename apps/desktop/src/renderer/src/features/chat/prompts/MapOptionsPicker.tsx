@@ -30,7 +30,7 @@ export function MapOptionsPicker({
 }: {
   /** The pending prompt item, whose map pins main keeps. */
   promptId: string;
-  /** Where the pins come from (workflow interfaces); default the pending prompt's. */
+  /** Where the pins come from (run interfaces); default the pending prompt's. */
   loadPins?: () => Promise<(MapPoint | null)[] | null>;
   field: FormField;
   value: string;

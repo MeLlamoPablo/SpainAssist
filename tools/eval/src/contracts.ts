@@ -436,7 +436,7 @@ export type Condition =
   | { type: 'prose'; from: AgentKind | 'any'; matches: RegExp }
   /**
    * Something a tool returned to the model (the text of a `tool_end`: what the app records of the
-   * result the model received: what its workflows returned, logged or reported). `ok`
+   * result the model received: what its runs returned, logged or reported). `ok`
    * limits it to results that did not fail (`true`) or only to failed ones (`false`).
    */
   | { type: 'toolResult'; agent?: AgentKind; tool?: string | RegExp; matches: RegExp; ok?: boolean }
@@ -608,12 +608,12 @@ export type Observation =
     }
   | { seq: number; t: string; type: 'quiescent' }
   | { seq: number; t: string; type: 'note'; text: string }
-  /** Codemode: a render of an open workflow interface (`src/run/app/interfaces.ts`). */
+  /** Codemode: a render of an open run interface (`src/run/app/interfaces.ts`). */
   | {
       seq: number;
       t: string;
       type: 'interface_render';
-      workflowId: string;
+      runId: string;
       key: string;
       rev: number;
       /** Something the user can act on (not loading, an input or an enabled button). */
@@ -621,8 +621,8 @@ export type Observation =
     };
 
 /**
- * The `toolCallId` prefix of an agent workflow's bridge call, recorded as a `tool_start` named by
- * its method (`src/run/app/observers.ts`): a step of a workflow, not a tool call of the model.
+ * The `toolCallId` prefix of an agent run's bridge call, recorded as a `tool_start` named by its
+ * method (`src/run/app/observers.ts`): a step of a run, not a tool call of the model.
  */
 export const BRIDGE_CALL_PREFIX = 'bridge-';
 

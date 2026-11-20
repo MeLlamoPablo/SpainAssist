@@ -15,7 +15,7 @@ import { type AgentHostConfig, buildAgentLaunch, PiRpcClient } from '../src/inde
 import { formatToday } from '../src/prompt/system';
 import type { AgentEvent } from '../src/rpc/events';
 import { COORDINATOR_TOOL_NAMES } from '../src/tools/names';
-import { createFakeBridge, type FakeBridge, workflowHandlers } from './helpers/fake-bridge';
+import { createFakeBridge, type FakeBridge, runHandlers } from './helpers/fake-bridge';
 import { RESEARCH_TEXT, type TestHooks } from './helpers/hook-host-fixtures';
 
 const packageRoot = join(import.meta.dirname, '..');
@@ -82,7 +82,7 @@ describe('HostHooks (real host process)', () => {
     llm = await createMockLlm({ scenario: { fallback: { text: 'Hecho.' } }, chunkSize: 16 });
     bridge = await createFakeBridge({
       'agent.credential': () => ({ credential: { type: 'api_key', key: 'llm-key-from-bridge' } }),
-      ...workflowHandlers(),
+      ...runHandlers(),
     });
   });
 
@@ -155,11 +155,11 @@ describe('HostHooks (real host process)', () => {
       .filter((m) => m.role === 'tool')
       .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)));
   const script = (scenario: ScenarioInput) => llm.setScenario(scenario);
-  /** A codemode call running `body` as the workflow's main. */
-  const workflow = (workflow: string, body: string, id?: string) => ({
+  /** A codemode call running `body` as the module's main. */
+  const codemode = (body: string, id?: string) => ({
     ...(id ? { id } : {}),
     name: 'codemode',
-    arguments: { workflow, source: `export async function main(api) {\n${body}\n}` },
+    arguments: { source: `export async function main(api) {\n${body}\n}` },
   });
 
   describe('without hooks', () => {
@@ -186,13 +186,10 @@ describe('HostHooks (real host process)', () => {
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                workflow(
-                  'leer',
-                  `const page = await api.fetchUrl('https://sede.spain.test/tramite?id=7');
+                codemode(`const page = await api.fetchUrl('https://sede.spain.test/tramite?id=7');
 const r = await api.fetch('https://api.spain.test/v1/datos', { method: 'POST', body: 'x' });
 const laws = await api.boe.search('documento nacional de identidad');
-return { page: page.text, api: await r.json(), laws };`,
-                ),
+return { page: page.text, api: await r.json(), laws };`),
               ],
             },
           },
@@ -237,7 +234,7 @@ return { page: page.text, api: await r.json(), laws };`,
 
       // What the model read came from the stand-in, produced by the product operations.
       const [result] = toolResults(completions()[1] as ChatRequest);
-      expect(result).toContain('Workflow "leer" succeeded');
+      expect(result).toContain('Run succeeded');
       expect(result).toContain('Texto servido por el egress de prueba.');
       expect(result).toContain('/v1/datos');
       expect(result).toContain('BOE-A-2005-21163');
@@ -253,8 +250,7 @@ return { page: page.text, api: await r.json(), laws };`,
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                workflow(
-                  'guarda',
+                codemode(
                   `const tries = [
   () => api.fetchUrl('http://127.0.0.1:8790/'),
   () => api.fetchUrl('http://localhost:8790/'),
@@ -339,10 +335,7 @@ return errors;`,
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                workflow(
-                  'investigar',
-                  `return await api.search({ prompt: 'renovar NIE', mode: 'balanced' });`,
-                ),
+                codemode(`return await api.search({ prompt: 'renovar NIE', mode: 'balanced' });`),
               ],
             },
           },
@@ -364,10 +357,8 @@ return errors;`,
         url: 'https://research.spain.test/v1/research',
         body: { input: 'renovar NIE', mode: 'balanced' },
       });
-      // The workflow reads the answer the product tool produces for this stream.
-      expect(toolResults(second)).toEqual([
-        `Workflow "investigar" succeeded.\n\nResult:\n${RESEARCH_TEXT}`,
-      ]);
+      // The run reads the answer the product tool produces for this stream.
+      expect(toolResults(second)).toEqual([`Run succeeded.\n\nResult:\n${RESEARCH_TEXT}`]);
     });
 
     it('can emulate the Exa backend, with the stub providing its tools', async () => {
@@ -405,18 +396,15 @@ return errors;`,
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                workflow(
-                  'uno',
+                codemode(
                   `return await (await api.fetch('https://api.spain.test/a')).json();`,
                   'call_a',
                 ),
-                workflow(
-                  'dos',
+                codemode(
                   `return await (await api.fetch('https://api.spain.test/b')).json();`,
                   'call_b',
                 ),
-                workflow(
-                  'tres',
+                codemode(
                   `const page = await api.fetchUrl('https://sede.spain.test/c');
 return await api.search({ prompt: 'renovar NIE', mode: 'fast' });`,
                   'call_c',

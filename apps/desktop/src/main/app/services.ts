@@ -23,7 +23,7 @@ import { ChatService } from '../chat/service';
 import { CodemodeAgents } from '../codemode/agents';
 import { CodemodeCoordinator } from '../codemode/coordinator';
 import { createCodemodeHandlers } from '../codemode/handlers';
-import { WorkflowService } from '../codemode/workflows';
+import { RunService } from '../codemode/runs';
 import { CompanionService } from '../companion/service';
 import { ConversationService } from '../conversation/service';
 import { UserError } from '../core/errors';
@@ -166,9 +166,9 @@ export interface MainServices {
   /** DNIe with the phone; only with the `dnie-phone` feature flag. */
   companion?: CompanionService;
   feedback: FeedbackService;
-  /** Agents, their workflows and the coordinator that drives them (docs/codemode.md). */
+  /** Agents, their runs and the coordinator that drives them (docs/codemode.md). */
   codemode: {
-    workflows: WorkflowService;
+    runs: RunService;
     directory: CodemodeAgents;
     coordinator: CodemodeCoordinator;
   };
@@ -261,51 +261,49 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const media = new MediaStore((pid) => procedureStore.paths(pid).mediaDir);
   const tokens = new TokenRegistry();
 
-  // docs/codemode.md: agents independent of procedures, durable workflows.
+  // docs/codemode.md: agents independent of procedures; their runs' durable state is theirs.
+  const agentsDir = join(paths.userData, 'agents');
   const directory = new CodemodeAgents({
-    dir: join(paths.userData, 'agents'),
+    dir: agentsDir,
     events,
     logger: logger.child('codemode'),
     clock,
   });
   let codemodeCoordinator!: CodemodeCoordinator;
-  const workflows = new WorkflowService({
-    dir: join(paths.userData, 'workflows'),
+  const runs = new RunService({
+    dir: agentsDir,
     events,
-    logger: logger.child('workflows'),
+    logger: logger.child('runs'),
     clock,
     placeLookup: (address, signal) => places.place(address, signal),
-    agentAlive: (id) => agents.isActive(id),
     onEnd: (end) => {
-      codemodeCoordinator.onWorkflowEnd(end);
-      // Development capture mode: a run's end saves the capture of its procedures' browsing.
+      codemodeCoordinator.onCodemodeEnd(end);
+      // Development capture mode: a run's end saves the capture of its agent's browsing.
       if (capture)
-        for (const id of end.workflow.procedures) void browser.finishCapture(id).catch(() => {});
+        for (const id of directory.get(end.agentId)?.procedures ?? [])
+          void browser.finishCapture(id).catch(() => {});
     },
-    onDetachedEvent: (workflow) => codemodeCoordinator.onDetachedEvent(workflow),
+    onDetachedEvent: (run) => codemodeCoordinator.onDetachedEvent(run),
     // What the user typed into fields with a vaultKey goes to Mis datos, always.
-    saveAnswers: async (_workflow, answers) => {
+    saveAnswers: async (answers) => {
       const current = new Map(vaultPort.listPersonal().map((p) => [p.key, p.value]));
       const changed = answers.filter((a) => current.get(a.key) !== a.value);
       if (!changed.length) return;
-      const { saved } = await setPersonalPartial(
-        vaultPort,
-        changed,
-        'form',
-        logger.child('workflows'),
-      );
+      const { saved } = await setPersonalPartial(vaultPort, changed, 'form', logger.child('runs'));
       if (!saved.length) return;
       events.emit({ type: 'vault.changed' });
       const labels = saved.map((p) => p.label).join(', ');
       conversation.addNotice('info', t(lang(), 'savedToVault', { labels }));
     },
-    onStale: (workflow) => codemodeCoordinator.onStale(workflow),
+    onStale: (run) => codemodeCoordinator.onStale(run),
   });
   await directory.init();
-  await workflows.init();
-  workflows.startSweeping();
+  await runs.init();
+  runs.startSweeping();
+  // The store of the workflows that preceded agent-owned state (until 2026-11-20): dropped.
+  await rm(join(paths.userData, 'workflows'), { recursive: true, force: true }).catch(() => {});
   events.on((e) => {
-    if (e.type === 'codemode.workflow') codemodeCoordinator.onWorkflowChanged(e.workflow.agentId);
+    if (e.type === 'codemode.run') codemodeCoordinator.onRunChanged(e.run.agentId);
   });
 
   // Late-bound references (circular wiring between agents, providers and the bridge).
@@ -529,7 +527,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   codemodeCoordinator = new CodemodeCoordinator({
     agents,
     directory,
-    workflows,
+    runs,
     procedures,
     conversation,
     prompts,
@@ -560,7 +558,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         dniePhone,
       }),
       ...createCodemodeHandlers({
-        workflows,
+        runs,
         procedures,
         directory,
         coordinator: codemodeCoordinator,
@@ -612,7 +610,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     );
     await browser.downloads.discard(id);
     await procedures.delete(id);
-    workflows.forgetProcedure(id);
     directory.forgetProcedure(id);
   }
 
@@ -625,7 +622,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     await browser.closeAll();
     await vaultPort.wipe();
     await procedures.deleteAll();
-    await workflows.deleteAll();
+    await runs.deleteAll();
     await directory.deleteAll();
     await conversation.clear();
     await rm(paths.assistantDir, { recursive: true, force: true }).catch(() => {});
@@ -645,8 +642,8 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     await bridge.close().catch(() => {});
     await procedures.flush().catch(() => {});
     await conversation.flush().catch(() => {});
-    workflows.dispose();
-    await workflows.flush().catch(() => {});
+    runs.dispose();
+    await runs.flush().catch(() => {});
     await directory.flush().catch(() => {});
     await vault.cleanupTmp().catch(() => {});
   }
@@ -727,23 +724,19 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     deleteProcedure,
     wipeAll,
     codemode: {
-      state: () => ({ agents: directory.infos(), workflows: workflows.infos() }),
-      uiEvent: (workflowId: string, key: string, event: UiEvent) =>
-        workflows.userEvent(workflowId, key, event),
-      pins: async (workflowId: string, key: string, addresses: string[]) => {
+      state: () => ({ agents: directory.infos(), runs: runs.infos() }),
+      uiEvent: (runId: string, key: string, event: UiEvent) => runs.userEvent(runId, key, event),
+      pins: async (runId: string, key: string, addresses: string[]) => {
         const signal = AbortSignal.timeout(20_000);
-        await workflows.locateOpen(workflowId, key, signal);
-        return workflows.pins(workflowId, key, addresses);
+        await runs.locateOpen(runId, key, signal);
+        return runs.pins(runId, key, addresses);
       },
       agentLog: async (agentId: string) => structuredClone(await directory.transcript(agentId)),
       stopAgent: async (agentId: string) => {
         if (directory.kindOf(agentId) === 'agent') await codemodeCoordinator.stopAgent(agentId);
       },
-      uiFailed: (workflowId: string, key: string, rev: number, detail: string) =>
-        workflows.uiFailed(workflowId, key, rev, detail),
-      cancelWorkflow: async (workflowId: string) => {
-        await workflows.cancel(workflowId, 'The user dismissed it');
-      },
+      uiFailed: (runId: string, key: string, rev: number, detail: string) =>
+        runs.uiFailed(runId, key, rev, detail),
     },
   });
 
@@ -765,7 +758,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     browser,
     companion,
     feedback,
-    codemode: { workflows, directory, coordinator: codemodeCoordinator },
+    codemode: { runs, directory, coordinator: codemodeCoordinator },
     deleteProcedure,
     wipeAll,
     shutdown,

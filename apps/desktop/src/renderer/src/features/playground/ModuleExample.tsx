@@ -1,5 +1,5 @@
-import type { WorkflowState } from '@sa/agent/workflow-run';
-import type { CodemodeAgentInfo, PromptItem, WorkflowInfo } from '@sa/shared';
+import type { DurableState } from '@sa/agent/run';
+import type { CodemodeAgentInfo, PromptItem, RunInfo } from '@sa/shared';
 import { Play, RotateCcw, Square, StepForward } from 'lucide-react';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -25,8 +25,8 @@ import {
   type RunView,
 } from './runner';
 
-const EMPTY: WorkflowState = { memo: {}, ui: {} };
-/** The meter's row for the running workflow. */
+const EMPTY: DurableState = { memo: {}, ui: {} };
+/** The meter's row for the running module. */
 const AGENT_ID = 'a-playground';
 
 const STATUS_TONE: Record<RunStatus, Tone> = {
@@ -45,7 +45,7 @@ const LINE_CLASS: Record<RunLine['kind'], string> = {
   error: 'text-danger',
 };
 
-/** A question of the workflow's (`api.user.*`) in the conversation, answered on its card. */
+/** A question of the module's (`api.user.*`) in the conversation, answered on its card. */
 const ask: RunnerHost['ask'] = (item, onAnswer) => {
   let done = false;
   const unsubscribe = useChatStore.subscribe((s) => {
@@ -65,10 +65,10 @@ const ask: RunnerHost['ask'] = (item, onAnswer) => {
 };
 
 /**
- * One workflow, run by the real kernel: what the user sees ("Para ti" and the agent meter) beside
+ * One module, run by the real kernel: what the user sees ("Para ti" and the agent meter) beside
  * its source, which can be edited and run again, from scratch or resumed from its durable state.
  */
-export function WorkflowExample({ example }: { example: PlaygroundExample }) {
+export function ModuleExample({ example }: { example: PlaygroundExample }) {
   const t = useT(playgroundDict);
   const lang = useLang();
   const original = example.source ?? '';
@@ -78,7 +78,7 @@ export function WorkflowExample({ example }: { example: PlaygroundExample }) {
   const count = useRef(0);
 
   const launch = useCallback(
-    (code: string, state: WorkflowState, resumed?: RunView) => {
+    (code: string, state: DurableState, resumed?: RunView) => {
       run.current?.stop('Replaced by a new run');
       const next = new PlaygroundRun(`${example.id}-${++count.current}`, code, state, {
         lang,
@@ -108,10 +108,10 @@ export function WorkflowExample({ example }: { example: PlaygroundExample }) {
   // The interfaces' events reach this run (UiRenderer → mock API → here).
   useEffect(() => {
     setPlaygroundCodemode({
-      uiEvent: (workflowId, key, event) =>
-        run.current?.workflowId === workflowId ? run.current.uiEvent(key, event) : false,
-      uiFailed: (workflowId, key, rev, detail) =>
-        run.current?.workflowId === workflowId ? run.current.uiFailed(key, rev, detail) : false,
+      uiEvent: (runId, key, event) =>
+        run.current?.runId === runId ? run.current.uiEvent(key, event) : false,
+      uiFailed: (runId, key, rev, detail) =>
+        run.current?.runId === runId ? run.current.uiFailed(key, rev, detail) : false,
       stopAgent: () => run.current?.stop('Stopped from the meter'),
     });
     return () => setPlaygroundCodemode(undefined);
@@ -135,9 +135,9 @@ export function WorkflowExample({ example }: { example: PlaygroundExample }) {
       createdAt: now,
       updatedAt: now,
     };
-    useCodemodeStore.getState().setAll({ agents: [agent], workflows: [] });
+    useCodemodeStore.getState().setAll({ agents: [agent], runs: [] });
   }, [view, example.label]);
-  useEffect(() => () => useCodemodeStore.getState().setAll({ agents: [], workflows: [] }), []);
+  useEffect(() => () => useCodemodeStore.getState().setAll({ agents: [], runs: [] }), []);
 
   const edited = source !== original;
   const runAgain = () => launch(source, EMPTY);
@@ -257,8 +257,8 @@ function UserView({ view }: { view: RunView | null }) {
   );
   const entries = useMemo<ForYouEntry[]>(() => {
     if (!view) return [];
-    const workflow: WorkflowInfo = {
-      id: view.workflowId,
+    const info: RunInfo = {
+      id: view.runId,
       status: view.status,
       agentId: AGENT_ID,
       ui: view.ui,
@@ -272,7 +272,7 @@ function UserView({ view }: { view: RunView | null }) {
           kind: 'ui',
           id: ui.key,
           at: ui.openedAt,
-          workflow,
+          run: info,
           ui,
         }),
       ),

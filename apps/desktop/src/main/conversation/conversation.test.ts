@@ -47,7 +47,7 @@ describe('ConversationService', () => {
     });
     a.appendDelta('m1', 'la');
     a.addNotice('info', 'Guardado', 'p_1');
-    // No question outlives a restart, not even a form or a phone call: the workflow that asked
+    // No question outlives a restart, not even a form or a phone call: the run that asked
     // resumes from its state and asks again.
     a.upsertItem({
       id: 'q1',

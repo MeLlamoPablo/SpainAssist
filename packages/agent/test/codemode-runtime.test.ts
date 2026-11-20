@@ -1,6 +1,6 @@
 import { UI_FAILED } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
-import { HostOpError } from '../src/codemode/workflow-run';
+import { HostOpError } from '../src/codemode/run';
 import { findNode, handlerOf, MemoryStore, startRun, until } from './helpers/codemode';
 
 describe('codemode runtime', () => {
@@ -29,7 +29,7 @@ describe('codemode runtime', () => {
     if (outcome.status === 'failed') expect(outcome.error).toMatch(/SyntaxError/);
   });
 
-  it('passes host errors to the workflow as CodemodeError with code and effect', async () => {
+  it('passes host errors to the module as CodemodeError with code and effect', async () => {
     const outcome = await startRun(
       `export async function main(api) {
         try { await api.vault.read(); } catch (e) {
@@ -188,7 +188,7 @@ describe('codemode runtime', () => {
     });
   });
 
-  it('logs the note the user left on an action, even when the workflow drops it', async () => {
+  it('logs the note the user left on an action, even when the module drops it', async () => {
     const outcome = await startRun(
       `export async function main(api) {
         const r = await api.user.requestAction({ kind: 'captcha', title: 'Escribe el código', message: 'Mira la imagen' });
@@ -262,7 +262,7 @@ describe('codemode runtime', () => {
     if (outcome.status === 'failed') expect(outcome.error).toMatch(/showed nothing/);
   });
 
-  it('fails the workflow when a handler throws, so the agent sees the bug', async () => {
+  it('fails the run when a handler throws, so the agent sees the bug', async () => {
     const started = startRun(`
       import { Button } from '@spainassist/ui';
       export async function main(api) {
@@ -321,7 +321,7 @@ describe('codemode runtime', () => {
       expect(outcome.error).toMatch(
         /^CodemodeError \[bad_request in ui.present\]: could not be shown/,
       );
-      expect(outcome.error).toMatch(/workflow\.js:3/);
+      expect(outcome.error).toMatch(/module\.js:3/);
     }
   });
 
@@ -384,8 +384,8 @@ describe('codemode runtime', () => {
     if (outcome.status === 'failed') expect(outcome.error).toMatch(/endless loop/);
   });
 
-  it('fails the run, not the process, when workflow code breaks what the kernel calls', async () => {
-    // Workflow code shares the kernel's realm: here dispatch's own lookup throws a Promise.
+  it('fails the run, not the process, when module code breaks what the kernel calls', async () => {
+    // Module code shares the kernel's realm: here dispatch's own lookup throws a Promise.
     const started = startRun(`export async function main() {
       const get = Map.prototype.get;
       Map.prototype.get = function (k) {

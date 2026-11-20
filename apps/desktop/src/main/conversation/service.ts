@@ -184,7 +184,7 @@ export class ConversationService implements TranscriptSink {
 
 /**
  * Close interrupted work. A prompt never outlives the agent's bridge call that showed it: after a
- * restart, the workflow that asked resumes from its state (or its agent hears it was interrupted).
+ * restart, the run that asked resumes from its state (or its agent hears it was interrupted).
  */
 export function closeStaleItem(item: ChatItem, now: string): ChatItem {
   if (item.type === 'prompt' && item.status === 'pending') return { ...item, status: 'cancelled' };

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { AGENT_REPORT_PREFIX, WORKFLOW_RESULT_PREFIX } from '@sa/agent';
+import { AGENT_REPORT_PREFIX, RESULT_CHARS, RUN_RESULT_PREFIX } from '@sa/agent';
 import {
   type ActivityItem,
   ASSISTANT_AGENT_ID,
@@ -18,20 +18,19 @@ import type { Logger } from '../core/logger';
 import { type Clock, errorMessage } from '../core/util';
 import type { ProcedureService } from '../procedures/service';
 import type { CodemodeAgents } from './agents';
-import type { WorkflowEnd, WorkflowRecord, WorkflowService } from './workflows';
+import type { RunEnd, RunRecord, RunService } from './runs';
 
 /** How the blocks that open a user's message start (`decorateUserMessage`; `dev/rewind.ts` strips them). */
 export const PROCEDURES_PREFACE = '[Procedures';
-export const INTERRUPTED_NOTE = '[Interrupted workflows';
+export const INTERRUPTED_NOTE = '[Interrupted runs';
 
 /** Upward messages stay short: the coordinator's context lives forever. */
 const MAX_REPORT_CHARS = 800;
-const MAX_RESULT_CHARS = 4_000;
 
 export interface CodemodeCoordinatorDeps {
   agents: AgentManager;
   directory: CodemodeAgents;
-  workflows: WorkflowService;
+  runs: RunService;
   procedures: ProcedureService;
   conversation: ConversationService;
   prompts: PromptManager;
@@ -45,10 +44,10 @@ export interface CodemodeCoordinatorDeps {
  * The codemode harness's glue in main (docs/codemode.md): the coordinator's background agents,
  * independent of procedures.
  *   - down: `agents.start/message/stop` from the coordinator's tools (agent_start, …);
- *   - up: an agent's run ends → a short report to the coordinator; a workflow that ended after
- *     its `codemode` call returned → its outcome to the agent that ran it;
- *   - resume: the user acts on an interface of a workflow no process runs → its agent is woken
- *     and its host resumes the workflow from its state.
+ *   - up: an agent's turn ends → a short report to the coordinator; a codemode run that ended
+ *     after its call returned → its outcome to the agent that ran it;
+ *   - resume: the user acts on an interface of a run no process runs → its agent is woken and
+ *     its host resumes the run from the agent's state.
  * Every agent's first message, and later ones when they changed, carry the procedures' cards.
  */
 export class CodemodeCoordinator {
@@ -84,31 +83,24 @@ export class CodemodeCoordinator {
       : `${PROCEDURES_PREFACE}: none yet]\n\n`;
   }
 
-  /** Workflows of this agent interrupted while it was away (it decides what to do). */
+  /** Runs of this agent interrupted while it was away (told once; it decides what to do). */
   private interruptedNote(agentId: string): string {
-    const list = this.deps.workflows
-      .list()
-      .filter((w) => w.agentId === agentId && w.status === 'interrupted');
+    const list = this.deps.runs.takeInterrupted(agentId);
     if (!list.length) return '';
-    return `${INTERRUPTED_NOTE} (the app or your process restarted while they ran; memoized steps are kept, re-run with the same id to continue): ${list.map((w) => `"${w.id}"${w.title ? ` (${w.title})` : ''}`).join(', ')}]\n\n`;
+    return `${INTERRUPTED_NOTE} (the app or your process restarted while they ran; memoized steps and closed interfaces are kept, run them again to continue): ${list.map(name).join(', ')}]\n\n`;
   }
 
   /**
-   * Workflows of this agent whose interfaces are still on screen: a message may answer them (the
+   * Runs of this agent whose interfaces are still on screen: a message may answer them (the
    * user attached the document instead of typing the number), and then they must not stay up.
    */
   private waitingNote(agentId: string): string {
-    const list = this.deps.workflows
-      .list()
-      .filter((w) => w.agentId === agentId && Object.values(w.ui).some((u) => u.status === 'open'));
+    const list = this.deps.runs.waiting(agentId);
     if (!list.length) return '';
-    const items = list.map((w) => {
-      const keys = Object.values(w.ui)
-        .filter((u) => u.status === 'open')
-        .map((u) => `"${u.key}"`);
-      return `"${w.id}"${w.title ? ` (${w.title})` : ''}: ${keys.join(', ')}`;
-    });
-    return `[Your interfaces the user still sees (if this message answers one or makes it obsolete, cancel its workflow with api.workflows.cancel and continue with the answer): ${items.join('; ')}]\n\n`;
+    const items = list.map(
+      ({ run, keys }) => `${name(run)}: ${keys.map((k) => `"${k}"`).join(', ')}`,
+    );
+    return `[Your interfaces the user still sees (if this message answers one or makes it obsolete, cancel its run with api.runs.cancel and continue with the answer): ${items.join('; ')}]\n\n`;
   }
 
   /**
@@ -121,7 +113,7 @@ export class CodemodeCoordinator {
 
   /** The user's chat message as the coordinator reads it. */
   decorateUserMessage(text: string): string {
-    return `${this.procedurePreface(ASSISTANT_AGENT_ID)}${this.interruptedNote(ASSISTANT_AGENT_ID)}${text}`;
+    return `${this.procedurePreface(ASSISTANT_AGENT_ID)}${text}`;
   }
 
   // --- agents (the coordinator's agent_* tools) ----------------------------------------------
@@ -300,60 +292,57 @@ export class CodemodeCoordinator {
     return saved.length ? `\nSaved documents: ${saved.join('; ')}` : '';
   }
 
-  /** WorkflowService: a run ended. When its codemode call had returned, the agent hears now. */
-  onWorkflowEnd(end: WorkflowEnd): void {
-    // The agent hears the result: it works on from the workflow without a gap in the meter.
+  /** RunService: a run ended. When its codemode call had returned, the agent hears now. */
+  onCodemodeEnd(end: RunEnd): void {
+    // The agent hears the result: it works on from the run without a gap in the meter.
     const wakes =
       end.deliver &&
       end.agentId !== ASSISTANT_AGENT_ID &&
       this.deps.directory.kindOf(end.agentId) === 'agent';
     if (wakes) this.deps.directory.setRunning(end.agentId, true);
-    this.refreshWorkflows(end.agentId);
+    this.refreshRuns(end.agentId);
     if (!end.deliver) return;
-    const w = end.workflow;
-    const title = w.title ? ` (${w.title})` : '';
     const body =
       end.outcome.status === 'succeeded'
         ? end.outcome.value === undefined
           ? 'main returned nothing.'
-          : `Result:\n${clip(end.outcome.value, MAX_RESULT_CHARS)}`
+          : `Result:\n${clip(end.outcome.value, RESULT_CHARS)}`
         : end.outcome.status === 'failed'
-          ? `Error:\n${clip(end.outcome.error ?? 'unknown', MAX_RESULT_CHARS)}\nFix the module and re-run it with the same id: memoized steps and closed interfaces are kept.`
+          ? `Error:\n${clip(end.outcome.error ?? 'unknown', RESULT_CHARS)}\nFix the module and run it again: memoized steps and closed interfaces are kept.`
           : `Cancelled${end.outcome.error ? `: ${end.outcome.error}` : ''}.`;
-    const logs = end.outcome.logs ? `\n\nLogs:\n${clip(end.outcome.logs, MAX_RESULT_CHARS)}` : '';
+    const logs = end.outcome.logs ? `\n\nLogs:\n${clip(end.outcome.logs, RESULT_CHARS)}` : '';
     const searches = end.outcome.searches ? `\n\n${end.outcome.searches}` : '';
-    const text = `${WORKFLOW_RESULT_PREFIX} "${w.id}"${title} ${end.outcome.status}]\n${body}${logs}${searches}`;
+    const text = `${RUN_RESULT_PREFIX} ${name(end.run)} ${end.outcome.status}]\n${body}${logs}${searches}`;
     this.track(this.send(end.agentId, text, { followUp: true }));
   }
 
   /**
-   * WorkflowService: a running workflow's run stopped reaching main (its host lost it). Its
-   * agent hears it, so it can re-run the workflow (its memoized steps are kept).
+   * RunService: a run stopped reaching main while it worked (its host lost it). Its agent hears
+   * it, so it can run the module again (memoized steps are kept).
    */
-  onStale(workflow: WorkflowRecord): void {
-    this.refreshWorkflows(workflow.agentId);
-    const title = workflow.title ? ` (${workflow.title})` : '';
+  onStale(run: RunRecord): void {
+    this.refreshRuns(run.agentId);
     this.track(
       this.send(
-        workflow.agentId,
-        `${WORKFLOW_RESULT_PREFIX} "${workflow.id}"${title} interrupted]\nIts run stopped while it worked. Memoized steps and closed interfaces are kept: re-run it with the same id to continue.`,
+        run.agentId,
+        `${RUN_RESULT_PREFIX} ${name(run)} interrupted]\nIt stopped while it worked. Memoized steps and closed interfaces are kept: run it again to continue.`,
         { followUp: true },
       ),
     );
   }
 
-  /** WorkflowService: the user acted on an interface no process runs: wake its agent. */
-  onDetachedEvent(workflow: WorkflowRecord): void {
-    const agentId = workflow.agentId;
+  /** RunService: the user acted on an interface no process runs: wake its agent. */
+  onDetachedEvent(run: RunRecord): void {
+    const agentId = run.agentId;
     if (this.waking.has(agentId)) return;
     this.waking.add(agentId);
     this.track(
       this.deps.agents
         .wake(agentId)
         .catch((err) => {
-          this.deps.logger.warn('could not wake an agent to resume its workflow', {
+          this.deps.logger.warn('could not wake an agent to resume its run', {
             agentId,
-            workflowId: workflow.id,
+            runId: run.id,
             error: errorMessage(err),
           });
         })
@@ -363,41 +352,44 @@ export class CodemodeCoordinator {
 
   /** AgentManager: an agent's process ended (stopped, idle, crashed). */
   onAgentGone(agentId: string): void {
-    const interrupted = this.deps.workflows.detachAgent(agentId);
+    const interrupted = this.deps.runs.detachAgent(agentId);
     if (interrupted.length)
-      this.deps.logger.info('workflows interrupted with their agent', {
+      this.deps.logger.info('runs interrupted with their agent', {
         agentId,
-        workflows: interrupted.map((w) => w.id),
+        runs: interrupted.map((r) => r.id),
       });
-    this.refreshWorkflows(agentId);
+    this.refreshRuns(agentId);
   }
 
-  /** Whether the agent's process must stay up: one of its workflows runs (not only waits). */
+  /** Whether the agent's process must stay up: one of its runs works (not only waits). */
   keepAlive(agentId: string): boolean {
-    return this.deps.workflows
+    return this.deps.runs
       .list()
-      .some(
-        (w) => w.agentId === agentId && w.status === 'running' && this.deps.workflows.isLive(w.id),
-      );
+      .some((r) => r.agentId === agentId && r.status === 'running' && this.deps.runs.isLive(r.id));
   }
 
-  /** A workflow changed (it began or ended, an interface opened or closed): its agent's state in the meter. */
-  onWorkflowChanged(agentId: string): void {
-    this.refreshWorkflows(agentId);
+  /** A run changed (it began or ended, an interface opened or closed): its agent's state in the meter. */
+  onRunChanged(agentId: string): void {
+    this.refreshRuns(agentId);
   }
 
   /**
-   * The agent's workflows in the meter: one waits for the user, or one runs on its own (after
-   * its codemode call returned, the agent's run may have ended while the workflow still works).
+   * The agent's runs in the meter: one waits for the user, or one works on its own (after its
+   * codemode call returned, the agent's turn may have ended while the run still works).
    */
-  private refreshWorkflows(agentId: string): void {
+  private refreshRuns(agentId: string): void {
     if (agentId === ASSISTANT_AGENT_ID || !this.deps.directory.has(agentId)) return;
     this.deps.directory.setWaitingUser(
       agentId,
-      this.deps.workflows.list().some((w) => w.agentId === agentId && w.status === 'waiting_user'),
+      this.deps.runs.list().some((r) => r.agentId === agentId && r.status === 'waiting_user'),
     );
-    this.deps.directory.setWorkflowRunning(agentId, this.keepAlive(agentId));
+    this.deps.directory.setCodemodeRunning(agentId, this.keepAlive(agentId));
   }
+}
+
+/** A run as its agent reads it: its id (api.runs.cancel takes it) and its title. */
+function name(run: RunRecord): string {
+  return `${run.id}${run.title ? ` (${run.title})` : ''}`;
 }
 
 function clip(text: string, max: number): string {

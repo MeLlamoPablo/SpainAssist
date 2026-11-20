@@ -2,10 +2,10 @@ import type { ScenarioInput } from '@sa/mock-llm';
 
 /**
  * The spec's own example (docs/codemode.md): "¿tengo que presentar este año la declaración de la
- * renta?", which the coordinator hands to an agent, answered by the agent with one workflow: a
+ * renta?", which the coordinator hands to an agent, answered by the agent with one run: a
  * card, the income question shown at once while the official threshold is read in parallel, the
  * income checked against it in code, the card updated. The scripted model writes exactly that
- * workflow; what the test checks is the harness.
+ * run; what the test checks is the harness.
  */
 
 export const RENTA_QUESTION = '¿Tengo que presentar este año la declaración de la renta?';
@@ -16,7 +16,7 @@ export const RENTA_PAGE = `<!doctype html><html lang="es"><head><title>Obligados
 <p>El límite es de 15.876 euros cuando hay más de un pagador y lo recibido del segundo y siguientes supera 1.500 euros.</p>
 </main></body></html>`;
 
-function rentaWorkflow(siteUrl: string): string {
+function rentaModule(siteUrl: string): string {
   return `import { Form, TextField, Actions, Button, Text } from '@spainassist/ui';
 
 function IncomeForm({ api }) {
@@ -103,7 +103,7 @@ export function rentaCodemodeScenario(siteUrl: string, llmDelayMs = 0): Scenario
       },
       {
         id: 'agent: report',
-        when: { systemPrompt: agent, lastUser: '\\[Workflow "renta-obligacion".*succeeded' },
+        when: { systemPrompt: agent, lastUser: '\\[Run .*succeeded' },
         reply: {
           text: 'No está obligado: ganó menos de 22.000 € de un solo pagador. Tarjeta completada.',
           delayMs: llmDelayMs,
@@ -115,16 +115,15 @@ export function rentaCodemodeScenario(siteUrl: string, llmDelayMs = 0): Scenario
         reply: { text: 'Le he preguntado cuánto ganó en 2025.', delayMs: llmDelayMs },
       },
       {
-        id: 'agent: workflow',
+        id: 'agent: run',
         when: { systemPrompt: agent, lastUser: 'renta', hasTool: '^codemode$' },
         reply: {
           toolCalls: [
             {
               name: 'codemode',
               arguments: {
-                workflow: 'renta-obligacion',
                 title: 'Saber si tienes que hacer la renta',
-                source: rentaWorkflow(siteUrl),
+                source: rentaModule(siteUrl),
               },
             },
           ],

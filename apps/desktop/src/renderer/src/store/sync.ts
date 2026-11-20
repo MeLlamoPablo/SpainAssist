@@ -50,8 +50,8 @@ function applyEvent(event: SaEvent): void {
     case 'codemode.agent':
       useCodemodeStore.getState().upsertAgent(event.agent);
       return;
-    case 'codemode.workflow':
-      useCodemodeStore.getState().upsertWorkflow(event.workflow);
+    case 'codemode.run':
+      useCodemodeStore.getState().upsertRun(event.run);
       return;
     case 'codemode.agentLog':
       return;

@@ -5,7 +5,7 @@
 import { hostLog } from './log';
 import { runHost } from './run';
 
-// This process hosts the agent's chat and all its workflows: a rejection nobody handled (a bug,
+// This process hosts the agent's chat and all its runs: a rejection nobody handled (a bug,
 // or one model code found a way to cause) is logged instead of ending them all.
 process.on('unhandledRejection', (reason: unknown) => {
   hostLog(

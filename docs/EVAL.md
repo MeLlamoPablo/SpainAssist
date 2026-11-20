@@ -67,7 +67,7 @@ The network layer keeps the URL the agent sees and only changes where the socket
 | --- | --- |
 | `X-SpainBench-Host` | The real host (wins over `Host`) |
 | `X-SpainBench-World` | The world: an opaque id (16 hex characters), never the run id, since the agent reads it in planted URLs |
-| `X-SpainBench-Source` | `browser`, `web_research`, `other` (a workflow's `api.fetch`, `api.fetchUrl`, `api.boe`), ... |
+| `X-SpainBench-Source` | `browser`, `web_research`, `other` (a run's `api.fetch`, `api.fetchUrl`, `api.boe`), ... |
 | `X-SpainBench-Resource-Type` | `document`, `xhr`, ... (browser only) |
 | `X-SpainBench-Harness: 1` | Ask for `X-SpainBench-Kind/Page/Seq` answers, which the harness strips |
 | `X-Forwarded-Proto` | `https`, so the mock writes real absolute URLs |
@@ -80,7 +80,7 @@ The client types are in `tools/eval/src/contracts.ts`.
 
 ## Network transparency (fail closed)
 
-Two paths leave an agent: the browser, and the agent host process (its workflows' `api.fetchUrl`,
+Two paths leave an agent: the browser, and the agent host process (its runs' `api.fetchUrl`,
 `api.fetch` and `api.boe`, and research). Both may reach only SpainBench, the model gateway, or nothing.
 
 - **Browser**: a mapping proxy per browser context ends TLS with one pinned key and forwards to the
@@ -140,8 +140,8 @@ Only quiet end states can be checkpointed: the app has no way to export a state 
 Any other point is reached by replaying the recorded prefix from the cache, which costs nothing as
 long as the world and the prompts stay identical. As in the real app, nothing resumes by itself: the
 run sends a follow-up message and the coordinator passes it to its agent with `agent_message`.
-App prompts (a confirmation, a credential) end with the app; a workflow's interface comes back with
-its workflow.
+App prompts (a confirmation, a credential) end with the app; a run's interface comes back with
+its run.
 
 ## Models and budget
 
@@ -349,7 +349,7 @@ removed.
 ## Codemode
 
 The app's agents work in codemode ([codemode.md](codemode.md)), its only harness: the coordinator
-starts agents, and they write workflows instead of calling one tool per step and ask the user
+starts agents, and they write modules instead of calling one tool per step and ask the user
 through interfaces they render. The harness reads them so (`src/run/app/interfaces.ts`,
 `observers.ts`):
 
@@ -362,15 +362,15 @@ through interfaces they render. The harness reads them so (`src/run/app/interfac
   renderer sends it: one `onChange` per field, each after the re-render of the last, then the click.
   The tree the click leads to is a new prompt. The renderer cannot dismiss an interface: a dismissed
   answer leaves it open, and a required field the user does not know is said in the chat.
-- **Bridge calls are tool calls.** A workflow's call through the bridge is a `tool_start` named by
+- **Bridge calls are tool calls.** A run's call through the bridge is a `tool_start` named by
   its method (`browser.loginClave`, `browser.open`, `downloads.save`, `vault.document`), under an id
   that starts with `bridge-`: the rules that name steps judge those. They do not count against the
   run's tool-call limit: the model made one call, `codemode`. The coordinator's tools are its own
   `tool_start`s (`agent_start`, `agent_message`...).
-- **A workflow's result is a tool result.** The `codemode` call's result, or, when the workflow
+- **A run's result is a tool result.** The `codemode` call's result, or, when the run
   waited for the user, the message its result reaches the agent in: both are `tool_end`s of
   `codemode`, so the injection's "shown to the model" precondition sees what the model saw.
-- **Quiet** also waits for running workflows, agents and answers being played.
+- **Quiet** also waits for running runs, agents and answers being played.
 
 The coordinator counts as the assistant (`agent: 'assistant'`) and every other agent, and every
 prompt (only agents ask), as a procedure agent's. A run's `run.json` says `options.codemode: true`;

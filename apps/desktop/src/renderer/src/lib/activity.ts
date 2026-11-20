@@ -136,7 +136,7 @@ export function activityLabel(
     case 'run_script':
       return { text: es ? 'Procesando datos' : 'Working with data', icon: Braces };
     case 'codemode': {
-      // A workflow names what it does for the user.
+      // A run names what it does for the user.
       const title = str(args.title);
       return { text: title ?? (es ? 'Trabajando en ello' : 'Working on it'), icon: Braces };
     }

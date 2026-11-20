@@ -72,7 +72,7 @@ async function openWithProvider(options: Partial<HeadlessOptions> = {}) {
 }
 
 /**
- * One bridge call as an agent would make it (the bearer token identifies the agent; a workflow
+ * One bridge call as an agent would make it (the bearer token identifies the agent; a run
  * names the procedure it acts on).
  */
 async function bridge(
@@ -376,16 +376,17 @@ describe('the services behind the options', () => {
     ],
   };
 
-  /** Opens an interface with a map, as a workflow does. */
+  /** Opens an interface with a map, as a run does. */
   async function presentMap(app: HeadlessApp) {
     const { token } = await anAgent(app);
-    const begun = await bridge(app, 'workflow.begin', { workflowId: 'w', source: 's' }, token);
-    return bridge(
+    const runId = (await bridge(app, 'run.begin', { source: 's' }, token)).result.runId as string;
+    const shown = await bridge(
       app,
-      'workflow.ui',
-      { runId: begun.result.runId, action: 'open', key: 'm', rev: 1, tree: mapUi },
+      'run.ui',
+      { runId, action: 'open', key: 'm', rev: 1, tree: mapUi },
       token,
     );
+    return { ...shown, runId };
   }
 
   it('looks map addresses up with the given places, and has none otherwise', async () => {
@@ -400,9 +401,9 @@ describe('the services behind the options', () => {
       userDataDir: join(root, 'places'),
       places: { place, home: async () => null },
     });
-    expect(await presentMap(app)).toMatchObject({ ok: true });
+    const { runId } = await presentMap(app);
     expect(place).toHaveBeenCalledWith('Calle Falsa 1, Sevilla', expect.anything());
-    expect(await app.invoke('codemode.pins', 'w', 'm', ['Calle Falsa 1, Sevilla'])).toEqual([
+    expect(await app.invoke('codemode.pins', runId, 'm', ['Calle Falsa 1, Sevilla'])).toEqual([
       { latitude: 37.38, longitude: -5.98 },
     ]);
 

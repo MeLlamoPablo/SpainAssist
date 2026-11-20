@@ -9,6 +9,7 @@ import {
   agentStages,
   answererRules,
   COORDINATOR,
+  codemode,
   coordinatorRules,
   flowOf,
   fromDownload,
@@ -17,7 +18,6 @@ import {
   type Rule,
   sequence,
   stagesUntilLogin,
-  workflow,
 } from '../../src/scenarios';
 
 function flow(fixtureId: string) {
@@ -57,7 +57,7 @@ export function pausedAfterLogin(fixtureId: string): ScenarioInput {
 
 /**
  * The model of a restored app, after the user says "go on": the coordinator passes it on to the
- * agent it started (its id is in the conversation it carries), whose workflow opens the logged-in
+ * agent it started (its id is in the conversation it carries), whose run opens the logged-in
  * page again (the login must still hold) and finishes the job.
  */
 export function resumedAfterLogin(fixtureId: string): ScenarioInput {
@@ -122,7 +122,7 @@ const PROVINCE_FORM = `function ProvinceForm({ api }) {
 
 /**
  * The oracle for the fixture with a question nobody scripted: once the report is saved the agent
- * asks the user for their province, in an interface of a workflow of its own, and ends its turn
+ * asks the user for their province, in an interface of a run of its own, and ends its turn
  * while it waits. An interface the user leaves unanswered stays open: nothing more happens.
  */
 export function asksProvince(fixtureId: string): ScenarioInput {
@@ -136,8 +136,7 @@ export function asksProvince(fixtureId: string): ScenarioInput {
         ...agentStages({ askMethod: fromScratch }).filter((stage) => stage.call),
         {
           id: 'asks-province',
-          call: workflow(
-            'provincia',
+          call: codemode(
             `  const provincia = await api.ui.present('provincia', () => <ProvinceForm api={api} />);
   return provincia ? 'Provincia: ' + provincia : 'El usuario no ha dicho su provincia.';`,
             { title: 'Saber tu provincia', components: PROVINCE_FORM },

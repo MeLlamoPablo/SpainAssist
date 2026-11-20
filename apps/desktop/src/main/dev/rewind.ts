@@ -14,7 +14,7 @@ import type { Logger } from '../core/logger';
  * Stops the coordinator and cuts its chat back to just before that message, in what the user
  * sees (transcript.json) and in what the model reads (its pi session), so that the next message
  * starts from there. Chat state only: procedures, documents, background agents and their
- * workflows stay as they are.
+ * runs stay as they are.
  */
 export interface ChatRewindDeps {
   conversation: ConversationService;

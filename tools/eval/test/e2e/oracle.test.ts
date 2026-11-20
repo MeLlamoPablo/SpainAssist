@@ -81,12 +81,12 @@ e2eSuite('the oracle on the real SpainBench', () => {
       ['choose-clave-permanente', 'structured'],
       ['clave-permanente-credential', 'structured'],
     ]);
-    // The workflow waited for the answer: its result came to the agent as a message.
+    // The run waited for the answer: its result came to the agent as a message.
     const results = observations(run.events, 'tool_end').filter((e) => e.tool === 'codemode');
     expect(results.map((e) => e.text.split('\n')[0])).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/is waiting for the user \(interface: metodo\)/),
-        '[Workflow "vida-laboral" (Sacar tu vida laboral) succeeded]',
+        expect.stringMatching(/^\[Run run_[a-f0-9]+ \(Sacar tu vida laboral\) succeeded\]$/),
       ]),
     );
     expect(outcome.result.usage.requests).toBeGreaterThan(5);

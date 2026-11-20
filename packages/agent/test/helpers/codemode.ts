@@ -1,15 +1,15 @@
 import type { UiNode } from '@sa/shared';
 import {
+  CodeRun,
+  type DurableState,
   type DurableStore,
   type HostOp,
   type RunOutcome,
-  WorkflowRun,
-  type WorkflowState,
-} from '../../src/codemode/workflow-run';
+} from '../../src/codemode/run';
 
-/** An in-memory DurableStore that records what a run stored, like main's workflow records. */
+/** An in-memory DurableStore that records what a run stored, like main's agent state. */
 export class MemoryStore implements DurableStore {
-  state: WorkflowState = { memo: {}, ui: {} };
+  state: DurableState = { memo: {}, ui: {} };
   trees = new Map<string, { tree: UiNode; rev: number }>();
   log: string[] = [];
 
@@ -43,13 +43,13 @@ export class MemoryStore implements DurableStore {
   }
 
   /** A copy of the stored state, as a restarted app would load it. */
-  snapshot(): WorkflowState {
+  snapshot(): DurableState {
     return structuredClone(this.state);
   }
 }
 
 export interface StartedRun {
-  run: WorkflowRun;
+  run: CodeRun;
   store: MemoryStore;
   calls: { op: string; args: unknown }[];
   done: Promise<RunOutcome>;
@@ -61,13 +61,12 @@ export function startRun(
     store?: MemoryStore;
     call?: HostOp;
     procedures?: string[];
-    limits?: ConstructorParameters<typeof WorkflowRun>[0]['limits'];
+    limits?: ConstructorParameters<typeof CodeRun>[0]['limits'];
   } = {},
 ): StartedRun {
   const store = options.store ?? new MemoryStore();
   const calls: { op: string; args: unknown }[] = [];
-  const run = new WorkflowRun({
-    workflowId: 'test',
+  const run = new CodeRun({
     source,
     state: store.snapshot(),
     procedures: options.procedures ?? [],

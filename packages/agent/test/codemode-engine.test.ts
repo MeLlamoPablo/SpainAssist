@@ -1,14 +1,14 @@
 import { type BridgeMethod, UI_FAILED } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import type { BridgeCallOptions, BridgeTransport } from '../src/bridge/client';
-import { type ResearchLog, unreturnedSearches, WorkflowEngine } from '../src/codemode/engine';
+import { type ResearchLog, RunEngine, unreturnedSearches } from '../src/codemode/engine';
 import { createImageStore, RESEARCH_FIRST } from '../src/codemode/host-ops';
 import { codemodeTool } from '../src/codemode/tool';
 import type { AnyToolDefinition } from '../src/tools/common';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe('WorkflowEngine', () => {
+describe('RunEngine', () => {
   it('dispatches events that came before their interface reopened, once it opens', async () => {
     // A resumed run replays (here a slow procedure call) before it presents its interface
     // again; the user's event, sent while no process ran it, is already queued in the app.
@@ -18,17 +18,16 @@ describe('WorkflowEngine', () => {
       async call<M extends BridgeMethod>(method: M, params: unknown, options?: BridgeCallOptions) {
         const answer = async (): Promise<unknown> => {
           switch (method) {
-            case 'workflow.begin':
+            case 'run.begin':
               return {
                 runId: 'run_1',
-                resumed: true,
                 procedures: [],
                 state: { memo: {}, ui: { q: { status: 'open', rev: 1 } } },
               };
             case 'procs.getOrCreate':
               await sleep(300);
               return { id: 'p_aaaaaaaaaaaaaaaa' };
-            case 'workflow.events':
+            case 'run.events':
               polls++;
               if (polls === 1)
                 return {
@@ -39,7 +38,7 @@ describe('WorkflowEngine', () => {
                 options?.signal?.addEventListener('abort', resolve, { once: true }),
               );
               return { events: [], ended: true };
-            case 'workflow.end':
+            case 'run.end':
               ended.push((params as { outcome: unknown }).outcome);
               return {};
             default:
@@ -49,14 +48,13 @@ describe('WorkflowEngine', () => {
         return (await answer()) as never;
       },
     };
-    const engine = new WorkflowEngine({
+    const engine = new RunEngine({
       bridge,
       images: createImageStore(),
       imagesSupported: false,
       detachAfterMs: 10_000,
     });
     await engine.start({
-      workflowId: 'wf',
       source: `export async function main(api) {
   await api.procedures.getOrCreate({ id: 'tramite', title: 'Trámite' });
   try {
@@ -76,32 +74,36 @@ describe('WorkflowEngine', () => {
 describe('documents.create after research', () => {
   const FOUND = 'Un préstamo entre particulares se presenta con el Modelo 600 en 30 días hábiles.';
 
-  /** An app that runs each workflow to its end (no interfaces) and records what it hears. */
-  function setup(options: { researchLog?: ResearchLog; withResearch?: boolean } = {}) {
+  /** An app that runs each module to its end (no interfaces) and records what it hears. */
+  function setup(
+    options: { researchLog?: ResearchLog; withResearch?: boolean; procedures?: string[] } = {},
+  ) {
     const created: string[] = [];
+    const linkedTo: (string | undefined)[] = [];
+    const procedures = options.procedures ?? [];
     const ended: Record<string, unknown>[] = [];
     let run = 0;
     const bridge: BridgeTransport = {
       async call<M extends BridgeMethod>(method: M, params: unknown, options?: BridgeCallOptions) {
         const answer = async (): Promise<unknown> => {
           switch (method) {
-            case 'workflow.begin':
+            case 'run.begin':
               run++;
               return {
                 runId: `run_${run}`,
-                resumed: false,
-                procedures: [],
+                procedures,
                 state: { memo: {}, ui: {} },
               };
             case 'vault.createDocument':
               created.push((params as { name: string }).name);
+              linkedTo.push(options?.procedureId);
               return { documentId: 'doc_1', name: (params as { name: string }).name, pages: 1 };
-            case 'workflow.events':
+            case 'run.events':
               await new Promise((resolve) =>
                 options?.signal?.addEventListener('abort', resolve, { once: true }),
               );
               return { events: [], ended: true };
-            case 'workflow.end':
+            case 'run.end':
               ended.push((params as { outcome: Record<string, unknown> }).outcome);
               return {};
             default:
@@ -115,7 +117,7 @@ describe('documents.create after research', () => {
       name: 'web_research',
       execute: async () => ({ content: [{ type: 'text', text: FOUND }] }),
     } as unknown as AnyToolDefinition;
-    const engine = new WorkflowEngine({
+    const engine = new RunEngine({
       bridge,
       images: createImageStore(),
       imagesSupported: false,
@@ -134,7 +136,11 @@ describe('documents.create after research', () => {
     const runTool = async (body: string) => {
       const result = await tool.execute(
         'call',
-        { workflow: 'contrato', source: `export async function main(api) {\n${body}\n}` },
+        {
+          source: `export async function main(api) {
+${body}
+}`,
+        },
         undefined,
         undefined,
         undefined as never,
@@ -144,7 +150,7 @@ describe('documents.create after research', () => {
         isError: !!(result as { isError?: boolean }).isError,
       };
     };
-    return { engine, runTool, created, ended };
+    return { engine, runTool, created, linkedTo, ended };
   }
 
   const CREATE = `return await api.documents.create('Contrato de préstamo', '# Contrato');`;
@@ -201,11 +207,20 @@ describe('documents.create after research', () => {
     expect(created).toEqual(['Contrato de préstamo']);
   });
 
+  it("goes to the agent's latest procedure when the run touched none itself", async () => {
+    // Run 1 made the card; run 2 writes the document before touching any procedure.
+    const { runTool, linkedTo } = setup({
+      withResearch: false,
+      procedures: ['p_7dec0dd256376396'],
+    });
+    expect((await runTool(CREATE)).isError).toBe(false);
+    expect(linkedTo).toEqual(['p_7dec0dd256376396']);
+  });
+
   it("delivers a detached run's searches it didn't return with its outcome", async () => {
     const { engine, ended } = setup();
     const outcome = await engine.start(
       {
-        workflowId: 'largo',
         source: `export async function main(api) { await api.search('préstamo'); return 'ok'; }`,
       },
       undefined,
@@ -217,6 +232,46 @@ describe('documents.create after research', () => {
       expect.objectContaining({ status: 'succeeded', searches: expect.stringContaining(FOUND) }),
     ]);
     expect(engine.researched()).toBe(true);
+  });
+
+  it("can't be cut inside the module: slicing research gives it back whole", async () => {
+    // Real runs wrote r.slice(0, 6000), research.slice(2800, 9000) and String(legal).slice(0, 1500).
+    const { runTool } = setup({ withResearch: true });
+    const result = await runTool(`
+  const research = await api.search('préstamo');
+  return {
+    cut: research.slice(2800, 9000), sub: research.substring(0, 3), substr: research.substr(0, 3),
+    viaString: String(research).slice(0, 1500), inTemplate: \`Notas: \${String(research).slice(0, 5)}\`,
+    text: research + '', json: JSON.stringify({ research }), length: research.length,
+    plain: String('abc').slice(0, 1), made: new String('ab').length, number: String(12),
+  };`);
+    expect(JSON.parse(result.text.replace(/^Run succeeded\.\n\nResult:\n/, ''))).toEqual({
+      cut: FOUND,
+      sub: FOUND,
+      substr: FOUND,
+      viaString: FOUND,
+      inTemplate: `Notas: ${FOUND}`,
+      text: FOUND,
+      json: JSON.stringify({ research: FOUND }),
+      length: FOUND.length,
+      plain: 'a',
+      made: 2,
+      number: '12',
+    });
+  });
+
+  it('cuts what main returns at the one result limit, in the tool result and in the message', async () => {
+    const { runTool, engine, ended } = setup({ withResearch: false });
+    const result = await runTool(`return 'x'.repeat(60_000);`);
+    expect(result.text).toContain('… cut at 50000 characters: return less.');
+    expect(result.text.length).toBeLessThan(50_100);
+    await engine.start(
+      { source: `export async function main(api) { return 'y'.repeat(60_000); }` },
+      undefined,
+      { detach: true },
+    );
+    for (let i = 0; i < 60 && !ended.length; i++) await sleep(50);
+    expect(String(ended[0]?.value).length).toBe(50_000);
   });
 });
 

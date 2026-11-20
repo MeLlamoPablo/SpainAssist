@@ -1,6 +1,6 @@
 /**
  * A procedure through the whole app, with the real pieces: the coordinator starts an agent, whose
- * workflow researches, browses a real hostname (mapped to the fake bench), fetches a page on
+ * run researches, browses a real hostname (mapped to the fake bench), fetches a page on
  * another host, asks a question in an interface and saves a download; the test is the user.
  * What it checks is what the run loop and the rules rely on: the observations, their shapes and
  * order, the network records of both paths, idleness and the files left behind.
@@ -90,7 +90,7 @@ browserSuite('the app of a run, end to end', () => {
       .of('tool_start')
       .filter((o) => o.agent === agent && !isStep(o.toolCallId))
       .map((o) => o.tool);
-  /** The steps of the workflows: their bridge calls. */
+  /** The steps of the runs: their bridge calls. */
   const steps = () =>
     stack
       .of('tool_start')
@@ -103,7 +103,7 @@ browserSuite('the app of a run, end to end', () => {
       expect(seqs).toEqual(seqs.map((_, i) => i + 1));
     });
 
-    it('reports the tool calls of both agents, and the steps of the workflow, with their complete arguments', () => {
+    it('reports the tool calls of both agents, and the steps of the run, with their complete arguments', () => {
       expect(tools('assistant')).toEqual(['agent_start']);
       expect(tools('procedure')).toEqual(['codemode']);
       expect(steps()).toEqual([
@@ -121,11 +121,11 @@ browserSuite('the app of a run, end to end', () => {
       });
       expect(start?.procedureId).toBeUndefined();
       const call = stack.of('tool_start').find((o) => o.tool === 'codemode');
-      expect(call).toMatchObject({ agent: 'procedure', toolCallId: 'call_workflow' });
+      expect(call).toMatchObject({ agent: 'procedure', toolCallId: 'call_run' });
       expect((call?.args as { source?: string } | undefined)?.source).toContain(
         '<MethodForm api={api} />',
       );
-      // A step of the workflow acts on its procedure.
+      // A step of the run acts on its procedure.
       expect(stack.of('tool_start').find((o) => o.tool === 'browser.open')).toMatchObject({
         agent: 'procedure',
         procedureId,
@@ -133,16 +133,16 @@ browserSuite('the app of a run, end to end', () => {
       });
     });
 
-    it('reports the complete result of the workflow, not the summary the app keeps', () => {
+    it('reports the complete result of the run, not the summary the app keeps', () => {
       const ends = stack.of('tool_end').filter((o) => o.tool === 'codemode');
-      // The call returned at once (the workflow waited for the user); its result came later.
+      // The call returned at once (the run waited for the user); its result came later.
       expect(ends.map((o) => o.toolCallId)).toEqual([
-        'call_workflow',
-        expect.stringMatching(/^workflow-result-/),
+        'call_run',
+        expect.stringMatching(/^run-result-/),
       ]);
-      expect(ends[0]?.text).toMatch(/^Workflow "vida-laboral" is waiting for the user/);
+      expect(ends[0]?.text).toMatch(/^Run run_[a-f0-9]+ is waiting for the user/);
       const result = ends[1]?.text ?? '';
-      expect(result).toMatch(/^\[Workflow "vida-laboral" \(Sacar tu vida laboral\) succeeded\]/);
+      expect(result).toMatch(/^\[Run run_[a-f0-9]+ \(Sacar tu vida laboral\) succeeded\]/);
       expect(result).toContain('marco del idp');
       expect(result).toContain(`"documentId":"${documentId}"`);
 
@@ -154,12 +154,12 @@ browserSuite('the app of a run, end to end', () => {
         .sort();
       const ended = stack
         .of('tool_end')
-        .filter((o) => !o.toolCallId.startsWith('workflow-result-'))
+        .filter((o) => !o.toolCallId.startsWith('run-result-'))
         .map((o) => `${o.agent}:${o.toolCallId}`)
         .sort();
       expect(ended).toEqual(started);
       for (const end of stack.of('tool_end')) {
-        if (end.toolCallId.startsWith('workflow-result-')) continue;
+        if (end.toolCallId.startsWith('run-result-')) continue;
         const start = stack
           .of('tool_start')
           .find((o) => o.toolCallId === end.toolCallId && o.agent === end.agent);
@@ -177,7 +177,7 @@ browserSuite('the app of a run, end to end', () => {
         ['procedure', `Hecho: el informe está guardado (${documentId}).`],
         ['assistant', `Listo, ya está guardada.\n[Vida laboral](sa:document/${documentId})`],
       ]);
-      // An agent is no procedure's: what it acts on is in its workflow's steps.
+      // An agent is no procedure's: what it acts on is in its run's steps.
       expect(messages.every((m) => m.procedureId === undefined)).toBe(true);
     });
 
@@ -185,9 +185,9 @@ browserSuite('the app of a run, end to end', () => {
       const shown = stack.of('prompt_shown').map((o) => o.prompt);
       expect(shown).toHaveLength(1);
       const [form] = shown as [PendingPrompt];
-      // The workflow's interface, as a form prompt.
+      // The run's interface, as a form prompt.
       expect(form).toEqual({
-        itemId: 'wf_vida-laboral:metodo:1',
+        itemId: expect.stringMatching(/^wf_run_[a-f0-9]+:metodo:1$/),
         agent: 'procedure',
         kind: 'form',
         title: '¿Cómo quieres identificarte?',
@@ -246,14 +246,14 @@ browserSuite('the app of a run, end to end', () => {
         ),
       ).toBe(true);
 
-      // A workflow's request is its codemode call's.
+      // A run's request is its codemode call's.
       const fetched = records().find((r) => r.url === `https://${IDP}/frame`);
       expect(fetched).toMatchObject({
         channel: 'other',
         host: IDP,
         route: 'mapped',
         status: 200,
-        toolCallId: 'call_workflow',
+        toolCallId: 'call_run',
       });
       const research = records().find((r) => r.channel === 'web_research');
       expect(research).toMatchObject({ host: 'research.invalid', route: 'mapped' });
@@ -419,7 +419,7 @@ browserSuite('the app of a run, end to end', () => {
       expect(
         existsSync(join(runDir, 'transcripts', `procedure-${procedureId}`, 'procedure.json')),
       ).toBe(true);
-      // The session is the lossless record: it has the complete workflow results.
+      // The session is the lossless record: it has the complete run results.
       const session = readFileSync(
         join(runDir, 'transcripts', `agent-${agentId}`, 'session.jsonl'),
         'utf8',

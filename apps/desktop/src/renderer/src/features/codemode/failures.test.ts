@@ -2,8 +2,8 @@ import type { UiElement } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import { describeFailure } from './failures';
 
-describe('what the app tells a workflow it could not draw', () => {
-  it('names the component, its label and the workflow’s components that rendered it', () => {
+describe('what the app tells a run it could not draw', () => {
+  it('names the component, its label and the module’s components that rendered it', () => {
     const node: UiElement = {
       type: 'Appointment',
       props: {

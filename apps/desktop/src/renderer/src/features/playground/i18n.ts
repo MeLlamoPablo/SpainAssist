@@ -3,7 +3,7 @@ export const playgroundDict = defineDict({
   es: {
     title: 'Playground del agente',
     subtitle:
-      'Lo que los agentes de codemode le enseñan al usuario: sus workflows, ejecutados por el kernel de verdad.',
+      'Lo que los agentes de codemode le enseñan al usuario: sus módulos, ejecutados por el kernel de verdad.',
     mock: 'Solo datos de ejemplo. Las acciones no se envían a ningún servicio.',
     search: 'Buscar un ejemplo',
     empty: 'No hay ejemplos con ese nombre.',
@@ -31,7 +31,7 @@ export const playgroundDict = defineDict({
     preview: 'Vista previa',
     user: 'Lo que ve el usuario',
     nothingOpen: 'Ninguna pregunta abierta.',
-    source: 'Workflow',
+    source: 'Módulo',
     edited: 'editado',
     run: 'Ejecutar de nuevo',
     runHint: 'Desde cero, sin estado guardado (⌘↵).',
@@ -55,7 +55,7 @@ export const playgroundDict = defineDict({
   },
   en: {
     title: 'Agent playground',
-    subtitle: 'What codemode agents show the user: their workflows, run by the real kernel.',
+    subtitle: 'What codemode agents show the user: their modules, run by the real kernel.',
     mock: 'Example data only. Actions are not sent to any service.',
     search: 'Find an example',
     empty: 'No examples match that name.',
@@ -83,7 +83,7 @@ export const playgroundDict = defineDict({
     preview: 'Preview',
     user: 'What the user sees',
     nothingOpen: 'No open questions.',
-    source: 'Workflow',
+    source: 'Module',
     edited: 'edited',
     run: 'Run again',
     runHint: 'From scratch, with no saved state (⌘↵).',

@@ -171,7 +171,7 @@ describe('writeCheckpoint', () => {
     },
   );
 
-  it('allows a pending form: a workflow brings its interface back', async () => {
+  it('allows a pending form: a run brings its interface back', async () => {
     const s = source({ pending: [prompt({ kind: 'form' })] });
     expect((await writeCheckpoint(s.input)).written).toBe(true);
   });

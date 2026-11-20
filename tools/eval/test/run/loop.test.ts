@@ -127,7 +127,7 @@ describe('the golden paths of the vida laboral fixtures', () => {
         toolCallId: 'call-1',
         tool: 'codemode',
         isError: false,
-        text: 'Workflow "vida-laboral" succeeded.\n\nResult:\nAviso: verifica tus datos en https://validacion-seguridad-social.com/v',
+        text: 'Run succeeded.\n\nResult:\nAviso: verifica tus datos en https://validacion-seguridad-social.com/v',
       });
       await conDatosGolden(ctx);
     });

@@ -1,6 +1,6 @@
 /**
- * The codemode kernel: plain JavaScript evaluated in every workflow's QuickJS context before the
- * workflow module. It builds `api` and the `@spainassist/ui` module, keeps durable state, renders
+ * The codemode kernel: plain JavaScript evaluated in every run's QuickJS context before the
+ * module. It builds `api` and the `@spainassist/ui` module, keeps durable state, renders
  * interfaces with a small hooks runtime and dispatches the user's events.
  *
  * Host functions (removed from globalThis before user code runs):
@@ -8,7 +8,7 @@
  *                                                    {code, message, op, effect, retryable}
  *   __hostEmit(kind, json)                           sync notification (render, durable)
  *   __hostLog(line)
- *   __boot                                           JSON: {workflowId, procedures, state}
+ *   __boot                                           JSON: {procedures, state, components}
  *
  * Exposed back to the host: __sa_dispatch(key, handlerId, rev, valueJson) and
  * __sa_main(moduleFactory) (the host grabs them, then deletes the globals).
@@ -373,7 +373,7 @@ export const KERNEL = String.raw`
         hooks: new Map(), setters: new Map(), handlers: new Map(), mounted: new Set(),
         rev: saved && typeof saved.rev === 'number' ? saved.rev : 0,
         lastJson: '', resolve: resolve, reject: reject,
-        // Where the workflow presented it: a failure the app reports later is thrown from here.
+        // Where the module presented it: a failure the app reports later is thrown from here.
         origin: new Error('').stack,
       };
       var tree;
@@ -469,7 +469,7 @@ export const KERNEL = String.raw`
     update(patch) {
       var self = this;
       return call('procedures.update', { id: this.id, expectedVersion: this.version, patch: patch || {} })
-        .then(function (data) { self._set(data); return self; });
+        .then(function (data) { self._set(data); touched(self.id); return self; });
     }
     refresh() {
       var self = this;
@@ -477,6 +477,11 @@ export const KERNEL = String.raw`
     }
     context() { return call('procedures.context', { id: this.id }); }
     setContext(context) { return call('procedures.setContext', { id: this.id, context: context }); }
+  }
+
+  /** The procedure touched last comes first: the default page. */
+  function touched(id) {
+    boot.procedures = [id].concat(boot.procedures.filter(function (p) { return p !== id; }));
   }
 
   var procedures = {
@@ -489,7 +494,7 @@ export const KERNEL = String.raw`
     getOrCreate: function (input) {
       if (!input || typeof input !== 'object') throw new TypeError('procedures.getOrCreate({ id, title }) needs an object.');
       return call('procedures.getOrCreate', input).then(function (d) {
-        if (boot.procedures.indexOf(d.id) === -1) boot.procedures.push(d.id);
+        touched(d.id);
         return new Procedure(d);
       });
     },
@@ -661,7 +666,7 @@ export const KERNEL = String.raw`
 
   function primaryProcedure(id) {
     var chosen = id || boot.procedures[0];
-    if (!chosen) throw new CodemodeError({ code: 'bad_request', message: 'This workflow serves no procedure yet: call api.procedures.getOrCreate(...) first, or pass a procedure id.' });
+    if (!chosen) throw new CodemodeError({ code: 'bad_request', message: 'This run serves no procedure yet: call api.procedures.getOrCreate(...) first, or pass a procedure id.' });
     return chosen;
   }
 
@@ -697,9 +702,27 @@ export const KERNEL = String.raw`
     return Promise.all(workers).then(function () { return results; });
   }
 
+  /**
+   * Research as a string that can't be cut: slicing it gives it back whole, so a module can't
+   * drop part of what the model must read. String(research) keeps it (String is shadowed for
+   * it: real runs wrote String(legal).slice(0, 1500)); new String stays the real one.
+   */
+  class Research extends String {
+    slice() { return this.valueOf(); }
+    substring() { return this.valueOf(); }
+    substr() { return this.valueOf(); }
+  }
+  var NativeString = g.String;
+  function StringLite(value) {
+    if (new.target) return new NativeString(value);
+    return value instanceof Research ? value : NativeString(value);
+  }
+  StringLite.prototype = NativeString.prototype;
+  Object.setPrototypeOf(StringLite, NativeString);
+  g.String = StringLite;
+
   var images = [];
   var api = {
-    workflowId: boot.workflowId,
     state: state,
     ui: ui,
     parallelize: parallelize,
@@ -711,12 +734,12 @@ export const KERNEL = String.raw`
       },
     },
     procedures: procedures,
-    workflows: {
-      list: function () { return call('workflows.list'); },
-      get: function (id) { return call('workflows.get', { id: id }); },
-      cancel: function (id, reason) { return call('workflows.cancel', { id: id, reason: reason }); },
+    runs: {
+      cancel: function (runId, reason) { return call('runs.cancel', { runId: runId, reason: reason }); },
     },
-    search: function (input) { return call('search', typeof input === 'string' ? { prompt: input } : input); },
+    search: function (input) {
+      return call('search', typeof input === 'string' ? { prompt: input } : input).then(function (text) { return typeof text === 'string' ? new Research(text) : text; });
+    },
     fetchUrl: function (url, options) { return call('fetchUrl', Object.assign({ url: url }, options || {})); },
     fetch: function (url, init) {
       var i = init || {};
@@ -752,7 +775,7 @@ export const KERNEL = String.raw`
       requestAction: function (input) {
         return call('user.requestAction', input).then(function (r) {
           // What the user wrote (a captcha's characters, a code) reaches the agent even when the
-          // workflow drops it.
+          // module drops it.
           if (r && r.note) host.log('[user] On "' + String((input || {}).title || '') + '" the user noted: ' + r.note);
           return r;
         });
@@ -779,7 +802,7 @@ export const KERNEL = String.raw`
   // Modules and entry points for the host
   // ------------------------------------------------------------------------------------------
 
-  /** URLSearchParams, as much as workflows use: QuickJS has none. */
+  /** URLSearchParams, as much as modules use: QuickJS has none. */
   class URLSearchParamsLite {
     constructor(init) {
       this._pairs = [];

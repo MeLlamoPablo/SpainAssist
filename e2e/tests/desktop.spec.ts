@@ -68,7 +68,7 @@ test('the coordinator delegates; the agent asks in "Para ti"; its question survi
   await chat.getByRole('textbox').fill('Quiero renovar el DNI');
   await chat.getByTestId('composer-send').click();
 
-  // The agent's workflow creates the card with its plan and asks above the cards.
+  // The agent's run creates the card with its plan and asks above the cards.
   const procedure = await procedureTitled(h, 'Renovar el DNI');
   const card = h.page.getByTestId(`procedure-card-${procedure.id}`);
   await expect(card).toBeVisible();
@@ -78,8 +78,8 @@ test('the coordinator delegates; the agent asks in "Para ti"; its question survi
     .getByTestId('for-you-ui')
     .filter({ hasText: 'Dos datos para la cita del DNI' });
   await expect(question).toBeVisible();
-  const { workflow } = await openUi(h, 'datos');
-  expect(workflow).toMatchObject({ id: 'renovar-dni', status: 'waiting_user' });
+  const { run } = await openUi(h, 'datos');
+  expect(run.status).toBe('waiting_user');
   // The question is not on the card, and the chat stays free.
   await expect(card).not.toContainText('Dos datos');
   await expect(h.page.getByTestId('prompt-dock')).toHaveCount(0);
@@ -89,22 +89,22 @@ test('the coordinator delegates; the agent asks in "Para ti"; its question survi
   const agent = await theAgent(h);
   await agentIdle(h, agent.id, 'waiting_user');
 
-  // The app quits before the user answers: the workflow keeps its state, its question comes back.
+  // The app quits before the user answers: the run keeps its state, its question comes back.
   await h.restart();
   await expect(h.page.getByTestId(`procedure-card-${procedure.id}`)).toBeVisible();
   const again = h.page
     .getByTestId('for-you-ui')
     .filter({ hasText: 'Dos datos para la cita del DNI' });
   await expect(again).toBeVisible();
-  expect((await openUi(h, 'datos')).workflow.status).toBe('waiting_user');
+  expect((await openUi(h, 'datos')).run.status).toBe('waiting_user');
 
-  // Answering wakes the agent, whose host resumes the workflow without another model turn.
+  // Answering wakes the agent, whose host resumes the run without another model turn.
   await again.getByRole('combobox', { name: 'Provincia', exact: true }).fill('Madrid');
   await h.page.getByRole('option', { name: 'Madrid', exact: true }).click();
   await again.getByRole('button', { name: 'Seguir', exact: true }).click();
   await expect(h.page.getByTestId('for-you')).toHaveCount(0);
 
-  // The workflow ends; the agent's report reaches the coordinator, which tells the user.
+  // The run ends; the agent's report reaches the coordinator, which tells the user.
   await assistantSaid(h, 'tienes el plan en la tarjeta de **Renovar el DNI**');
   const restartedChat = h.page.getByTestId('chat-panel');
   await expect(restartedChat.getByTestId('procedure-event').first()).toBeVisible();
@@ -129,7 +129,7 @@ test('the coordinator delegates; the agent asks in "Para ti"; its question survi
     log.some((i) => i.type === 'assistant' && i.text.includes('Esto es lo que tiene que hacer')),
   ).toBe(true);
 
-  // The coordinator only read the reports: never the workflow, its interface or the answer.
+  // The coordinator only read the reports: never the module, its interface or the answer.
   const coordinatorRequests = h.llm
     .requests()
     .filter((r) => JSON.stringify(r.body).includes('"name":"agent_start"'));
@@ -186,7 +186,6 @@ test('secret answers stay out of model requests and saved transcripts; stopping 
       ...coordinatorRules('Entra en la sede de prueba.', 'Hecho.', 'Código escrito'),
       ...agentRules(
         {
-          workflow: 'sede-secreta',
           title: 'Entrar en la sede',
           // Not the Cl@ve password: fillFromUser refuses it (loginClave types it).
           source: `export async function main(api) {
@@ -207,7 +206,7 @@ test('secret answers stay out of model requests and saved transcripts; stopping 
   });
   await invoke(h.page, 'chat.send', { text: 'Prueba secreta' });
   const procedure = await procedureTitled(h, 'Prueba secreta');
-  // The app asks for the code itself, above the cards; the workflow never sees it.
+  // The app asks for the code itself, above the cards; the run never sees it.
   const prompt = await pending(h, procedure.id);
   await expect(h.page.getByTestId('for-you-prompt')).toContainText('Código de prueba');
   await invoke(h.page, 'chat.respond', prompt.id, {
@@ -236,7 +235,7 @@ test('secret answers stay out of model requests and saved transcripts; stopping 
   expect([...saved.keys()].some((path) => path.includes(agent.id))).toBe(true);
   for (const [path, text] of saved) expect(text, path).not.toContain(secret);
 
-  // The coordinator passes a new request on; the agent's next workflow waits for an approval,
+  // The coordinator passes a new request on; the agent's next run waits for an approval,
   // and the user stops the agent.
   h.llm.setScenario({
     name: 'secret-again',
@@ -261,7 +260,6 @@ test('secret answers stay out of model requests and saved transcripts; stopping 
         reply: {
           toolCalls: [
             codemodeCall({
-              workflow: 'enviar',
               title: 'Enviar la solicitud',
               source: `export async function main(api) {
   await api.procedures.getOrCreate({ id: '${procedure.id}', title: 'Prueba secreta' });
@@ -303,7 +301,6 @@ test('an agent opens the mock government site through the browser bridge', async
       ...coordinatorRules('Abre la sede de prueba.', 'La sede está abierta.', 'He abierto'),
       ...agentRules(
         {
-          workflow: 'abrir-sede',
           title: 'Abrir la sede',
           source: `export async function main(api) {
   const card = await api.procedures.getOrCreate({ id: 'sede', title: 'Abrir la sede', status: 'researching' });
@@ -325,7 +322,7 @@ test('an agent opens the mock government site through the browser bridge', async
   const agent = await theAgent(h);
   const log = await agentIdle(h, agent.id);
   expect(codemodeCalls(log).map((c) => c.status)).toEqual(['done']);
-  // The workflow's result (what the page showed) reached the agent's model.
+  // The run's result (what the page showed) reached the agent's model.
   const agentRequests = JSON.stringify(
     h.llm.requests().filter((r) => JSON.stringify(r.body).includes('"name":"codemode"')),
   );

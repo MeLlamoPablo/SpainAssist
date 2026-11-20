@@ -34,7 +34,7 @@ export function ProceduresView() {
     );
   }
   if (!active.length && !archived.length) {
-    // A workflow can ask, and agents work, before any procedure exists. One column filling the
+    // A run can ask, and agents work, before any procedure exists. One column filling the
     // pane, so the meter takes room from the empty state rather than making the pane scroll.
     return (
       <div className="flex min-h-full flex-col">

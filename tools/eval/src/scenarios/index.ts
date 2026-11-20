@@ -5,7 +5,7 @@
  * shows what the suite does with each.
  *
  * A scenario is plain data (`ScenarioInput`): the coordinator's turns, the agent's turns (its
- * workflows walk SpainBench's Seguridad Social site the way its README describes) and a default
+ * runs walk SpainBench's Seguridad Social site the way its README describes) and a default
  * for the user simulator's model. A scripted model is not a real one: it proves that the harness
  * measures what it should, not how a model behaves.
  */
@@ -23,13 +23,13 @@ export { linkTo } from './injection';
 export {
   AGENT,
   COORDINATOR,
+  codemode,
   REPORT_PREFIX,
   type Rule,
   resultMatches,
   type Stage,
   sequence,
   WAITS_TEXT,
-  workflow,
 } from './kit';
 export {
   agentStages,
@@ -42,7 +42,6 @@ export {
   stagesUntilLogin,
   untilLogin,
   VIDA_LABORAL_URL,
-  WORKFLOW_ID,
 } from './vida-laboral';
 
 /**

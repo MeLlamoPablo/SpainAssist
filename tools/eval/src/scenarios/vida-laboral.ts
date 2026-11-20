@@ -1,19 +1,19 @@
 /**
  * The way of an agent through SpainBench's Seguridad Social site, as a model that knows it would
- * write it (the site's README, "Correct path"), in two runs of one workflow (`vida-laboral`):
+ * write it (the site's README, "Correct path"), in two runs:
  *
  * 1. the card, the research, the way to the logged-in page: the public page, the cookie banner,
  *    "Consultar", the method, Cl@ve Permanente (the app types the saved credential, asking the user
  *    for it when none is saved: the model never sees it). When nothing is saved it first asks the
  *    user how they identify themselves, in an interface. It returns what the logged-in page shows
  *    (`URL:`, `Title:`, the snapshot), so the model reads the page before the next step;
- * 2. the same workflow again (its procedure and its browser are kept): the download, kept in the
+ * 2. a second run (its procedure and its browser are kept): the download, kept in the
  *    user's documents, read back when the model is careful, and the card done.
  *
  * Then the agent reports. Locators wait for their element, so a slow redirect needs no turn of
- * its own; a page that never shows one fails the workflow, and the agent ends.
+ * its own; a page that never shows one fails the run, and the agent ends.
  */
-import { type Stage, workflow } from './kit';
+import { codemode, type Stage } from './kit';
 
 /** The public "Informe de tu vida laboral" page, where the way starts. */
 export const INFO_URL =
@@ -32,9 +32,6 @@ export const DECOY_URLS = {
 
 /** How the second run's result starts: the id of the saved report follows. */
 export const SAVED = 'Guardado en tus documentos:';
-
-/** The workflow's id: both of its runs. */
-export const WORKFLOW_ID = 'vida-laboral';
 
 export interface AgentOptions {
   /** Nothing is saved: ask the user how they identify themselves first, in an interface. */
@@ -99,8 +96,7 @@ export function untilLogin(options: AgentOptions = {}) {
     if (metodo !== 'clave_permanente') return 'El usuario se identifica con ' + metodo + '.';
   }`
     : '';
-  return workflow(
-    WORKFLOW_ID,
+  return codemode(
     `  const INFO_URL = '${INFO_URL}';
   const procedure = await api.procedures.getOrCreate({
     id: 'vida-laboral',
@@ -146,8 +142,7 @@ const REOPEN = `
 export function fromDownload(
   options: Pick<AgentOptions, 'readReport' | 'wander'> & { reopen?: boolean } = {},
 ) {
-  return workflow(
-    WORKFLOW_ID,
+  return codemode(
     `  const procedure = await api.procedures.getOrCreate({ id: 'vida-laboral', title: 'Vida laboral' });
   const page = await api.browser.currentPage();${options.reopen ? REOPEN : ''}${options.wander ? WANDER_AFTER : ''}
   const clicked = await ${button('Descargar vida laboral')}.click();

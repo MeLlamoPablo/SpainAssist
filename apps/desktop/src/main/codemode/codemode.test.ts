@@ -7,7 +7,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AGENT_REPORT_PREFIX, WORKFLOW_RESULT_PREFIX } from '@sa/agent';
+import { AGENT_REPORT_PREFIX, RESULT_CHARS, RUN_RESULT_PREFIX } from '@sa/agent';
 import {
   ASSISTANT_AGENT_ID,
   PROCEDURE_HEADER,
@@ -126,7 +126,7 @@ async function tokenFor(
   return app.services.tokens.issue(agentId);
 }
 
-/** An agent the coordinator started (only agents run workflows), and a token for it. */
+/** An agent the coordinator started (only agents run modules), and a token for it. */
 async function anAgent(
   app: HeadlessApp,
   agentLib: ReturnType<typeof createFakeAgentLib>,
@@ -167,24 +167,19 @@ describe('the coordinator', () => {
   });
 });
 
-describe('a workflow', () => {
+describe('a run', () => {
   it('creates its procedure by key, shows an interface, gets the user’s answer and hands the result to its agent', async () => {
     const { app, agentLib, events } = await open();
     const { agentId, token } = await anAgent(app, agentLib);
 
-    const begin = await call(app, token, 'workflow.begin', {
-      workflowId: 'renta-obligacion',
+    const begin = await call(app, token, 'run.begin', {
       title: 'Renta',
       source: 'src',
     });
-    expect(begin).toMatchObject({
-      ok: true,
-      result: { resumed: false, state: { memo: {}, ui: {} } },
-    });
+    expect(begin).toMatchObject({ ok: true, result: { state: { memo: {}, ui: {} } } });
     const runId = begin.result.runId as string;
 
     const created = await call(app, token, 'procs.getOrCreate', {
-      runId,
       id: 'obligatoriedad-renta',
       title: 'Obligación de declarar la renta',
       status: 'researching',
@@ -195,7 +190,6 @@ describe('a workflow', () => {
     });
     const procedureId = created.result.id as string;
     const again = await call(app, token, 'procs.getOrCreate', {
-      runId,
       id: 'obligatoriedad-renta',
       title: 'Otro',
     });
@@ -207,7 +201,7 @@ describe('a workflow', () => {
 
     expect(
       (
-        await call(app, token, 'workflow.memo', {
+        await call(app, token, 'run.memo', {
           runId,
           key: 'income-search',
           value: { umbral: 22000 },
@@ -216,7 +210,7 @@ describe('a workflow', () => {
     ).toBe(true);
     expect(
       (
-        await call(app, token, 'workflow.ui', {
+        await call(app, token, 'run.ui', {
           runId,
           action: 'open',
           key: 'income',
@@ -227,27 +221,19 @@ describe('a workflow', () => {
     ).toBe(true);
 
     const state = await app.invoke('codemode.state');
-    expect(state.workflows).toHaveLength(1);
-    expect(state.workflows[0]).toMatchObject({
-      id: 'renta-obligacion',
-      status: 'waiting_user',
-      attached: true,
-    });
-    // The workflow serves the procedure it created; the renderer is not told (questions are not
+    expect(state.runs).toHaveLength(1);
+    expect(state.runs[0]).toMatchObject({ id: runId, status: 'waiting_user', attached: true });
+    // The agent worked on the procedure it created; the renderer is not told (questions are not
     // tied to procedures).
-    expect(app.services.codemode?.workflows.get('renta-obligacion')?.procedures).toEqual([
-      procedureId,
-    ]);
-    expect(state.workflows[0]).not.toHaveProperty('procedures');
-    expect(state.workflows[0]?.ui[0]).toMatchObject({ key: 'income', rev: 1, tree: FORM });
-    expect(events.some((e) => e.type === 'codemode.workflow' && e.workflow.ui.length === 1)).toBe(
-      true,
-    );
+    expect(app.services.codemode?.directory.get(agentId)?.procedures).toEqual([procedureId]);
+    expect(state.runs[0]).not.toHaveProperty('procedures');
+    expect(state.runs[0]?.ui[0]).toMatchObject({ key: 'income', rev: 1, tree: FORM });
+    expect(events.some((e) => e.type === 'codemode.run' && e.run.ui.length === 1)).toBe(true);
 
     // The host polls; the user types and clicks in the meantime.
-    const poll = call(app, token, 'workflow.events', { runId, after: 0 });
+    const poll = call(app, token, 'run.events', { runId, after: 0 });
     expect(
-      await app.invoke('codemode.uiEvent', 'renta-obligacion', 'income', {
+      await app.invoke('codemode.uiEvent', runId, 'income', {
         handler: 'r.0:Income/0#onChange',
         rev: 1,
         value: '21000',
@@ -264,7 +250,7 @@ describe('a workflow', () => {
 
     expect(
       (
-        await call(app, token, 'workflow.ui', {
+        await call(app, token, 'run.ui', {
           runId,
           action: 'durable',
           key: 'income',
@@ -275,7 +261,7 @@ describe('a workflow', () => {
     ).toBe(true);
     expect(
       (
-        await call(app, token, 'workflow.ui', {
+        await call(app, token, 'run.ui', {
           runId,
           action: 'close',
           key: 'income',
@@ -293,7 +279,7 @@ describe('a workflow', () => {
     const followUps = () => received(clientOf(agentLib, agentId));
     expect(
       (
-        await call(app, token, 'workflow.end', {
+        await call(app, token, 'run.end', {
           runId,
           outcome: { status: 'succeeded', value: '"no-exempt"' },
           deliver: true,
@@ -302,21 +288,14 @@ describe('a workflow', () => {
     ).toBe(true);
     await vi.waitFor(() =>
       expect(
-        followUps().some((t) =>
-          t.startsWith(`${WORKFLOW_RESULT_PREFIX} "renta-obligacion" (Renta) succeeded]`),
-        ),
+        followUps().some((t) => t.startsWith(`${RUN_RESULT_PREFIX} ${runId} (Renta) succeeded]`)),
       ).toBe(true),
     );
-    expect((await app.invoke('codemode.state')).workflows).toEqual([]);
+    expect((await app.invoke('codemode.state')).runs).toEqual([]);
 
-    // A re-run resumes: the memoized value and the closed interface's answer are there.
-    const rerun = await call(app, token, 'workflow.begin', {
-      workflowId: 'renta-obligacion',
-      source: 'src v2',
-    });
+    // The agent's next run gets its state: the memoized value and the closed interface's answer.
+    const rerun = await call(app, token, 'run.begin', { source: 'src v2' });
     expect(rerun.result).toMatchObject({
-      resumed: true,
-      procedures: [procedureId],
       state: {
         memo: { 'income-search': { value: { umbral: 22000 } } },
         ui: { income: { status: 'closed', result: { income: 21000 } } },
@@ -327,9 +306,8 @@ describe('a workflow', () => {
   it('refuses an update made from an old version (optimistic concurrency)', async () => {
     const { app, agentLib } = await open();
     const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
+    await call(app, token, 'run.begin', { source: 's' });
     const created = await call(app, token, 'procs.getOrCreate', {
-      runId: result.runId,
       id: 'dni',
       title: 'Renovar el DNI',
     });
@@ -346,8 +324,8 @@ describe('a workflow', () => {
   it('validates interfaces before the renderer sees them and locates every map address', async () => {
     const { app, agentLib } = await open();
     const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
-    const bad = await call(app, token, 'workflow.ui', {
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    const bad = await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'x',
@@ -367,7 +345,7 @@ describe('a workflow', () => {
         },
       ],
     });
-    const missing = await call(app, token, 'workflow.ui', {
+    const missing = await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'm',
@@ -377,7 +355,7 @@ describe('a workflow', () => {
     expect(missing.error?.message).toMatch(/No matching place in Spain for: Calle Nowhere 1/);
     expect(
       (
-        await call(app, token, 'workflow.ui', {
+        await call(app, token, 'run.ui', {
           runId: result.runId,
           action: 'open',
           key: 'm',
@@ -387,7 +365,10 @@ describe('a workflow', () => {
       ).ok,
     ).toBe(true);
     expect(
-      await app.invoke('codemode.pins', 'w', 'm', ['Calle Mayor 1, Madrid', 'Calle Falsa 2']),
+      await app.invoke('codemode.pins', result.runId, 'm', [
+        'Calle Mayor 1, Madrid',
+        'Calle Falsa 2',
+      ]),
     ).toEqual([{ latitude: 40.4, longitude: -3.7 }, null]);
   });
 });
@@ -402,12 +383,12 @@ describe('answers for Mis datos', () => {
 
   it('are saved by the app when the interface closes: fields with a vaultKey, unless flagged', async () => {
     const { app, agentLib } = await open();
-    const { token } = await anAgent(app, agentLib);
+    const { agentId, token } = await anAgent(app, agentLib);
     await app.invoke('vault.setPersonal', [{ key: 'phone', value: '+34 600 000 000' }]);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
     const runId = result.runId as string;
     const ui = (action: string, extra: Record<string, unknown>) =>
-      call(app, token, 'workflow.ui', { runId, action, key: 'datos', ...extra });
+      call(app, token, 'run.ui', { runId, action, key: 'datos', ...extra });
     expect((await ui('open', { rev: 1, tree: tree(field({ value: '' })) })).ok).toBe(true);
     // The last tree is what the user answered.
     await ui('render', {
@@ -424,7 +405,9 @@ describe('answers for Mis datos', () => {
         field({ value: 'sin vaultKey' }),
       ),
     });
-    await vi.waitFor(() => expect(app.services.codemode.workflows.get('w')?.ui.datos?.rev).toBe(2));
+    await vi.waitFor(() =>
+      expect(app.services.codemode.runs.stateOf(agentId).ui.datos?.rev).toBe(2),
+    );
     expect((await ui('close', { result: { ok: true } })).ok).toBe(true);
 
     const personal = (key: string) =>
@@ -437,7 +420,7 @@ describe('answers for Mis datos', () => {
       label: 'Referencia catastral',
       value: '9872023VH5797S0001WX',
     });
-    // Flagged as wrong by the workflow: not saved. Already saved: left as it was.
+    // Flagged as wrong by the module: not saved. Already saved: left as it was.
     expect(personal('givenName')).toBeUndefined();
     expect(personal('phone')).toMatchObject({ source: 'manual' });
     expect(app.services.conversation.transcript().at(-1)).toMatchObject({
@@ -449,9 +432,9 @@ describe('answers for Mis datos', () => {
   it('may not name what agents never see (the CAN, PINs)', async () => {
     const { app, agentLib } = await open();
     const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
     for (const vaultKey of ['dniAccessNumber', 'custom.pin_tarjeta']) {
-      const refused = await call(app, token, 'workflow.ui', {
+      const refused = await call(app, token, 'run.ui', {
         runId: result.runId,
         action: 'open',
         key: 'x',
@@ -464,12 +447,36 @@ describe('answers for Mis datos', () => {
 });
 
 describe('procedure keys', () => {
-  it('name the same procedure on every run of a workflow, whoever runs it; full ids pass through', () => {
-    const id = procedureIdFor('renta-obligacion', 'obligatoriedad-renta');
+  it('name the same procedure on every run of an agent; full ids pass through', () => {
+    const id = procedureIdFor('a_1', 'obligatoriedad-renta');
     expect(id).toMatch(/^p_[a-f0-9]{16}$/);
-    expect(procedureIdFor('renta-obligacion', 'obligatoriedad-renta')).toBe(id);
-    expect(procedureIdFor('otro-flujo', 'obligatoriedad-renta')).not.toBe(id);
-    expect(procedureIdFor('otro-flujo', id)).toBe(id);
+    expect(procedureIdFor('a_1', 'obligatoriedad-renta')).toBe(id);
+    expect(procedureIdFor('a_2', 'obligatoriedad-renta')).not.toBe(id);
+    expect(procedureIdFor('a_2', id)).toBe(id);
+  });
+
+  it('name the same card in every run of the agent, which procedures.get takes too', async () => {
+    const { app, agentLib } = await open();
+    const { token } = await anAgent(app, agentLib);
+    expect((await call(app, token, 'run.begin', { source: 's' })).result.procedures).toEqual([]);
+    const made = await call(app, token, 'procs.getOrCreate', { id: 'contrato', title: 'Contrato' });
+    // The next run starts with the card as its default procedure (documents, prompts), and the
+    // key gives the same card, not a second one.
+    const second = await call(app, token, 'run.begin', { source: 's' });
+    expect(second.result.procedures).toEqual([made.result.id]);
+    const again = await call(app, token, 'procs.getOrCreate', { id: 'contrato', title: 'Otro' });
+    expect(again.result).toMatchObject({ id: made.result.id, created: false, title: 'Contrato' });
+    expect(app.services.procedures.list()).toHaveLength(1);
+    expect((await call(app, token, 'procs.get', { id: 'contrato' })).result).toMatchObject({
+      id: made.result.id,
+      title: 'Contrato',
+    });
+    expect((await call(app, token, 'procs.get', { id: made.result.id })).ok).toBe(true);
+    const missing = await call(app, token, 'procs.get', { id: 'otro' });
+    expect(missing.error?.code).toBe('not_found');
+    expect(missing.error?.message).toMatch(
+      /^No procedure of yours with the key "otro" \(p_[a-f0-9]{16}\)\. api\.procedures\.getOrCreate\(\{ id: "otro", title \}\) creates it/,
+    );
   });
 });
 
@@ -477,9 +484,9 @@ describe('roles', () => {
   it('lets the coordinator only delegate, and agents only act on procedures they name', async () => {
     const { app, agentLib } = await open();
     const orchestrator = app.services.tokens.issue(ASSISTANT_AGENT_ID);
-    // No workflows, interfaces, vault, approvals or browser: agents and the cards only.
+    // No runs, interfaces, vault, approvals or browser: agents and the cards only.
     for (const [method, params] of [
-      ['workflow.begin', { workflowId: 'w', source: 's' }],
+      ['run.begin', { source: 's' }],
       ['vault.read', {}],
       ['prompt.confirm', { title: 'T', message: 'M' }],
       ['browser.snapshot', {}],
@@ -496,12 +503,8 @@ describe('roles', () => {
     expect(agentId).toMatch(/^a_[a-f0-9]{16}$/);
     const agent = await tokenFor(app, agentLib, agentId);
     // The agent creates the card once it knows the procedure.
-    const { result } = await call(app, agent, 'workflow.begin', { workflowId: 'w', source: 's' });
-    const p = await call(app, agent, 'procs.getOrCreate', {
-      runId: result.runId,
-      id: 'k',
-      title: 'T',
-    });
+    await call(app, agent, 'run.begin', { source: 's' });
+    const p = await call(app, agent, 'procs.getOrCreate', { id: 'k', title: 'T' });
     expect((await call(app, orchestrator, 'procs.get', { id: p.result.id })).ok).toBe(true);
     expect((await call(app, agent, 'browser.snapshot', {})).error?.message).toMatch(
       /needs a procedure/,
@@ -570,12 +573,8 @@ describe('agents', () => {
     const token = await tokenFor(app, agentLib, agentId);
     const agent = async () =>
       (await app.invoke('codemode.state')).agents.find((a) => a.id === agentId);
-    const { result: run } = await call(app, token, 'workflow.begin', {
-      workflowId: 'voto',
-      source: 's',
-    });
+    await call(app, token, 'run.begin', { source: 's' });
     const card = await call(app, token, 'procs.getOrCreate', {
-      runId: run.runId,
       id: 'voto',
       title: 'Voto por correo',
     });
@@ -602,7 +601,7 @@ describe('agents', () => {
     expect((await agent())?.since).not.toBe(before);
   });
 
-  it('work while a workflow runs on after their run ended, until its result wakes them', async () => {
+  it('work while a run goes on after their turn ended, until its result wakes them', async () => {
     const { app, agentLib } = await open();
     const orchestrator = app.services.tokens.issue(ASSISTANT_AGENT_ID);
     const { result } = await call(app, orchestrator, 'agents.start', {
@@ -619,14 +618,11 @@ describe('agents', () => {
       if (e.type === 'codemode.agent' && e.agent.id === agentId) seen.push(e.agent.activity);
     });
     client?.emit({ type: 'run_start' });
-    const { result: run } = await call(app, token, 'workflow.begin', {
-      workflowId: 'tasa',
-      source: 's',
-    });
+    const { result: run } = await call(app, token, 'run.begin', { source: 's' });
     const since = (await agent())?.since;
     expect(since).toBeDefined();
 
-    // The codemode call returned "still running": the run ends, the workflow works on.
+    // The codemode call returned "still running": the turn ends, the run works on.
     client?.emit({ type: 'run_end' });
     await vi.waitFor(() =>
       expect(
@@ -638,7 +634,7 @@ describe('agents', () => {
     expect(await agent()).toMatchObject({ activity: 'working', since });
 
     // Its result wakes the agent: it works on, on the same timer.
-    await call(app, token, 'workflow.end', {
+    await call(app, token, 'run.end', {
       runId: run.runId,
       outcome: { status: 'succeeded', value: '{}' },
       deliver: true,
@@ -660,12 +656,12 @@ describe('agents', () => {
       (await app.invoke('codemode.state')).agents.find((a) => a.id === agentId)?.status;
 
     expect(
-      (await call(app, token, 'workflow.setStatus', { status: 'Analizando la página de Correos…' }))
+      (await call(app, token, 'run.setStatus', { status: 'Analizando la página de Correos…' }))
         .error,
     ).toBeUndefined();
     expect(await status()).toBe('Analizando la página de Correos…');
     // Only agents set their own status: the coordinator gives it with a message.
-    expect((await call(app, orchestrator, 'workflow.setStatus', { status: 'x' })).error?.code).toBe(
+    expect((await call(app, orchestrator, 'run.setStatus', { status: 'x' })).error?.code).toBe(
       'policy_denied',
     );
 
@@ -681,7 +677,7 @@ describe('agents', () => {
 });
 
 describe('resuming', () => {
-  it('wakes the agent of a workflow no process runs when the user acts, and hands the run the queued events', async () => {
+  it('wakes the agent of a run no process runs when the user acts, and hands it the queued events', async () => {
     const { app, agentLib } = await open();
     const orchestrator = app.services.tokens.issue(ASSISTANT_AGENT_ID);
     const { result: agent } = await call(app, orchestrator, 'agents.start', {
@@ -689,18 +685,15 @@ describe('resuming', () => {
       brief: 'Renueva el DNI',
     });
     const token = await tokenFor(app, agentLib, agent.agentId);
-    const { result } = await call(app, token, 'workflow.begin', {
-      workflowId: 'cita-dni',
-      source: 'src',
-    });
-    await call(app, token, 'workflow.ui', {
+    const { result } = await call(app, token, 'run.begin', { source: 'src' });
+    await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'income',
       rev: 3,
       tree: FORM,
     });
-    await call(app, token, 'workflow.ui', {
+    await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'durable',
       key: 'income',
@@ -708,16 +701,16 @@ describe('resuming', () => {
       value: '100',
     });
 
-    // The agent's process goes away (idle, or the app restarted): the workflow keeps waiting.
+    // The agent's process goes away (idle, or the app restarted): the run keeps waiting.
     await app.services.agents.stop(agent.agentId);
     const after = await app.invoke('codemode.state');
-    expect(after.workflows[0]).toMatchObject({ status: 'waiting_user', attached: false });
+    expect(after.runs[0]).toMatchObject({ status: 'waiting_user', attached: false });
 
     const before = agentLib.clients.filter(
       (c) => c.launch.env.SA_PROCEDURE_ID === agent.agentId,
     ).length;
     expect(
-      await app.invoke('codemode.uiEvent', 'cita-dni', 'income', {
+      await app.invoke('codemode.uiEvent', result.runId, 'income', {
         handler: 'r.0:Income/1#onClick',
         rev: 3,
       }),
@@ -728,25 +721,21 @@ describe('resuming', () => {
       ).toBe(before + 1),
     );
     expect(clientOf(agentLib, agent.agentId)?.started).toBe(true);
-    // Woken without a message: its host resumes the workflow by itself.
+    // Woken without a message: its host resumes the run by itself.
     expect(clientOf(agentLib, agent.agentId)?.prompts).toEqual([]);
 
     // Its new host asks what to resume and starts the run again from the state.
     const fresh = await tokenFor(app, agentLib, agent.agentId);
-    const resumable = await call(app, fresh, 'workflow.resumable', {});
-    expect(resumable.result.workflows).toEqual([
-      { workflowId: 'cita-dni', source: 'src', procedures: [] },
-    ]);
-    const resumed = await call(app, fresh, 'workflow.begin', {
-      workflowId: 'cita-dni',
-      source: 'src',
-    });
+    const resumable = await call(app, fresh, 'run.resumable', {});
+    expect(resumable.result.runs).toEqual([{ runId: result.runId, source: 'src', procedures: [] }]);
+    const resumed = await call(app, fresh, 'run.begin', { runId: result.runId, source: 'src' });
+    expect(resumed.result.runId).toBe(result.runId);
     expect(resumed.result.state.ui.income).toEqual({
       status: 'open',
       durable: { income: '100' },
       rev: 3,
     });
-    const polled = await call(app, fresh, 'workflow.events', {
+    const polled = await call(app, fresh, 'run.events', {
       runId: resumed.result.runId,
       after: 0,
     });
@@ -755,28 +744,28 @@ describe('resuming', () => {
     ]);
   });
 
-  it('keeps workflows across an app restart: waiting ones stay on screen, running ones are interrupted', async () => {
+  it('keeps runs across an app restart: waiting ones stay on screen, running ones are interrupted', async () => {
     const userData = join(root, 'persist');
     const first = await open({ userData });
     const { agentId, token } = await anAgent(first.app, first.agentLib);
-    const a = await call(first.app, token, 'workflow.begin', { workflowId: 'waits', source: 's' });
-    await call(first.app, token, 'workflow.ui', {
+    const a = await call(first.app, token, 'run.begin', { source: 's' });
+    await call(first.app, token, 'run.ui', {
       runId: a.result.runId,
       action: 'open',
       key: 'q',
       rev: 1,
       tree: FORM,
     });
-    await call(first.app, token, 'workflow.begin', { workflowId: 'runs', source: 's' });
+    const b = await call(first.app, token, 'run.begin', { source: 's' });
     await first.app.close();
     apps = apps.filter((x) => x !== first.app);
 
     const second = await open({ userData });
     const state = await second.app.invoke('codemode.state');
-    expect(state.workflows.map((w) => [w.id, w.status, w.ui.length])).toEqual([
-      ['waits', 'waiting_user', 1],
+    expect(state.runs.map((w) => [w.id, w.status, w.ui.length])).toEqual([
+      [a.result.runId, 'waiting_user', 1],
     ]);
-    expect(second.app.services.codemode?.workflows.get('runs')?.status).toBe('interrupted');
+    expect(second.app.services.codemode?.runs.get(b.result.runId)?.status).toBe('interrupted');
     // Its agent hears about the interrupted one with its next message.
     await call(second.app, second.app.services.tokens.issue(ASSISTANT_AGENT_ID), 'agents.message', {
       agentId,
@@ -784,25 +773,27 @@ describe('resuming', () => {
     });
     await vi.waitFor(() =>
       expect(
-        received(clientOf(second.agentLib, agentId)).some((t) =>
-          /\[Interrupted workflows .*"runs"/.test(t),
+        received(clientOf(second.agentLib, agentId)).some(
+          (t) => t.includes(`[Interrupted runs (`) && t.includes(`): ${b.result.runId}]`),
         ),
       ).toBe(true),
     );
+    // Told once: the record is gone.
+    expect(second.app.services.codemode?.runs.get(b.result.runId)).toBeUndefined();
   });
 
   it('tells an agent which of its interfaces are still open when a message may answer them', async () => {
     const { app, agentLib } = await open();
     const { agentId, token } = await anAgent(app, agentLib);
-    const a = await call(app, token, 'workflow.begin', { workflowId: 'lote', source: 's' });
-    await call(app, token, 'workflow.ui', {
+    const a = await call(app, token, 'run.begin', { source: 's' });
+    await call(app, token, 'run.ui', {
       runId: a.result.runId,
       action: 'open',
       key: 'numero',
       rev: 1,
       tree: FORM,
     });
-    await call(app, token, 'workflow.begin', { workflowId: 'other', source: 's' });
+    const other = await call(app, token, 'run.begin', { source: 's' });
     await call(app, app.services.tokens.issue(ASSISTANT_AGENT_ID), 'agents.message', {
       agentId,
       message: 'El número está en el PDF adjunto',
@@ -810,10 +801,12 @@ describe('resuming', () => {
     await vi.waitFor(() =>
       expect(
         received(clientOf(agentLib, agentId)).find((t) => t.includes('El número está en el PDF')),
-      ).toMatch(/\[Your interfaces the user still sees .*: "lote": "numero"\]/),
+      ).toContain(
+        `[Your interfaces the user still sees (if this message answers one or makes it obsolete, cancel its run with api.runs.cancel and continue with the answer): ${a.result.runId}: "numero"]`,
+      ),
     );
     const message = received(clientOf(agentLib, agentId)).find((t) => t.includes('PDF adjunto'));
-    expect(message).not.toContain('"other"');
+    expect(message).not.toContain(other.result.runId);
   });
 });
 
@@ -828,38 +821,38 @@ describe('stale runs (found by the protocol model checker)', () => {
       { status: 'DNI', brief: 'b' },
     );
     const token = await tokenFor(app, agentLib, agent.agentId);
-    const { result } = await call(app, token, 'workflow.begin', {
-      workflowId: 'w',
+    const { result } = await call(app, token, 'run.begin', {
       title: 'Buscar cita',
       source: 's',
     });
     now += 60_000;
-    app.services.codemode?.workflows.sweep();
-    expect(app.services.codemode?.workflows.get('w')?.status).toBe('running');
+    app.services.codemode?.runs.sweep();
+    expect(app.services.codemode?.runs.get(result.runId)?.status).toBe('running');
     now += 30_000;
-    app.services.codemode?.workflows.sweep();
-    expect(app.services.codemode?.workflows.get('w')?.status).toBe('interrupted');
+    app.services.codemode?.runs.sweep();
+    // Told now, so its record goes (nothing to note later).
+    expect(app.services.codemode?.runs.get(result.runId)).toBeUndefined();
     await vi.waitFor(() =>
       expect(
         received(clientOf(agentLib, agent.agentId)).some((t) =>
-          t.startsWith(`${WORKFLOW_RESULT_PREFIX} "w" (Buscar cita) interrupted]`),
+          t.startsWith(`${RUN_RESULT_PREFIX} ${result.runId} (Buscar cita) interrupted]`),
         ),
       ).toBe(true),
     );
-    // Its host, if it was still there, hears that the run ended and stops it.
+    // Its host, if it was still there, hears that the run is gone and stops it.
     expect(
-      (await call(app, token, 'workflow.events', { runId: result.runId, after: 0 })).result,
-    ).toEqual({ events: [], ended: true });
+      (await call(app, token, 'run.events', { runId: result.runId, after: 0 })).error?.code,
+    ).toBe('not_found');
   });
 
-  it('keeps a waiting workflow on screen and hands what the user did to the run that resumes it', async () => {
+  it('keeps a waiting run on screen and hands what the user did to the one that resumes it', async () => {
     let now = Date.parse('2026-11-08T10:00:00Z');
     const { app, agentLib } = await open({ clock: () => new Date(now) });
     const { agentId, token } = await anAgent(app, agentLib);
-    const begun = await call(app, token, 'workflow.begin', { workflowId: 'q', source: 's' });
+    const begun = await call(app, token, 'run.begin', { source: 's' });
     expect(begun.error).toBeUndefined();
     const { result } = begun;
-    await call(app, token, 'workflow.ui', {
+    await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'income',
@@ -867,27 +860,27 @@ describe('stale runs (found by the protocol model checker)', () => {
       tree: FORM,
     });
     expect(
-      await app.invoke('codemode.uiEvent', 'q', 'income', {
+      await app.invoke('codemode.uiEvent', result.runId, 'income', {
         handler: 'r.0:Income/1#onClick',
         rev: 1,
       }),
     ).toBe(true);
     now += 120_000;
-    app.services.codemode?.workflows.sweep();
-    expect((await app.invoke('codemode.state')).workflows[0]).toMatchObject({
-      id: 'q',
+    app.services.codemode?.runs.sweep();
+    expect((await app.invoke('codemode.state')).runs[0]).toMatchObject({
+      id: result.runId,
       status: 'waiting_user',
       attached: false,
     });
     // What the user did wakes its agent, whose host resumes it.
     const fresh = await tokenFor(app, agentLib, agentId);
     expect(
-      (await call(app, fresh, 'workflow.resumable', {})).result.workflows.map(
-        (w: { workflowId: string }) => w.workflowId,
+      (await call(app, fresh, 'run.resumable', {})).result.runs.map(
+        (r: { runId: string }) => r.runId,
       ),
-    ).toEqual(['q']);
-    const resumed = await call(app, fresh, 'workflow.begin', { workflowId: 'q', source: 's' });
-    const polled = await call(app, fresh, 'workflow.events', {
+    ).toEqual([result.runId]);
+    const resumed = await call(app, fresh, 'run.begin', { runId: result.runId, source: 's' });
+    const polled = await call(app, fresh, 'run.events', {
       runId: resumed.result.runId,
       after: 0,
     });
@@ -900,28 +893,28 @@ describe('stale runs (found by the protocol model checker)', () => {
     let now = Date.parse('2026-11-08T10:00:00Z');
     const { app, agentLib } = await open({ clock: () => new Date(now) });
     const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'p', source: 's' });
-    const poll = call(app, token, 'workflow.events', { runId: result.runId, after: 0 });
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    const poll = call(app, token, 'run.events', { runId: result.runId, after: 0 });
     // Until the poll reaches main.
     await new Promise((r) => setTimeout(r, 150));
     now += 10 * 60_000;
-    app.services.codemode?.workflows.sweep();
-    expect(app.services.codemode?.workflows.get('p')?.status).toBe('running');
-    await app.invoke('codemode.cancelWorkflow', 'p');
+    app.services.codemode?.runs.sweep();
+    expect(app.services.codemode?.runs.get(result.runId)?.status).toBe('running');
+    await app.services.codemode?.runs.cancel(result.runId);
     expect((await poll).result).toEqual({ events: [], ended: true });
   });
 });
 
-describe('what a workflow may keep', () => {
+describe('what an agent may keep', () => {
   it('refuses values nested too deeply to resume, and records too large to load', async () => {
     const { app, agentLib } = await open();
-    const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'big', source: 's' });
+    const { agentId, token } = await anAgent(app, agentLib);
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
     const runId = result.runId;
 
     let deep: unknown = 'x';
     for (let i = 0; i < 100; i++) deep = [deep];
-    const nested = await call(app, token, 'workflow.memo', { runId, key: 'deep', value: deep });
+    const nested = await call(app, token, 'run.memo', { runId, key: 'deep', value: deep });
     expect(nested.error).toMatchObject({ code: 'bad_request' });
     expect(nested.error?.message).toMatch(/nests deeper than 64/);
 
@@ -929,22 +922,19 @@ describe('what a workflow may keep', () => {
     const chunk = 'x'.repeat(900_000);
     const keys = Array.from({ length: 9 }, (_, i) => `k${i}`);
     for (const key of keys)
-      expect((await call(app, token, 'workflow.memo', { runId, key, value: chunk })).ok).toBe(true);
-    const full = await call(app, token, 'workflow.memo', { runId, key: 'more', value: chunk });
+      expect((await call(app, token, 'run.memo', { runId, key, value: chunk })).ok).toBe(true);
+    const full = await call(app, token, 'run.memo', { runId, key: 'more', value: chunk });
     expect(full.error?.message).toMatch(/would keep too much/);
     // The refused value is not kept; the others are.
-    expect(Object.keys(app.services.codemode?.workflows.get('big')?.memo ?? {})).toEqual(keys);
+    expect(Object.keys(app.services.codemode?.runs.stateOf(agentId).memo ?? {})).toEqual(keys);
   });
 
   it('keeps at most 20 interfaces open at once', async () => {
     const { app, agentLib } = await open();
     const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'workflow.begin', {
-      workflowId: 'many',
-      source: 's',
-    });
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
     const present = (key: string) =>
-      call(app, token, 'workflow.ui', {
+      call(app, token, 'run.ui', {
         runId: result.runId,
         action: 'open',
         key,
@@ -952,7 +942,7 @@ describe('what a workflow may keep', () => {
         tree: FORM,
       });
     for (let i = 0; i < 20; i++) expect((await present(`k${i}`)).ok).toBe(true);
-    expect((await present('k20')).error?.message).toMatch(/has 20 interfaces open/);
+    expect((await present('k20')).error?.message).toMatch(/have 20 interfaces open/);
     // An open one may still be shown again.
     expect((await present('k3')).ok).toBe(true);
   });
@@ -964,8 +954,8 @@ describe('an interface the app could not draw', () => {
   it('leaves the screen, and its run hears it as a refusal of the interface', async () => {
     const { app, agentLib } = await open();
     const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
-    await call(app, token, 'workflow.ui', {
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'cita',
@@ -974,11 +964,11 @@ describe('an interface the app could not draw', () => {
     });
 
     // A newer tree may draw: a report about another one changes nothing.
-    expect(await app.invoke('codemode.uiFailed', 'w', 'cita', 1, detail)).toBe(false);
-    expect(await app.invoke('codemode.uiFailed', 'w', 'cita', 2, detail)).toBe(true);
-    expect((await app.invoke('codemode.state')).workflows[0]?.ui ?? []).toEqual([]);
-    expect(app.services.codemode?.workflows.get('w')?.status).toBe('running');
-    const polled = await call(app, token, 'workflow.events', { runId: result.runId, after: 0 });
+    expect(await app.invoke('codemode.uiFailed', result.runId, 'cita', 1, detail)).toBe(false);
+    expect(await app.invoke('codemode.uiFailed', result.runId, 'cita', 2, detail)).toBe(true);
+    expect((await app.invoke('codemode.state')).runs[0]?.ui ?? []).toEqual([]);
+    expect(app.services.codemode?.runs.get(result.runId)?.status).toBe('running');
+    const polled = await call(app, token, 'run.events', { runId: result.runId, after: 0 });
     expect(polled.result.events).toEqual([
       {
         seq: 1,
@@ -992,7 +982,7 @@ describe('an interface the app could not draw', () => {
     ]);
   });
 
-  it('wakes the agent when no process runs its workflow, to present it again', async () => {
+  it('wakes the agent when no process runs it, to present it again', async () => {
     const { app, agentLib } = await open();
     const { result: agent } = await call(
       app,
@@ -1001,8 +991,8 @@ describe('an interface the app could not draw', () => {
       { status: 'DNI', brief: 'b' },
     );
     const token = await tokenFor(app, agentLib, agent.agentId);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
-    await call(app, token, 'workflow.ui', {
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'cita',
@@ -1014,14 +1004,14 @@ describe('an interface the app could not draw', () => {
       agentLib.clients.filter((c) => c.launch.env.SA_PROCEDURE_ID === agent.agentId).length;
     const before = clients();
 
-    expect(await app.invoke('codemode.uiFailed', 'w', 'cita', 1, detail)).toBe(true);
-    // Its run resumes it: the replay presents the interface again and hears what fails then.
-    expect(app.services.codemode?.workflows.get('w')?.status).toBe('waiting_user');
+    expect(await app.invoke('codemode.uiFailed', result.runId, 'cita', 1, detail)).toBe(true);
+    // Its host resumes it: the replay presents the interface again and hears what fails then.
+    expect(app.services.codemode?.runs.get(result.runId)?.status).toBe('waiting_user');
     await vi.waitFor(() => expect(clients()).toBe(before + 1));
   });
 });
 
-describe('a workflow the user dismisses', () => {
+describe('a run the user dismisses', () => {
   it('is reported to its agent when its run ends, with the reason', async () => {
     const { app, agentLib } = await open();
     const { result: agent } = await call(
@@ -1031,12 +1021,11 @@ describe('a workflow the user dismisses', () => {
       { status: 'DNI', brief: 'b' },
     );
     const token = await tokenFor(app, agentLib, agent.agentId);
-    const { result } = await call(app, token, 'workflow.begin', {
-      workflowId: 'w',
+    const { result } = await call(app, token, 'run.begin', {
       title: 'Buscar cita',
       source: 's',
     });
-    await call(app, token, 'workflow.ui', {
+    await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'k',
@@ -1044,13 +1033,13 @@ describe('a workflow the user dismisses', () => {
       tree: FORM,
     });
 
-    await app.invoke('codemode.cancelWorkflow', 'w');
+    await app.services.codemode?.runs.cancel(result.runId, 'The user dismissed it');
     // Its host hears that the run ended, cancels it and reports the end (the agent's codemode
     // call had returned when the interface opened).
     expect(
-      (await call(app, token, 'workflow.events', { runId: result.runId, after: 0 })).result,
+      (await call(app, token, 'run.events', { runId: result.runId, after: 0 })).result,
     ).toEqual({ events: [], ended: true });
-    const end = await call(app, token, 'workflow.end', {
+    const end = await call(app, token, 'run.end', {
       runId: result.runId,
       outcome: { status: 'cancelled', error: 'Cancelled from the app' },
       deliver: true,
@@ -1060,7 +1049,7 @@ describe('a workflow the user dismisses', () => {
       expect(
         received(clientOf(agentLib, agent.agentId)).some((t) =>
           t.startsWith(
-            `${WORKFLOW_RESULT_PREFIX} "w" (Buscar cita) cancelled]\nCancelled: The user dismissed it.`,
+            `${RUN_RESULT_PREFIX} ${result.runId} (Buscar cita) cancelled]\nCancelled: The user dismissed it.`,
           ),
         ),
       ).toBe(true),
@@ -1077,8 +1066,8 @@ describe('a workflow the user dismisses', () => {
       { status: 'DNI', brief: 'b' },
     );
     const token = await tokenFor(app, agentLib, agent.agentId);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
-    await call(app, token, 'workflow.ui', {
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    await call(app, token, 'run.ui', {
       runId: result.runId,
       action: 'open',
       key: 'k',
@@ -1087,20 +1076,20 @@ describe('a workflow the user dismisses', () => {
     });
     // Its run stops reaching main: the interface waits on screen with no run.
     now += 120_000;
-    app.services.codemode?.workflows.sweep();
-    expect(app.services.codemode?.workflows.get('w')?.status).toBe('waiting_user');
+    app.services.codemode?.runs.sweep();
+    expect(app.services.codemode?.runs.get(result.runId)?.status).toBe('waiting_user');
 
-    await app.invoke('codemode.cancelWorkflow', 'w');
+    await app.services.codemode?.runs.cancel(result.runId, 'The user dismissed it');
     await vi.waitFor(() =>
       expect(
         received(clientOf(agentLib, agent.agentId)).some((t) =>
-          t.startsWith(`${WORKFLOW_RESULT_PREFIX} "w" cancelled]`),
+          t.startsWith(`${RUN_RESULT_PREFIX} ${result.runId} cancelled]`),
         ),
       ).toBe(true),
     );
   });
 
-  it('is not reported back to an agent that cancelled its own workflow', async () => {
+  it('is not reported back to an agent that cancelled its own run', async () => {
     const { app, agentLib } = await open();
     const { result: agent } = await call(
       app,
@@ -1109,22 +1098,23 @@ describe('a workflow the user dismisses', () => {
       { status: 'DNI', brief: 'b' },
     );
     const token = await tokenFor(app, agentLib, agent.agentId);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
-    expect((await call(app, token, 'workflows.cancel', { id: 'w' })).ok).toBe(true);
-    const end = await call(app, token, 'workflow.end', {
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    expect((await call(app, token, 'run.cancel', { runId: result.runId })).ok).toBe(true);
+    const end = await call(app, token, 'run.end', {
       runId: result.runId,
       outcome: { status: 'cancelled' },
       deliver: true,
     });
-    // As before: the run is gone, so its end is not found (the host only logs it).
-    expect(end.error).toMatchObject({ code: 'not_found' });
+    expect(end.ok).toBe(true);
     expect(
-      received(clientOf(agentLib, agent.agentId)).some((t) => t.includes('"w" cancelled]')),
+      received(clientOf(agentLib, agent.agentId)).some((t) =>
+        t.includes(`${result.runId} cancelled]`),
+      ),
     ).toBe(false);
   });
 });
 
-describe('a workflow outcome delivered later', () => {
+describe('a run outcome delivered later', () => {
   it('carries the run’s logs, with the notes the user left', async () => {
     const { app, agentLib } = await open();
     const orchestrator = app.services.tokens.issue(ASSISTANT_AGENT_ID);
@@ -1133,8 +1123,8 @@ describe('a workflow outcome delivered later', () => {
       brief: 'b',
     });
     const token = await tokenFor(app, agentLib, agent.agentId);
-    const { result } = await call(app, token, 'workflow.begin', { workflowId: 'w', source: 's' });
-    await call(app, token, 'workflow.end', {
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    await call(app, token, 'run.end', {
       runId: result.runId,
       outcome: {
         status: 'succeeded',
@@ -1150,6 +1140,24 @@ describe('a workflow outcome delivered later', () => {
           'Result:\n{"captcha":false}\n\nLogs:\n[user] On "Escribe el código" the user noted: X7K2\n\nSearches main didn\'t return (read them):\n\n### api.search: q\nModelo 600',
         ),
       ),
+    );
+  });
+
+  it('shows the value up to the one result limit, the same as the tool result', async () => {
+    const { app, agentLib } = await open();
+    const { token } = await anAgent(app, agentLib);
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    // A real run returned { answer, research, feedback } and a 4,000-character clip cut 60% of
+    // the research; the host sends at most RESULT_CHARS, and the message shows them all.
+    const value = JSON.stringify({ research: 'x'.repeat(RESULT_CHARS - 100) });
+    await call(app, token, 'run.end', {
+      runId: result.runId,
+      outcome: { status: 'succeeded', value },
+      deliver: true,
+    });
+    const agentId = (await app.invoke('codemode.state')).agents[0]?.id ?? '';
+    await vi.waitFor(() =>
+      expect(received(clientOf(agentLib, agentId)).some((t) => t.includes(value))).toBe(true),
     );
   });
 });

@@ -10,7 +10,7 @@ import type {
   Prompt,
   PromptItem,
 } from '@sa/shared';
-import { playgroundWorkflows } from './workflows';
+import { playgroundModules } from './modules';
 
 export type ExampleGroup =
   | 'interfaces'
@@ -24,9 +24,9 @@ export interface PlaygroundExample {
   id: string;
   group: ExampleGroup;
   label: string;
-  /** What raises it: the workflow API (`api.user.confirm({ kind: "payment" })`) or the item's type. */
+  /** What raises it: the run API (`api.user.confirm({ kind: "payment" })`) or the item's type. */
   code: string;
-  /** A workflow's source (interfaces), run by the real kernel. */
+  /** A module's source (interfaces), run by the real kernel. */
   source?: string;
   item?: ChatItem;
   procedureId?: string;
@@ -37,7 +37,7 @@ export interface PlaygroundExample {
 }
 const PLAYGROUND_TIME = '2026-10-04T10:00:00.000Z';
 
-/** How a workflow raises each approval: `api.user.confirm`, or the app on its own. */
+/** How a module raises each approval: `api.user.confirm`, or the app on its own. */
 const CONFIRM_CODE: Record<ConfirmKind, string> = {
   action: 'api.user.confirm({ kind: "action" })',
   submission: 'api.user.confirm({ kind: "submission" })',
@@ -48,13 +48,13 @@ const CONFIRM_CODE: Record<ConfirmKind, string> = {
 };
 
 /**
- * Mock-only catalogue: workflows (run for real), the host-owned questions codemode still raises,
+ * Mock-only catalogue: modules (run for real), the host-owned questions codemode still raises,
  * procedure rows, the agent meter and the coordinator's chat. Each question is also registered
  * with the mock API.
  */
 export function playgroundExamples(language: Language): PlaygroundExample[] {
   const t = (es: string, en: string) => (language === 'es' ? es : en);
-  const examples: PlaygroundExample[] = playgroundWorkflows(language).map((w) => ({
+  const examples: PlaygroundExample[] = playgroundModules(language).map((w) => ({
     id: w.id,
     group: 'interfaces',
     label: w.label,

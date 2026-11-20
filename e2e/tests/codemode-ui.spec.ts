@@ -22,7 +22,7 @@ async function open(page: Page, query: string): Promise<string[]> {
 test('questions above procedure rows, not tied to them, and a floating meter', async ({ page }) => {
   const pageErrors = await open(page, 'view=procedures');
 
-  // The workflow's question sits above the rows, without a heading or a procedure label.
+  // The run's question sits above the rows, without a heading or a procedure label.
   const questions = page.getByTestId('for-you');
   await expect(questions.getByText('¿Dónde y cuándo quieres la cita?')).toBeVisible();
   await expect(page.getByText('Para ti', { exact: true })).toHaveCount(0);

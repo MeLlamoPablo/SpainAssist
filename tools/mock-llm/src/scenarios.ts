@@ -8,11 +8,11 @@ const COORDINATOR = '^agent_start$';
 const AGENT = '^codemode$';
 
 /**
- * The demo's workflow (docs/codemode.md): the "Renovar el DNI" card with its plan, one interface
+ * The demo's module (docs/codemode.md): the "Renovar el DNI" card with its plan, one interface
  * for the province and the DNI's expiry, then the card updated with the answer. JavaScript with
  * JSX, as an agent writes it.
  */
-export const DEMO_WORKFLOW = `import { Form, Text, Province, TextField, Actions, Button } from '@spainassist/ui';
+export const DEMO_MODULE = `import { Form, Text, Province, TextField, Actions, Button } from '@spainassist/ui';
 
 function Datos({ api }) {
   const [province, setProvince] = api.ui.useDurableState('province', '');
@@ -73,8 +73,8 @@ export async function main(api) {
 /**
  * "demo": plausibly handles "renovar el DNI" with the codemode harness, so the desktop UI can be
  * demoed without a real model. The coordinator (requests declaring agent_start) starts an agent
- * and relays its reports. The agent (requests declaring codemode) runs one workflow
- * (`DEMO_WORKFLOW`): the card with its plan, a question above the cards, the card updated with
+ * and relays its reports. The agent (requests declaring codemode) runs one module
+ * (`DEMO_MODULE`): the card with its plan, a question above the cards, the card updated with
  * the answer; then it reports. Facts are worded as "to be confirmed" on purpose: this is a mock.
  */
 const demo: ScenarioInput = {
@@ -125,7 +125,7 @@ const demo: ScenarioInput = {
       id: 'dni-summary',
       when: {
         hasTool: AGENT,
-        lastUser: '\\[Workflow "renovar-dni"[^\\]]*succeeded[\\s\\S]*province',
+        lastUser: '\\[Run [^\\]]*succeeded[\\s\\S]*province',
       },
       reply: {
         text: [
@@ -139,7 +139,7 @@ const demo: ScenarioInput = {
     },
     {
       id: 'dni-dismissed',
-      when: { hasTool: AGENT, lastUser: '\\[Workflow "renovar-dni"' },
+      when: { hasTool: AGENT, lastUser: '\\[Run ' },
       reply: { text: 'No me ha dado su provincia; el plan queda a la espera.' },
     },
     {
@@ -150,7 +150,7 @@ const demo: ScenarioInput = {
       },
     },
     {
-      id: 'dni-workflow',
+      id: 'dni-run',
       when: { hasTool: AGENT, turn: 0, lastUser: DNI_REQUEST },
       reply: {
         text: 'Preparo el plan y le pregunto lo que falta.',
@@ -158,9 +158,8 @@ const demo: ScenarioInput = {
           {
             name: 'codemode',
             arguments: {
-              workflow: 'renovar-dni',
               title: 'Renovar el DNI',
-              source: DEMO_WORKFLOW,
+              source: DEMO_MODULE,
             },
           },
         ],

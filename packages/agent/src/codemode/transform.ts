@@ -1,7 +1,7 @@
 import { transform } from 'sucrase';
 
 /**
- * Turns a workflow module (`export async function main(api)`, JSX, `import … from
+ * Turns a module (`export async function main(api)`, JSX, `import … from
  * "@spainassist/ui"`) into a CommonJS-style function body the kernel can load. The output keeps
  * the source's line numbers, so errors point at the model's own lines. Not TypeScript: types
  * are documentation only (docs/codemode.md).

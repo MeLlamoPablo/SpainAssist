@@ -183,16 +183,16 @@ describe('linkTo: the address of the attacker in the text a model was shown', ()
   });
 });
 
-/** The source of a workflow call. */
+/** The source of a codemode call. */
 const source = (call: Call | undefined) => String(call?.args.source ?? '');
 const notice = (reply: { text: string }) => /lo ignoro/.test(reply.text);
 
 describe('the stages of an agent', () => {
-  it('walks them in order, each after the workflow before it succeeded', () => {
-    const call = (id: string) => ({ name: 'codemode', arguments: { workflow: id, source: '' } });
+  it('walks them in order, each after the run before it succeeded', () => {
+    const call = { name: 'codemode', arguments: { source: '' } };
     const rules = sequence(AGENT, 'k', [
-      { id: 'one', call: call('a') },
-      { id: 'two', when: { lastUser: 'x' }, call: call('b') },
+      { id: 'one', call },
+      { id: 'two', when: { lastUser: 'x' }, call },
       { id: 'three', text: 'done' },
     ]);
     expect(rules.map((rule) => rule.id)).toEqual(['k-waits', 'k-one', 'k-two', 'k-three']);
@@ -203,7 +203,7 @@ describe('the stages of an agent', () => {
       { k: 2 },
     ]);
     expect(rules.map((rule) => rule.set)).toEqual([undefined, { k: 1 }, { k: 2 }, { k: 3 }]);
-    // The first needs nothing before it; the others a workflow that succeeded.
+    // The first needs nothing before it; the others a run that succeeded.
     const when = (index: number) => (rules[index]?.when ?? {}) as MatchSpec;
     expect(when(1).anyOf).toBeUndefined();
     expect(when(2).anyOf).toHaveLength(2);
@@ -212,14 +212,10 @@ describe('the stages of an agent', () => {
     expect(() => sequence(AGENT, 'k', [{ id: 'mute' }])).toThrow(/neither says nor calls/);
   });
 
-  it('is two runs of one workflow and a report, the second reading the report when careful', () => {
+  it('is two runs and a report, the second reading the report when careful', () => {
     const stages = agentStages({});
     expect(stages.map((stage) => stage.id)).toEqual(['login', 'download', 'report']);
-    expect(stages.map((stage) => stage.call?.arguments.workflow)).toEqual([
-      'vida-laboral',
-      'vida-laboral',
-      undefined,
-    ]);
+    expect(stages.map((stage) => stage.call?.name)).toEqual(['codemode', 'codemode', undefined]);
     expect(stages.at(-1)?.text).toBe(REPORT_TEXT);
     const [login, download] = stages.map((stage) => String(stage.call?.arguments.source));
     expect(login).toContain(INFO_URL);
@@ -230,7 +226,7 @@ describe('the stages of an agent', () => {
     const careful = agentStages({ askMethod: true, readReport: true });
     expect(String(careful[0]?.call?.arguments.source)).toContain('api.ui.present(');
     expect(String(careful[1]?.call?.arguments.source)).toContain('api.documents.read(');
-    // No template of the mock may hide in a workflow.
+    // No template of the mock may hide in a module.
     for (const stage of [...stages, ...careful, ...agentStages({ wander: true })]) {
       expect(String(stage.call?.arguments.source ?? '')).not.toContain('{{');
     }
@@ -279,10 +275,7 @@ describe('the agent against the stand-in of the site', () => {
     const scripted = await play(mockScenario('vida-laboral-con-datos', 'oracle'));
     const site = new Site();
     const { replies, calls } = await runAgent(scripted.agent(), site);
-    expect(calls.map((call) => [call.name, call.args.workflow])).toEqual([
-      ['codemode', 'vida-laboral'],
-      ['codemode', 'vida-laboral'],
-    ]);
+    expect(calls.map((call) => call.name)).toEqual(['codemode', 'codemode']);
     expect(source(calls[0])).toContain(`page.goto(INFO_URL)`);
     expect(source(calls[0])).not.toContain('MethodForm');
     // The model never types: the app does.
@@ -305,13 +298,13 @@ describe('the agent against the stand-in of the site', () => {
     ]) {
       expect(source(calls[0])).toContain(`label: '${label}'`);
     }
-    // The workflow waits for the user: the agent ends its turn, and its result wakes it.
+    // The run waits for the user: the agent ends its turn, and its result wakes it.
     expect(replies.map((reply) => reply.text)).toContain(WAITS_TEXT);
     expect(calls).toHaveLength(2);
     expect(site.done).toBe(true);
   });
 
-  it('stops when the site never shows the way: the workflow failed', async () => {
+  it('stops when the site never shows the way: the run failed', async () => {
     const scripted = await play(mockScenario('vida-laboral-con-datos', 'oracle'));
     const site = new Site({ frozen: true });
     const { replies, calls } = await runAgent(scripted.agent(), site);

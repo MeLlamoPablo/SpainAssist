@@ -18,9 +18,9 @@ its first message, and a procedure left half done is continued by asking for it 
 | --- | --- |
 | One agent per procedure; the procedure is the agent's | Procedures are durable records; agents work on any of them, one agent can serve several |
 | One tool call per step, a model turn after each | One `codemode` tool: a JavaScript module does many steps (in parallel where it can) without a turn in between |
-| A form blocks the agent's turn; every answer costs a turn before the next step | Interfaces are rendered by the workflow itself; the workflow continues after the answer with no turn, and the agent's turn ends while the user answers |
+| A form blocks the agent's turn; every answer costs a turn before the next step | Interfaces are rendered by the run itself; the run continues after the answer with no turn, and the agent's turn ends while the user answers |
 | The assistant asks before it starts a procedure | The coordinator only delegates (plain tools, no codemode): agents research, ask in interfaces and create the cards once they know the plan; the coordinator never asks ([The coordinator](#the-coordinator)) |
-| A form survives a restart as a prompt; the agent gets a new message | A workflow resumes from its state: memoized steps are not repeated, open interfaces come back with what the user typed; native prompts (a confirmation, a phone call) are cancelled and the workflow hears it was interrupted |
+| A form survives a restart as a prompt; the agent gets a new message | A run resumes from the agent's state: memoized steps are not repeated, open interfaces come back with what the user typed; native prompts (a confirmation, a phone call) are cancelled and the run hears it was interrupted |
 | Questions on each card | Every question in one place above the cards ("Para ti", no heading), not tied to any procedure |
 
 Measured on the same task, in the real app (see [Empirical verification](#empirical-verification)):
@@ -33,19 +33,19 @@ of 9.
 flowchart TB
   subgraph Main["Main process (source of truth)"]
     P["Procedures<br/>cards + private context, versions"]
-    W["WorkflowService<br/>records: memo, interfaces, events"]
+    W["RunService<br/>agent state: memo, interfaces; runs, events"]
     A["CodemodeAgents<br/>agents, activity"]
     C["CodemodeCoordinator<br/>start, report, deliver, wake"]
   end
   subgraph Hosts["Agent processes (one per agent)"]
     O["Coordinator (the chat)<br/>agent_* tools"]
     G["Agents a_…<br/>codemode tool"]
-    E["WorkflowEngine + QuickJS runs"]
+    E["RunEngine + QuickJS runs"]
   end
   R["Renderer: Para ti, cards, meter"]
   G --> E
   O -->|"bridge: agents.*, procs.list/get"| C & P
-  E <-->|"bridge: workflow.*, procs.*, browser.*"| W & P
+  E <-->|"bridge: run.*, procs.*, browser.*"| W & P
   R <-->|"codemode.state / uiEvent / events"| W & A
   C --> A
 ```
@@ -56,45 +56,54 @@ flowchart TB
   pages themselves (no subagents: see [decision 15](#decisions-for-review)). Every agent has a
   single tool, `codemode`, and the declaration of its API in its system prompt
   (`packages/agent/src/codemode/declarations.ts`, `prompt/codemode.ts`).
-- **Where workflows run.** In the process of the agent that runs them: a fresh QuickJS
-  (WebAssembly) instance per run, the same sandbox `run_script` used, with a CPU slice limit
-  instead of a wall-clock limit (a run may wait hours for the user). Main is the source of truth:
-  every durable change goes to it before the workflow continues, so a run is only an executor.
-  Model-written code never runs in main.
-- **Durable records, independent of agents.** `workflows/<id>.json` (memo, interfaces with their
-  latest tree and durable values, result, status), `agents/<id>/` (record, activity log, pi
-  session), `procedures/<id>/context.json` (the private working context).
+- **Where runs execute.** In the process of the agent: a fresh QuickJS (WebAssembly) instance
+  per run, the same sandbox `run_script` used, with a CPU slice limit instead of a wall-clock
+  limit (a run may wait hours for the user). Main is the source of truth: every durable change
+  goes to it before the run continues, so a run is only an executor. Model-written code never
+  runs in main.
+- **State belongs to the agent** (since 2026-11-20; before, to a model-named "workflow", and two
+  agents on the same task picked the same name and silently inherited each other's answers).
+  `agents/<id>/state.json` holds the memo values, the interfaces by key (latest tree, durable
+  values, result once closed) and the agent's runs that are not over (source, status), next to
+  its record, activity log and pi session; `procedures/<id>/context.json` the private working
+  context. The old `workflows/` store is deleted at startup, without migration.
 
 ### A run's life
 
-1. `codemode({ workflow, title, procedures, source })` → `workflow.begin`: the record is created,
-   or resumed with its state (same id = resume). A live run of it in another living process is
-   refused (`conflict`).
+1. `codemode({ title, procedures, source })` → `run.begin`: a run with an app-assigned id
+   (`run_…`), started with the agent's state. The model never names a run; the id shows only
+   where it needs it (the result of a detached run, the message with its outcome, the interfaces
+   still open, so it can cancel one with `api.runs.cancel`).
 2. The module's `main(api)` runs. `api.state.memo(key, fn)` stores the value in main before
-   resolving; later runs get it without running `fn`. `api.ui.present(key, render)` renders the
-   interface to a tree, sends it (main validates it and locates map addresses before the renderer
-   sees it) and waits; a closed key returns its stored result.
-3. The host long-polls the user's events (`workflow.events`) and dispatches them into the run;
+   resolving; any later run of the agent gets it without running `fn`. `api.ui.present(key,
+   render)` renders the interface to a tree, sends it (main validates it and locates map
+   addresses before the renderer sees it) and waits; a closed key returns its stored result. Keys
+   are the model's responsibility: the prompt says they are shared by all its runs, even two at
+   once, and never to reuse one for something else. There is no joining, locking or collision
+   detection; a key open in another run of the agent is refused (`conflict`).
+3. The host long-polls the user's events (`run.events`) and dispatches them into the run;
    handlers update durable state (`useDurableState`, stored in main) and re-render.
-4. The tool call returns when `main` ends, or **detaches** when the workflow waits for the user (or
-   after 2 minutes): the agent's turn ends and the workflow keeps running. When it ends, main gives
-   its outcome to the agent as a message (`[Workflow "id" succeeded]`), with the run's console
+4. The tool call returns when `main` ends, or **detaches** when the run waits for the user (or
+   after 2 minutes): the agent's turn ends and the run keeps going. When it ends, main gives its
+   outcome to the agent as a message (`[Run run_… (title) succeeded]`), with the run's console
    output and the notes the user left on actions (a captcha's characters), which reach the agent
-   even when the workflow's code drops them.
-5. If the process goes away (idle, crash, provider change, app restart), main keeps the record: a
-   waiting workflow stays on screen; when the user acts on it, main wakes its agent, whose host
-   resumes it (re-runs it from its state, which reaches the open interface without repeating
-   anything memoized) and gets the queued events. A workflow that was running is `interrupted`;
-   its agent hears it with its next message and decides.
+   even when the module's code drops them. A run that ends leaves no record; an interface it left
+   open is withdrawn, keeping its durable values for the next run that presents its key.
+5. If the process goes away (idle, crash, provider change, app restart), main keeps the record of
+   a waiting run: its interface stays on screen; when the user acts on it, main wakes its agent,
+   whose host resumes it (`run.resumable`, `run.begin` with its id: the module runs again from
+   the agent's state, which reaches the open interface without repeating anything memoized) and
+   gets the queued events. A run that was running is `interrupted`: its agent hears it once, with
+   its next message, and decides; the record goes with the note.
 
 ### Determinism without a journal
 
 Everything durable is keyed by an explicit name (memo keys, interface keys, durable names), never
 by call order. That makes `Promise.all`, races and parallel interfaces replay-safe, which a
 positional journal (Cloudflare's design) is not. Memoized values are JSON round-tripped on the first
-run too, so first runs and replays see identical values. What is not memoized runs again on a
-re-run: idempotent reads and card updates are fine; anything that must not repeat (a submission, a
-payment) goes in `api.state.memo`. That is the contract the prompts teach.
+run too, so first runs and replays see identical values. What is not memoized runs again in a
+later run: idempotent reads and card updates are fine; anything that must not repeat (a submission,
+a payment) goes in `api.state.memo`. That is the contract the prompts teach.
 
 ## The API
 
@@ -110,13 +119,13 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
   Mis datos (`uiTreeAnswers`, from the last tree; skipped when the field has an `error` or the
   value is already saved) and says so in the chat. The user has no "save my data" choice and the
   agent no call to make; `api.vault.save` is for personal data found elsewhere.
-- `api.procedures`: `list`, `get`, `getOrCreate({ id, title, …card })`, and handles with `update`
+- `api.procedures`: `list`, `get` (a full id or one of the agent's keys), `getOrCreate({ id, title, …card })`, and handles with `update`
   (optimistic concurrency), `refresh`, `context`/`setContext` (private working context).
 - `api.parallelize(tasks, { concurrency })` (allSettled with a limit), `api.setStatus(status)` (the
   agent's line on the meter, an ongoing action: "Analizando la página de Correos…"; the
   coordinator sets it in `agent_start` and `agent_message`), `api.output.image(image)`.
 - `api.search`, `api.fetchUrl`, `api.fetch` (public HTTP, the old run_script fetch), `api.boe`,
-  `api.vault`, `api.documents`, `api.feedback`, `api.workflows`.
+  `api.vault`, `api.documents`, `api.feedback`, `api.runs.cancel`.
 - Agents: `api.browser.currentPage()` → a Playwright-shaped `Page` (locators:
   `getByRole`, `getByLabel`, `getByText`, `locator`, `filter`, `nth`…; actions: `click`, `fill`,
   `selectOption`, `check`, `setInputFiles(documentIds)`; reads: `textContent`, `count`,
@@ -139,9 +148,17 @@ they aren't shown again. The flag is a pi custom entry in the agent's session
 (`spainassist.research_seen`, outside the model's context), so it survives the agent's process
 ending and lasts the conversation; with no research backend there is no gate.
 
+**Research can't be cut by the module.** `api.search` resolves to a `String` object whose
+`slice`, `substring` and `substr` give it back whole, and the sandbox's `String(x)` returns that
+object for it (`new String` stays the real one): real runs wrote `r.slice(0, 6000)`,
+`research.slice(2800, 9000)` and `String(legal).slice(0, 1500)` into their notes and results.
+What the model reads of a run has one limit, `RESULT_CHARS` (50 k characters, `@sa/agent`): the
+tool result, and the value and logs of the message main sends for a run that ended after its
+call returned (it was 30 k and 4 k; a 4 k message cut 60% of a run's research).
+
 ## The coordinator
 
-The chat's agent only delegates. It has no codemode: one call per turn needs no workflow, and a
+The chat's agent only delegates. It has no codemode: one call per turn needs no module, and a
 weak model does better with six tools than with a `.d.ts` (`packages/agent/src/tools/coordinator.ts`,
 `prompt/coordinator.ts`):
 
@@ -181,15 +198,18 @@ agent's report, which the coordinator relays.
   it). The spec's "lease" is this compare-and-swap: a workflow that waited an hour for the user
   cannot overwrite what happened meanwhile.
 - **Stable keys.** `getOrCreate({ id: "renovar-dni" })` maps the key to
-  `p_` + sha256(workflow id, key): the same procedure on every run of that workflow, whoever runs
-  it, so restarting or replacing an agent never recreates it. A full id gets an existing one.
+  `p_` + sha256(agent id, key): the same procedure in every run of that agent, so a later run
+  never recreates it; `get` resolves a key the same way. A full id gets an existing one, so two
+  agents can share a card deliberately. Each run's default procedure (prompts, documents, the
+  page) is the one the agent touched last: `run.begin` hands the run the agent's list, and
+  `getOrCreate`/`update` move theirs to the front.
 - **What agents read.** Every agent's first message carries the cards (status, current step, what
   is missing, the next action); later messages carry them again only when they changed. Private
   context is always on demand.
 
 ## Interfaces and where they appear
 
-Workflows render native components only: main validates every tree (`uiTreeProblem`, zod schemas
+Runs render native components only: main validates every tree (`uiTreeProblem`, zod schemas
 per component, size and depth limits) and the renderer draws it with the app's own controls (map
 with pins, appointment slots, document picker with scanning…). Text is never HTML. Handlers are
 ids; the user's events go back through main. Inputs keep what the user types locally, so typing
@@ -197,10 +217,10 @@ never waits for a round trip.
 
 A tree can pass validation and still make the renderer fail (a value one of its controls can't
 show). Each node renders inside an error boundary: the interface leaves the screen and the
-renderer tells main (`codemode.uiFailed`, naming the component, its label and the workflow's
+renderer tells main (`codemode.uiFailed`, naming the component, its label and the module's
 components that rendered it), which sends the run an event with the reserved handler `UI_FAILED`.
 The kernel then rejects that interface's `present` with a `CodemodeError` whose stack is the
-`present` call's, exactly as if main had refused the tree: the workflow throws at that line, and
+`present` call's, exactly as if main had refused the tree: the module throws at that line, and
 can catch it. With no run, main wakes the agent; the resumed run presents the interface again
 and hears the failure then.
 
@@ -208,16 +228,16 @@ and hears the failure then.
 questions on its card). Every interface and native prompt appears above the procedure cards, in a section the code calls **"Para ti"** (`ForYou.tsx`) and
 the screen shows without a heading: the questions' boxes are enough. A question doesn't say which procedure it is
 for, and cards don't point to their questions: the question's own title says what it is about
-("Cita para renovar el DNI"), which is usually obvious. Workflows still record the procedures they
-serve (their identity references them, and the coordinator reads it), but the renderer never
-receives that list, and a document the user adds in an interface is saved to Mis datos without a
-procedure. An earlier version labelled each question with its workflow's procedures. It
-was dropped as complexity without enough use: a workflow serving several procedures labelled every
-question with all of them, and the labels depended on which procedures the model declared.
+("Cita para renovar el DNI"), which is usually obvious. Agents record the procedures they touched,
+but the renderer never receives that list, and a document the user adds in an interface is saved
+to Mis datos without a procedure. An earlier version labelled each question with its run's
+procedures. It was dropped as complexity without enough use: a run serving several procedures
+labelled every question with all of them, and the labels depended on which procedures the model
+declared.
 
 ## Browser
 
-The workflow's sandbox builds Playwright locators as data (`["getByRole","button",{"name":"Enviar"}]`)
+The run's sandbox builds Playwright locators as data (`["getByRole","button",{"name":"Enviar"}]`)
 and the app replays them on the real page with the real Playwright API
 (`packages/browser/src/locator.ts`), so waiting, strictness and errors are Playwright's. Only the
 listed steps exist; nothing reaches the context, the browser or other procedures. Locator targets go through the same bridge handlers as every page action (domain allowlists,
@@ -269,26 +289,26 @@ rename and appointment links (`features/procedures/CardParts.tsx`) and the empty
 ### Formal verification
 
 `packages/agent/test/helpers/protocol-model.ts` models the protocol as transition rules (main's
-`WorkflowService` and the hosts' `WorkflowEngine`): one workflow
-`read → memo a → ui q → memo b (a submission) → update procedure → end`, two agent processes, the
+`RunService` and the hosts' `RunEngine`): one module of an agent
+`read → memo a → ui q → memo b (a submission) → update procedure → end`, two processes of the agent, the
 user, and bounded faults (process crashes, app restarts, a run its host loses without telling main,
 someone else updating the procedure). A breadth-first explicit-state search checks on every state:
 
 - a stored memo value is never recomputed (at most once, plus once per fault during its effect);
 - an answered interface never opens again;
-- never two live runs of a workflow;
-- a finished workflow shows no interface; "waiting for the user" always has one on screen;
+- never two live runs of a record;
+- a finished run shows no interface; "waiting for the user" always has one on screen;
 
 and on the state graph, without any further fault: an open interface can always be answered, and
-the workflow can always end.
+the run can always end.
 
 **It found a real bug.** The original rules failed liveness with a two-step counterexample
 (`codemode 0 → zombie 0`): a run whose host lost it without its `workflow.end` reaching main kept
-receiving the user's events, and an agent whose process stayed up never resumed a waiting workflow
+receiving the user's events, and an agent whose process stayed up never resumed a waiting run
 (hosts resumed only at startup). Fixes: main sweeps for runs that stopped polling (a running one
 becomes `interrupted` and its agent is told; a waiting one stays on screen and its events go to the
-next run); hosts look for workflows to resume every 15 s; an ended run answers its host's poll with
-`ended` (it answered `not_found`, which the host retried forever).
+run that resumes it); hosts look for runs to resume every 15 s; a run cancelled from main answers
+its host's poll with `ended` (it answered `not_found`, which the host retried forever).
 
 | Rules | Fault budget | States | Transitions | Violations |
 | --- | --- | --- | --- | --- |
@@ -298,10 +318,10 @@ next run); hosts look for workflows to resume every 15 s; an ended run answers i
 | Fixed | 2 crashes, 2 restarts, 2 lost runs, 1 update | 553,253 | 2,290,613 | 0 |
 
 The model is an abstraction: it is as good as its correspondence with the code. Two checks close
-the gap: a randomized property test runs 60 seeded random workflows (parallel memo groups and
+the gap: a randomized property test runs 60 seeded random modules (parallel memo groups and
 interfaces) on the **real** runtime, cancelling them at random points and resuming from the stored
 state, and checks the same properties plus that the result equals a run without crashes
-(`codemode-protocol.test.ts`); and the main-process tests drive the real `WorkflowService` through
+(`codemode-protocol.test.ts`); and the main-process tests drive the real `RunService` through
 the stale-run, resume and restart paths (`apps/desktop/src/main/codemode/codemode.test.ts`).
 
 ### Tests
@@ -311,7 +331,7 @@ the stale-run, resume and restart paths (`apps/desktop/src/main/codemode/codemod
   components, the loop guard, `parallelize` limits, locators as data, roles, cancellation.
 - Host (`codemode-host.test.ts`): operations to bridge calls (procedure header, structured results),
   the declaration per role and that every declared API exists.
-- Main (`codemode.test.ts`, 14 tests through the real composition root): roles and the procedure
+- Main (`codemode.test.ts`, through the real composition root): roles and the procedure
   header, keys and optimistic concurrency, tree validation and map lookups, agents' briefs and
   reports, waking and resuming, restart persistence, stale runs, outcomes delivered later.
 - End to end (`tools/eval/test/codemode/e2e.test.ts`): the real app, the real agent host, QuickJS,
@@ -325,7 +345,7 @@ went with it): it ran the spec's "¿tengo que presentar la renta?" through both
 harnesses in the real app, with the real agent hosts, each scripted with the shortest tool sequence
 its prompts call for (classic: the assistant starts a procedure; its agent reads the vault, reads
 the official page, updates the card, asks, decides, reports; the assistant tells the user.
-Codemode: the coordinator starts an agent; the agent's one workflow creates the card, asks while it
+Codemode: the coordinator starts an agent; the agent's one run creates the card, asks while it
 reads the official page, checks the income against it and updates the card; the coordinator relays the agent's two
 reports). Every model call takes the same simulated latency.
 
@@ -337,7 +357,7 @@ under 0.1 s):
 | classic | 9 | 3 | 13.9 s | 7.5 s | 29.5 s |
 | codemode | 8 | 3 | 6.4 s | 7.6 s | 22.0 s |
 
-Until 2026-11-10 the codemode coordinator ran this workflow itself: 4 model calls, the question at
+Until 2026-11-10 the codemode coordinator ran this module itself: 4 model calls, the question at
 3.7 s, the result 5.1 s after the answer. Delegating costs two coordinator turns before the
 question and one relay after it; what it buys is a coordinator that never asks in chat
 ([The coordinator](#the-coordinator)).
@@ -347,23 +367,23 @@ agent against 45.5 k for a classic procedure agent; 6.7 k for the coordinator (p
 schemas 3.1 k) against 20.5 k for the classic assistant.
 
 What this does and does not show: it measures the harness (turns, waiting, context), with model
-behaviour held fixed. It does not measure whether real models write good workflows. That needs a
+behaviour held fixed. It does not measure whether real models write good modules. That needs a
 SpainBench run with real models (`docs/EVAL.md`). The first comparison (170 runs, 2026-11-09) is in
 [research/codemode-eval-2026-11.md](research/codemode-eval-2026-11.md).
 
 ## Decisions for review
 
-1. **Workflows run in the agent's process; main keeps their state.** Considered: a runner in main
+1. **Runs execute in the agent's process; main keeps the state.** Considered: a runner in main
    (better lifecycle, but model code next to every secret) and a dedicated runner process (more
    plumbing). The agent process already is the least-privileged place, and making main the source
-   of truth gives the independence the spec asks for: a replacement agent resumes the same record.
+   of truth lets a new process of the agent resume a waiting run.
 2. **QuickJS over a V8 isolate or an Electron renderer.** Already shipped and hardened (the classic `run_script`),
    portable, engine-level memory and CPU limits, no native builds. React compatibility was not needed:
    the kernel's hooks renderer (`kernel.ts`) produces trees for native components.
 3. **Keyed durability instead of a positional journal**, with re-execution of what is not memoized.
    It keeps parallelism replay-safe; the price is that the model must memoize effects, which the
    prompt and the API documentation say.
-4. **Detaching**: the `codemode` call returns once the workflow waits for the user (or after
+4. **Detaching**: the `codemode` call returns once the run waits for the user (or after
    2 minutes) and the outcome arrives later as a message. Without it the chat would block on every
    question; with it steering stays possible during long work.
 5. **Questions are not tied to procedures** ("Para ti", above): no label on a question, no pointer
@@ -376,13 +396,13 @@ SpainBench run with real models (`docs/EVAL.md`). The first comparison (170 runs
    a terrible experience, since nothing happens until the user answers. Now agents ask, in
    interfaces, while the work goes on. See [The coordinator](#the-coordinator).
 7. **The spec's lease is optimistic concurrency** (versions and `conflict`), not an exclusive lock:
-   a workflow that waits for the user must not block everyone else's updates.
-8. **Procedure keys are scoped to the workflow, not the agent** (the spec suggested prefixing by
-   agent): so that replacing an agent does not recreate procedures.
+   a run that waits for the user must not block everyone else's updates.
+8. **Procedure keys are scoped to the agent** (since 2026-11-20; before, to the workflow, so that
+   a run with a new name made a second card for the same key).
 9. **The procedures' cards ride on the first message and on later ones only when they changed**
    (the spec: every agent sees them on its initial message). For the never-ending coordinator,
    only the initial message would go stale.
-10. **Browser contexts stay per procedure**; a workflow's page is its first procedure's browser.
+10. **Browser contexts stay per procedure**; a run's page is that of the procedure it touched last.
     It keeps every procedure-scoped safety path (downloads, signatures and approvals on the card).
 11. **One snapshot: `page.snapshot()`** (the spec's `page.captureSnapshot()`), the classic tools'
     snapshot: masked, trimmed to a budget on heavy pages, with refs as a fallback (code acts through
@@ -396,28 +416,28 @@ SpainBench run with real models (`docs/EVAL.md`). The first comparison (170 runs
     belonged to exactly one procedure, so it sat on its card next to its facts. The classic design
     was kept, frozen, while the flag existed, and removed with it. The design is covered by a web
     e2e test against the preview (`e2e/tests/codemode-ui.spec.ts`) and the Electron ones.
-14. **Interrupted workflows are not re-run automatically.** Anything not memoized would repeat;
+14. **Interrupted runs are not run again automatically.** Anything not memoized would repeat;
     the agent decides, told by main.
 15. **No subagents** (removed 2026-11-10 after the SpainBench comparison). Agents could lend their
     page to a browsing subagent (`api.subagents.useBrowser`) or delegate a task (`run`); in the
     comparison subagents cost 45% of codemode's model spend, browsed one step per turn, and lost
     the procedure's structure in their prose answers (appointment slots the user never saw, a
-    vehicle report never requested). Agents now drive their pages in multi-step workflows, whose
+    vehicle report never requested). Agents now drive their pages in multi-step runs, whose
     results are only what their code returns.
     [research/codemode-subagents.md](research/codemode-subagents.md).
 16. **No `api.classify`** (removed 2026-11-14). It was one quick model call that picked one of
-    several options, so a workflow could branch in code on a judgement, with an "unknown" option
+    several options, so a module could branch in code on a judgement, with an "unknown" option
     of its own. In 625 Haiku codemode runs agents wrote it twice, both before the coordinator
     stopped asking (2026-11-10), and once only to re-read the value of their own select; Sol's 4
     calls in `tasa-790-012` ran one branch only. Agents ask in forms and branch on their values,
-    and judge research in their own turn. Bring it back if a workflow needs a judgement in code.
+    and judge research in their own turn. Bring it back if a module needs a judgement in code.
 
 ## Known gaps
 
 - Real-model quality: one SpainBench comparison so far (above), before the changes it led to
   (no subagents, approvals only before binding steps, hooks in `present`'s render).
-- Feedback recipes (reusable workflow source in feedback entries, research memo §10) are not built.
+- Feedback recipes (reusable module source in feedback entries, research memo §10) are not built.
 - The Playwright surface is a subset; network interception, raw cookies, frames by name and CDP
   stay out on purpose.
-- An agent whose workflows all wait for the user may be stopped as idle; that is safe (they resume
+- An agent whose runs all wait for the user may be stopped as idle; that is safe (they resume
   on the user's next action) but each resume pays a host start (about a second).

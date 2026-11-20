@@ -58,7 +58,6 @@ test('the browser outlives its windows: an agent closes it, waits and browses ag
           delayMs: 3_000,
           toolCalls: [
             codemodeCall({
-              workflow: 'abrir-otra-vez',
               title: 'Abrir la sede otra vez',
               source: `export async function main(api) {
   const [card] = await api.procedures.list();
@@ -79,7 +78,6 @@ test('the browser outlives its windows: an agent closes it, waits and browses ag
         reply: {
           toolCalls: [
             codemodeCall({
-              workflow: 'abrir-sede',
               title: 'Abrir la sede',
               source: `export async function main(api) {
   await api.procedures.getOrCreate({ id: 'sede', title: 'Abrir la sede', status: 'researching' });
@@ -101,7 +99,7 @@ test('the browser outlives its windows: an agent closes it, waits and browses ag
   const agent = await theAgent(h);
   const log = await agentIdle(h, agent.id);
   expect(codemodeCalls(log).map((c) => c.status)).toEqual(['done', 'done']);
-  // What the workflows returned, as the agent's model read it.
+  // What the runs returned, as the agent's model read it.
   const results = new Set(
     h.llm
       .requests()
@@ -114,11 +112,11 @@ test('the browser outlives its windows: an agent closes it, waits and browses ag
           ? m.content
           : (m.content as { text?: string }[]).map((part) => part.text ?? '').join(''),
       )
-      .filter((text) => text.startsWith('Workflow "')),
+      .filter((text) => text.startsWith('Run succeeded')),
   );
   expect([...results]).toEqual([
-    expect.stringContaining('Workflow "abrir-sede" succeeded'),
-    expect.stringMatching(/Workflow "abrir-otra-vez" succeeded[\s\S]*"tabs": 2/),
+    expect.stringMatching(/Run succeeded[\s\S]*"closed": true/),
+    expect.stringMatching(/Run succeeded[\s\S]*"tabs": 2/),
   ]);
 
   // One headed launch with the CRLSet, which never went away.

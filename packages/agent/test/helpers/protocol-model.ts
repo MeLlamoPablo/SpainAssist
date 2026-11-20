@@ -1,21 +1,21 @@
 /**
- * An explicit-state model of the codemode workflow protocol (docs/codemode.md, "Formal
- * verification"): main's WorkflowService and the agent hosts' WorkflowEngine as transition rules,
- * over one workflow
+ * An explicit-state model of the codemode run protocol (docs/codemode.md, "Formal
+ * verification"): main's RunService and the agent hosts' RunEngine as transition rules, over one
+ * module of an agent, whose durable state is the agent's
  *
  *   read procedure → memo "a" (a search) → ui "q" (the user answers) → memo "b" (a submission,
  *   the effect that must not repeat) → update procedure → end
  *
- * run by two agent processes (the one that started it and one that could take it over), with
- * the user acting on the interface, and bounded faults: a process crash, an app restart, a run
- * that dies without telling main (a "zombie"), and someone else changing the procedure.
+ * run by two processes of the agent (the one that started it and a later one that resumes it),
+ * with the user acting on the interface, and bounded faults: a process crash, an app restart, a
+ * run that dies without telling main (a "zombie"), and someone else changing the procedure.
  *
- * `rules` switches the two protocol fixes the model checker motivated: hosts look for workflows
- * to resume while they run (not only when they start), and main ends runs that stopped polling.
+ * `rules` switches the two protocol fixes the model checker motivated: hosts look for runs to
+ * resume while they run (not only when they start), and main ends runs that stopped polling.
  */
 
 export interface Rules {
-  /** Hosts resume waiting workflows periodically, not only at startup. */
+  /** Hosts resume waiting runs periodically, not only at startup. */
   periodicResume: boolean;
   /** Main treats a run that stopped polling as ended. */
   staleRuns: boolean;
@@ -37,7 +37,7 @@ interface HostRun {
 
 interface Agent {
   alive: boolean;
-  /** The process just started and has not looked for workflows to resume yet. */
+  /** The process just started and has not looked for runs to resume yet. */
   booting: boolean;
   run: HostRun | null;
 }
@@ -103,7 +103,7 @@ function initial(): State {
 const clone = (s: State): State => structuredClone(s);
 const sat = (n: number) => Math.min(2, n);
 
-/** main: `WorkflowService.begin` from agent `i` (the agent's tool call or its resume). */
+/** main: `RunService.begin` from process `i` (the agent's tool call or its resume). */
 function begin(s: State, i: number, resume: boolean): State | null {
   const n = clone(s);
   if (n.live) {
@@ -169,8 +169,8 @@ export function transitions(
       push(`wake ${i}`, n);
       continue;
     }
-    // The agent's model starts (or re-runs) the workflow with its codemode tool. Agent 1 only
-    // takes over a workflow that stopped.
+    // The agent's model starts (or runs again) the module with its codemode tool. Process 1
+    // only takes over a run that stopped.
     if (
       !agent.run &&
       !terminal &&
@@ -178,7 +178,7 @@ export function transitions(
     ) {
       push(`codemode ${i}`, begin(s, i, false));
     }
-    // The host resumes waiting workflows (engine.resumeAll): at startup, and periodically.
+    // The host resumes waiting runs (engine.resumeAll): at startup, and periodically.
     if (
       !agent.run &&
       s.status === 'waiting' &&
@@ -205,7 +205,7 @@ export function transitions(
       } else if (op.startsWith('memo:')) {
         const key = op.slice(5);
         if (r.phase === 'effect') {
-          // Stored before the workflow continues (`workflow.memo` resolves after the write).
+          // Stored before the run continues (`run.memo` resolves after the write).
           n.memo = [...new Set([...n.memo, key])].sort();
           r.phase = 'idle';
           r.pc++;
@@ -243,7 +243,7 @@ export function transitions(
           r.pc++;
           push(`update ${i}`, n);
         } else {
-          // `conflict`: the workflow fails and the agent re-reads (never overwrites).
+          // `conflict`: the run fails and the agent re-reads (never overwrites).
           n.status = 'failed';
           n.live = null;
           (n.agents[i] as Agent).run = null;
@@ -267,7 +267,7 @@ export function transitions(
       push(`crash ${i}`, n, true);
     }
     if (run && s.zombies < bounds.zombies) {
-      // The run dies in the host and its `workflow.end` never reaches main.
+      // The run dies in the host and its `run.end` never reaches main.
       const n = clone(s);
       n.zombies++;
       const r = (n.agents[i] as Agent).run as HostRun;
@@ -340,9 +340,9 @@ function safety(s: State): string | null {
   const runs = s.agents.filter(
     (a, i) => a.run && s.live?.id === a.run.id && hostRunIsLive(s, i),
   ).length;
-  if (runs > 1) return 'two live runs of one workflow';
+  if (runs > 1) return 'two live runs of one record';
   if ((s.status === 'succeeded' || s.status === 'failed') && s.ui === 'open')
-    return 'a finished workflow still shows its interface';
+    return 'a finished run still shows its interface';
   if (s.status === 'waiting' && s.ui !== 'open')
     return 'waiting for the user with nothing on screen';
   return null;
@@ -355,7 +355,7 @@ function key(s: State): string {
 /**
  * Explores every reachable state (BFS) and checks safety on each, then liveness on the graph:
  * from every state, without any further fault, (1) an open interface can be answered and the
- * workflow continue, and (2) the workflow can reach an end. Returns violations with traces.
+ * run continue, and (2) the run can reach an end. Returns violations with traces.
  */
 export function check(rules: Rules, bounds?: Parameters<typeof transitions>[2]): CheckResult {
   const start = initial();
@@ -416,7 +416,7 @@ export function check(rules: Rules, bounds?: Parameters<typeof transitions>[2]):
   const ends = canReach((s) => s.status === 'succeeded' || s.status === 'failed');
   for (let i = 0; i < states.length; i++) {
     const s = states[i] as State;
-    if (!ends[i]) report('the workflow can never end', i);
+    if (!ends[i]) report('the run can never end', i);
     if (s.ui === 'open' && !answered[i])
       report('the user can never get the open interface answered (stuck)', i);
   }

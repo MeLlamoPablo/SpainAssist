@@ -86,7 +86,7 @@ export class Scenario {
     this.wrongTurns++;
   }
 
-  /** The bridge call of the agent's workflow that logs in with the vault credential. */
+  /** The bridge call of the agent's run that logs in with the vault credential. */
   async loginWithClave(): Promise<void> {
     await this.feed(
       toolStart(

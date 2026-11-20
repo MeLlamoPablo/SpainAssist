@@ -509,7 +509,7 @@ export function renderActivity(observations: readonly Observation[]): string {
     }`,
     ...(steps.size > 0
       ? [
-          `- Workflow steps (codemode bridge calls): ${[...steps.values()].reduce((a, b) => a + b, 0)}; most used: ${sorted(steps, 5)}`,
+          `- Run steps (codemode bridge calls): ${[...steps.values()].reduce((a, b) => a + b, 0)}; most used: ${sorted(steps, 5)}`,
         ]
       : []),
     `- Prompts: ${shown} shown, ${answered} answered (scripted ${answers.structured}, answerer ${answers.answerer}, default ${answers.default})`,

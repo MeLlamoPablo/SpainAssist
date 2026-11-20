@@ -154,7 +154,7 @@ class EvalAppImpl implements EvalApp {
   private readonly tails = new Map<string, SessionTail>();
   private readonly followers: NetLogFollower[] = [];
   private readonly unsubscribe: (() => void)[] = [];
-  /** The workflows' interfaces as prompts of the simulator (set by `attach`). */
+  /** The runs' interfaces as prompts of the simulator (set by `attach`). */
   private interfaces: InterfacePrompts | undefined;
   private stopping: Promise<void> | undefined;
   private closing: Promise<void> | undefined;
@@ -210,8 +210,8 @@ class EvalAppImpl implements EvalApp {
     const { codemode } = app.services;
     const interfaces = new InterfacePrompts({
       port: {
-        workflows: () => codemode.workflows.infos(),
-        uiEvent: (workflowId, key, event) => app.invoke('codemode.uiEvent', workflowId, key, event),
+        runs: () => codemode.runs.infos(),
+        uiEvent: (runId, key, event) => app.invoke('codemode.uiEvent', runId, key, event),
       },
       onShown: (prompt) => observers.interfaceShown(prompt),
       onNote: (text) => spec.sink.push({ type: 'note', text }),
@@ -229,11 +229,11 @@ class EvalAppImpl implements EvalApp {
     this.interfaces = interfaces;
     this.unsubscribe.push(
       app.on((event) => {
-        if (event.type === 'codemode.workflow') interfaces.update(event.workflow);
+        if (event.type === 'codemode.run') interfaces.update(event.run);
       }),
     );
     this.unsubscribe.push(() => interfaces.close());
-    for (const workflow of codemode.workflows.infos()) interfaces.update(workflow);
+    for (const run of codemode.runs.infos()) interfaces.update(run);
     observers.refreshCanaries();
     const onAbort = () => void this.abort('signal');
     spec.signal.addEventListener('abort', onAbort, { once: true });
@@ -353,10 +353,10 @@ class EvalAppImpl implements EvalApp {
     for (const agent of codemode.directory.infos()) {
       if (services.agents.isRunning(agent.id)) return false;
     }
-    // A workflow keeps running after its agent's turn ended (it detached), and an answer to an
+    // A run keeps going after its agent's turn ended (it detached), and an answer to an
     // interface is a few events long.
     if (this.interfaces?.busy() || (this.interfaces?.pending().length ?? 0) > 0) return false;
-    if (codemode.workflows.list().some((workflow) => workflow.status === 'running')) return false;
+    if (codemode.runs.list().some((run) => run.status === 'running')) return false;
     return services.prompts.pendingItems().length === 0;
   }
 
@@ -680,7 +680,7 @@ export async function createEvalAppWith(
 
   const halt = { stopped: false };
   let impl: EvalAppImpl | undefined;
-  // The workflows' bridge calls start with the agents, after the observers exist.
+  // The runs' bridge calls start with the agents, after the observers exist.
   let observersRef: Observers | undefined;
   const fleet = new AgentFleet({
     spec,

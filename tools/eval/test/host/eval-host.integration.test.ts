@@ -24,7 +24,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import {
   createFakeBridge,
   type FakeBridge,
-  workflowHandlers,
+  runHandlers,
 } from '../../../../packages/agent/test/helpers/fake-bridge';
 import type { HostEvalConfig, NetRecord } from '../../src/contracts';
 import { evalHostLaunch, evalHostPath, writeHostEvalConfig } from '../../src/host';
@@ -124,7 +124,7 @@ describe('the eval host over RPC', () => {
     llm = await createMockLlm({ scenario: { fallback: { text: 'Hecho.' } }, chunkSize: 16 });
     world = await startFakeWorld();
     bridge = await createFakeBridge({
-      ...workflowHandlers(),
+      ...runHandlers(),
       'agent.credential': () => ({
         credential: { type: 'api_key', key: 'voucher-key-from-bridge' },
       }),
@@ -236,13 +236,12 @@ describe('the eval host over RPC', () => {
         .filter((m) => m.role === 'tool')
         .map((m) => [String(m.tool_call_id), textOf(m.content)]),
     );
-  /** What a workflow's main returned, from the `codemode` result the model got. */
+  /** What a module's main returned, from the `codemode` result the model got. */
   const returned = <T>(result: string | undefined): T => {
-    const match =
-      /^Workflow "[^"]+" succeeded\.\n\nResult:\n([\s\S]*?)(?:\n\nLogs:\n[\s\S]*)?$/.exec(
-        result ?? '',
-      );
-    if (!match) throw new Error(`Not a workflow's result: ${result}`);
+    const match = /^Run succeeded\.\n\nResult:\n([\s\S]*?)(?:\n\nLogs:\n[\s\S]*)?$/.exec(
+      result ?? '',
+    );
+    if (!match) throw new Error(`Not a run's result: ${result}`);
     // A string comes back as it is; anything else as JSON.
     try {
       return JSON.parse(match[1] ?? '') as T;
@@ -252,17 +251,14 @@ describe('the eval host over RPC', () => {
   };
   const records = (): Promise<NetRecord[]> => readNetLog(netlog);
 
-  /** A `codemode` call running `body` as the workflow's main. */
-  const workflow = (id: string, body: string) => ({
+  /** A `codemode` call running `body` as the module's main. */
+  const codemode = (id: string, body: string) => ({
     id,
     name: 'codemode',
-    arguments: {
-      workflow: id.replace(/_/g, '-'),
-      source: `export async function main(api) {\n${body}\n}`,
-    },
+    arguments: { source: `export async function main(api) {\n${body}\n}` },
   });
-  /** A model that runs these workflows in its first turn and then says it is done. */
-  const runs = (...calls: ReturnType<typeof workflow>[]): ScenarioInput => ({
+  /** A model that runs these modules in its first turn and then says it is done. */
+  const runs = (...calls: ReturnType<typeof codemode>[]): ScenarioInput => ({
     rules: [{ when: { turn: 0 }, reply: { toolCalls: calls } }],
     fallback: { text: 'Listo.' },
   });
@@ -271,9 +267,9 @@ describe('the eval host over RPC', () => {
   const tells = () =>
     new RegExp(`127\\.0\\.0\\.1|localhost|spainbench|express|powered|mock|:${world.port}\\b`, 'i');
 
-  /** One workflow that reads the world through every way out of the host process. */
+  /** One module that reads the world through every way out of the host process. */
   const everything = runs(
-    workflow(
+    codemode(
       'call_world',
       `
       const research = await api.search({ prompt: 'vida laboral, adulto residente en Madrid', mode: 'balanced' });
@@ -316,7 +312,7 @@ describe('the eval host over RPC', () => {
       const [first, second] = completions() as [ChatRequest, ChatRequest];
       expect(toolNames(first)).toEqual(['codemode']);
       const result = resultsById(second).call_world;
-      // Nothing a workflow tells the model says "mock".
+      // Nothing a run tells the model says "mock".
       expect(result).not.toMatch(tells());
       const seen = returned<World>(result);
 
@@ -355,7 +351,7 @@ describe('the eval host over RPC', () => {
       expect(world.requests.every((r) => r.headers['x-spainbench-world'] === 'run-host-test')).toBe(
         true,
       );
-      // A workflow's requests are its `codemode` call's: no tool of their own to name.
+      // A run's requests are its `codemode` call's: no tool of their own to name.
       expect(
         world.requests
           .map((r) => `${r.headers['x-spainbench-source']} ${r.host}${r.path.split('?')[0]}`)
@@ -391,7 +387,7 @@ describe('the eval host over RPC', () => {
           `other mapped GET ${BOE}/datosabiertos/api/legislacion-consolidada 200`,
         ].sort(),
       );
-      // The research tool behind api.search runs inside the workflow's call, under its own name.
+      // The research tool behind api.search runs inside the run's call, under its own name.
       expect(log.filter((r) => r.channel === 'web_research').map(line)).toEqual([
         'web_research mapped POST research.invalid/v1/research 200',
       ]);
@@ -418,7 +414,7 @@ describe('the eval host over RPC', () => {
     it('serves the same recording in the hosted search shape', async () => {
       llm.setScenario(
         runs(
-          workflow(
+          codemode(
             'call_research',
             `return await api.search({ prompt: 'vida laboral, adulto residente en Madrid', mode: 'balanced' });`,
           ),
@@ -467,7 +463,7 @@ describe('the eval host over RPC', () => {
     it('records what the product’s SSRF guard refuses, in every spelling, with the call that tried', async () => {
       llm.setScenario(
         runs(
-          workflow(
+          codemode(
             'call_ssrf',
             `
             const tries = {};
@@ -522,10 +518,10 @@ describe('the eval host over RPC', () => {
       expect(log.filter((r) => r.route === 'mapped' || r.route === 'unmapped')).toEqual([]);
     });
 
-    it('shows a workflow nothing of this machine: no process, no environment, no modules', async () => {
+    it('shows a run nothing of this machine: no process, no environment, no modules', async () => {
       llm.setScenario(
         runs(
-          workflow(
+          codemode(
             'call_env',
             `let fs;
             try { fs = typeof require('fs'); } catch (e) { fs = e.message; }
@@ -548,12 +544,12 @@ describe('the eval host over RPC', () => {
       expect(result).not.toMatch(tells());
     });
 
-    // Not yet: the workflow engine runs on the machine's clock, whatever `HostHooks.now` says
-    // (run_script took it), so a workflow's `Date` contradicts the prompt's "Today is".
-    it.fails('shows a workflow the frozen date in Date, as the prompt says', async () => {
+    // Not yet: the run engine runs on the machine's clock, whatever `HostHooks.now` says
+    // (run_script took it), so a run's `Date` contradicts the prompt's "Today is".
+    it.fails('shows a run the frozen date in Date, as the prompt says', async () => {
       llm.setScenario(
         runs(
-          workflow(
+          codemode(
             'call_date',
             `return { today: new Date().toISOString().slice(0, 10), now: Date.now() };`,
           ),
@@ -579,9 +575,9 @@ describe('the eval host over RPC', () => {
     });
   });
 
-  /** A workflow that reads the sede once: the probe host tries its doors before the call. */
+  /** A module that reads the sede once: the probe host tries its doors before the call. */
   const readsSede = runs(
-    workflow('call_page', `return await api.fetchUrl('https://${SEDE}/tramite');`),
+    codemode('call_page', `return await api.fetchUrl('https://${SEDE}/tramite');`),
   );
 
   describe('the guard around the process', () => {
@@ -610,7 +606,7 @@ describe('the eval host over RPC', () => {
       expect(unlisted.hits).toEqual([]);
       expect(world.requests.filter((r) => /probe-/.test(r.path))).toEqual([]);
 
-      // The workflow itself still worked, and the model was reached through the same guard.
+      // The run itself still worked, and the model was reached through the same guard.
       expect(
         returned<{ text: string }>(resultsById(completions()[1] as ChatRequest).call_page).text,
       ).toContain(SEDE_PAGE_TEXT);
@@ -670,7 +666,7 @@ describe('the eval host over RPC', () => {
       expect(byMethod('SPAWN').map((r) => r.reqBody)).toEqual([
         `curl ${unlisted.origin}/probe-curl?dni=53918274H`,
       ]);
-      // The workflow still reached the world through the transport, and the model through the guard.
+      // The run still reached the world through the transport, and the model through the guard.
       expect(
         returned<{ text: string }>(resultsById(completions()[1] as ChatRequest).call_page).text,
       ).toContain(SEDE_PAGE_TEXT);

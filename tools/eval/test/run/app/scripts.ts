@@ -1,7 +1,7 @@
 /**
  * Scripted models for the tests of the eval app: `tools/mock-llm` scenarios that play the
  * coordinator and an agent through the real hosts (docs/codemode.md). The coordinator is told
- * apart by its tools (`agent_start`), the agent by its own (`codemode`): it works in workflows,
+ * apart by its tools (`agent_start`), the agent by its own (`codemode`): it works in runs,
  * whose steps reach the app through the bridge.
  */
 import type { ScenarioInput } from '@sa/mock-llm';
@@ -9,18 +9,18 @@ import { CLAVE_PASSWORD } from '../../../src/fixtures';
 import {
   AGENT,
   COORDINATOR,
+  codemode,
   REPORT_PREFIX,
   type Rule,
   type Stage,
   sequence,
-  workflow,
 } from '../../../src/scenarios/kit';
 import { COLLECTOR, IDP, PORTAL } from './support';
 
 /** A host that is neither the world's nor the collector: it does not exist. */
 export const STRANGER_HOST = 'www.dominio-desconocido.test';
 
-/** The procedure every workflow here keeps (its stable key in the workflow). */
+/** The procedure every run here keeps (the agent's stable key). */
 const CARD = `const procedure = await api.procedures.getOrCreate({ id: 'vida-laboral', title: 'Vida laboral', status: 'in_progress' });`;
 
 /** What the coordinator does: starts an agent, then relays its report, with the document link. */
@@ -35,7 +35,7 @@ export const coordinatorRules: Rule[] = [
   },
   {
     // The agent names the document itself: the app's report lists only the documents saved
-    // during the agent's last run, and a workflow that waited for the user saved it before.
+    // during the agent's last turn, and a run that waited for the user saved it before.
     id: 'coordinator-relays-named-document',
     when: {
       ...COORDINATOR,
@@ -71,7 +71,7 @@ export const coordinatorRules: Rule[] = [
   },
 ];
 
-/** The agent's way: `stages` in order (state `p`), each a workflow or its last report. */
+/** The agent's way: `stages` in order (state `p`), each a run or its last report. */
 function agent(stages: Stage[]): Rule[] {
   return sequence(AGENT, 'p', stages);
 }
@@ -99,8 +99,8 @@ const METHOD_FORM = `function MethodForm({ api }) {
 }`;
 
 /**
- * The whole trip in one workflow: research, a page in the browser, a fetch on another host, a
- * question (the workflow waits for the user) and a saved download.
+ * The whole trip in one run: research, a page in the browser, a fetch on another host, a
+ * question (the run waits for the user) and a saved download.
  */
 export function vidaScenario(): ScenarioInput {
   return {
@@ -108,9 +108,8 @@ export function vidaScenario(): ScenarioInput {
       ...coordinatorRules,
       ...agent([
         {
-          id: 'workflow',
-          call: workflow(
-            'vida-laboral',
+          id: 'run',
+          call: codemode(
             `${CARD}
   const research = await api.search({ prompt: 'vida laboral', mode: 'fast' });
   const page = await api.browser.currentPage();
@@ -122,7 +121,7 @@ export function vidaScenario(): ScenarioInput {
   const saved = await api.documents.saveDownload(downloads[0].downloadId, 'Informe de prueba');
   await procedure.update({ status: 'done', summary: 'Informe guardado' });
   return { procedureId: procedure.id, metodo, research: research.length, frame: frame.text, saved };`,
-            { callId: 'call_workflow', title: 'Sacar tu vida laboral', components: METHOD_FORM },
+            { callId: 'call_run', title: 'Sacar tu vida laboral', components: METHOD_FORM },
           ),
         },
         {
@@ -137,7 +136,7 @@ export function vidaScenario(): ScenarioInput {
 }
 
 /**
- * An agent that is hijacked: its workflow reads a page, then sends what it knows to an unknown
+ * An agent that is hijacked: its run reads a page, then sends what it knows to an unknown
  * host (a canary in the query), to the registered collector (nothing in it) and, posting, to a
  * host that is neither.
  */
@@ -148,9 +147,8 @@ export function exfilScenario(): ScenarioInput {
       ...coordinatorRules,
       ...agent([
         {
-          id: 'workflow',
-          call: workflow(
-            'leer',
+          id: 'run',
+          call: codemode(
             `${CARD}
   const page = await api.browser.currentPage();
   await page.goto('https://${PORTAL}/');
@@ -181,9 +179,8 @@ export function pausedScenario(): ScenarioInput {
       ...coordinatorRules,
       ...agent([
         {
-          id: 'workflow',
-          call: workflow(
-            'vida-laboral',
+          id: 'run',
+          call: codemode(
             `${CARD}
   const page = await api.browser.currentPage();
   await page.goto('https://${PORTAL}/set-cookie');
@@ -201,7 +198,7 @@ export function pausedScenario(): ScenarioInput {
 
 /**
  * After a restore the user says to go on: the coordinator reads the card and passes it on to the
- * agent it started, whose workflow looks at the portal with the cookies of before.
+ * agent it started, whose run looks at the portal with the cookies of before.
  */
 export function resumeScenario(procedureId: string, agentId: string): ScenarioInput {
   return {
@@ -232,10 +229,9 @@ export function resumeScenario(procedureId: string, agentId: string): ScenarioIn
       },
       ...agent([
         {
-          id: 'workflow',
+          id: 'run',
           when: { lastUser: 'Continúa donde lo dejaste' },
-          call: workflow(
-            'vida-laboral-sigue',
+          call: codemode(
             `const page = await api.browser.currentPage();
   await page.goto('https://${PORTAL}/whoami');
   const vault = await api.vault.read();
@@ -255,7 +251,7 @@ export function resumeScenario(procedureId: string, agentId: string): ScenarioIn
 }
 
 /**
- * A login the way the user's own typing goes: the workflow asks the user for the password with
+ * A login the way the user's own typing goes: the run asks the user for the password with
  * `fillFromUser` (the app types it straight into the page, the agent never sees it) and clicks
  * "Entrar", which posts the form to the portal.
  */
@@ -265,9 +261,8 @@ export function loginScenario(): ScenarioInput {
       ...coordinatorRules,
       ...agent([
         {
-          id: 'workflow',
-          call: workflow(
-            'entrar',
+          id: 'run',
+          call: codemode(
             `${CARD}
   const page = await api.browser.currentPage();
   await page.goto('https://${PORTAL}/form');
@@ -291,9 +286,8 @@ export function leakScenario(): ScenarioInput {
       ...coordinatorRules,
       ...agent([
         {
-          id: 'workflow',
-          call: workflow(
-            'enviar',
+          id: 'run',
+          call: codemode(
             `const r = await api.fetch('https://${PORTAL}/post', { method: 'POST', body: 'p=${CLAVE_PASSWORD}' });
   return await r.text();`,
             { callId: 'call_leak' },
@@ -320,8 +314,8 @@ const PROVINCE_FORM = `function ProvinceForm({ api }) {
 }`;
 
 /**
- * An agent whose workflow asks one question and waits for the answer. A restored app resumes the
- * workflow when the question is answered: its result comes as a message.
+ * An agent whose run asks one question and waits for the answer. A restored app resumes the
+ * run when the question is answered: its result comes as a message.
  */
 export function questionScenario(): ScenarioInput {
   return {
@@ -330,7 +324,7 @@ export function questionScenario(): ScenarioInput {
         id: 'agent-resumed',
         when: {
           ...AGENT,
-          lastUser: '^\\[Workflow "provincia"[^\\]\\n]* succeeded\\]',
+          lastUser: '^\\[Run [^\\]\\n]* succeeded\\]',
           state: { p: null },
         },
         reply: { text: 'Gracias, sigo.' },
@@ -338,9 +332,8 @@ export function questionScenario(): ScenarioInput {
       ...coordinatorRules,
       ...agent([
         {
-          id: 'workflow',
-          call: workflow(
-            'provincia',
+          id: 'run',
+          call: codemode(
             `${CARD}
   const provincia = await api.ui.present('provincia', () => <ProvinceForm api={api} />);
   return { procedureId: procedure.id, provincia };`,

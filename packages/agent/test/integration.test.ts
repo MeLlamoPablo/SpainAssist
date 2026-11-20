@@ -12,17 +12,17 @@ import { type AgentHostConfig, buildAgentLaunch, PiRpcClient } from '../src/inde
 import type { AgentEvent } from '../src/rpc/events';
 import { COORDINATOR_TOOL_NAMES } from '../src/tools/names';
 import { EVAL_MARKERS } from './helpers/eval-markers';
-import { createFakeBridge, type FakeBridge, hang, workflowHandlers } from './helpers/fake-bridge';
+import { createFakeBridge, type FakeBridge, hang, runHandlers } from './helpers/fake-bridge';
 import { createFakeSse, sseEvent } from './helpers/fake-sse';
 
 const packageRoot = join(import.meta.dirname, '..');
 const hostPath = join(packageRoot, 'dist', 'host.js');
 
-/** A codemode call running `body` as the workflow's main. */
-function workflow(id: string, body: string) {
+/** A codemode call running `body` as the module's main. */
+function codemode(body: string) {
   return {
     name: 'codemode',
-    arguments: { workflow: id, source: `export async function main(api) {\n${body}\n}` },
+    arguments: { source: `export async function main(api) {\n${body}\n}` },
   };
 }
 
@@ -35,13 +35,10 @@ const scenario: ScenarioInput = {
       reply: {
         text: 'Te ayudo a renovar el DNI. Apunto el plan.',
         toolCalls: [
-          workflow(
-            'renovar-dni',
-            `const vault = await api.vault.read({ keys: ['addressProvince'] });
+          codemode(`const vault = await api.vault.read({ keys: ['addressProvince'] });
 const province = vault.personal[0].value;
 const approved = await api.user.confirm({ title: 'Pedir cita', message: 'Pido cita en ' + province });
-return { province, approved };`,
-          ),
+return { province, approved };`),
         ],
       },
     },
@@ -107,7 +104,7 @@ describe('agent host over RPC (integration)', () => {
     llm = await createMockLlm({ scenario, chunkSize: 7 });
     bridge = await createFakeBridge({
       'agent.credential': () => ({ credential: { type: 'api_key', key: 'llm-key-from-bridge' } }),
-      ...workflowHandlers(),
+      ...runHandlers(),
       'vault.read': () => ({
         personal: [{ key: 'addressProvince', label: 'Provincia', value: 'Madrid' }],
         documents: [],
@@ -170,7 +167,7 @@ describe('agent host over RPC (integration)', () => {
     return { client, events, info };
   }
 
-  it('runs a full turn: a workflow that reads the vault and asks the user, final answer', async () => {
+  it('runs a full turn: a run that reads the vault and asks the user, final answer', async () => {
     const { client, events, info } = await start();
     expect(info.model).toEqual({ provider: 'custom', id: 'mock-model' });
     expect(await client.prompt('Hola, quiero renovar el DNI')).toBe('started');
@@ -200,21 +197,19 @@ describe('agent host over RPC (integration)', () => {
     expect(toolEnds[0]).toMatchObject({
       tool: 'codemode',
       isError: false,
-      details: { workflowId: 'renovar-dni', status: 'succeeded' },
+      details: { runId: 'run_1', status: 'succeeded' },
     });
     expect(events.some((e) => e.type === 'usage' && e.inputTokens > 0)).toBe(true);
     expect(events.some((e) => e.type === 'log' && e.message.startsWith('ready:'))).toBe(true);
 
-    // The app received the workflow's calls, and its outcome.
-    expect(bridge.callsTo('workflow.begin')[0]?.params).toMatchObject({
-      workflowId: 'renovar-dni',
-    });
+    // The app received the run's calls, and its outcome.
+    expect(bridge.callsTo('run.begin')).toHaveLength(1);
     expect(bridge.callsTo('vault.read')[0]?.params).toEqual({ keys: ['addressProvince'] });
     expect(bridge.callsTo('prompt.confirm')[0]?.params).toMatchObject({
       title: 'Pedir cita',
       message: 'Pido cita en Madrid',
     });
-    expect(bridge.callsTo('workflow.end')[0]?.params).toMatchObject({
+    expect(bridge.callsTo('run.end')[0]?.params).toMatchObject({
       outcome: { status: 'succeeded' },
     });
     expect(bridge.calls.every((c) => c.authorization === `Bearer ${bridge.token}`)).toBe(true);
@@ -271,7 +266,7 @@ describe('agent host over RPC (integration)', () => {
     });
     const body = llm.requests().filter((r) => r.path.endsWith('/chat/completions'))[0]
       ?.body as ChatRequest;
-    // No research, browser or workflows: everything goes through background agents.
+    // No research, browser or runs: everything goes through background agents.
     expect((body.tools ?? []).map((t) => t.function?.name)).toEqual([...COORDINATOR_TOOL_NAMES]);
     expect(String(body.messages?.[0]?.content).startsWith('You are Spain Assist.')).toBe(true);
     const toolResult = llm.requests().at(-1)?.body as ChatRequest;
@@ -499,8 +494,7 @@ describe('agent host over RPC (integration)', () => {
           when: { turn: 0, lastUser: '^Descarga el documento$' },
           reply: {
             toolCalls: [
-              workflow(
-                'descargar',
+              codemode(
                 `return await api.user.requestAction({ kind: 'qr_scan', title: 'Confirma el acceso', message: 'Escanea el QR', showBrowser: false });`,
               ),
             ],
@@ -619,10 +613,7 @@ describe('agent host over RPC (integration)', () => {
             when: { turn: 0 },
             reply: {
               toolCalls: [
-                workflow(
-                  'investigar',
-                  `return await api.search({ prompt: 'renovar NIE', mode: 'balanced' });`,
-                ),
+                codemode(`return await api.search({ prompt: 'renovar NIE', mode: 'balanced' });`),
               ],
             },
           },
@@ -700,7 +691,7 @@ describe('agent host over RPC (integration)', () => {
           {
             when: { turn: 0 },
             reply: {
-              toolCalls: [workflow('investigar', `return await api.search('renovar NIE');`)],
+              toolCalls: [codemode(`return await api.search('renovar NIE');`)],
             },
           },
           {

@@ -56,8 +56,7 @@ export type BridgeHandlers = {
 /** The codemode harness's own methods (codemode/handlers.ts). */
 type CodemodeMethod = Extract<
   BridgeMethod,
-  | `workflow.${string}`
-  | `workflows.${string}`
+  | `run.${string}`
   | `procs.${string}`
   | `agents.${string}`
   | 'browser.query'
@@ -65,7 +64,7 @@ type CodemodeMethod = Extract<
   | 'browser.info'
 >;
 export type CodemodeHandlers = Pick<BridgeHandlers, CodemodeMethod>;
-/** The app's capabilities that workflows reach (bridge/handlers.ts). */
+/** The app's capabilities that runs reach (bridge/handlers.ts). */
 export type CapabilityHandlers = Omit<BridgeHandlers, CodemodeMethod>;
 
 /** Methods that act on a procedure, so they need the procedure header. */

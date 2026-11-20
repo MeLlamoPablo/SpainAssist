@@ -47,7 +47,7 @@ export function recordSessionSelection(
   }
 }
 
-/** Custom entry: search results reached the model (WorkflowEngine.markResearched). */
+/** Custom entry: search results reached the model (RunEngine.markResearched). */
 const RESEARCH_SEEN = 'spainassist.research_seen';
 
 /**

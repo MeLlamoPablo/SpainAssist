@@ -4,7 +4,7 @@ import type { Api, Model } from '@earendil-works/pi-ai';
 import { BRIDGE_ENV, DEFAULT_THINKING_LEVEL, setExtraTrustedHosts } from '@sa/shared';
 import { BridgeClient } from '../bridge/client';
 import { buildDeclarations } from '../codemode/declarations';
-import { WorkflowEngine } from '../codemode/engine';
+import { RunEngine } from '../codemode/engine';
 import { createImageStore } from '../codemode/host-ops';
 import { codemodeTool } from '../codemode/tool';
 import { parseHostConfig } from '../config';
@@ -89,7 +89,7 @@ export async function runHost(
   hooks.onModel?.(model, config);
   const imagesSupported = model.input.includes('image');
 
-  // docs/codemode.md: background agents write workflows; the coordinator, the chat's agent, only
+  // docs/codemode.md: background agents write modules; the coordinator, the chat's agent, only
   // delegates to them with a few plain tools.
   const codemode = config.role === 'agent';
   const coordinator = config.role === 'orchestrator';
@@ -152,16 +152,16 @@ export async function runHost(
       }),
     );
   }
-  let engine: WorkflowEngine | undefined;
+  let engine: RunEngine | undefined;
   if (codemode) {
-    // Codemode: research, fetch and every other capability become the workflow API; the
+    // Codemode: research, fetch and every other capability become the run's API; the
     // model's only tool is `codemode` (docs/codemode.md).
     const wrappedResearch = wrapTools(researchTools, hooks.wrapTool);
     const searchTool =
       wrappedResearch.find((t) => t.name === WEB_RESEARCH_TOOL_NAME) ??
       wrappedResearch.find((t) => t.name === EXA_TOOL_NAMES[0]);
     const images = createImageStore();
-    engine = new WorkflowEngine({
+    engine = new RunEngine({
       bridge,
       images,
       imagesSupported,
@@ -298,8 +298,8 @@ export async function runHost(
     'info',
     `ready: ${config.role}, ${model.provider}/${model.id}, ${agentTools.length} tools, web research ${research ?? 'off'}`,
   );
-  // Codemode: workflows that waited for the user resume in this process (their state is in the
-  // app). In the background: their outcomes reach the agent as messages through the app.
+  // Codemode: runs that waited for the user resume in this process (their state is in the app).
+  // In the background: their outcomes reach the agent as messages through the app.
   if (engine) {
     const resumer = engine;
     setTimeout(() => resumer.startResuming(), 0);

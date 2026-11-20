@@ -6,7 +6,7 @@ import {
   type PromptResponse,
   UserActionPrompt,
 } from './chat';
-import { CodemodeSlug, type UiEvent } from './codemode';
+import type { UiEvent } from './codemode';
 import { Procedure as ProcedureSchema, ProcedureUpdate } from './procedure';
 import { FEEDBACK_BODY_MAX, FeedbackKind, FeedbackVote } from './services';
 import { PersonalDataInput } from './vault';
@@ -18,7 +18,7 @@ import { PersonalDataInput } from './vault';
  * Two kinds of agents use it (docs/codemode.md):
  *   - the coordinator (ASSISTANT_AGENT_ID): the chat's agent. It only delegates to background
  *     agents (`agents.*`) and reads the procedures' cards;
- *   - background agents: they write workflows (`workflow.*`) that do the work: research, the
+ *   - background agents: they write modules (`run.*`) that do the work: research, the
  *     browser, the user's questions, the procedures' cards.
  * What each may call: codemodeMayCall.
  *
@@ -123,7 +123,7 @@ export const BrowserLiveInput = z.discriminatedUnion('type', [
 export type BrowserLiveInput = z.infer<typeof BrowserLiveInput>;
 
 /**
- * An element: a ref from the latest snapshot ("e12"), or, from codemode workflows, `loc:` and the
+ * An element: a ref from the latest snapshot ("e12"), or, from codemode runs, `loc:` and the
  * JSON of a Playwright locator chain (see @sa/browser locator.ts).
  */
 const Ref = z
@@ -332,25 +332,26 @@ export const BridgeParams = {
   /** Rates a learning from feedback.search (by its id). */
   'feedback.vote': z.object({ id: z.string().min(1).max(64), vote: FeedbackVote }),
 
-  // --- workflows (docs/codemode.md) ------------------------------------------------------------
+  // --- runs (docs/codemode.md) -----------------------------------------------------------------
   /**
-   * Starts a run of a workflow: creates its record, or resumes it with its durable state when the
-   * id exists (another live run of it is refused with `conflict`). Returns the run's id.
+   * Starts a run of a module with the agent's durable state, or, with `runId`, resumes one of
+   * the agent's runs that waits for the user (refused while a live process runs it). Returns the
+   * run's procedures: the given ones, then the agent's, most recently touched first.
    */
-  'workflow.begin': z.object({
-    workflowId: CodemodeSlug,
+  'run.begin': z.object({
+    runId: RunId.optional(),
     title: z.string().max(120).optional(),
     procedures: z.array(ProcedureId).max(20).optional(),
     source: z.string().min(1).max(200_000),
   }),
-  'workflow.memo': z.object({
+  'run.memo': z.object({
     runId: RunId,
     key: StateKey,
     value: z.unknown().optional(),
     delete: z.boolean().optional(),
   }),
   /** Interfaces of a run: open (validated, its map addresses located), render, durable, close. */
-  'workflow.ui': z.object({
+  'run.ui': z.object({
     runId: RunId,
     action: z.enum(['open', 'render', 'durable', 'close']),
     key: StateKey,
@@ -364,39 +365,37 @@ export const BridgeParams = {
    * Long poll: the user's events on the run's open interfaces after `after`. Answers at once when
    * there are some, else within 25 s with none; `ended` when the run was cancelled from outside.
    */
-  'workflow.events': z.object({ runId: RunId, after: z.number().int().nonnegative() }),
+  'run.events': z.object({ runId: RunId, after: z.number().int().nonnegative() }),
   /** The calling agent's status on the meter (api.setStatus). */
-  'workflow.setStatus': z.object({ status: z.string().min(1).max(120) }),
+  'run.setStatus': z.object({ status: z.string().min(1).max(120) }),
   /** The run ended. `deliver`: the agent's tool already returned, so main tells the agent. */
-  'workflow.end': z.object({
+  'run.end': z.object({
     runId: RunId,
     outcome: z.object({
       status: z.enum(['succeeded', 'failed', 'cancelled']),
-      value: z.string().max(100_000).optional(),
+      value: z.string().max(50_000).optional(),
       error: z.string().max(10_000).optional(),
       code: z.string().max(40).optional(),
       /** console output and the user's notes, for an agent that hears the outcome later. */
-      logs: z.string().max(10_000).optional(),
+      logs: z.string().max(50_000).optional(),
       /** The run's search results main didn't return, for the agent to read (shown in full). */
       searches: z.string().max(20_000).optional(),
     }),
     deliver: z.boolean().default(false),
   }),
-  /** This agent's workflows to resume when its process starts (they were waiting for the user). */
-  'workflow.resumable': z.object({}),
-  'workflows.list': z.object({}),
-  'workflows.get': z.object({ id: CodemodeSlug }),
-  'workflows.cancel': z.object({ id: CodemodeSlug, reason: z.string().max(300).optional() }),
+  /** This agent's runs to resume when its process starts (they wait for the user). */
+  'run.resumable': z.object({}),
+  /** Stops one of the agent's runs (its interfaces are withdrawn). */
+  'run.cancel': z.object({ runId: RunId, reason: z.string().max(300).optional() }),
 
   /** Every procedure's card (no private context). */
   'procs.list': z.object({ includeArchived: z.boolean().default(false) }),
   'procs.get': z.object({ id: ProcedureId }),
   /**
-   * A procedure by a key stable within the run's workflow (or a full id): created the first time,
-   * the same one on every later run. Adds it to the workflow's procedures.
+   * A procedure by a key of the agent's (or a full id): created the first time, the same one on
+   * every later run.
    */
   'procs.getOrCreate': ProcedureUpdate.extend({
-    runId: RunId,
     id: z.string().min(1).max(64),
     title: ProcedureSchema.shape.title,
   }),
@@ -541,16 +540,15 @@ export interface BridgeResults {
   'feedback.search': { results: import('./services').FeedbackEntry[] };
   'feedback.submit': { submitted: boolean; id?: string; redactions: number; reason?: string };
   'feedback.vote': { counted: boolean; reason?: string };
-  'workflow.begin': {
+  'run.begin': {
     runId: string;
-    resumed: boolean;
     procedures: string[];
     state: {
       memo: Record<string, { value?: unknown }>;
       ui: Record<
         string,
         {
-          status: 'open' | 'closed';
+          status: 'open' | 'closed' | 'withdrawn';
           result?: unknown;
           durable?: Record<string, unknown>;
           rev?: number;
@@ -558,36 +556,15 @@ export interface BridgeResults {
       >;
     };
   };
-  'workflow.memo': Record<string, never>;
-  'workflow.ui': Record<string, never>;
-  'workflow.events': { events: { seq: number; key: string; event: UiEvent }[]; ended?: boolean };
-  'workflow.setStatus': Record<string, never>;
-  'workflow.end': Record<string, never>;
-  'workflow.resumable': {
-    workflows: { workflowId: string; title?: string; source: string; procedures: string[] }[];
+  'run.memo': Record<string, never>;
+  'run.ui': Record<string, never>;
+  'run.events': { events: { seq: number; key: string; event: UiEvent }[]; ended?: boolean };
+  'run.setStatus': Record<string, never>;
+  'run.end': Record<string, never>;
+  'run.resumable': {
+    runs: { runId: string; title?: string; source: string; procedures: string[] }[];
   };
-  'workflows.list': {
-    workflows: {
-      id: string;
-      title?: string;
-      status: string;
-      agentId: string;
-      procedures: string[];
-      openUi: string[];
-    }[];
-  };
-  'workflows.get': {
-    id: string;
-    title?: string;
-    status: string;
-    agentId: string;
-    procedures: string[];
-    memoKeys: string[];
-    openUi: string[];
-    result?: unknown;
-    error?: string;
-  };
-  'workflows.cancel': { cancelled: boolean };
+  'run.cancel': { cancelled: boolean };
   'procs.list': { procedures: VersionedProcedure[] };
   'procs.get': VersionedProcedure;
   'procs.getOrCreate': VersionedProcedure & { created: boolean };
@@ -624,7 +601,7 @@ export type CodemodeBridgeRole = 'orchestrator' | 'agent';
 /**
  * What each codemode role may call. The coordinator only delegates: its agents and reading the
  * cards (its tools, packages/agent/src/tools/coordinator.ts), plus the saved documents' names for
- * its host's check of the links in its messages. Agents: everything else, workflows, procedures,
+ * its host's check of the links in its messages. Agents: everything else, runs, procedures,
  * vault, the browser and the user prompts, but no agents of their own.
  */
 export function codemodeMayCall(role: CodemodeBridgeRole, method: BridgeMethod): boolean {
@@ -648,7 +625,7 @@ export const BridgeErrorCode = z.enum([
   'policy_denied', // e.g. credential not allowed on this domain
   'browser_error',
   'unavailable', // e.g. feedback server unreachable
-  'conflict', // codemode: a procedure changed since it was read, a page is locked, a workflow runs elsewhere
+  'conflict', // codemode: a procedure changed since it was read, a page is locked, a run is live elsewhere
   'internal',
 ]);
 export type BridgeErrorCode = z.infer<typeof BridgeErrorCode>;

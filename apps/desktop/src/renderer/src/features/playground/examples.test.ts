@@ -10,12 +10,12 @@ import {
 } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import { appointmentExample, examplePromptItems, playgroundExamples } from './examples';
+import { playgroundModules } from './modules';
 import { PlaygroundRun, type RunView } from './runner';
-import { playgroundWorkflows } from './workflows';
 
 const EMPTY = { memo: {}, ui: {} };
 
-/** Starts a workflow with a host that approves every question. */
+/** Starts a module with a host that approves every question. */
 function start(source: string, lang: 'es' | 'en' = 'es') {
   let view: RunView | undefined;
   const asked: PromptItem[] = [];
@@ -84,20 +84,20 @@ describe('agent playground', () => {
       expect(NextAction.safeParse(appointmentExample(t)).success).toBe(true);
     });
 
-    it(`runs every workflow to its first interface, covering every component, in ${language}`, async () => {
+    it(`runs every module to its first interface, covering every component, in ${language}`, async () => {
       const seen = new Set<string>();
-      for (const workflow of playgroundWorkflows(language)) {
-        const { run, view } = start(workflow.source, language);
+      for (const module of playgroundModules(language)) {
+        const { run, view } = start(module.source, language);
         const ready = await until(() => {
           const v = view();
           return v && v.status !== 'running' && v;
-        }, workflow.id);
-        if (workflow.id === 'rechazada') {
+        }, module.id);
+        if (module.id === 'rechazada') {
           expect(ready.status).toBe('failed');
           expect(ready.error).toMatch(/bad_request.*Links must be https/s);
           continue;
         }
-        expect(ready.status, `${workflow.id}: ${ready.error}`).toBe('waiting_user');
+        expect(ready.status, `${module.id}: ${ready.error}`).toBe('waiting_user');
         for (const ui of ready.ui) for (const node of nodes(ui.tree ?? '')) seen.add(node.type);
         run.stop();
       }
@@ -106,7 +106,7 @@ describe('agent playground', () => {
   }
 
   it('books the DNI appointment end to end, through two interfaces and an approval', async () => {
-    const source = playgroundWorkflows('es').find((w) => w.id === 'cita-dni')?.source ?? '';
+    const source = playgroundModules('es').find((w) => w.id === 'cita-dni')?.source ?? '';
     const { run, view, asked } = start(source);
     const first = await until(() => view()?.ui[0], 'the first interface');
     run.uiEvent('where-and-when', {
@@ -162,7 +162,7 @@ describe('agent playground', () => {
   });
 
   it('saves what the user typed in fields with a vaultKey when the interface closes, however it closes', async () => {
-    const source = playgroundWorkflows('es').find((w) => w.id === 'datos')?.source ?? '';
+    const source = playgroundModules('es').find((w) => w.id === 'datos')?.source ?? '';
     const saved: unknown[] = [];
     let view: RunView | undefined;
     const run = new PlaygroundRun('wf-datos', source, EMPTY, {
@@ -201,7 +201,7 @@ describe('agent playground', () => {
   });
 
   it('resumes from durable state: closed interfaces and memoized steps are not repeated', async () => {
-    const source = playgroundWorkflows('es').find((w) => w.id === 'cita-dni')?.source ?? '';
+    const source = playgroundModules('es').find((w) => w.id === 'cita-dni')?.source ?? '';
     const state = {
       memo: { slots: { value: ['2026-12-03T09:10'] } },
       ui: {

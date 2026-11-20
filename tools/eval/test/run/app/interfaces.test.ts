@@ -1,4 +1,4 @@
-import type { PromptResponse, UiNode, WorkflowInfo } from '@sa/shared';
+import type { PromptResponse, RunInfo, UiNode } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
 import type { PendingPrompt } from '../../../src/contracts';
 import {
@@ -123,14 +123,14 @@ describe('readTree and interfaceForm', () => {
   });
 });
 
-/** One workflow with one interface that re-renders on events, as the kernel does. */
-function fakeWorkflow(render: (state: Record<string, unknown>) => UiNode | null) {
+/** One run with one interface that re-renders on events, as the kernel does. */
+function fakeRun(render: (state: Record<string, unknown>) => UiNode | null) {
   const state: Record<string, unknown> = { dni: '' };
   let rev = 1;
   let open = true;
   const events: { handler: string; value?: unknown; rev: number }[] = [];
-  const listeners: ((w: WorkflowInfo) => void)[] = [];
-  const info = (): WorkflowInfo => {
+  const listeners: ((w: RunInfo) => void)[] = [];
+  const info = (): RunInfo => {
     const tree = open ? render(state) : null;
     return {
       id: 'renovar-dni',
@@ -150,7 +150,7 @@ function fakeWorkflow(render: (state: Record<string, unknown>) => UiNode | null)
     state,
     events,
     port: {
-      workflows: () => [info()],
+      runs: () => [info()],
       async uiEvent(
         _w: string,
         _k: string,
@@ -170,7 +170,7 @@ function fakeWorkflow(render: (state: Record<string, unknown>) => UiNode | null)
         return true;
       },
     },
-    on: (listener: (w: WorkflowInfo) => void) => listeners.push(listener),
+    on: (listener: (w: RunInfo) => void) => listeners.push(listener),
     info,
     rerender: () => {
       rev++;
@@ -200,12 +200,12 @@ function setup(
   render: (state: Record<string, unknown>) => UiNode | null,
   options: Partial<InterfacePromptsOptions> = {},
 ) {
-  const workflow = fakeWorkflow(render);
+  const run = fakeRun(render);
   const shown: PendingPrompt[] = [];
   const notes: string[] = [];
   const renders: { rev: number; actionable: boolean }[] = [];
   const prompts = new InterfacePrompts({
-    port: workflow.port,
+    port: run.port,
     onShown: (prompt) => shown.push(prompt),
     onNote: (text) => notes.push(text),
     onRender: ({ rev, actionable }) => renders.push({ rev, actionable }),
@@ -215,9 +215,9 @@ function setup(
     renderWaitMs: 500,
     ...options,
   });
-  workflow.on((info) => prompts.update(info));
-  prompts.update(workflow.info());
-  return { workflow, prompts, shown, notes, renders };
+  run.on((info) => prompts.update(info));
+  prompts.update(run.info());
+  return { run, prompts, shown, notes, renders };
 }
 
 describe('InterfacePrompts', () => {
@@ -248,7 +248,7 @@ describe('InterfacePrompts', () => {
 
   it('reports each render once, and a loading tree as not actionable', async () => {
     let loading = true;
-    const { workflow, shown, renders } = setup((s) =>
+    const { run, shown, renders } = setup((s) =>
       loading
         ? el('Root', {}, el('Actions', {}, el('Button', { loading: true }, 'Buscando…')))
         : dniTree({ dni: String(s.dni) }),
@@ -256,7 +256,7 @@ describe('InterfacePrompts', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(shown).toEqual([]);
     loading = false;
-    workflow.rerender();
+    run.rerender();
     await waitFor(() => shown[0]);
     expect(renders).toEqual([
       { rev: 1, actionable: false },
@@ -274,7 +274,7 @@ describe('InterfacePrompts', () => {
   });
 
   it('plays an answer as the renderer would: each change after the last re-render, then the click', async () => {
-    const { workflow, prompts, shown } = setup((s) =>
+    const { run, prompts, shown } = setup((s) =>
       dniTree({ dni: String(s.dni), ...(s.when ? { when: String(s.when) } : {}) }),
     );
     const prompt = await waitFor(() => shown[0]);
@@ -282,7 +282,7 @@ describe('InterfacePrompts', () => {
       prompt.itemId,
       form({ numero_de_dni: '12345678Z', horario: 'pm', [BUTTON_FIELD]: 'Buscar cita' }),
     );
-    expect(workflow.events.map((e) => [e.handler, e.value, e.rev])).toEqual([
+    expect(run.events.map((e) => [e.handler, e.value, e.rev])).toEqual([
       ['r/0/2#onChange', '12345678Z', 1],
       ['r/0/3#onChange', 'pm', 2],
       ['r/0/4/1#onClick', undefined, 3],
@@ -294,7 +294,7 @@ describe('InterfacePrompts', () => {
   });
 
   it('makes the tree a click leads to a new prompt, and keeps the prompt across identical re-renders', async () => {
-    const { workflow, prompts, shown } = setup((s) =>
+    const { run, prompts, shown } = setup((s) =>
       el(
         'Root',
         {},
@@ -304,7 +304,7 @@ describe('InterfacePrompts', () => {
       ),
     );
     const first = await waitFor(() => shown[0]);
-    workflow.rerender();
+    run.rerender();
     await new Promise((r) => setTimeout(r, 60));
     expect(shown).toHaveLength(1);
     expect(prompts.pending()).toEqual([first]);
@@ -319,7 +319,7 @@ describe('InterfacePrompts', () => {
   });
 
   it('presses a button the form enables once its inputs are filled in', async () => {
-    const { workflow, prompts, shown } = setup((s) =>
+    const { run, prompts, shown } = setup((s) =>
       el(
         'Root',
         {},
@@ -338,11 +338,11 @@ describe('InterfacePrompts', () => {
     const prompt = await waitFor(() => shown[0]);
     expect(prompt.fields?.map((f) => f.key)).toEqual(['como_entras']);
     await prompts.respond(prompt.itemId, form({ como_entras: 'permanente' }));
-    expect(workflow.events.map((e) => e.handler)).toEqual(['r/0/3#onChange', 'r/0/4/1#onClick']);
+    expect(run.events.map((e) => e.handler)).toEqual(['r/0/3#onChange', 'r/0/4/1#onClick']);
   });
 
   it('asks again when the button stays disabled after the answer', async () => {
-    const { workflow, prompts, shown, notes } = setup((s) =>
+    const { run, prompts, shown, notes } = setup((s) =>
       el(
         'Root',
         {},
@@ -352,7 +352,7 @@ describe('InterfacePrompts', () => {
     );
     const first = await waitFor(() => shown[0]);
     await prompts.respond(first.itemId, form({ dni: '1' }));
-    expect(workflow.events.map((e) => e.handler)).toEqual(['r/0/2#onChange']);
+    expect(run.events.map((e) => e.handler)).toEqual(['r/0/2#onChange']);
     expect(notes).toEqual([`interface ${first.itemId}: the button "Continuar" is still disabled`]);
     const second = await waitFor(() => shown[1]);
     expect(prompts.pending()).toEqual([second]);
@@ -398,8 +398,8 @@ describe('InterfacePrompts', () => {
   });
 
   it('shows a tree that never holds still after a while', async () => {
-    const { workflow, shown } = setup((s) => dniTree({ dni: String(s.dni) }));
-    const ticking = setInterval(() => workflow.rerender(), 10);
+    const { run, shown } = setup((s) => dniTree({ dni: String(s.dni) }));
+    const ticking = setInterval(() => run.rerender(), 10);
     try {
       await waitFor(() => shown[0], 500);
     } finally {
@@ -409,12 +409,10 @@ describe('InterfacePrompts', () => {
 
   it('drops the prompt when the interface closes before it is answered', async () => {
     let open = true;
-    const { workflow, prompts, shown } = setup((s) =>
-      open ? dniTree({ dni: String(s.dni) }) : null,
-    );
+    const { run, prompts, shown } = setup((s) => (open ? dniTree({ dni: String(s.dni) }) : null));
     await waitFor(() => shown[0]);
     open = false;
-    workflow.rerender();
+    run.rerender();
     expect(prompts.pending()).toEqual([]);
   });
 });

@@ -1,44 +1,41 @@
-import type { CodemodeAgentInfo, WorkflowInfo } from '@sa/shared';
+import type { CodemodeAgentInfo, RunInfo } from '@sa/shared';
 import { create } from 'zustand';
 
 /**
- * Codemode: the agents behind the progress meter and the workflows whose interfaces wait for the
+ * Codemode: the agents behind the progress meter and the runs whose interfaces wait for the
  * user ("Para ti"). Kept from `codemode.state` and its push events.
  */
 interface CodemodeState {
   agents: Record<string, CodemodeAgentInfo>;
-  workflows: Record<string, WorkflowInfo>;
-  setAll: (state: { agents: CodemodeAgentInfo[]; workflows: WorkflowInfo[] }) => void;
+  runs: Record<string, RunInfo>;
+  setAll: (state: { agents: CodemodeAgentInfo[]; runs: RunInfo[] }) => void;
   upsertAgent: (agent: CodemodeAgentInfo) => void;
-  upsertWorkflow: (workflow: WorkflowInfo) => void;
+  upsertRun: (run: RunInfo) => void;
 }
 
 export const useCodemodeStore = create<CodemodeState>()((set) => ({
   agents: {},
-  workflows: {},
-  setAll: ({ agents, workflows }) =>
+  runs: {},
+  setAll: ({ agents, runs }) =>
     set({
       agents: Object.fromEntries(agents.map((a) => [a.id, a])),
-      workflows: Object.fromEntries(workflows.map((w) => [w.id, w])),
+      runs: Object.fromEntries(runs.map((w) => [w.id, w])),
     }),
   upsertAgent: (agent) => set((s) => ({ agents: { ...s.agents, [agent.id]: agent } })),
-  upsertWorkflow: (workflow) =>
+  upsertRun: (run) =>
     set((s) => {
-      // Finished workflows with nothing on screen leave the inbox.
-      const keep =
-        workflow.ui.length > 0 ||
-        workflow.status === 'running' ||
-        workflow.status === 'waiting_user';
-      const workflows = { ...s.workflows };
-      if (keep) workflows[workflow.id] = workflow;
-      else delete workflows[workflow.id];
-      return { workflows };
+      // Finished runs with nothing on screen leave the inbox.
+      const keep = run.ui.length > 0 || run.status === 'running' || run.status === 'waiting_user';
+      const runs = { ...s.runs };
+      if (keep) runs[run.id] = run;
+      else delete runs[run.id];
+      return { runs };
     }),
 }));
 
-/** Every open interface, oldest first, with the workflow it belongs to. */
-export function openInterfaces(workflows: Record<string, WorkflowInfo>) {
-  return Object.values(workflows)
-    .flatMap((workflow) => workflow.ui.map((ui) => ({ workflow, ui })))
+/** Every open interface, oldest first, with the run it belongs to. */
+export function openInterfaces(runs: Record<string, RunInfo>) {
+  return Object.values(runs)
+    .flatMap((run) => run.ui.map((ui) => ({ run, ui })))
     .sort((a, b) => a.ui.openedAt.localeCompare(b.ui.openedAt));
 }

@@ -3,7 +3,7 @@
 A scripted, offline LLM server for tests, demos and for developing the eval harness for free
 (`tools/eval`). Rules (`when` conditions, `reply`) are matched against each request; see
 `src/scenario.ts` for the full vocabulary and `src/scenarios.ts` for the built-in `demo` (the coordinator delegates "renovar el DNI" to an agent,
-whose `codemode` workflow creates the card and asks in an interface) and `echo`.
+whose `codemode` run creates the card and asks in an interface) and `echo`.
 
 ```sh
 corepack pnpm --filter @sa/mock-llm start -- --port 8789 [--scenario file.json|demo|echo] [--litellm] [--litellm-budget 1.5]

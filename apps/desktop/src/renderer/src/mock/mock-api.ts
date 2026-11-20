@@ -98,14 +98,14 @@ export function putPlaygroundItem(item: ChatItem): void {
   putItem?.(item);
 }
 
-/** What the playground's workflows answer instead of the demo's. */
+/** What the playground's runs answer instead of the demo's. */
 export interface PlaygroundCodemode {
-  uiEvent(workflowId: string, key: string, event: UiEvent): boolean;
-  uiFailed(workflowId: string, key: string, rev: number, detail: string): boolean;
+  uiEvent(runId: string, key: string, event: UiEvent): boolean;
+  uiFailed(runId: string, key: string, rev: number, detail: string): boolean;
   stopAgent(agentId: string): void;
 }
 let playgroundCodemode: PlaygroundCodemode | undefined;
-/** The playground runs real workflows (features/playground/runner.ts). Preview only. */
+/** The playground runs real modules (features/playground/runner.ts). Preview only. */
 export function setPlaygroundCodemode(impl: PlaygroundCodemode | undefined): void {
   playgroundCodemode = impl;
 }
@@ -953,7 +953,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const claveUsernames = new Map<string, string>();
   const claveUsername = (id: string) => claveUsernames.get(id) ?? '12345678Z';
 
-  // The DNI's question is a workflow's interface, agents fill the meter.
+  // The DNI's question is a run's interface, agents fill the meter.
   const codemode = createCodemodeMock({
     lang,
     emit,
@@ -1666,22 +1666,21 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         );
       else putChat(next);
     },
-    // The playground's workflows (setPlaygroundCodemode) stand in for the demo's.
+    // The playground's runs (setPlaygroundCodemode) stand in for the demo's.
     'codemode.state': () =>
-      params.has('playground') ? { agents: [], workflows: [] } : codemode.state(),
-    'codemode.uiEvent': (workflowId, key, event) =>
-      (playgroundCodemode ?? codemode).uiEvent(workflowId, key, event),
-    'codemode.pins': (workflowId, key, addresses) =>
+      params.has('playground') ? { agents: [], runs: [] } : codemode.state(),
+    'codemode.uiEvent': (runId, key, event) =>
+      (playgroundCodemode ?? codemode).uiEvent(runId, key, event),
+    'codemode.pins': (runId, key, addresses) =>
       playgroundCodemode
         ? addresses.map((a) => DEMO_PLACES[a] ?? null)
-        : codemode.pins(workflowId, key, addresses),
+        : codemode.pins(runId, key, addresses),
     'codemode.agentLog': () => [],
     'codemode.stopAgent': (agentId) => (playgroundCodemode ?? codemode).stopAgent(agentId),
-    'codemode.uiFailed': (workflowId, key, rev, detail) =>
+    'codemode.uiFailed': (runId, key, rev, detail) =>
       playgroundCodemode
-        ? playgroundCodemode.uiFailed(workflowId, key, rev, detail)
-        : codemode.uiFailed(workflowId, key),
-    'codemode.cancelWorkflow': (workflowId) => codemode.cancelWorkflow(workflowId),
+        ? playgroundCodemode.uiFailed(runId, key, rev, detail)
+        : codemode.uiFailed(runId, key),
     'media.get': (id) => state.media.get(id) ?? null,
     'browser.show': () => {
       if (params.has('playground'))

@@ -8,7 +8,7 @@ import { createTestApp, type TestApp } from '../testing/harness';
 let app: TestApp;
 let procedureId: string;
 let agentId: string;
-/** An agent's token; `app.rpc` names the procedure it acts on, as a workflow does. */
+/** An agent's token; `app.rpc` names the procedure it acts on, as a run does. */
 let token: string;
 
 beforeEach(async () => {

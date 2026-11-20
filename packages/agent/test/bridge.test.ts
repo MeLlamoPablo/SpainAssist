@@ -40,9 +40,9 @@ describe('BridgeClient', () => {
   });
 
   it('reports unauthorized when the token is wrong', async () => {
-    bridge = await createFakeBridge({ 'workflows.list': () => ({}) });
+    bridge = await createFakeBridge({ 'run.resumable': () => ({}) });
     const client = new BridgeClient({ url: bridge.url, token: 'wrong' });
-    await expect(client.call('workflows.list', {})).rejects.toMatchObject({ code: 'unauthorized' });
+    await expect(client.call('run.resumable', {})).rejects.toMatchObject({ code: 'unauthorized' });
   });
 
   it('propagates aborts: the request is cancelled and the app sees the connection close', async () => {
@@ -66,9 +66,9 @@ describe('BridgeClient', () => {
     expect(defaultBridgeTimeoutMs('browser.fillFromUser')).toBe(0);
     expect(defaultBridgeTimeoutMs('vault.signDocument')).toBe(0);
     expect(defaultBridgeTimeoutMs('procs.update')).toBeGreaterThan(0);
-    bridge = await createFakeBridge({ 'workflows.list': hang });
+    bridge = await createFakeBridge({ 'run.resumable': hang });
     const client = new BridgeClient({ url: bridge.url, token: bridge.token });
-    await expect(client.call('workflows.list', {}, { timeoutMs: 100 })).rejects.toMatchObject({
+    await expect(client.call('run.resumable', {}, { timeoutMs: 100 })).rejects.toMatchObject({
       code: 'timeout',
     });
   });
@@ -94,8 +94,8 @@ describe('BridgeClient', () => {
     try {
       const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       const client = new BridgeClient({ url, token: 't' });
-      expect(await client.call('workflows.list', {})).toEqual({ n: 1 });
-      expect(await client.call('workflows.list', {})).toEqual({ n: 2 });
+      expect(await client.call('run.resumable', {})).toEqual({ n: 1 });
+      expect(await client.call('run.resumable', {})).toEqual({ n: 2 });
       expect(resets).toBe(1);
       client.close();
     } finally {
@@ -106,6 +106,6 @@ describe('BridgeClient', () => {
 
   it('reports network errors when the app is unreachable', async () => {
     const client = new BridgeClient({ url: 'http://127.0.0.1:9', token: 't' });
-    await expect(client.call('workflows.list', {})).rejects.toMatchObject({ code: 'network' });
+    await expect(client.call('run.resumable', {})).rejects.toMatchObject({ code: 'network' });
   });
 });

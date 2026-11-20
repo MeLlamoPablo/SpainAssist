@@ -1,4 +1,3 @@
-import { CodemodeSlug } from '@sa/shared';
 import { Type } from 'typebox';
 import {
   type AnyToolDefinition,
@@ -6,38 +5,30 @@ import {
   errorResult,
   type ToolResult,
 } from '../tools/common';
-import { type EngineOutcome, unreturnedSearches, type WorkflowEngine } from './engine';
+import { type EngineOutcome, RESULT_CHARS, type RunEngine, unreturnedSearches } from './engine';
 import type { ImageStore } from './host-ops';
 
 /** The model-facing name of the only tool of codemode agents. */
 const CODEMODE_TOOL_NAME = 'codemode';
 
-const MAX_RESULT_CHARS = 30_000;
-
 export interface CodemodeToolOptions {
-  engine: WorkflowEngine;
+  engine: RunEngine;
   images: ImageStore;
   imagesSupported: boolean;
   language: 'es' | 'en';
 }
 
 /**
- * `codemode`: runs a workflow module. Its description is short; the API's declaration and the
- * rules are in the system prompt.
+ * `codemode`: runs a module. Its description is short; the API's declaration and the rules are
+ * in the system prompt.
  */
 export function codemodeTool(options: CodemodeToolOptions): AnyToolDefinition {
   return defineSaTool({
     name: CODEMODE_TOOL_NAME,
-    label: options.language === 'es' ? 'Flujo de trabajo' : 'Workflow',
+    label: options.language === 'es' ? 'Ejecutar código' : 'Run code',
     description:
-      'Run a workflow: a JavaScript module exporting `async function main(api)` (see the Api declaration in the system prompt). The same workflow id resumes it: memoized steps and closed interfaces are reused, so fix and re-run instead of starting over. Returns what main returns, or that the workflow waits for the user (its result then comes to you as a message).',
+      'Runs a JavaScript module exporting `async function main(api)` (see the Api declaration in the system prompt). Returns what main returns, or that the run waits for the user (its result then comes to you as a message).',
     parameters: Type.Object({
-      workflow: Type.String({
-        minLength: 1,
-        maxLength: 64,
-        pattern: '^[a-z0-9][a-z0-9-]*$',
-        description: 'Stable id, descriptive: "renovar-dni-cita". Same id = resume.',
-      }),
       title: Type.Optional(
         Type.String({
           maxLength: 120,
@@ -53,14 +44,10 @@ export function codemodeTool(options: CodemodeToolOptions): AnyToolDefinition {
       source: Type.String({ minLength: 1, maxLength: 200_000, description: 'The module source.' }),
     }),
     async execute(_id, params, signal) {
-      const id = CodemodeSlug.safeParse(params.workflow);
-      if (!id.success)
-        return errorResult('workflow must be lower-case letters, digits and dashes.');
       let outcome: EngineOutcome;
       try {
         outcome = await options.engine.start(
           {
-            workflowId: id.data,
             source: params.source,
             ...(params.procedures?.length ? { procedures: params.procedures } : {}),
             ...(params.title ? { title: params.title } : {}),
@@ -70,11 +57,8 @@ export function codemodeTool(options: CodemodeToolOptions): AnyToolDefinition {
       } catch (error) {
         if (signal?.aborted) throw error;
         return errorResult(
-          `The workflow could not start: ${error instanceof Error ? error.message : String(error)}`,
-          {
-            workflowId: id.data,
-            status: 'failed',
-          },
+          `The run could not start: ${error instanceof Error ? error.message : String(error)}`,
+          { status: 'failed' },
         );
       }
       return renderOutcome(outcome, options);
@@ -82,7 +66,7 @@ export function codemodeTool(options: CodemodeToolOptions): AnyToolDefinition {
   });
 }
 
-function clip(text: string, max = MAX_RESULT_CHARS): string {
+function clip(text: string, max = RESULT_CHARS): string {
   return text.length > max
     ? `${text.slice(0, max)}\n… cut at ${max} characters: return less.`
     : text;
@@ -101,32 +85,29 @@ function renderOutcome(
   outcome: EngineOutcome,
   options: Pick<CodemodeToolOptions, 'engine' | 'images' | 'imagesSupported'>,
 ): ToolResult {
-  const head = `Workflow "${outcome.workflowId}"`;
-  const resumed = outcome.resumed
-    ? ` (resumed: ${outcome.memoReused} memoized value${outcome.memoReused === 1 ? '' : 's'} reused)`
-    : '';
-  const details = { workflowId: outcome.workflowId, status: outcome.status };
+  const details = { runId: outcome.runId, status: outcome.status };
   if (outcome.status === 'detached') {
+    // The run's id: the message with its result names it, and api.runs.cancel takes it.
     const text = outcome.openUi.length
-      ? `${head}${resumed} is waiting for the user (interface${outcome.openUi.length > 1 ? 's' : ''}: ${outcome.openUi.join(', ')}). It keeps running on its own; its result reaches you as a message when it ends. Don't wait or poll: end your turn now (or do other work).`
-      : `${head}${resumed} is still running. It continues on its own; its result reaches you as a message when it ends. Don't start it again.`;
+      ? `Run ${outcome.runId} is waiting for the user (interface${outcome.openUi.length > 1 ? 's' : ''}: ${outcome.openUi.join(', ')}). It keeps running on its own; its result reaches you as a message when it ends. Don't wait or poll: end your turn now (or do other work).`
+      : `Run ${outcome.runId} is still running. It continues on its own; its result reaches you as a message when it ends.`;
     return { content: [{ type: 'text', text }], details };
   }
   const run = outcome.outcome;
-  if (!run) return errorResult(`${head} ended without an outcome.`, details);
+  if (!run) return errorResult('The run ended without an outcome.', details);
   const parts: string[] = [];
   if (run.status === 'succeeded') {
-    parts.push(`${head} succeeded${resumed}.`);
+    parts.push('Run succeeded.');
     parts.push(
       run.value === undefined ? 'main returned nothing.' : `Result:\n${pretty(run.value)}`,
     );
   } else if (run.status === 'failed') {
-    parts.push(`${head} failed${resumed}:\n${run.error}`);
+    parts.push(`Run failed:\n${run.error}`);
     parts.push(
-      'Fix the module and run it again with the same workflow id: memoized steps and closed interfaces are kept, so it continues where it stopped.',
+      'Fix the module and run it again: memoized steps and closed interfaces are kept, so it continues where it stopped.',
     );
   } else {
-    parts.push(`${head} was cancelled: ${run.reason}`);
+    parts.push(`Run cancelled: ${run.reason}`);
   }
   if (run.logs.length) parts.push(`Logs:\n${run.logs.join('\n')}`);
   let text = clip(parts.join('\n\n'));

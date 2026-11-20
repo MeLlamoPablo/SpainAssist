@@ -1,20 +1,20 @@
-import { HostOpError, WorkflowRun, type WorkflowState } from '@sa/agent/workflow-run';
+import { CodeRun, type DurableState, HostOpError } from '@sa/agent/run';
 import {
   emptyProcedure,
   type ProcedureListItem,
   type Prompt,
   type PromptItem,
   type PromptResponse,
+  type RunUi,
   UI_FAILED,
   type UiAnswer,
   type UiEvent,
   uiTreeAnswers,
   uiTreeProblem,
-  type WorkflowUi,
 } from '@sa/shared';
 
 /**
- * Runs a playground workflow for real: the kernel in QuickJS, as the agent host does, with main's
+ * Runs a playground module for real: the kernel in QuickJS, as the agent host does, with main's
  * side played here. Durable state lives in memory (so "resume" re-runs from it, as after a
  * restart), trees are checked like main checks them, and the host's operations answer with
  * example data. Questions (`api.user.*`) become real prompt items the page shows.
@@ -31,10 +31,10 @@ export interface RunLine {
 }
 
 export interface RunView {
-  workflowId: string;
+  runId: string;
   status: RunStatus;
   /** Open interfaces, oldest first. */
-  ui: WorkflowUi[];
+  ui: RunUi[];
   /** Questions it asked (`api.user.*`), still waiting. */
   prompts: PromptItem[];
   /** Procedures it created or changed, as the user's list shows them. */
@@ -48,7 +48,7 @@ export interface RunView {
   result?: string;
   error?: string;
   /** Its durable state: memoized steps and interfaces. */
-  state: WorkflowState;
+  state: DurableState;
 }
 
 export interface RunnerHost {
@@ -69,7 +69,7 @@ export interface RunnerHost {
 const LINE_LIMIT = 300;
 
 export class PlaygroundRun {
-  private readonly run: WorkflowRun;
+  private readonly run: CodeRun;
   private readonly view: RunView;
   private readonly withdraw = new Set<() => void>();
   private readonly procedures = new Map<string, ProcedureListItem>();
@@ -78,13 +78,13 @@ export class PlaygroundRun {
   private finished = false;
 
   constructor(
-    readonly workflowId: string,
+    readonly runId: string,
     source: string,
-    state: WorkflowState,
+    state: DurableState,
     private readonly host: RunnerHost,
   ) {
     this.view = {
-      workflowId,
+      runId,
       status: 'running',
       ui: [],
       prompts: [],
@@ -93,8 +93,7 @@ export class PlaygroundRun {
       state: structuredClone(state),
       since: new Date().toISOString(),
     };
-    this.run = new WorkflowRun({
-      workflowId,
+    this.run = new CodeRun({
       source,
       state: structuredClone(state),
       procedures: [],
@@ -337,7 +336,7 @@ export class PlaygroundRun {
   private ask(op: string, args: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
     const prompt = promptOf(op, args);
     const item: PromptItem = {
-      id: `${this.workflowId}-prompt-${this.nextPrompt++}`,
+      id: `${this.runId}-prompt-${this.nextPrompt++}`,
       type: 'prompt',
       createdAt: new Date().toISOString(),
       prompt,
@@ -374,7 +373,7 @@ export class PlaygroundRun {
   }
 }
 
-/** A procedure as workflows read it: no runtime. */
+/** A procedure as runs read it: no runtime. */
 function fieldsOf(procedure: ProcedureListItem) {
   const { runtime: _runtime, ...fields } = procedure;
   return fields;

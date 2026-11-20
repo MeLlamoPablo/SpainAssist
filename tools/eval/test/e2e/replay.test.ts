@@ -110,7 +110,7 @@ e2eSuite('the replay cache on the real SpainBench', () => {
       .filter((message) => message.agent === 'assistant')
       .at(-1)?.text;
     expect(link).toContain(`sa:document/${document?.id}`);
-    // The workflow kept this run's download, not the first run's.
+    // The run kept this run's download, not the first run's.
     const downloads = observations(second.events, 'tool_start')
       .filter((event) => event.tool === 'downloads.save')
       .map((event) => (event.args as { downloadId: string }).downloadId);

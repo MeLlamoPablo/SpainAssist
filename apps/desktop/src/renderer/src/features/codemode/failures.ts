@@ -3,21 +3,21 @@ import { api } from '../../lib/api';
 
 /**
  * Interfaces the app could not draw (UiRenderer): main takes them off the screen and their
- * workflow hears it at the line that presented them, as if the interface had been refused.
+ * run hears it at the line that presented them, as if the interface had been refused.
  */
 
 const reported = new Set<string>();
 
 /** Tells main, once per tree, that an interface could not be drawn. */
-export function reportUiFailure(workflowId: string, key: string, rev: number, detail: string) {
-  const id = `${workflowId}/${key}/${rev}`;
+export function reportUiFailure(runId: string, key: string, rev: number, detail: string) {
+  const id = `${runId}/${key}/${rev}`;
   if (reported.has(id)) return;
   reported.add(id);
-  void api.invoke('codemode.uiFailed', workflowId, key, rev, detail.slice(0, 2000)).catch(() => {});
+  void api.invoke('codemode.uiFailed', runId, key, rev, detail.slice(0, 2000)).catch(() => {});
 }
 
 /**
- * What the workflow's author needs to find what failed: the component, its label (or its text,
+ * What the module's author needs to find what failed: the component, its label (or its text,
  * for a Button), their own components that rendered it (named in its handlers' ids,
  * "r.0:CitaForm/2#onChange"), and what it threw. "it" when the node is unknown.
  */

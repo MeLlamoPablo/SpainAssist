@@ -1,5 +1,5 @@
 /**
- * Codemode's interfaces as the harness sees them (docs/codemode.md, "Interfaces"): a workflow's
+ * Codemode's interfaces as the harness sees them (docs/codemode.md, "Interfaces"): a run's
  * `api.ui.present` shows the user a tree of native components, not one of the app's prompts. The
  * simulator answers prompts, so each interface it can act on becomes a `form` prompt, and its
  * answer goes back the way the renderer sends it: an `onChange` per input, then a click.
@@ -12,7 +12,7 @@
  *   texts       Form and Section titles, Text, Callout, Facts and Link texts are the message, which
  *               the rules' text matchers read as they read a prompt's.
  *
- * An interface's first render is a prompt at once: components are synchronous, so a workflow loads
+ * An interface's first render is a prompt at once: components are synchronous, so a run loads
  * its data before `present` and the first tree is the whole question (in 85 Haiku runs no first
  * render changed before it was answered). After an answer, the same interface becomes a new prompt
  * only with a newer tree (the click's effect: an error, the next step) once that tree has held
@@ -23,9 +23,9 @@
 import {
   APPOINTMENT_MORE,
   type PromptResponse,
+  type RunInfo,
   type UiElement,
   type UiNode,
-  type WorkflowInfo,
 } from '@sa/shared';
 import type { PendingPrompt } from '../../contracts';
 
@@ -66,7 +66,7 @@ export interface ReadTree {
   texts: string[];
   inputs: Control[];
   buttons: Control[];
-  /** A button is loading: the workflow is busy with the last click. */
+  /** A button is loading: the run is busy with the last click. */
   loading: boolean;
 }
 
@@ -331,11 +331,11 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stri
 // -------------------------------------------------------------------------------------------
 
 interface InterfacePort {
-  /** The workflows as the renderer gets them (`codemode.state`). */
-  workflows(): WorkflowInfo[];
+  /** The runs as the renderer gets them (`codemode.state`). */
+  runs(): RunInfo[];
   /** The renderer's `codemode.uiEvent`. */
   uiEvent(
-    workflowId: string,
+    runId: string,
     key: string,
     event: { handler: string; rev: number; value?: string | string[] | boolean },
   ): Promise<boolean>;
@@ -348,7 +348,7 @@ interface Shown {
 }
 
 interface Entry {
-  workflowId: string;
+  runId: string;
   key: string;
   seq: number;
   /** The rev the last answer acted on: only a newer tree is a new prompt. */
@@ -378,7 +378,7 @@ export interface InterfacePromptsOptions {
    */
   onUnknown?(labels: string[]): void;
   /** A render of an open interface (each rev once). */
-  onRender?(render: { workflowId: string; key: string; rev: number; actionable: boolean }): void;
+  onRender?(render: { runId: string; key: string; rev: number; actionable: boolean }): void;
   /** How long a tree after an answer must hold still to be a prompt (default 1.5 s). */
   settleMs?: number;
   /** The longest a changing tree waits to be a prompt (default 5 s). */
@@ -393,30 +393,30 @@ const POLL_MS = 50;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** The open interfaces of the run's workflows, as prompts of the simulator. */
+/** The open interfaces of the agents' runs, as prompts of the simulator. */
 export class InterfacePrompts {
   private readonly entries = new Map<string, Entry>();
   private closed = false;
 
   constructor(private readonly options: InterfacePromptsOptions) {}
 
-  /** A workflow changed (`codemode.workflow`): its interfaces may have opened, changed or closed. */
-  update(workflow: WorkflowInfo): void {
+  /** A run changed (`codemode.run`): its interfaces may have opened, changed or closed. */
+  update(run: RunInfo): void {
     if (this.closed) return;
     const open = new Set<string>();
-    for (const ui of workflow.ui) {
+    for (const ui of run.ui) {
       if (ui.status !== 'open' || !ui.tree) continue;
-      const id = `${workflow.id}\u0000${ui.key}`;
+      const id = `${run.id}\u0000${ui.key}`;
       open.add(id);
       let entry = this.entries.get(id);
       if (!entry) {
-        entry = { workflowId: workflow.id, key: ui.key, seq: 0, answeredRev: -1, answering: false };
+        entry = { runId: run.id, key: ui.key, seq: 0, answeredRev: -1, answering: false };
         this.entries.set(id, entry);
       }
       if (entry.renderedRev !== ui.rev) {
         entry.renderedRev = ui.rev;
         this.options.onRender?.({
-          workflowId: workflow.id,
+          runId: run.id,
           key: ui.key,
           rev: ui.rev,
           actionable: actionable(readTree(ui.tree)),
@@ -425,8 +425,8 @@ export class InterfacePrompts {
       this.schedule(entry);
     }
     for (const [id, entry] of this.entries) {
-      if (entry.workflowId !== workflow.id || open.has(id)) continue;
-      // Closed (answered by the workflow itself, withdrawn, the workflow ended): no longer pending.
+      if (entry.runId !== run.id || open.has(id)) continue;
+      // Closed (answered by the run itself, withdrawn, the run ended): no longer pending.
       if (entry.timer) clearTimeout(entry.timer);
       this.entries.delete(id);
     }
@@ -444,7 +444,7 @@ export class InterfacePrompts {
   }
 
   /**
-   * Whether an interface is being answered (events still going to the workflow), or is waiting
+   * Whether an interface is being answered (events still going to the run), or is waiting
    * for its tree to hold still before it is shown: the run is not quiet while a prompt is coming.
    */
   busy(): boolean {
@@ -459,10 +459,10 @@ export class InterfacePrompts {
 
   private latest(
     entry: Entry,
-  ): { rev: number; tree: UiNode; title?: string; workflow: WorkflowInfo } | undefined {
-    const workflow = this.options.port.workflows().find((w) => w.id === entry.workflowId);
-    const ui = workflow?.ui.find((u) => u.key === entry.key && u.status === 'open');
-    return workflow && ui?.tree ? { rev: ui.rev, tree: ui.tree, workflow } : undefined;
+  ): { rev: number; tree: UiNode; title?: string; run: RunInfo } | undefined {
+    const run = this.options.port.runs().find((w) => w.id === entry.runId);
+    const ui = run?.ui.find((u) => u.key === entry.key && u.status === 'open');
+    return run && ui?.tree ? { rev: ui.rev, tree: ui.tree, run } : undefined;
   }
 
   /** Shows the interface as a prompt once its tree has held still, if the user can act on it. */
@@ -506,7 +506,7 @@ export class InterfacePrompts {
       entry.shown = undefined;
       return;
     }
-    const form = interfaceForm(read, now.workflow.title ?? 'Pregunta');
+    const form = interfaceForm(read, now.run.title ?? 'Pregunta');
     if (entry.shown) {
       const was = entry.shown.form;
       if (
@@ -521,8 +521,8 @@ export class InterfacePrompts {
     }
     entry.seq += 1;
     const prompt: PendingPrompt = {
-      itemId: `wf_${entry.workflowId}:${entry.key}:${entry.seq}`,
-      // Only agents have workflows: the coordinator has plain tools.
+      itemId: `wf_${entry.runId}:${entry.key}:${entry.seq}`,
+      // Only agents have runs: the coordinator has plain tools.
       agent: 'procedure',
       kind: 'form',
       title: form.title,
@@ -561,7 +561,7 @@ export class InterfacePrompts {
         }
         const next = eventValue(control, value);
         if (next === undefined || same(next, currentValue(control))) continue;
-        await this.options.port.uiEvent(entry.workflowId, entry.key, {
+        await this.options.port.uiEvent(entry.runId, entry.key, {
           handler: control.handler,
           rev: now.rev,
           value: next,
@@ -610,14 +610,14 @@ export class InterfacePrompts {
       }
       entry.answeredRev = now.rev;
       entry.answeredTree = JSON.stringify(now.tree);
-      await this.options.port.uiEvent(entry.workflowId, entry.key, {
+      await this.options.port.uiEvent(entry.runId, entry.key, {
         handler: button.handler,
         rev: now.rev,
       });
     } finally {
       entry.shown = undefined;
       entry.answering = false;
-      if (this.entries.get(`${entry.workflowId}\u0000${entry.key}`) === entry) this.schedule(entry);
+      if (this.entries.get(`${entry.runId}\u0000${entry.key}`) === entry) this.schedule(entry);
     }
   }
 

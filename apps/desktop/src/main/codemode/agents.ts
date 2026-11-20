@@ -43,13 +43,13 @@ export type AgentRecord = z.infer<typeof AgentRecord>;
 
 interface Runtime {
   running: boolean;
-  /** One of its workflows runs on its own, after its codemode call returned: it still works. */
-  workflowRunning: boolean;
+  /** One of its runs goes on on its own, after its codemode call returned: it still works. */
+  codemodeRunning: boolean;
   waitingUser: boolean;
   /** A prompt it showed waits for the user (it may still be running). */
   asking: boolean;
   now?: string;
-  /** When its current stretch of work (runs and the workflows between them) started. */
+  /** When its current stretch of work (turns and the runs between them) started. */
   since?: string;
   error?: string;
 }
@@ -211,7 +211,7 @@ export class CodemodeAgents {
   private rt(id: string): Runtime {
     let r = this.runtime.get(id);
     if (!r) {
-      r = { running: false, workflowRunning: false, waitingUser: false, asking: false };
+      r = { running: false, codemodeRunning: false, waitingUser: false, asking: false };
       this.runtime.set(id, r);
     }
     return r;
@@ -227,17 +227,17 @@ export class CodemodeAgents {
     this.emit(id);
   }
 
-  /** One of its workflows runs, or none does: the meter shows it working meanwhile. */
-  setWorkflowRunning(id: string, running: boolean): void {
+  /** One of its runs goes on, or none does: the meter shows it working meanwhile. */
+  setCodemodeRunning(id: string, running: boolean): void {
     const r = this.rt(id);
-    if (r.workflowRunning === running) return;
+    if (r.codemodeRunning === running) return;
     const wasBusy = busy(r);
-    r.workflowRunning = running;
+    r.codemodeRunning = running;
     this.updateSince(r, wasBusy);
     this.emit(id);
   }
 
-  /** The timer runs from the start of the work until neither a run nor a workflow goes on. */
+  /** The timer runs from the start of the work until neither a turn nor a run goes on. */
   private updateSince(r: Runtime, wasBusy: boolean): void {
     if (!busy(r)) delete r.since;
     else if (!wasBusy) r.since = this.now();
@@ -411,13 +411,13 @@ export class CodemodeAgents {
   }
 }
 
-/** It works: a run goes on, or one of its workflows runs on its own. */
+/** It works: a turn goes on, or one of its runs goes on on its own. */
 function busy(r: Runtime): boolean {
-  return r.running || r.workflowRunning;
+  return r.running || r.codemodeRunning;
 }
 
 /**
- * A tool call in a few words for the meter: the workflow's title. Never the tool's name
+ * A tool call in a few words for the meter: the run's title. Never the tool's name
  * ("codemode"): without a title the meter says it works.
  */
 function activityLabel(now: NonNullable<ProcedureRuntime['now']>): string | undefined {

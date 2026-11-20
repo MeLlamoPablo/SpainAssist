@@ -54,8 +54,8 @@ flowchart TB
     user: with a few plain tools it starts and messages background agents, reads the procedures'
     cards and relays the agents' reports ([codemode.md](codemode.md)).
   - **Background agents**: independent of procedures, each with one tool, `codemode`, that runs
-    resumable JavaScript workflows (QuickJS, in the agent's process) whose durable state main
-    keeps. They research, browse, ask the user and create the procedures, which are durable
+    a JavaScript module (QuickJS, in the agent's process) with the agent's durable state, which
+    main keeps. They research, browse, ask the user and create the procedures, which are durable
     records any agent may update (with versions), plus a private working context.
 - **Browser**: the bundled Chromium (Chrome for Testing), with an isolated context per procedure,
   headless (`browser/routed.ts`). When the user needs to help (CAPTCHA, QR, manual step), "Abrir
@@ -109,12 +109,12 @@ once it knows what the user needs. The coordinator reads the cards instead of as
 passes on what the user says, and stops an agent only when the user asks. When an agent's run
 ends, the coordinator gets a short report and tells the user in a sentence or two.
 
-### Workflows
-An agent writes a module (`export async function main(api)`); main
-stores its memoized steps and the state of the interfaces it shows, the agent's host executes it
-and long-polls the user's events. The agent's turn ends while the user answers; the workflow
-continues by itself and its outcome reaches the agent as a message. After a restart, an
-interface stays on screen and the workflow resumes from its state when the user acts on it. The
+### Runs
+An agent writes a module (`export async function main(api)`); main stores its memoized steps and
+the state of the interfaces it shows (per agent, shared by all its runs), the agent's host
+executes it and long-polls the user's events. The agent's turn ends while the user answers; the
+run continues by itself and its outcome reaches the agent as a message. After a restart, an
+interface stays on screen and the run resumes from the agent's state when the user acts on it. The
 protocol is model-checked (`packages/agent/test/codemode-protocol.test.ts`). Details, decisions and
 measurements: [codemode.md](codemode.md).
 
@@ -124,18 +124,18 @@ An agent researches first, then plans, then asks for what's missing, then acts.
 - ChatGPT users get `web_research` with OpenAI's hosted web search, on their plan.
 - BYOK and custom endpoints get Exa search (free, or with their own Exa key).
 
-Its workflows can also read pages (`api.fetchUrl`), search the BOE, browse and search community
+Its runs can also read pages (`api.fetchUrl`), search the BOE, browse and search community
 learnings. It records status, steps, requirements, sources and the next action on the card.
 
 ### Asking the user
-Workflows ask in interfaces they render with the app's own components (forms, choices, maps,
+Runs ask in interfaces they render with the app's own components (forms, choices, maps,
 appointment slots, document pickers), plus native prompts for confirmations, manual actions,
 credential requests and phone calls. All of them show above the procedure cards ("Para ti"), not
 tied to any procedure; what agents are doing shows in a meter apart from the cards
 ([codemode.md](codemode.md), "UI redesign"). Questions never block the chat. After a restart an
-interface comes back with what the user typed and its workflow resumes from its state; a pending
-native prompt is cancelled (its workflow hears it was interrupted).
-- **Map choices**: the workflow gives addresses, main geocodes them through the maps server, and
+interface comes back with what the user typed and its run resumes from its state; a pending
+native prompt is cancelled (its run hears it was interrupted).
+- **Map choices**: the run gives addresses, main geocodes them through the maps server, and
   the user picks one. Mapbox results are never stored or sent to the agent: only the chosen value
   goes back.
 - **Phone calls**: the prompt can record the call and transcribe it through the gateway. Audio is
@@ -325,12 +325,12 @@ or rating learnings (searching still works).
   registers `chat.rewind` but refuses it unless `appInfo.isDev`). "Rebobinar" on a user message
   stops the coordinator and cuts transcript.json and its pi session back to before that message
   (`dev/rewind.ts`), then puts the message in the composer. Chat state only: procedures,
-  documents, background agents and workflows stay, and their later reports land after the cut.
+  documents, background agents and runs stay, and their later reports land after the cut.
 - **Headless app and eval hooks.** `createHeadlessApp` (`@sa/desktop/headless`) runs the app's
   logic without a window or the internet. `HostHooks` let a harness stub the agent host's network.
   The SpainBench eval suite builds on both (`docs/EVAL.md`). Neither ships in the packaged app.
 - **Agent playground.** The web preview's `?playground=1` (`corepack pnpm playground`) runs example
-  workflows in the real kernel (QuickJS in the page, main's side played by
+  modules in the real kernel (QuickJS in the page, main's side played by
   `features/playground/runner.ts`): their interfaces in the real "Para ti" boxes, editable source,
   a log of host calls, durable state, and a resume that re-runs from it. It also shows the
   questions the host still asks (`api.user.*`, certificates, the DNI), procedure rows, the agent
@@ -352,8 +352,8 @@ or rating learnings (searching still works).
   it may only call its agents and read the cards (`codemodeMayCall`). Background agents can't
   start or message other agents.
 - **Untrusted web content.** Agents have no shell or file tools, domain checks, and confirmations
-  for irreversible actions. Model-written workflows run in a sandboxed QuickJS in the agent's
+  for irreversible actions. Model-written modules run in a sandboxed QuickJS in the agent's
   process, with network access only through the host's checks (`api.fetchUrl`, `api.fetch`);
   their page code runs only in the page.
-- **Known gaps.** Procedure metadata, transcripts, screenshots, pi session files, workflow records
+- **Known gaps.** Procedure metadata, transcripts, screenshots, pi session files, agents' state
   and development captures are private local files but not encrypted.

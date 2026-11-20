@@ -16,12 +16,12 @@ import {
   USER_AGENT,
 } from '../research/fetch';
 import type { AnyToolDefinition } from '../tools/common';
-import { type HostOp, HostOpError } from './workflow-run';
+import { type HostOp, HostOpError } from './run';
 
 /**
- * The codemode operations of the agent host: what each `api.*` call of a workflow does. Most go
+ * The codemode operations of the agent host: what each `api.*` call of a run does. Most go
  * to the app over the bridge (the app enforces every policy again: roles, domains, approvals);
- * research and public HTTP run here, as the tools did. Results are JSON for the workflow, never
+ * research and public HTTP run here, as the tools did. Results are JSON for the module, never
  * prose to parse.
  */
 
@@ -47,9 +47,7 @@ export function createImageStore(max = 20): ImageStore {
 export interface HostOpsDeps {
   bridge: BridgeTransport;
   images: ImageStore;
-  /** The current run's id (ops scoped to the workflow). */
-  runId(): string;
-  /** The workflow's procedures, primary first (prompts and downloads belong to the primary). */
+  /** The run's procedures, the one touched last first (prompts and documents go to it). */
   procedures(): string[];
   /** Web research as a tool (web_research, or exa_search for BYOK), when configured. */
   research?: { kind: 'web_research' | 'exa'; search: AnyToolDefinition };
@@ -415,7 +413,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
     throw new HostOpError('bad_request', `Cannot read ${doc.mimeType} files.`, 'not_started');
   }
 
-  /** A PDF page's image for the workflow, with its size (fill's points are its pixels). */
+  /** A PDF page's image for the module, with its size (fill's points are its pixels). */
   function pageImage(page: { png?: Uint8Array; width?: number; height?: number }) {
     return {
       ...deps.images.put('image/png', Buffer.from(page.png ?? []).toString('base64')),
@@ -486,7 +484,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
       },
       { signal, procedureId: primary() },
     );
-    // The pages written on, to look at (a workflow shows at most four images).
+    // The pages written on, to look at (a run shows at most four images).
     const copy = await bridge.call('vault.document', { documentId: filled.documentId }, { signal });
     const bytes = Buffer.from(copy.dataBase64, 'base64');
     const pages = [];
@@ -585,11 +583,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
   const ops: Record<string, (a: Record<string, unknown>, signal: AbortSignal) => Promise<unknown>> =
     {
       setStatus: async (a, signal) => {
-        await bridge.call(
-          'workflow.setStatus',
-          { status: str(a.status, 'status', 120) },
-          { signal },
-        );
+        await bridge.call('run.setStatus', { status: str(a.status, 'status', 120) }, { signal });
       },
       'procedures.list': async (a, signal) =>
         (await bridge.call('procs.list', { includeArchived: !!a.includeArchived }, { signal }))
@@ -597,11 +591,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
       'procedures.get': (a, signal) =>
         bridge.call('procs.get', { id: str(a.id, 'id', 64) }, { signal }),
       'procedures.getOrCreate': (a, signal) =>
-        bridge.call(
-          'procs.getOrCreate',
-          { ...(a as { id: string; title: string }), runId: deps.runId() },
-          { signal },
-        ),
+        bridge.call('procs.getOrCreate', a as { id: string; title: string }, { signal }),
       'procedures.update': (a, signal) =>
         bridge.call(
           'procs.update',
@@ -622,15 +612,11 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
         );
         return undefined;
       },
-      'workflows.list': async (_a, signal) =>
-        (await bridge.call('workflows.list', {}, { signal })).workflows,
-      'workflows.get': (a, signal) =>
-        bridge.call('workflows.get', { id: str(a.id, 'id', 64) }, { signal }),
-      'workflows.cancel': async (a, signal) => {
+      'runs.cancel': async (a, signal) => {
         await bridge.call(
-          'workflows.cancel',
+          'run.cancel',
           {
-            id: str(a.id, 'id', 64),
+            runId: str(a.runId, 'runId', 64),
             ...(typeof a.reason === 'string' ? { reason: a.reason } : {}),
           },
           { signal },

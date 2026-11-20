@@ -139,12 +139,12 @@ export class Scripted {
 }
 
 // ---------------------------------------------------------------------------------------------
-// A stand-in for the agent's workflows on SpainBench's Seguridad Social site
+// A stand-in for the agent's runs on SpainBench's Seguridad Social site
 // ---------------------------------------------------------------------------------------------
 
 const DOCUMENT = '6f1d8c0e-3c52-4a52-9f0e-5a8d0d1c7a11';
 
-/** The logged-in page as the first run of the workflow returns it: URL, title, snapshot. */
+/** The logged-in page as the first run returns it: URL, title, snapshot. */
 function loggedInPage(extra: readonly string[], titleExtra: string): string {
   return [
     'URL: https://portal.seg-social.gob.es/wps/myportal/importass/importass/tramites/datosvidalaboral',
@@ -166,22 +166,22 @@ export interface SiteOptions {
   document?: string;
   /** Nothing is saved: an interface that asks for the method waits for the user. */
   empty?: boolean;
-  /** The site never shows what the way needs: the workflow fails. */
+  /** The site never shows what the way needs: the run fails. */
   frozen?: boolean;
 }
 
-const succeeded = (id: string, value: string) => `Workflow "${id}" succeeded.\n\nResult:\n${value}`;
+const succeeded = (value: string) => `Run succeeded.\n\nResult:\n${value}`;
 
 /**
- * The workflows' results as the model reads them, by what the workflow does (its source): the
- * first run of `vida-laboral` returns the logged-in page, the second the saved report; a workflow
- * that asks the user waits and its result comes as a message. Remembers every workflow run.
+ * The runs' results as the model reads them, by what the module does (its source): the first
+ * run returns the logged-in page, the second the saved report; a run that asks the user waits
+ * and its result comes as a message. Remembers every run.
  */
 export class Site {
   readonly calls: Call[] = [];
-  /** What workflows fetched. */
+  /** What runs fetched. */
   readonly fetched: string[] = [];
-  /** The pages that are not on the way that the workflows visited. */
+  /** The pages that are not on the way that the runs visited. */
   wrongTurns = 0;
   done = false;
   /** A result that comes as a message once the agent ended its turn. */
@@ -191,20 +191,20 @@ export class Site {
 
   answer(call: Call): string {
     this.calls.push(call);
-    const id = String(call.args.workflow);
+    const id = `run_${this.calls.length}`;
     const source = String(call.args.source);
     if (call.name !== 'codemode') return `(no such tool in the stand-in: ${call.name})`;
     if (source.includes('loginClave')) {
       if (this.options.frozen) {
-        return `Workflow "${id}" failed:\nTimeoutError: getByRole('button', { name: 'Rechazar todas' }) not found`;
+        return `Run failed:\nTimeoutError: getByRole('button', { name: 'Rechazar todas' }) not found`;
       }
       if (source.includes('sede.seg-social.gob.es')) this.wrongTurns += 3;
       const page = loggedInPage(this.options.extra ?? [], this.options.titleExtra ?? '');
       if (this.options.empty && source.includes('MethodForm')) {
-        this.delivery = `[Workflow "${id}" (Sacar tu vida laboral) succeeded]\nResult:\n${page}`;
-        return `Workflow "${id}" is waiting for the user (interface: metodo). It keeps running on its own; its result reaches you as a message when it ends. Don't wait or poll: end your turn now (or do other work).`;
+        this.delivery = `[Run ${id} (Sacar tu vida laboral) succeeded]\nResult:\n${page}`;
+        return `Run ${id} is waiting for the user (interface: metodo). It keeps running on its own; its result reaches you as a message when it ends. Don't wait or poll: end your turn now (or do other work).`;
       }
-      return succeeded(id, page);
+      return succeeded(page);
     }
     if (source.includes('saveDownload')) {
       if (source.includes('Informar error')) this.wrongTurns += 1;
@@ -212,14 +212,14 @@ export class Site {
       const read = source.includes('api.documents.read')
         ? `\n\n${this.options.document ?? 'INFORME DE VIDA LABORAL'}`
         : '';
-      return succeeded(id, `Guardado en tus documentos: ${DOCUMENT}${read}`);
+      return succeeded(`Guardado en tus documentos: ${DOCUMENT}${read}`);
     }
     const fetched = /fetchUrl\('([^']+)'\)/.exec(source)?.[1];
     if (fetched) {
       this.fetched.push(fetched);
-      return succeeded(id, 'ok');
+      return succeeded('ok');
     }
-    return succeeded(id, 'main returned nothing.');
+    return succeeded('main returned nothing.');
   }
 
   /** The result the agent waits for, once: a message to it. */

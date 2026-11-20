@@ -226,7 +226,7 @@ const STRINGS = {
     en: '{host} wants to know which certificate you will sign with. Carry on on your phone: nothing is signed yet.',
   },
 
-  /** Codemode: an interface a workflow showed is no longer open. */
+  /** Codemode: an interface a run showed is no longer open. */
   codemodeUiClosed: {
     es: 'Esta pregunta ya no está abierta.',
     en: 'This question is no longer open.',

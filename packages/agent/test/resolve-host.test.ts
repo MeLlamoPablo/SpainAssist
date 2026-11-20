@@ -177,7 +177,6 @@ describe('resolveHost in the host operations', () => {
     const call = createHostOps({
       bridge: { call: async () => ({}) as never },
       images: createImageStore(),
-      runId: () => 'run_1',
       procedures: () => [],
       imagesSupported: true,
       fetchImpl: rec.fetchImpl,
