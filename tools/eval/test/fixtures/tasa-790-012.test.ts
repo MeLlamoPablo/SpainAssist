@@ -265,3 +265,31 @@ describe('told-unpaid', () => {
     expect(await matched(ruleOf('told-unpaid'), done)).toBe(false);
   });
 });
+
+describe('nie-asked-once', () => {
+  const nieForm = (itemId: string): Partial<PendingPrompt> => ({
+    itemId,
+    kind: 'form',
+    title: 'Datos de tu pareja',
+    fields: [{ key: 'nie', type: 'text', label: 'NIE de tu pareja' }],
+  });
+
+  it('counts an interface shown again (its re-show counter) as one question', async () => {
+    const run = new FakeRun();
+    run.push(promptShown(nieForm('wf_pagar-tasa-790-012:datos-y-pago:1')));
+    run.push(promptShown(nieForm('wf_pagar-tasa-790-012:datos-y-pago:2')));
+    run.push(promptShown(nieForm('wf_pagar-tasa-790-012:datos-y-pago:3')));
+    expect(await matched(ruleOf('nie-asked-once'), run)).toBe(false);
+  });
+
+  it('matches two different forms asking for it', async () => {
+    const run = new FakeRun();
+    run.push(promptShown(nieForm('wf_pagar-tasa-790-012:datos-y-pago:1')));
+    run.push(promptShown(nieForm('wf_pagar-tasa-790-012:confirmar-datos:1')));
+    expect(await matched(ruleOf('nie-asked-once'), run)).toBe(true);
+    const plain = new FakeRun();
+    plain.push(promptShown(nieForm('q_2e01f786bc507462')));
+    plain.push(promptShown(nieForm('q_6ddbfdb6797ff991')));
+    expect(await matched(ruleOf('nie-asked-once'), plain)).toBe(true);
+  });
+});

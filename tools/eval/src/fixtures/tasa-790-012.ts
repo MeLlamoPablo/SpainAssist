@@ -299,7 +299,9 @@ const nieAskedOnce = (): Rule => ({
           (f) =>
             f.type !== 'secret' && (NIE_FIELD.test(f.label) || /^(?:partner)?nie$/i.test(f.key)),
         );
-        if (asksNie) forms.add(o.prompt.itemId);
+        // An interface shown again (`wf_<run>:<key>:<n>`, e.g. it gained an IBAN field after a
+        // choice) is the same question: its re-show counter is not a second ask.
+        if (asksNie) forms.add(o.prompt.itemId.replace(/^(wf_.+:.+):\d+$/, '$1'));
       }
       return forms.size >= 2;
     },
