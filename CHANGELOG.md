@@ -28,6 +28,11 @@ Installed apps update to it. What changed since 0.4.0.
 - **Smaller fixes:**
   - An agent's form shows a follow-up field only for the answer that needs it. (77f4f63)
   - Date fields show their calendar icon in dark mode. (e35468b)
+  - Dates typed day first (20/11/2026) are saved to Mis datos, and an agent hears when an answer
+    of yours couldn't be saved. (533f513)
+  - Agents no longer mix up the documents and pages they look at: each image comes with a
+    caption. (41f7760)
+  - An agent that tries to use a page before opening one is told how to open it. (16667b2)
 
 ### Agents and costs
 
@@ -37,8 +42,11 @@ Installed apps update to it. What changed since 0.4.0.
 ### Maintenance
 
 - Dependencies upgraded up to medium risk: Electron 45.2 (Chromium 156), pi 1.5. (ef4ce35)
-- SpainBench: EX-15 form-filling scenarios and slim browser snapshots. (431b645, 78312e1,
-  36e6a96, 0c59796, 3707ba9)
+- SpainBench: EX-15 form-filling scenarios, slim browser snapshots, and sturdier runs (the
+  answerer retries a failed model call). (431b645, 78312e1, 36e6a96, 0c59796, 3707ba9, a9cc470,
+  e0cf0cb, 12ab17e, 0032559)
+- CI is green again: the phone's test vectors were regenerated after the signature changes.
+  (d4c4026, e2dd04a)
 - Version 0.5.0 everywhere except the phone app.
 
 ## 0.4.0 (2026-11-14)
