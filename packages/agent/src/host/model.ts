@@ -29,6 +29,8 @@ function commonPrefixLength(a: string, b: string): number {
 /**
  * Template for a model id the catalog does not list: the sibling sharing the longest id prefix
  * (gpt-6.2-sol → gpt-6.1-sol, vendor/model-5 → vendor/model-4), else the provider's default.
+ * A default the catalog does not list yet (the models file may name a newer one) stands for its
+ * own closest sibling.
  */
 export function templateFor(
   provider: string,
@@ -36,7 +38,19 @@ export function templateFor(
   id: string,
 ): Model<Api> | undefined {
   if (models.length === 0) return undefined;
-  const preferred = models.find((m) => m.id === TEMPLATE_MODEL_BY_PROVIDER[provider]);
+  const defaultId = TEMPLATE_MODEL_BY_PROVIDER[provider];
+  const preferred =
+    models.find((m) => m.id === defaultId) ??
+    (defaultId ? closestSibling(models, defaultId) : undefined);
+  return closestSibling(models, id, preferred) ?? preferred ?? models[0];
+}
+
+/** The model sharing the longest id prefix with `id` (ties go to `preferred`), if any is long. */
+function closestSibling(
+  models: readonly Model<Api>[],
+  id: string,
+  preferred?: Model<Api>,
+): Model<Api> | undefined {
   let best: Model<Api> | undefined;
   let bestLength = 5; // shorter shared prefixes ("gpt-", "meta-") say little
   for (const model of models) {
@@ -46,7 +60,7 @@ export function templateFor(
       bestLength = length;
     }
   }
-  return best ?? preferred ?? models[0];
+  return best;
 }
 
 function litellmUpstream(id: string): string {

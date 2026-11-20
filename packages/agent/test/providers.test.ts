@@ -668,7 +668,9 @@ describe('vouchers, credit and models', () => {
 describe('provider catalogue', () => {
   it('lists the models of one provider, including the legacy Codex one', () => {
     const codex = listProviderModels('openai-codex');
-    expect(codex.map((m) => m.id)).toContain(BUNDLED_MODEL_LISTS.chatgpt.procedures[0]?.id);
+    // The list may lead with a model newer than pi's catalog: it then clones a listed sibling.
+    const ids = codex.map((m) => m.id);
+    expect(BUNDLED_MODEL_LISTS.chatgpt.procedures.some((m) => ids.includes(m.id))).toBe(true);
     expect(new Set(codex.map((m) => m.provider))).toEqual(new Set(['openai-codex']));
     expect(listProviderModels('no-such-provider')).toEqual([]);
   });
