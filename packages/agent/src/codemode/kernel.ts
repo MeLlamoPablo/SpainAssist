@@ -728,9 +728,13 @@ export const KERNEL = String.raw`
     parallelize: parallelize,
     setStatus: function (status) { return call('setStatus', { status: String(status) }); },
     output: {
-      image: function (image) {
+      // The label is the image's caption in the tool result: images shown from parallel
+      // callbacks arrive in the order they finish.
+      image: function (image, label) {
         if (!image || typeof image.imageId !== 'string') throw new TypeError('output.image needs an image from page.screenshot() or documents.read().');
-        images.push(image.imageId);
+        var entry = { imageId: image.imageId };
+        if (label !== undefined && label !== null && String(label).trim()) entry.label = String(label).trim().slice(0, 200);
+        images.push(entry);
       },
     },
     procedures: procedures,

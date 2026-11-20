@@ -275,8 +275,8 @@ function apiInterface(o: DeclarationOptions): string {
     '  parallelize<T>(tasks: (Promise<T> | (() => Promise<T>))[], o?: { concurrency?: number }): Promise<({ status: "fulfilled"; value: T } | { status: "rejected"; reason: any })[]>;',
     '  /** The one line the user sees about you while you work: what you are doing now, as an ongoing action ("Analizando la página de Correos…"). */',
     '  setStatus(status: string): Promise<void>;',
-    '  /** Attach an image to what you read back. */',
-    '  output: { image(image: Image): void };',
+    '  /** Attach an image to what you read back (at most 4 a run), after a caption: label it with what it shows ("Contrato, página 2"), since images come in the order the calls ran. */',
+    '  output: { image(image: Image, label?: string): void };',
   ];
   if (o.search)
     lines.push(

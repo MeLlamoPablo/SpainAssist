@@ -291,3 +291,92 @@ describe('unreturnedSearches', () => {
     expect(shown.length).toBeLessThan(4_200);
   });
 });
+
+describe('output.image', () => {
+  /** Saved photos the module reads; the first ones answer last, like the eval's parallel reads. */
+  function setup() {
+    const docs = ['doc_a', 'doc_b', 'doc_c', 'doc_d', 'doc_e', 'doc_f'];
+    const bridge: BridgeTransport = {
+      async call<M extends BridgeMethod>(method: M, params: unknown, options?: BridgeCallOptions) {
+        const answer = async (): Promise<unknown> => {
+          switch (method) {
+            case 'run.begin':
+              return { runId: 'run_1', procedures: [], state: { memo: {}, ui: {} } };
+            case 'vault.document': {
+              const id = (params as { documentId: string }).documentId;
+              await sleep((docs.length - docs.indexOf(id)) * 15);
+              return {
+                id,
+                name: `Foto ${id}.jpg`,
+                mimeType: 'image/jpeg',
+                dataBase64: Buffer.from(id).toString('base64'),
+              };
+            }
+            case 'run.events':
+              await new Promise((resolve) =>
+                options?.signal?.addEventListener('abort', resolve, { once: true }),
+              );
+              return { events: [], ended: true };
+            default:
+              return {};
+          }
+        };
+        return (await answer()) as never;
+      },
+    };
+    const images = createImageStore();
+    const engine = new RunEngine({ bridge, images, imagesSupported: true, detachAfterMs: 10_000 });
+    const tool = codemodeTool({ engine, images, imagesSupported: true, language: 'es' });
+    return async (body: string) => {
+      const result = await tool.execute(
+        'call',
+        { source: `export async function main(api) {\n${body}\n}` },
+        undefined,
+        undefined,
+        undefined as never,
+      );
+      // After the run's text: captions as they are, images as <their bytes>.
+      return (
+        result.content as ({ type: 'text'; text: string } | { type: 'image'; data: string })[]
+      )
+        .slice(1)
+        .map((c) => (c.type === 'text' ? c.text : `<${Buffer.from(c.data, 'base64').toString()}>`));
+    };
+  }
+
+  it('captions each image with its label and document, in the order they were shown', async () => {
+    const run = setup();
+    const shown = await run(`
+  await Promise.all(['doc_a', 'doc_b', 'doc_c'].map(async (id, i) => {
+    const r = await api.documents.read(id);
+    api.output.image(r.image, i === 1 ? undefined : 'Foto ' + (i + 1));
+  }));`);
+    // doc_c finished first: the captions, not the order, say which image is which.
+    expect(shown).toEqual([
+      'Image 1: Foto 3 — document "Foto doc_c.jpg" (id doc_c)',
+      '<doc_c>',
+      'Image 2: document "Foto doc_b.jpg" (id doc_b)',
+      '<doc_b>',
+      'Image 3: Foto 1 — document "Foto doc_a.jpg" (id doc_a)',
+      '<doc_a>',
+    ]);
+  });
+
+  it('names the images past the limit instead of dropping them', async () => {
+    const run = setup();
+    const shown = await run(`
+  for (const id of ['doc_a', 'doc_b', 'doc_c', 'doc_d', 'doc_e', 'doc_f'])
+    api.output.image((await api.documents.read(id)).image, id);`);
+    expect(shown.filter((s) => s.startsWith('<'))).toEqual([
+      '<doc_a>',
+      '<doc_b>',
+      '<doc_c>',
+      '<doc_d>',
+    ]);
+    expect(shown.at(-1)).toBe(
+      'Not shown (at most 4 images per run; show the rest in another run):\n' +
+        'Image 5: doc_e — document "Foto doc_e.jpg" (id doc_e)\n' +
+        'Image 6: doc_f — document "Foto doc_f.jpg" (id doc_f)',
+    );
+  });
+});

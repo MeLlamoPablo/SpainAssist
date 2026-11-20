@@ -25,18 +25,25 @@ import { type HostOp, HostOpError } from './run';
  * prose to parse.
  */
 
+/** An image a run made, and where it came from (its caption when the module gives no label). */
+interface StoredImage {
+  mimeType: string;
+  dataBase64: string;
+  source?: string;
+}
+
 export interface ImageStore {
-  put(mimeType: string, dataBase64: string): { imageId: string; mimeType: string };
-  get(imageId: string): { mimeType: string; dataBase64: string } | undefined;
+  put(mimeType: string, dataBase64: string, source?: string): { imageId: string; mimeType: string };
+  get(imageId: string): StoredImage | undefined;
 }
 
 export function createImageStore(max = 20): ImageStore {
-  const images = new Map<string, { mimeType: string; dataBase64: string }>();
+  const images = new Map<string, StoredImage>();
   let n = 0;
   return {
-    put(mimeType, dataBase64) {
+    put(mimeType, dataBase64, source) {
       const imageId = `img_${++n}`;
-      images.set(imageId, { mimeType, dataBase64 });
+      images.set(imageId, { mimeType, dataBase64, ...(source ? { source } : {}) });
       while (images.size > max) images.delete(images.keys().next().value as string);
       return { imageId, mimeType };
     },
@@ -303,7 +310,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
             'not_started',
           );
         const shot = await bridge.call('browser.screenshot', { fullPage: !!a.fullPage }, opts);
-        return deps.images.put(shot.mimeType, shot.dataBase64);
+        return deps.images.put(shot.mimeType, shot.dataBase64, 'screenshot of the browser page');
       }
       case 'tabs': {
         const action = a.action === 'select' || a.action === 'close' ? a.action : 'list';
@@ -387,7 +394,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           ...base,
           pages: page.pages,
           text: page.text,
-          ...(page.png ? { image: pageImage(page) } : {}),
+          ...(page.png ? { image: pageImage(page, documentSource(doc, Number(a.page))) } : {}),
         };
       }
       const pdf = await pdfToText(bytes);
@@ -406,7 +413,10 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
           'This model cannot see images: ask the user for what you need.',
           'not_started',
         );
-      return { ...base, image: deps.images.put(doc.mimeType, doc.dataBase64) };
+      return {
+        ...base,
+        image: deps.images.put(doc.mimeType, doc.dataBase64, documentSource(doc)),
+      };
     }
     if (doc.mimeType.startsWith('text/') || doc.mimeType === 'application/json')
       return { ...base, text: bytes.toString('utf8').slice(0, 100_000) };
@@ -414,12 +424,17 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
   }
 
   /** A PDF page's image for the module, with its size (fill's points are its pixels). */
-  function pageImage(page: { png?: Uint8Array; width?: number; height?: number }) {
+  function pageImage(page: { png?: Uint8Array; width?: number; height?: number }, source: string) {
     return {
-      ...deps.images.put('image/png', Buffer.from(page.png ?? []).toString('base64')),
+      ...deps.images.put('image/png', Buffer.from(page.png ?? []).toString('base64'), source),
       width: page.width,
       height: page.height,
     };
+  }
+
+  /** Which document (and page) an image shows, for its caption. */
+  function documentSource(doc: { id: string; name: string }, page?: number): string {
+    return `${page ? `page ${page} of ` : ''}document "${doc.name}" (id ${doc.id})`;
   }
 
   async function fillDocument(a: Record<string, unknown>, signal: AbortSignal) {
@@ -489,7 +504,13 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
     const bytes = Buffer.from(copy.dataBase64, 'base64');
     const pages = [];
     for (const n of filled.pages.slice(0, 4))
-      pages.push({ page: n, image: pageImage(await pdfPage(bytes, n, { image: true })) });
+      pages.push({
+        page: n,
+        image: pageImage(
+          await pdfPage(bytes, n, { image: true }),
+          documentSource({ id: filled.documentId, name: filled.name }, n),
+        ),
+      });
     return {
       documentId: filled.documentId,
       name: filled.name,

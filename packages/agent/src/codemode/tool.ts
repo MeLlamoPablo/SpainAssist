@@ -7,6 +7,7 @@ import {
 } from '../tools/common';
 import { type EngineOutcome, RESULT_CHARS, type RunEngine, unreturnedSearches } from './engine';
 import type { ImageStore } from './host-ops';
+import type { OutputImage } from './run';
 
 /** The model-facing name of the only tool of codemode agents. */
 const CODEMODE_TOOL_NAME = 'codemode';
@@ -118,10 +119,37 @@ function renderOutcome(
     options.engine.markResearched();
   }
   const content: ToolResult['content'] = [{ type: 'text', text }];
-  if (options.imagesSupported)
-    for (const id of run.images.slice(0, 4)) {
-      const image = options.images.get(id);
-      if (image) content.push({ type: 'image', data: image.dataBase64, mimeType: image.mimeType });
-    }
+  if (options.imagesSupported) content.push(...imageContent(run.images, options.images));
   return { content, details, ...(run.status === 'failed' ? { isError: true } : {}) };
+}
+
+/** Images one result shows at most. */
+const MAX_IMAGES = 4;
+
+/**
+ * The images main showed, each after a caption (its label, and what it shows): they come in
+ * the order output.image ran, which for parallel callbacks is the order they finished. What
+ * doesn't fit is named, never dropped silently.
+ */
+function imageContent(shown: OutputImage[], store: ImageStore): ToolResult['content'] {
+  const content: ToolResult['content'] = [];
+  const left: string[] = [];
+  shown.forEach((entry, i) => {
+    const image = store.get(entry.imageId);
+    const caption = [entry.label, image?.source].filter(Boolean).join(' — ');
+    const name = `Image ${i + 1}${caption ? `: ${caption}` : ''}`;
+    if (!image) left.push(`${name} (no longer kept: show it again from a new read)`);
+    else if (content.length / 2 >= MAX_IMAGES) left.push(name);
+    else
+      content.push(
+        { type: 'text', text: name },
+        { type: 'image', data: image.dataBase64, mimeType: image.mimeType },
+      );
+  });
+  if (left.length)
+    content.push({
+      type: 'text',
+      text: `Not shown (at most ${MAX_IMAGES} images per run; show the rest in another run):\n${left.join('\n')}`,
+    });
+  return content;
 }

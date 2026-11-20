@@ -86,10 +86,16 @@ export interface RunLimits {
   logChars: number;
 }
 
+/** An image main showed with api.output.image, and its label. */
+export interface OutputImage {
+  imageId: string;
+  label?: string;
+}
+
 export type RunOutcome =
-  | { status: 'succeeded'; value?: string; logs: string[]; images: string[] }
-  | { status: 'failed'; error: string; code?: string; logs: string[]; images: string[] }
-  | { status: 'cancelled'; reason: string; logs: string[]; images: string[] };
+  | { status: 'succeeded'; value?: string; logs: string[]; images: OutputImage[] }
+  | { status: 'failed'; error: string; code?: string; logs: string[]; images: OutputImage[] }
+  | { status: 'cancelled'; reason: string; logs: string[]; images: OutputImage[] };
 
 const DEFAULT_LIMITS: RunLimits = {
   memoryBytes: 64 * 1024 * 1024,
@@ -371,7 +377,7 @@ export class CodeRun {
     this.finish({ status: 'succeeded', ...(value ? { value } : {}) });
   }
 
-  private images(): string[] {
+  private images(): OutputImage[] {
     const context = this.context;
     const fn = this.imagesFn;
     if (!context || !fn) return [];
@@ -381,9 +387,9 @@ export class CodeRun {
         result.error.dispose();
         return [];
       }
-      const ids = JSON.parse(context.getString(result.value)) as string[];
+      const images = JSON.parse(context.getString(result.value)) as OutputImage[];
       result.value.dispose();
-      return ids;
+      return images;
     } catch {
       return [];
     }
