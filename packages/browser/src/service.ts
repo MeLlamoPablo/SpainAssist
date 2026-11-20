@@ -99,6 +99,9 @@ type StorageState = Exclude<BrowserContextOptions['storageState'], string | unde
 
 const REF_RE = /^(?:f\d+)?e\d+$/;
 const DEFAULT_BUDGET = 24_000;
+/** How agents open a page (codemode's API, `declarations.ts`). */
+const OPEN_A_PAGE = 'Open a page first: (await api.browser.currentPage()).goto(url).';
+const NO_TAB_MESSAGE = `No tab is open. ${OPEN_A_PAGE}`;
 const QUIET_MS = 350;
 /** The longest a click waits for a window it asked to open (`watchPopups`). */
 const POPUP_WAIT_MS = 5_000;
@@ -744,9 +747,12 @@ export class PlaywrightBrowserService implements BrowserService {
     });
   }
 
-  /** URL and title of the active tab, without a snapshot. */
+  /** URL and title of the active tab, without a snapshot: about:blank before any page opens. */
   info(procedureId: string): Promise<{ url: string; title: string }> {
+    // Like a fresh Playwright page, rather than an error to read before the first goto.
+    if (!this.sessions.has(procedureId)) return Promise.resolve({ url: 'about:blank', title: '' });
     return this.run(procedureId, async (s) => {
+      if (!this.livePage(s)) return { url: 'about:blank', title: '' };
       const page = await this.pageFor(s);
       return {
         url: maskSecrets(page.url(), s.secretVariants),
@@ -969,10 +975,7 @@ export class PlaywrightBrowserService implements BrowserService {
     let s = this.sessions.get(procedureId);
     if (!s) {
       if (!opts.create) {
-        throw new BrowserError(
-          'no_page',
-          'No browser is open for this procedure. Use browser_open with a URL first.',
-        );
+        throw new BrowserError('no_page', `No browser is open for this procedure. ${OPEN_A_PAGE}`);
       }
       s = newSession(procedureId);
       this.sessions.set(procedureId, s);
@@ -1406,8 +1409,7 @@ export class PlaywrightBrowserService implements BrowserService {
       if (isHttpUrl(url)) await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(noop);
       s.notes.push('The tab had crashed and was reloaded.');
     }
-    if (!page)
-      throw new BrowserError('no_page', 'No tab is open. Use browser_open with a URL first.');
+    if (!page) throw new BrowserError('no_page', NO_TAB_MESSAGE);
     return page;
   }
 
@@ -1714,8 +1716,7 @@ export class PlaywrightBrowserService implements BrowserService {
     opts: { initialWait?: number; condense?: boolean } = {},
   ): Promise<BrowserObservation> {
     const first = this.livePage(s);
-    if (!first)
-      throw new BrowserError('no_page', 'No tab is open. Use browser_open with a URL first.');
+    if (!first) throw new BrowserError('no_page', NO_TAB_MESSAGE);
     const started = Date.now();
     await this.settle(s, first, opts.initialWait ?? 100);
     const settled = Date.now();

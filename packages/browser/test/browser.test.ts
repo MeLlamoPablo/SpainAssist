@@ -200,7 +200,12 @@ describe('snapshots and refs', () => {
       message: `Ref ${ref} not found — take a new snapshot (the page may have changed) and use a ref from it.`,
     });
     await expect(t.service.click('stale', 'Enviar')).rejects.toMatchObject({ code: 'invalid_ref' });
-    await expect(t.service.snapshot('nobody')).rejects.toMatchObject({ code: 'no_page' });
+    await expect(t.service.snapshot('nobody')).rejects.toMatchObject({
+      code: 'no_page',
+      message: expect.stringContaining('.goto(url)'),
+    });
+    // Like a fresh Playwright page: about:blank before the first goto, not an error.
+    await expect(t.service.info('nobody')).resolves.toEqual({ url: 'about:blank', title: '' });
   });
 });
 
