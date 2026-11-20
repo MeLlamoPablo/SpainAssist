@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import {
   type AgentEvent,
   type AgentHostConfig,
+  BUNDLED_MODEL_LISTS,
   buildAgentLaunch,
   COORDINATOR_TOOL_NAMES,
   PiRpcClient,
@@ -433,7 +434,7 @@ describe('the eval host over RPC', () => {
         'POST research.invalid/v1/responses',
       ]);
       expect(JSON.parse(log[0]?.reqBody ?? '{}')).toMatchObject({
-        model: 'gpt-6.1-sol',
+        model: BUNDLED_MODEL_LISTS.chatgpt.research.balanced[0]?.id,
         tools: [{ type: 'web_search' }],
       });
     });
