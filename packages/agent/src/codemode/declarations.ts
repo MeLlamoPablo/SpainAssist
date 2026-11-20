@@ -167,7 +167,8 @@ interface Documents {
   fill(id: string, values: ({ page: number; x: number; y: number } & ({ text: string } | { check: true }))[], options?: { name?: string }): Promise<{ documentId: string; name: string; pages: { page: number; image: Image }[]; warnings: string[] }>;
   /** Writes a new PDF in their documents from Markdown. Always research first what this kind of
    *  document legally requires (content, formalities, what must be done with it afterwards, like
-   *  taxes or registration) and follow it. ___[Label] is a field to fill in;
+   *  taxes or registration) and follow it. ___[Label] is a field to fill in, one underscore wide
+   *  per character of the answer, with room to write it by hand (a date in words: 25);
    *  <div class="columns"><div>…</div><div>…</div></div> sets blocks side by side (signatures). */
   create(name: string, markdown: string): Promise<{ documentId: string; name: string; pages: number }>;
   /** Signs a saved PDF with the user's certificate or DNI, no website needed: the user places the

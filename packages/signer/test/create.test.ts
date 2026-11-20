@@ -86,7 +86,7 @@ describe('createDocument', () => {
     // Blanks of spaces counted as trimmable whitespace: this line overfilled (its words ran
     // together) and its last blank split into two fields.
     const { pdf, fields } = await createDocument(
-      'De una parte, D. Pablo Rodríguez, mayor de edad, con DNI ___ y domicilio en ___, en adelante el prestamista.',
+      'De una parte, D. Pablo Rodríguez, mayor de edad, con DNI ____________ y domicilio en ____________, en adelante el prestamista.',
       { fonts: FONTS },
     );
     expect(fields).toEqual(['con DNI', 'y domicilio en']);
