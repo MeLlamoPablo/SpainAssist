@@ -171,9 +171,16 @@ export class EvalNetwork implements CertificateProxy {
     return `http://127.0.0.1:${(await proxy).port}`;
   }
 
-  /** Client certificates do not exist in evaluation runs. */
-  async configure(): Promise<never> {
-    throw new Error('Certificate logins are not available in evaluation runs.');
+  /**
+   * Client certificates do not exist in evaluation runs. Turning them off (`null`, as the app does
+   * when it moves a procedure to the headed browser) clears nothing and succeeds.
+   */
+  async configure(
+    _session: string,
+    _hosts: readonly string[],
+    identity: Parameters<CertificateProxy['configure']>[2],
+  ): Promise<void> {
+    if (identity) throw new Error('Certificate logins are not available in evaluation runs.');
   }
 
   /** The browser context is gone: its proxy closes. */

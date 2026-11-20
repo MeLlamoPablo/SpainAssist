@@ -648,7 +648,16 @@ describe('EvalNetwork: lifecycle', () => {
   });
 
   it('has no certificate logins and its own random proxy credentials', async () => {
-    await expect(network.configure()).rejects.toThrow(/not available/);
+    const identity = {
+      id: 'cert-1',
+      chain: [new Uint8Array([1])],
+      key: crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey,
+    };
+    await expect(
+      network.configure('s1', ['pasarela-ident.clave.gob.es'], identity),
+    ).rejects.toThrow(/not available/);
+    // Turning certificates off (the app moving a procedure to the headed browser) is fine.
+    await expect(network.configure('s1', [], null)).resolves.toBeUndefined();
     const other = new EvalNetwork({
       upstream: bench.origin,
       scoringOrigin: bench.scoringOrigin,

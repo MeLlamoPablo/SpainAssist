@@ -91,7 +91,7 @@ describe.skipIf(!chromium)('WebRTC and the evaluation browser', () => {
       },
       credentials: network.credentials,
       openSession: (session: string) => network.openSession(session),
-      configure: () => network.configure(),
+      configure: (...args: Parameters<EvalNetwork['configure']>) => network.configure(...args),
       endSession: (session: string) => network.endSession(session),
       networkError: (session: string, hostPort: string) => network.networkError(session, hostPort),
     };
