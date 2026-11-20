@@ -995,7 +995,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
     },
     'app.info': () => ({
       name: 'Spain Assist',
-      version: '0.4.0',
+      version: '0.5.0',
       platform: dataImportParam || store ? 'win32' : 'darwin',
       installChannel: dataImportParam || store ? 'msix' : 'dev',
       isDev: true,

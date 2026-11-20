@@ -3,6 +3,44 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.5.0 (2026-11-20)
+
+Installed apps update to it. What changed since 0.4.0.
+
+### App
+
+- **Signing PDFs with no website.** Ask the assistant to sign a document and you place the
+  visible signature on a preview of the page, then approve it; it signs with your certificate or
+  DNI. Signatures are PAdES-B-LT, with a certified time from a timestamp authority, so they stay
+  verifiable after the certificate expires. Mis documentos marks signed documents "Firmado", and
+  on hover says who signed, when and with which certificate. (50a26ea, 9f0948d, e09d4a9, 34aa98b,
+  418b8b7, 26de8e7, 72db51d, f016daa, c97018d, d54781e, 366099a)
+- **Filling in PDF forms.** Agents fill in a PDF form the way you would with a pen, pointing at
+  each blank on the page, and give you a filled copy. They can also read and look at a PDF's
+  pages. (a90d833, 393bce9)
+- **Documents written for you.** Agents write documents such as a private loan contract as a
+  PDF, with blanks you can fill in and signature blocks side by side. They research first what
+  the document legally requires, in an earlier step, and follow it. (85a26d6, fd07aed, f7c5eca,
+  9b16e19, 3019ff2, ee32f04)
+- **Agents remember their work.** What an agent asked you and found stays with it, so a step it
+  retries doesn't ask again or redo a search; a document it writes lands on its procedure card,
+  and a procedure is no longer split into two cards. (5a077db)
+- **Smaller fixes:**
+  - An agent's form shows a follow-up field only for the answer that needs it. (77f4f63)
+  - Date fields show their calendar icon in dark mode. (e35468b)
+
+### Agents and costs
+
+- ChatGPT procedures, the scanner and research run on gpt-6.2-sol first; deep research on
+  gpt-6.2-astra. (7460133)
+
+### Maintenance
+
+- Dependencies upgraded up to medium risk: Electron 45.2 (Chromium 156), pi 1.5. (ef4ce35)
+- SpainBench: EX-15 form-filling scenarios and slim browser snapshots. (431b645, 78312e1,
+  36e6a96, 0c59796, 3707ba9)
+- Version 0.5.0 everywhere except the phone app.
+
 ## 0.4.0 (2026-11-14)
 
 Installed apps update to it. What changed since 0.3.3.
