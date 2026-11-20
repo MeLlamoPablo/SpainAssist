@@ -3,6 +3,7 @@ import {
   matchPersonalOption,
   PERSONAL_FIELDS,
   PersonalFieldOption,
+  parsePersonalDate,
   personalFieldDef,
 } from '../src';
 
@@ -23,5 +24,29 @@ describe('personal select fields', () => {
     expect(matchPersonalOption(def, 'Legally  separated')?.value).toBe('separated');
     expect(matchPersonalOption(def, 'pareja de hecho')).toBeUndefined();
     expect(matchPersonalOption(def, '')).toBeUndefined();
+  });
+});
+
+describe('personal date fields', () => {
+  it('read ISO and Spanish day-first dates as ISO', () => {
+    expect(parsePersonalDate('2026-12-04')).toBe('2026-12-04');
+    expect(parsePersonalDate(' 04/12/2026 ')).toBe('2026-12-04');
+    expect(parsePersonalDate('4/1/2026')).toBe('2026-01-04');
+    expect(parsePersonalDate('04-12-2026')).toBe('2026-12-04');
+    expect(parsePersonalDate('04.12.2026')).toBe('2026-12-04');
+    expect(parsePersonalDate('29/02/2028')).toBe('2028-02-29');
+  });
+
+  it('refuse impossible days and other forms', () => {
+    for (const text of [
+      '31/02/2026',
+      '29/02/2026',
+      '2026-13-01',
+      '04/12/26',
+      '04/12.2026',
+      '12/2026',
+      '',
+    ])
+      expect(parsePersonalDate(text), text).toBeUndefined();
   });
 });

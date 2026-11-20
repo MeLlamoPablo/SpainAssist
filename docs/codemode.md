@@ -117,7 +117,8 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
   (TextField, Select, Choice, Province) carries a `vaultKey` ("email", "custom.<slug>"; never the
   CAN or a PIN): when its interface closes, however it closes, main saves the field's value to
   Mis datos (`uiTreeAnswers`, from the last tree; skipped when the field has an `error` or the
-  value is already saved) and says so in the chat. The user has no "save my data" choice and the
+  value is already saved) and says so in the chat; answers the vault refuses (fixed reasons, never
+  values) reach the agent as a line in the run's logs. The user has no "save my data" choice and the
   agent no call to make; `api.vault.save` is for personal data found elsewhere.
 - `api.procedures`: `list`, `get` (a full id or one of the agent's keys), `getOrCreate({ id, title, …card })`, and handles with `update`
   (optimistic concurrency), `refresh`, `context`/`setContext` (private working context).

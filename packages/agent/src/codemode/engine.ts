@@ -158,7 +158,7 @@ export class RunEngine {
       },
       closeUi: (key, result) =>
         serial(() => bridge.call('run.ui', { runId, action: 'close', key, result })).then(
-          () => undefined,
+          (res) => res.note,
         ),
     };
 

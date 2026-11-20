@@ -12,6 +12,8 @@ export class MemoryStore implements DurableStore {
   state: DurableState = { memo: {}, ui: {} };
   trees = new Map<string, { tree: UiNode; rev: number }>();
   log: string[] = [];
+  /** What closing an interface tells the agent (main: answers Mis datos refused). */
+  closeNote: string | undefined;
 
   async setMemo(key: string, value: unknown): Promise<void> {
     this.log.push(`memo ${key}`);
@@ -36,10 +38,11 @@ export class MemoryStore implements DurableStore {
     const ui = this.state.ui[key];
     if (ui) ui.durable = { ...ui.durable, [name]: value };
   }
-  async closeUi(key: string, result: unknown): Promise<void> {
+  async closeUi(key: string, result: unknown): Promise<string | undefined> {
     this.log.push(`close ${key}`);
     this.state.ui[key] = { status: 'closed', result };
     this.trees.delete(key);
+    return this.closeNote;
   }
 
   /** A copy of the stored state, as a restarted app would load it. */

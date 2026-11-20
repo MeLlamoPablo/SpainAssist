@@ -429,6 +429,28 @@ describe('answers for Mis datos', () => {
     });
   });
 
+  it('save Spanish dates as ISO, and tell the agent which answers the vault refused', async () => {
+    const { app, agentLib } = await open();
+    const { token } = await anAgent(app, agentLib);
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    const ui = (action: string, extra: Record<string, unknown>) =>
+      call(app, token, 'run.ui', { runId: result.runId, action, key: 'datos', ...extra });
+    const answers = tree(
+      field({ vaultKey: 'dniExpiry', value: '04/12/2026' }),
+      field({ vaultKey: 'passportExpiry', value: '31/02/2026' }),
+    );
+    expect((await ui('open', { rev: 1, tree: answers })).ok).toBe(true);
+    const closed = await ui('close', { result: null });
+    expect(closed.result).toEqual({
+      note: expect.stringContaining('passportExpiry (invalid_date)'),
+    });
+    expect(closed.result?.note).not.toContain('31/02/2026');
+    const personal = (key: string) =>
+      app.services.vault.overview().personal.find((p) => p.key === key);
+    expect(personal('dniExpiry')).toMatchObject({ value: '2026-12-04', source: 'form' });
+    expect(personal('passportExpiry')).toBeUndefined();
+  });
+
   it('may not name what agents never see (the CAN, PINs)', async () => {
     const { app, agentLib } = await open();
     const { token } = await anAgent(app, agentLib);

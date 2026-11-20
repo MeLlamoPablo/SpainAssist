@@ -289,11 +289,18 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       const current = new Map(vaultPort.listPersonal().map((p) => [p.key, p.value]));
       const changed = answers.filter((a) => current.get(a.key) !== a.value);
       if (!changed.length) return;
-      const { saved } = await setPersonalPartial(vaultPort, changed, 'form', logger.child('runs'));
-      if (!saved.length) return;
-      events.emit({ type: 'vault.changed' });
-      const labels = saved.map((p) => p.label).join(', ');
-      conversation.addNotice('info', t(lang(), 'savedToVault', { labels }));
+      const { saved, rejected } = await setPersonalPartial(
+        vaultPort,
+        changed,
+        'form',
+        logger.child('runs'),
+      );
+      if (saved.length) {
+        events.emit({ type: 'vault.changed' });
+        const labels = saved.map((p) => p.label).join(', ');
+        conversation.addNotice('info', t(lang(), 'savedToVault', { labels }));
+      }
+      return rejected;
     },
     onStale: (run) => codemodeCoordinator.onStale(run),
   });

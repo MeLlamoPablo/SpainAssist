@@ -84,6 +84,28 @@ export function matchPersonalOption(
 }
 
 /**
+ * A `date` field's value as stored (YYYY-MM-DD), from ISO or the Spanish day-first form people
+ * type ("04/12/2026", "4-12-2026", "04.12.2026"). Undefined for anything else, or a day the
+ * calendar doesn't have (31/02/2026).
+ */
+export function parsePersonalDate(text: string): string | undefined {
+  const value = text.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const spanish = /^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})$/.exec(value);
+  const parts = iso
+    ? [iso[1], iso[2], iso[3]]
+    : spanish
+      ? [spanish[4], spanish[3], spanish[1]]
+      : undefined;
+  if (!parts) return undefined;
+  const [y, m, d] = parts.map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(y, m - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d)
+    return undefined;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/**
  * Civil statuses as the Civil Registry records them and administration forms list them (Código
  * Civil; Ley 20/2011 del Registro Civil): single, married, legally separated, divorced, widowed.
  * A registered partnership (pareja de hecho) is not a civil status: it lives in regional

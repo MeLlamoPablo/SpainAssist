@@ -108,6 +108,19 @@ describe('personal field rules', () => {
     expect(rejection('dniExpiry', '9999-01-01')).toBeUndefined();
   });
 
+  it('saves dates typed day first as ISO, and refuses days the calendar lacks', () => {
+    expectRule(
+      'dniExpiry',
+      'invalid_date',
+      ['2026-12-04', '04/12/2026', '4/12/2026', '04-12-2026', '04.12.2026'],
+      ['31/02/2026', '2026-02-30', '04/12/26', '12/2026', '04/12-2026', 'mañana'],
+    );
+    expect(normalizePersonalInput({ key: 'dniExpiry', value: '4.12.2026' }, undefined).value).toBe(
+      '2026-12-04',
+    );
+    expect(rejection('birthDate', '15/01/2999')).toBe('future_date');
+  });
+
   it('checks driving licence categories and their dates', () => {
     const rows = (...list: object[]) => JSON.stringify(list);
     expectRule(

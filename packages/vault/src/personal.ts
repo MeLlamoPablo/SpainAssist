@@ -7,6 +7,7 @@ import {
   PERSONAL_FIELDS,
   type PersonalDataItem,
   PersonalFieldKey,
+  parsePersonalDate,
   personalFieldDef,
   postalCodeProvince,
 } from '@sa/shared';
@@ -46,14 +47,6 @@ export class PersonalDataValidationError extends VaultError {
 
 function invalid(message: string, reason: string, key?: string): VaultError {
   return new PersonalDataValidationError(message, reason, key);
-}
-
-function isCalendarDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const date = new Date(Date.UTC(y, m - 1, d));
-  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
 /** Dates that must be in the past: one day of slack covers time zones. */
@@ -120,14 +113,17 @@ export function normalizePersonalInput(
   if (value === '') return { key, value: null };
 
   switch (def?.input) {
-    case 'date':
-      if (!isCalendarDate(value))
-        throw invalid(`"${key}" must be a date (YYYY-MM-DD)`, 'invalid_date', key);
+    case 'date': {
+      const date = parsePersonalDate(value);
+      if (!date)
+        throw invalid(`"${key}" must be a date (DD/MM/YYYY or YYYY-MM-DD)`, 'invalid_date', key);
+      value = date;
       if ((key === 'birthDate' || key.endsWith('IssueDate')) && !isPastDate(value))
         throw invalid(`"${key}" can't be in the future`, 'future_date', key);
       if (key === 'birthDate' && value < '1900-01-01')
         throw invalid('"birthDate" is too early', 'implausible_date', key);
       break;
+    }
     case 'select': {
       const option = matchPersonalOption(def, value);
       if (!option) {

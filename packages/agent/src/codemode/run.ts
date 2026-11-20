@@ -42,7 +42,8 @@ export interface DurableStore {
   renderUi(key: string, tree: UiNode, rev: number): void;
   /** A durable value of an open interface changed (best effort, in order). */
   setDurable(key: string, name: string, value: unknown): void;
-  closeUi(key: string, result: unknown): Promise<void>;
+  /** Resolves with a note for the agent's log, e.g. answers Mis datos refused to save. */
+  closeUi(key: string, result: unknown): Promise<string | undefined>;
 }
 
 /** A failure of a host operation, as the module sees it (`CodemodeError`). */
@@ -473,11 +474,14 @@ export class CodeRun {
         this.open.add(key);
         this.options.onUiChange?.(this.openUis());
         return undefined;
-      case 'ui.close':
-        await store.closeUi(key, args.result);
+      case 'ui.close': {
+        const note = await store.closeUi(key, args.result);
+        // The agent reads it with the run's logs (nothing else tells it).
+        if (note) this.log(note);
         this.open.delete(key);
         this.options.onUiChange?.(this.openUis());
         return undefined;
+      }
     }
     throw new HostOpError('internal', `Unknown state operation ${op}`);
   }

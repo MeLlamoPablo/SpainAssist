@@ -88,6 +88,7 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
     },
     'run.ui': async (params, ctx) => {
       const { runId, key } = params;
+      let note: string | undefined;
       switch (params.action) {
         case 'open':
           await runs.openUi(ctx.agentId, runId, key, params.tree, params.rev ?? 1, ctx.signal);
@@ -100,10 +101,10 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
           runs.durable(ctx.agentId, runId, key, params.name, params.value);
           break;
         case 'close':
-          await runs.closeUi(ctx.agentId, runId, key, params.result ?? null);
+          note = await runs.closeUi(ctx.agentId, runId, key, params.result ?? null);
           break;
       }
-      return {};
+      return note ? { note } : {};
     },
     'run.setStatus': async (params, ctx) => {
       directory.setStatus(ctx.agentId, params.status);

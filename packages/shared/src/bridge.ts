@@ -557,7 +557,8 @@ export interface BridgeResults {
     };
   };
   'run.memo': Record<string, never>;
-  'run.ui': Record<string, never>;
+  /** `close`: a note for the agent, e.g. answers Mis datos refused to save. */
+  'run.ui': { note?: string };
   'run.events': { events: { seq: number; key: string; event: UiEvent }[]; ended?: boolean };
   'run.setStatus': Record<string, never>;
   'run.end': Record<string, never>;

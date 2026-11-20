@@ -188,6 +188,31 @@ describe('codemode runtime', () => {
     });
   });
 
+  it('logs what main says when an interface closes (answers Mis datos refused)', async () => {
+    const store = new MemoryStore();
+    store.closeNote = 'Mis datos did not save: dniExpiry (invalid_date).';
+    const started = startRun(
+      `
+      import { Form, Button } from '@spainassist/ui';
+      export async function main(api) {
+        return api.ui.present('datos', () => (
+          <Form title="Datos"><Button onClick={() => api.ui.close('ok')}>Seguir</Button></Form>
+        ));
+      }
+    `,
+      { store },
+    );
+    await until(() => store.trees.has('datos'));
+    const tree = store.trees.get('datos');
+    started.run.dispatch('datos', {
+      handler: handlerOf(findNode(tree?.tree, 'Button', 'Seguir'), 'onClick'),
+      rev: tree?.rev ?? 0,
+    });
+    const outcome = await started.done;
+    expect(outcome.status).toBe('succeeded');
+    expect(outcome.logs).toEqual(['Mis datos did not save: dniExpiry (invalid_date).']);
+  });
+
   it('logs the note the user left on an action, even when the module drops it', async () => {
     const outcome = await startRun(
       `export async function main(api) {

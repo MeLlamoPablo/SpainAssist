@@ -255,7 +255,7 @@ describe('personal data', () => {
       [{ key: 'favouriteColour', value: 'x' }, 'Unknown'],
       [{ key: 'custom.Bad Key', value: 'x', label: 'L' }, 'key'],
       [{ key: 'custom.nolabel', value: 'x' }, 'label'],
-      [{ key: 'birthDate', value: '31/01/1980' }, 'date'],
+      [{ key: 'birthDate', value: '31/02/1980' }, 'date'],
       [{ key: 'birthDate', value: '1980-02-30' }, 'date'],
       [{ key: 'sex', value: 'Femenino' }, 'one of'],
       [{ key: 'nationality', value: 'Española' }, 'one of'],
@@ -278,7 +278,7 @@ describe('personal data', () => {
         'invalid_input',
       );
       expect(error.message).toContain(fragment);
-      for (const secret of ['31/01/1980', 'carmen at example', 'ES00', '30/11/2026']) {
+      for (const secret of ['31/02/1980', 'carmen at example', 'ES00', '30/11/2026']) {
         expect(error.message).not.toContain(secret);
       }
     }

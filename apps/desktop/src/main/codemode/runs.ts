@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import {
   type BridgeResults,
   type MapPoint,
+  type PersonalSaveIssue,
   type RunInfo,
   RunStatus,
   type RunUi,
@@ -108,6 +109,15 @@ export interface RunEnd {
   deliver: boolean;
 }
 
+/** What the agent reads when Mis datos refused answers: fixed reasons, never the values. */
+function rejectedAnswersNote(key: string, rejected: PersonalSaveIssue[]): string {
+  const list = rejected.map((r) => `${r.key} (${r.reason})`).join(', ');
+  const dates = rejected.some((r) => r.reason === 'invalid_date')
+    ? ' Dates are DD/MM/YYYY or YYYY-MM-DD.'
+    : '';
+  return `Mis datos did not save these answers of the interface "${key}": ${list}.${dates} Ask the user again, or save a corrected value with api.vault.save.`;
+}
+
 export interface RunServiceDeps {
   /** The agents' directory: each agent's state is in its folder. */
   dir: string;
@@ -122,9 +132,10 @@ export interface RunServiceDeps {
   onDetachedEvent?(run: RunRecord): void;
   /**
    * An interface closed with values for Mis datos (its fields' `vaultKey`). Saved before its
-   * `present` resolves, so the run reads them back from the vault.
+   * `present` resolves, so the run reads them back from the vault. Returns the answers the vault
+   * refused, which the agent is told.
    */
-  saveAnswers?(answers: UiAnswer[]): Promise<void>;
+  saveAnswers?(answers: UiAnswer[]): Promise<PersonalSaveIssue[] | undefined>;
   /** A run that was running stopped reaching main (its host lost it); its agent should know. */
   onStale?(run: RunRecord): void;
   /** A run that neither polls nor calls for this long is gone (default 75 s; polls last 25 s). */
@@ -531,7 +542,13 @@ export class RunService {
     this.persistSoon(agentId);
   }
 
-  async closeUi(agentId: string, runId: string, key: string, result: unknown): Promise<void> {
+  /** Returns a note for the agent when Mis datos refused some of the interface's answers. */
+  async closeUi(
+    agentId: string,
+    runId: string,
+    key: string,
+    result: unknown,
+  ): Promise<string | undefined> {
     const { record, state } = this.runOf(runId, agentId);
     checkValue(`The result of "${key}"`, result);
     const ui = state.ui[key];
@@ -554,13 +571,15 @@ export class RunService {
     record.updatedAt = this.now();
     await this.persist(agentId);
     this.emit(record);
-    if (answers.length && this.deps.saveAnswers)
-      await this.deps.saveAnswers(answers).catch((err: unknown) =>
-        this.deps.logger.warn('saving an interface’s answers failed', {
-          runId,
-          error: errorMessage(err),
-        }),
-      );
+    if (!answers.length || !this.deps.saveAnswers) return undefined;
+    const rejected = await this.deps.saveAnswers(answers).catch((err: unknown) => {
+      this.deps.logger.warn('saving an interface’s answers failed', {
+        runId,
+        error: errorMessage(err),
+      });
+      return answers.map((a) => ({ key: a.key, reason: 'not_saved' }));
+    });
+    return rejected?.length ? rejectedAnswersNote(key, rejected) : undefined;
   }
 
   /** Long poll for the user's events on a run's interfaces. */
