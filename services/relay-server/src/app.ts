@@ -4,11 +4,14 @@
  * - `GET /p`: the page a pairing link opens when the phone app isn't installed (or App Links
  *   aren't verified). It offers the Android download; the pairing payload stays in the
  *   fragment (never sent to us);
+ * - `GET /android` and `GET /android/latest.json`: the download page of the APK offered outside
+ *   Google Play, and what the desktop reads to tell an out-of-date phone app. Without an APK
+ *   configured they point to the store;
  * - `GET /.well-known/assetlinks.json`: verifies the app for App Links on this host, when the
  *   signing certificate fingerprints are configured.
  */
 import { readFileSync } from 'node:fs';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 
 export interface AppOptions {
   /** Android application id (default es.spainassist.firma). */
@@ -17,9 +20,26 @@ export interface AppOptions {
   androidCertFingerprints?: string[];
   /** Where to install the app; default the Play Store page of `androidPackage`. */
   installUrl?: string;
+  /** The APK offered outside Google Play; with it, `/p` sends to `/android`, not `installUrl`. */
+  androidApk?: AndroidApk;
+  /** Trust X-Forwarded-For and X-Forwarded-Proto (only behind our own reverse proxy). */
+  trustProxy?: boolean;
+}
+
+/** The universal APK Google Play signs, hosted as an asset of its `android/vX.Y.Z` release. */
+export interface AndroidApk {
+  /** Direct download URL. */
+  url: string;
+  /** X.Y.Z. */
+  version: string;
+  /** SHA-256 of the file, in hex. */
+  sha256: string;
 }
 
 export const DEFAULT_ANDROID_PACKAGE = 'es.spainassist.firma';
+
+/** Where the source of each release is (`Licenses.SOURCE_URL` in the phone app). */
+const SOURCE_URL = 'https://github.com/MeLlamoPablo/SpainAssist';
 
 const fonts = new Map(
   [
@@ -36,7 +56,8 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-function landingPage(installUrl: string): string {
+/** A page in the relay's own style: no scripts, fonts served from here. */
+function page(main: string, style = ''): string {
   return `<!doctype html>
 <html lang="es">
 <head>
@@ -93,23 +114,69 @@ function landingPage(installUrl: string): string {
     text-align: center; text-decoration: none; font-weight: 600; line-height: 24px;
   }
   .download:hover { background: var(--accent-hover); }
-  .download:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; }
+  .download:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; }${style}
 </style>
 </head>
 <body>
-<main>
-  <header class="brand" aria-label="Spain Assist">
+${main}
+</body>
+</html>`;
+}
+
+const BRAND = `<header class="brand" aria-label="Spain Assist">
     <span class="brand-flag" aria-hidden="true"></span>
     <span>Spain</span> <i>Assist</i>
-  </header>
+  </header>`;
+
+function landingPage(installUrl: string): string {
+  return page(`<main>
+  ${BRAND}
   <section class="content" aria-labelledby="title">
     <h1 id="title">Firma con tu DNI</h1>
     <p>Conecta la app de escritorio de Spain Assist con tu móvil para firmar.</p>
     <a class="download" href="${escapeHtml(installUrl)}">Descargar Spain Assist para Android</a>
   </section>
-</main>
-</body>
-</html>`;
+</main>`);
+}
+
+/** The download page of the APK, with the steps for people who never installed one. */
+function downloadPage(apk: AndroidApk): string {
+  const source = `${SOURCE_URL}/tree/android/v${apk.version}`;
+  return page(
+    `<main class="apk">
+  ${BRAND}
+  <section class="content" aria-labelledby="title">
+    <h1 id="title">Spain Assist para Android</h1>
+    <p>La ofrecemos aquí mientras llega a Google Play. Es la misma app que Google Play instalará y actualizará.</p>
+    <a class="download" href="${escapeHtml(apk.url)}">Descargar Spain Assist para Android</a>
+    <p class="version">Versión ${escapeHtml(apk.version)}</p>
+    <h2>Cómo instalarla</h2>
+    <ol>
+      <li>Pulsa «Descargar».</li>
+      <li>Si Android pregunta, permite instalar apps desde tu navegador («Permitir de esta fuente»). Solo hace falta una vez.</li>
+      <li>Pulsa «Instalar». Si Google Play Protect pregunta, pulsa «Analizar app» o «Instalar de todas formas».</li>
+    </ol>
+  </section>
+  <footer>
+    <p>Spain Assist es una app privada y no representa a ninguna entidad gubernamental.</p>
+    <p><a href="${escapeHtml(source)}">Código fuente de esta versión</a></p>
+    <p>SHA-256 del archivo: <code>${escapeHtml(apk.sha256)}</code></p>
+  </footer>
+</main>`,
+    `
+  main.apk { justify-content: flex-start; padding-top: 72px; gap: 48px; }
+  .apk .content p { margin-bottom: 32px; }
+  .apk .content .version { margin: 12px 0 0; text-align: center; font-size: 13px; line-height: 18px; }
+  h2 { font-size: 16px; line-height: 22px; font-weight: 600; margin: 48px 0 0; }
+  ol { margin: 12px 0 0; padding-left: 22px; color: var(--subtle); }
+  li { padding-left: 4px; text-wrap: pretty; }
+  li + li { margin-top: 10px; }
+  footer { width: 100%; font-size: 13px; line-height: 18px; }
+  footer p { margin: 0; }
+  footer p + p { margin-top: 10px; }
+  footer a { color: var(--fg); }
+  code { font: 12px/18px ui-monospace, monospace; overflow-wrap: anywhere; }`,
+  );
 }
 
 export function createApp(options: AppOptions = {}): Hono {
@@ -118,7 +185,18 @@ export function createApp(options: AppOptions = {}): Hono {
     options.installUrl ??
     `https://play.google.com/store/apps/details?id=${encodeURIComponent(pkg)}`;
   const fingerprints = options.androidCertFingerprints ?? [];
+  const apk = options.androidApk;
   const app = new Hono();
+
+  const html = (c: Context, body: string) => {
+    c.header('Cache-Control', 'no-store');
+    c.header('Referrer-Policy', 'no-referrer');
+    c.header(
+      'Content-Security-Policy',
+      "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; form-action 'none'",
+    );
+    return c.html(body);
+  };
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
@@ -131,14 +209,21 @@ export function createApp(options: AppOptions = {}): Hono {
     });
   });
 
-  app.get('/p', (c) => {
-    c.header('Cache-Control', 'no-store');
-    c.header('Referrer-Policy', 'no-referrer');
-    c.header(
-      'Content-Security-Policy',
-      "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; form-action 'none'",
-    );
-    return c.html(landingPage(installUrl));
+  // The link to `/android` carries no fragment: the pairing payload stays in the phone's browser.
+  app.get('/p', (c) => html(c, landingPage(apk ? '/android' : installUrl)));
+
+  app.get('/android', (c) => (apk ? html(c, downloadPage(apk)) : c.redirect(installUrl, 302)));
+
+  app.get('/android/latest.json', (c) => {
+    c.header('Cache-Control', 'public, max-age=300');
+    if (!apk) return c.json({ store: installUrl });
+    const url = new URL('/android', c.req.url);
+    // Our proxy ends TLS: the request reaches us as http.
+    const forwarded = options.trustProxy
+      ? c.req.header('x-forwarded-proto')?.split(',')[0]?.trim()
+      : undefined;
+    if (forwarded === 'https' || forwarded === 'http') url.protocol = forwarded;
+    return c.json({ version: apk.version, url: apk.url, sha256: apk.sha256, page: url.href });
   });
 
   app.get('/.well-known/assetlinks.json', (c) => {

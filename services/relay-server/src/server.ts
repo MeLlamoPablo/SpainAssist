@@ -13,8 +13,6 @@ export interface RelayOptions extends AppOptions {
   limits?: Partial<RoomLimits>;
   /** Largest binary frame (default 1 MiB; the channel's fragments are 256 KiB). */
   maxFrameBytes?: number;
-  /** Trust X-Forwarded-For (only behind our own reverse proxy). */
-  trustProxy?: boolean;
   /** Ping interval; a socket that misses one pong is dropped (default 20 s). */
   heartbeatMs?: number;
   now?: () => number;

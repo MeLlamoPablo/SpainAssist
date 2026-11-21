@@ -11,6 +11,8 @@ relay can't read them, and it has no accounts and no database. Hono + `ws` on No
 | `GET /v1/rooms/{roomId}/desktop` (WebSocket) | The desktop's side of a room (`Authorization: Bearer <room key>`) |
 | `GET /v1/rooms/{roomId}/phone` (WebSocket) | The phone's side |
 | `GET /p` | Landing page of pairing links (`/p#<payload>`) for phones without the app |
+| `GET /android` | Download page of the Android APK offered outside Google Play (when configured; otherwise it redirects to the store) |
+| `GET /android/latest.json` | The latest APK, for the desktop's update notice (see below) |
 | `GET /.well-known/assetlinks.json` | Android App Links for the pairing links (when configured) |
 | `GET /health` | `{ "status": "ok" }` |
 
@@ -63,9 +65,30 @@ and no addresses.
 
 **Pairing links.** The desktop shows `https://<relay host>/p#<payload>` as a QR code. With App
 Links verified (`ANDROID_CERT_SHA256`), Android opens it straight in the app. Otherwise the page
-offers "Descargar Spain Assist para Android", linking to the Play Store. After installing, the
-app's own scanner can read the QR. The page follows the system's light or dark theme and serves
-its fonts locally, without third-party requests.
+offers "Descargar Spain Assist para Android", linking to the Play Store (or to `/android` while
+an APK is configured). After installing, the app's own scanner can read the QR. The page follows
+the system's light or dark theme and serves its fonts locally, without third-party requests.
+
+**Android APK outside Google Play.** While Google Play reviews the app, we offer the universal
+APK that Google Play signs (Play Console > App bundle explorer > Downloads > "Signed, universal
+APK"), hosted as an asset of its `android/vX.Y.Z` GitHub release. It has the signature of the
+Play install, so each updates the other (`docs/research/play-policy.md`, "Distribution outside
+Play"). With `ANDROID_APK_URL`, `ANDROID_APK_VERSION` and `ANDROID_APK_SHA256` set:
+- `/p`'s button goes to `/android`. That link has no fragment, so the pairing payload still
+  never leaves the phone's browser;
+- `/android` (Spanish, the style of `/p`, no scripts) has the download button, the version, the
+  steps to install an APK, the file's SHA-256 and a link to the source of that version (the
+  `android/vX.Y.Z` tag);
+- `/android/latest.json` answers `{ "version", "url", "sha256", "page" }`, where `page` is the
+  absolute URL of `/android` (with `TRUST_PROXY`, in the scheme of `X-Forwarded-Proto`). The
+  desktop reads it (`apps/desktop/src/main/companion/phone-app.ts`) to tell a phone whose app is
+  older, with a QR to `page`.
+
+Without them (all three unset or empty), everything points to the store again: `/p` links to
+`INSTALL_URL` or the Play page, `/android` redirects there (302), and `/android/latest.json`
+answers `{ "store": "<that URL>" }` with status 200, so the desktop names Google Play in its
+notices. Going back to Google Play is only that: unset the three variables. Setting only some of
+them stops the relay at start. `/android/latest.json` is cached for 5 minutes (`max-age=300`).
 
 ## Configuration
 
@@ -75,7 +98,10 @@ its fonts locally, without third-party requests.
 | `TRUST_PROXY` | off | Client address from `X-Forwarded-For` (behind our reverse proxy only) |
 | `ANDROID_PACKAGE` | `es.spainassist.firma` | App id for App Links and the landing page |
 | `ANDROID_CERT_SHA256` | empty | Comma-separated SHA-256 fingerprints of the app's signing certificates |
-| `INSTALL_URL` | Play Store page | Where "Descargar Spain Assist para Android" points |
+| `INSTALL_URL` | Play Store page | Where "Descargar Spain Assist para Android" points while no APK is configured |
+| `ANDROID_APK_URL` | unset | Direct `https://` URL of the APK (a GitHub release asset). With the next two: all three or none |
+| `ANDROID_APK_VERSION` | unset | Its version, `X.Y.Z` (the page links to the tag `android/vX.Y.Z`) |
+| `ANDROID_APK_SHA256` | unset | SHA-256 of the APK file, 64 hex digits (`shasum -a 256 <file>`) |
 | `ROOMS_PER_ADDRESS` / `CONNECTIONS_PER_ADDRESS` | 20 / 40 | Per client address |
 | `MAX_CONNECTIONS` | 300 | In total, all addresses |
 | `ROOM_MEGABYTES` | 512 | Bytes forwarded per room (binary and text frames) |
@@ -87,4 +113,5 @@ points the app at it and puts this machine's LAN address in the QR, so a real ph
 Wi-Fi can pair (the debug app accepts `ws://`). Tests run it on a random port.
 
 Production: Coolify app `relay-server` (`infra/terraform/coolify.tf`) on `relay.<domain>`.
-Fingerprints come from the `android_cert_sha256` Terraform variable.
+Fingerprints come from the `android_cert_sha256` Terraform variable. The APK's three variables
+go in `relay_server_env` (`terraform.tfvars`, set by a human).

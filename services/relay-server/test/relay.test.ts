@@ -359,6 +359,105 @@ describe('relay HTTP', () => {
     expect(links[0]?.target.package_name).toBe('es.spainassist.firma');
     expect((await createApp().request('/.well-known/assetlinks.json')).status).toBe(404);
   });
+
+  const apk = {
+    url: 'https://github.com/MeLlamoPablo/SpainAssist/releases/download/android/v0.3.5/spain-assist-0.3.5.apk',
+    version: '0.3.5',
+    sha256: 'ab'.repeat(32),
+  };
+  const play = 'https://play.google.com/store/apps/details?id=es.spainassist.firma';
+
+  it('sends to the store while no APK is configured', async () => {
+    const app = createApp();
+    expect(await (await app.request('/p')).text()).toContain(`href="${play}"`);
+    const page = await app.request('/android');
+    expect(page.status).toBe(302);
+    expect(page.headers.get('location')).toBe(play);
+    const latest = await app.request('/android/latest.json');
+    expect(latest.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(await latest.json()).toEqual({ store: play });
+    const custom = createApp({ installUrl: 'https://example.test/install' });
+    expect(await (await custom.request('/p')).text()).toContain(
+      'href="https://example.test/install"',
+    );
+    expect(await (await custom.request('/android/latest.json')).json()).toEqual({
+      store: 'https://example.test/install',
+    });
+  });
+
+  it('offers the APK on its own page when one is configured', async () => {
+    const app = createApp({ androidApk: apk, installUrl: 'https://example.test/install' });
+    const landing = await (await app.request('/p')).text();
+    expect(landing).toContain('<a class="download" href="/android">');
+    expect(landing).not.toContain('example.test');
+    expect(landing).not.toContain('<script');
+
+    const page = await app.request('/android');
+    expect(page.status).toBe(200);
+    expect(page.headers.get('content-security-policy')).toBe(
+      (await app.request('/p')).headers.get('content-security-policy'),
+    );
+    expect(page.headers.get('referrer-policy')).toBe('no-referrer');
+    const html = await page.text();
+    expect(html).toContain(`<a class="download" href="${apk.url}">`);
+    expect(html).toContain('Versión 0.3.5');
+    expect(html).toContain(apk.sha256);
+    expect(html).toContain('«Permitir de esta fuente»');
+    expect(html).toContain('«Instalar de todas formas»');
+    expect(html).toContain('Es la misma app que Google Play instalará y actualizará.');
+    expect(html).toContain(
+      'Spain Assist es una app privada y no representa a ninguna entidad gubernamental.',
+    );
+    expect(html).toContain(
+      'href="https://github.com/MeLlamoPablo/SpainAssist/tree/android/v0.3.5"',
+    );
+    expect(html).not.toContain('<script');
+    expect([...html.matchAll(/url\("([^"]+)"\)/g)]).toHaveLength(3);
+  });
+
+  it('tells the desktop the latest APK and where its page is', async () => {
+    const app = createApp({ androidApk: apk });
+    const latest = await app.request('http://relay.example.test/android/latest.json', {
+      headers: { 'x-forwarded-proto': 'https' },
+    });
+    expect(latest.headers.get('cache-control')).toBe('public, max-age=300');
+    expect(await latest.json()).toEqual({
+      ...apk,
+      page: 'http://relay.example.test/android',
+    });
+    // Behind our proxy the request arrives as http: the page keeps the scheme the client used.
+    const proxied = createApp({ androidApk: apk, trustProxy: true });
+    const body = (await (
+      await proxied.request('http://relay.example.test/android/latest.json', {
+        headers: { 'x-forwarded-proto': 'https' },
+      })
+    ).json()) as { page: string };
+    expect(body.page).toBe('https://relay.example.test/android');
+  });
+
+  it('reads the APK from the environment, all three variables or none', () => {
+    const env = {
+      ANDROID_APK_URL: apk.url,
+      ANDROID_APK_VERSION: apk.version,
+      ANDROID_APK_SHA256: apk.sha256.toUpperCase(),
+    };
+    expect(loadConfig(env).androidApk).toEqual(apk);
+    expect(loadConfig({}).androidApk).toBeUndefined();
+    // Emptied in the dashboard counts as unset.
+    expect(
+      loadConfig({ ANDROID_APK_URL: '', ANDROID_APK_VERSION: ' ', ANDROID_APK_SHA256: '' })
+        .androidApk,
+    ).toBeUndefined();
+    expect(() => loadConfig({ ...env, ANDROID_APK_SHA256: undefined })).toThrow(
+      /Missing ANDROID_APK_SHA256/,
+    );
+    expect(() => loadConfig({ ANDROID_APK_VERSION: apk.version })).toThrow(
+      /Missing ANDROID_APK_URL, ANDROID_APK_SHA256/,
+    );
+    expect(() => loadConfig({ ...env, ANDROID_APK_SHA256: 'abc' })).toThrow();
+    expect(() => loadConfig({ ...env, ANDROID_APK_VERSION: 'v0.3.5' })).toThrow();
+    expect(() => loadConfig({ ...env, ANDROID_APK_URL: 'http://example.test/a.apk' })).toThrow();
+  });
 });
 
 describe('companion through the real relay', () => {
