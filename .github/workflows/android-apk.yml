@@ -115,12 +115,14 @@ jobs:
           fi
           certs=$("$tools/apksigner" verify --print-certs "$APK")
           echo "$certs"
-          signer=$(grep -m 1 'Signer #1 certificate SHA-256 digest:' <<< "$certs" | awk '{print $NF}')
+          # One line per scheme (V3.0, V3.2 for newer Android with rotated keys); not the stamp.
+          signers=$(grep -v '^Source Stamp' <<< "$certs" | grep 'certificate SHA-256 digest:' | awk '{print $NF}')
           play=$(tr -d ':\n' < "$RUNNER_TEMP/play-cert.txt" | tr 'A-F' 'a-f')
-          if [[ -z "$signer" || "$signer" != "$play" ]]; then
-            echo "::error::The APK's signer ($signer) is not the key Google Play reports ($play)"
+          if [[ -z "$play" ]] || ! grep -qx "$play" <<< "$signers"; then
+            echo "::error::The key Google Play reports ($play) does not sign the APK"
             exit 1
           fi
+          signer=$play
           sha=$(sha256sum "$APK" | cut -d ' ' -f 1)
           echo "SHA256=$sha" >> "$GITHUB_ENV"
           {
