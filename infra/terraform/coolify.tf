@@ -204,10 +204,13 @@ locals {
       TRUST_PROXY  = "1"
     }, var.maps_server_env)
     # Desktop <-> phone relay for DNIe signatures: only end-to-end encrypted frames, no accounts.
-    # It also serves the pairing links' landing page and the Android App Links file.
+    # It also serves the pairing links' landing page, the Android App Links file and the APK
+    # page, from this repository's android/vX.Y.Z releases (empty it in relay_server_env for
+    # Google Play only).
     relay_server = merge({
-      TRUST_PROXY         = "1"
-      ANDROID_CERT_SHA256 = var.android_cert_sha256
+      TRUST_PROXY             = "1"
+      ANDROID_CERT_SHA256     = var.android_cert_sha256
+      ANDROID_APK_GITHUB_REPO = var.github_repository
     }, var.relay_server_env)
   }
 

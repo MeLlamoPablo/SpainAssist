@@ -20,8 +20,8 @@ export interface AppOptions {
   androidCertFingerprints?: string[];
   /** Where to install the app; default the Play Store page of `androidPackage`. */
   installUrl?: string;
-  /** The APK offered outside Google Play; with it, `/p` sends to `/android`, not `installUrl`. */
-  androidApk?: AndroidApk;
+  /** The APK offered outside Google Play now; with one, `/p` sends to `/android`, not `installUrl`. */
+  androidApk?: () => AndroidApk | undefined;
   /** Trust X-Forwarded-For and X-Forwarded-Proto (only behind our own reverse proxy). */
   trustProxy?: boolean;
 }
@@ -185,7 +185,7 @@ export function createApp(options: AppOptions = {}): Hono {
     options.installUrl ??
     `https://play.google.com/store/apps/details?id=${encodeURIComponent(pkg)}`;
   const fingerprints = options.androidCertFingerprints ?? [];
-  const apk = options.androidApk;
+  const currentApk = options.androidApk ?? (() => undefined);
   const app = new Hono();
 
   const html = (c: Context, body: string) => {
@@ -210,11 +210,15 @@ export function createApp(options: AppOptions = {}): Hono {
   });
 
   // The link to `/android` carries no fragment: the pairing payload stays in the phone's browser.
-  app.get('/p', (c) => html(c, landingPage(apk ? '/android' : installUrl)));
+  app.get('/p', (c) => html(c, landingPage(currentApk() ? '/android' : installUrl)));
 
-  app.get('/android', (c) => (apk ? html(c, downloadPage(apk)) : c.redirect(installUrl, 302)));
+  app.get('/android', (c) => {
+    const apk = currentApk();
+    return apk ? html(c, downloadPage(apk)) : c.redirect(installUrl, 302);
+  });
 
   app.get('/android/latest.json', (c) => {
+    const apk = currentApk();
     c.header('Cache-Control', 'public, max-age=300');
     if (!apk) return c.json({ store: installUrl });
     const url = new URL('/android', c.req.url);

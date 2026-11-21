@@ -73,7 +73,13 @@ the system's light or dark theme and serves its fonts locally, without third-par
 APK that Google Play signs (Play Console > App bundle explorer > Downloads > "Signed, universal
 APK"), hosted as an asset of its `android/vX.Y.Z` GitHub release. It has the signature of the
 Play install, so each updates the other (`docs/research/play-policy.md`, "Distribution outside
-Play"). With `ANDROID_APK_URL`, `ANDROID_APK_VERSION` and `ANDROID_APK_SHA256` set:
+Play"). `.github/workflows/android-apk.yml` attaches it to that release as
+`SpainAssist-X.Y.Z.apk`. With `ANDROID_APK_GITHUB_REPO` (owner/name) set, the relay reads that
+repository's releases from GitHub's API (`src/github-apk.ts`) at start and every 10 minutes, and
+offers the newest `android/vX.Y.Z` release that has its APK, with the SHA-256 GitHub gives for
+it (`digest`). A new Android release thus needs no deploy. It sends no token: 6 requests an hour,
+of the 60 GitHub allows an address. A failed read keeps the last APK and tries again after a
+minute. While the relay has an APK:
 - `/p`'s button goes to `/android`. That link has no fragment, so the pairing payload still
   never leaves the phone's browser;
 - `/android` (Spanish, the style of `/p`, no scripts) has the download button, the version, the
@@ -84,11 +90,13 @@ Play"). With `ANDROID_APK_URL`, `ANDROID_APK_VERSION` and `ANDROID_APK_SHA256` s
   desktop reads it (`apps/desktop/src/main/companion/phone-app.ts`) to tell a phone whose app is
   older, with a QR to `page`.
 
-Without them (all three unset or empty), everything points to the store again: `/p` links to
+While it has none (`ANDROID_APK_GITHUB_REPO` unset or empty, before the first read, or GitHub
+lists no such release), everything points to the store again: `/p` links to
 `INSTALL_URL` or the Play page, `/android` redirects there (302), and `/android/latest.json`
 answers `{ "store": "<that URL>" }` with status 200, so the desktop names Google Play in its
-notices. Going back to Google Play is only that: unset the three variables. Setting only some of
-them stops the relay at start. `/android/latest.json` is cached for 5 minutes (`max-age=300`).
+notices. Going back to Google Play is only that: set `ANDROID_APK_GITHUB_REPO` to empty in
+`relay_server_env` (Terraform sets it to `github_repository`). `/android/latest.json` is cached
+for 5 minutes (`max-age=300`).
 
 ## Configuration
 
@@ -99,9 +107,7 @@ them stops the relay at start. `/android/latest.json` is cached for 5 minutes (`
 | `ANDROID_PACKAGE` | `es.spainassist.firma` | App id for App Links and the landing page |
 | `ANDROID_CERT_SHA256` | empty | Comma-separated SHA-256 fingerprints of the app's signing certificates |
 | `INSTALL_URL` | Play Store page | Where "Descargar Spain Assist para Android" points while no APK is configured |
-| `ANDROID_APK_URL` | unset | Direct `https://` URL of the APK (a GitHub release asset). With the next two: all three or none |
-| `ANDROID_APK_VERSION` | unset | Its version, `X.Y.Z` (the page links to the tag `android/vX.Y.Z`) |
-| `ANDROID_APK_SHA256` | unset | SHA-256 of the APK file, 64 hex digits (`shasum -a 256 <file>`) |
+| `ANDROID_APK_GITHUB_REPO` | unset | owner/name whose newest `android/vX.Y.Z` release offers the APK outside Google Play |
 | `ROOMS_PER_ADDRESS` / `CONNECTIONS_PER_ADDRESS` | 20 / 40 | Per client address |
 | `MAX_CONNECTIONS` | 300 | In total, all addresses |
 | `ROOM_MEGABYTES` | 512 | Bytes forwarded per room (binary and text frames) |

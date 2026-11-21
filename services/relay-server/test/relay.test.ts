@@ -386,7 +386,7 @@ describe('relay HTTP', () => {
   });
 
   it('offers the APK on its own page when one is configured', async () => {
-    const app = createApp({ androidApk: apk, installUrl: 'https://example.test/install' });
+    const app = createApp({ androidApk: () => apk, installUrl: 'https://example.test/install' });
     const landing = await (await app.request('/p')).text();
     expect(landing).toContain('<a class="download" href="/android">');
     expect(landing).not.toContain('example.test');
@@ -416,7 +416,7 @@ describe('relay HTTP', () => {
   });
 
   it('tells the desktop the latest APK and where its page is', async () => {
-    const app = createApp({ androidApk: apk });
+    const app = createApp({ androidApk: () => apk });
     const latest = await app.request('http://relay.example.test/android/latest.json', {
       headers: { 'x-forwarded-proto': 'https' },
     });
@@ -426,7 +426,7 @@ describe('relay HTTP', () => {
       page: 'http://relay.example.test/android',
     });
     // Behind our proxy the request arrives as http: the page keeps the scheme the client used.
-    const proxied = createApp({ androidApk: apk, trustProxy: true });
+    const proxied = createApp({ androidApk: () => apk, trustProxy: true });
     const body = (await (
       await proxied.request('http://relay.example.test/android/latest.json', {
         headers: { 'x-forwarded-proto': 'https' },
@@ -435,28 +435,15 @@ describe('relay HTTP', () => {
     expect(body.page).toBe('https://relay.example.test/android');
   });
 
-  it('reads the APK from the environment, all three variables or none', () => {
-    const env = {
-      ANDROID_APK_URL: apk.url,
-      ANDROID_APK_VERSION: apk.version,
-      ANDROID_APK_SHA256: apk.sha256.toUpperCase(),
-    };
-    expect(loadConfig(env).androidApk).toEqual(apk);
-    expect(loadConfig({}).androidApk).toBeUndefined();
+  it('reads the GitHub repository of the APK from the environment', () => {
+    const repo = 'MeLlamoPablo/SpainAssist';
+    expect(loadConfig({ ANDROID_APK_GITHUB_REPO: ` ${repo} ` }).androidApkRepo).toBe(repo);
+    expect(loadConfig({}).androidApkRepo).toBeUndefined();
     // Emptied in the dashboard counts as unset.
-    expect(
-      loadConfig({ ANDROID_APK_URL: '', ANDROID_APK_VERSION: ' ', ANDROID_APK_SHA256: '' })
-        .androidApk,
-    ).toBeUndefined();
-    expect(() => loadConfig({ ...env, ANDROID_APK_SHA256: undefined })).toThrow(
-      /Missing ANDROID_APK_SHA256/,
+    expect(loadConfig({ ANDROID_APK_GITHUB_REPO: ' ' }).androidApkRepo).toBeUndefined();
+    expect(() => loadConfig({ ANDROID_APK_GITHUB_REPO: 'https://github.com/x/y' })).toThrow(
+      /owner\/name/,
     );
-    expect(() => loadConfig({ ANDROID_APK_VERSION: apk.version })).toThrow(
-      /Missing ANDROID_APK_URL, ANDROID_APK_SHA256/,
-    );
-    expect(() => loadConfig({ ...env, ANDROID_APK_SHA256: 'abc' })).toThrow();
-    expect(() => loadConfig({ ...env, ANDROID_APK_VERSION: 'v0.3.5' })).toThrow();
-    expect(() => loadConfig({ ...env, ANDROID_APK_URL: 'http://example.test/a.apk' })).toThrow();
   });
 });
 

@@ -1,6 +1,7 @@
 # Android release: pushing an `android/vX.Y.Z` tag releases independently of desktop's `vX.Y.Z`.
 # Builds the Android App Bundle signed with the upload key, checks the signature and keeps the
-# .aab as the workflow artifact `android-bundle`. Tagged builds then submit it to Google Play.
+# .aab as the workflow artifact `android-bundle`. Tagged builds then submit it to Google Play,
+# and attach the APK Play signs to the GitHub release `android/vX.Y.Z` (android-apk.yml).
 # The version is X.Y.Z, and the versionCode X*10000 + Y*100 + Z
 # (`apps/mobile/androidApp/build.gradle.kts`). Running it by hand from an `android/v*` tag does the
 # same; from a branch it needs the `version` input and builds a test bundle.
@@ -209,3 +210,13 @@ jobs:
           PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           ANDROID_BUNDLE_DIR: ${{ runner.temp }}/android-bundle
         run: node scripts/store-submissions.mjs android
+
+  apk:
+    name: Offer the APK outside Google Play
+    needs: [check, play]
+    uses: ./.github/workflows/android-apk.yml
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      version: ${{ needs.check.outputs.version }}

@@ -1,9 +1,10 @@
 # Downloads the universal APK that Google Play signs (Play App Signing) for a version already
 # uploaded to Play, checks it, and keeps it as the workflow artifact `android-apk`. With
 # `publish`, it also attaches it to the GitHub release `android/vX.Y.Z` (created if absent, never
-# marked latest: the desktop's updater reads the latest release). The relay's /android page
-# offers that file (services/relay-server/README.md, ANDROID_APK_*). Play makes the APKs when a
-# bundle is uploaded, before any review, but not at once: the download waits up to 10 minutes.
+# marked latest: the desktop's updater reads the latest release). The relay finds it there and
+# offers it on /android (services/relay-server/README.md). mobile-release.yml calls this after
+# the Play submission. Play makes the APKs when a bundle is uploaded, before any review: the
+# download waits up to 10 minutes for them.
 #
 # Google Play access trusts only tag refs (apps/mobile/README.md, "Google Play access"), and a
 # dispatch runs this file as it is at the ref it runs from: dispatch it from a tag that has it.
@@ -160,11 +161,4 @@ jobs:
             echo "::error::$tag already has another $name ($digest). Remove it by hand if it is wrong."
             exit 1
           fi
-          {
-            echo "### Relay"
-            echo "\`\`\`"
-            echo "ANDROID_APK_URL=https://github.com/$GH_REPO/releases/download/$tag/$name"
-            echo "ANDROID_APK_VERSION=$VERSION"
-            echo "ANDROID_APK_SHA256=$SHA256"
-            echo "\`\`\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "- Download: https://github.com/$GH_REPO/releases/download/$tag/$name" >> "$GITHUB_STEP_SUMMARY"

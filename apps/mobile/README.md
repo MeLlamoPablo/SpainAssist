@@ -196,8 +196,9 @@ even when a previous build with that code was only a draft. Keep released tags f
 - **APK outside Google Play.** `.github/workflows/android-apk.yml` downloads the universal APK
   that Google Play signs for a version already in Play, checks its package, version and
   signature, and keeps it as the artifact `android-apk`. With `publish`, it attaches it to the
-  GitHub release `android/vX.Y.Z` (created if absent, never marked latest) and prints the
-  relay's `ANDROID_APK_*` values (`services/relay-server/README.md`). Google Play access trusts
+  GitHub release `android/vX.Y.Z` (created if absent, never marked latest), where the relay
+  finds it (`services/relay-server/README.md`). The release calls it after the Play
+  submission; a dispatch serves to retry it or for older versions. Google Play access trusts
   only tags, so dispatch it from a tag that has the workflow; the `version` input selects the
   Play version, e.g. for a version tagged before the workflow existed:
   `git tag ci/apk-0.3.5 master && git push origin ci/apk-0.3.5`, then
