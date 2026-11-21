@@ -9,7 +9,7 @@
         "tools/scan-eval/run.mjs"
       ],
       "project": ["scripts/**", "tools/scan-eval/**", "marketing/**/*.{js,mjs}"],
-      "ignoreBinaries": ["ffmpeg"]
+      "ignoreBinaries": ["ffmpeg", "gpg", "git-crypt"]
     },
     "apps/desktop": {
       "entry": [

@@ -21,6 +21,7 @@
     "services": "node scripts/dev-services.mjs",
     "vouchers": "corepack pnpm --filter @sa/key-server vouchers:admin",
     "feedback": "corepack pnpm --filter @sa/feedback-server admin",
+    "yubikey-unlock": "git show yubikey-recovery:.git-crypt/keys/default/0/93C1AE6AA35C5B388955984612BF2F12483FD814.gpg | gpg -d > /tmp/gc.key && git-crypt unlock /tmp/gc.key; rm -P /tmp/gc.key",
     "reset:dev": "corepack pnpm --filter @sa/desktop reset:dev",
     "reset:dev:onboarding": "corepack pnpm --filter @sa/desktop reset:dev:onboarding",
     "design:colors": "node tools/design-colors.mjs",
