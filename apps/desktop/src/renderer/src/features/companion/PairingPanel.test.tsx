@@ -63,6 +63,73 @@ describe('PairingPanel', () => {
     );
   });
 
+  const phoneApp = { version: '0.3.5', page: 'https://relay.example.invalid/android' };
+
+  it('tells a connected phone of a newer app outside Google Play, with a QR to download it', () => {
+    const html = render({ state: 'connected', device: 'Pixel 8', phoneApp, phoneUpdate: true });
+    // Still connected: the notice doesn't replace or block anything.
+    expect(html).toContain('data-testid="companion-connected"');
+    expect(html).toContain('Conectado con Pixel 8');
+    expect(html).toContain('data-testid="companion-update"');
+    expect(html).toContain('Hay una versión nueva de la app del móvil (0.3.5).');
+    expect(html).toContain('Escanéalo con el móvil para actualizarla.');
+    expect(html).toContain('data-testid="companion-update-qr"');
+    expect(html).toContain('aria-label="Código para descargar la app del móvil"');
+    expect(html).not.toContain('role="alert"');
+    // The pairing QR is another code.
+    expect(html).not.toContain('data-testid="companion-qr"');
+  });
+
+  it('has no update notice for an up-to-date phone, without an APK, or while not connected', () => {
+    for (const status of [
+      { state: 'connected', device: 'Pixel 8' },
+      { state: 'connected', device: 'Pixel 8', phoneApp },
+      // Never without the page to send to.
+      { state: 'connected', device: 'Pixel 8', phoneUpdate: true },
+      { state: 'away', device: 'Pixel 8', phoneApp },
+      { state: 'waiting', link: 'https://relay.example.invalid/p#demo', phoneApp },
+    ] satisfies CompanionStatus[]) {
+      const html = render(status);
+      expect(html).not.toContain('companion-update');
+      expect(html).not.toContain('Hay una versión nueva');
+    }
+  });
+
+  it('sends an out-of-date phone app to the QR while the relay offers it outside Google Play', () => {
+    const outdated = { phone: 5, desktop: 6 };
+    const html = render({ state: 'away', device: 'Pixel 8', outdated, phoneApp });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('data-side="phone"');
+    expect(html).toContain('La app del móvil está desactualizada. Actualízala y vuelve a abrirla.');
+    expect(html).toContain('Escanéalo con el móvil para actualizarla.');
+    expect(html).toContain('data-testid="companion-update-qr"');
+    expect(html).not.toContain('Google Play');
+    // A first pairing keeps its own QR next to it.
+    const first = render({
+      state: 'waiting',
+      link: 'https://relay.example.invalid/p#demo',
+      outdated,
+      phoneApp,
+    });
+    expect(first).toContain('data-testid="companion-qr"');
+    expect(first).toContain('data-testid="companion-update-qr"');
+    // Without the APK: Google Play, and no QR to a download.
+    const play = render({ state: 'away', device: 'Pixel 8', outdated });
+    expect(play).toContain(
+      'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
+    );
+    expect(play).not.toContain('companion-update-qr');
+    // The phone's download doesn't help when the desktop is the old one.
+    const desktop = render({
+      state: 'away',
+      device: 'Pixel 8',
+      outdated: { phone: 7, desktop: 6 },
+      phoneApp,
+    });
+    expect(desktop).toContain('data-side="desktop"');
+    expect(desktop).not.toContain('companion-update-qr');
+  });
+
   it('shows only the code while connecting, then says the server is out of reach and offers to retry', () => {
     const link = 'https://relay.example.invalid/p#demo';
     const connecting = render({ state: 'connecting', link });

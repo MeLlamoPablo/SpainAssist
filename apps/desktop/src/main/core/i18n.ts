@@ -301,6 +301,10 @@ const STRINGS = {
     es: 'La app del móvil está desactualizada. Actualízala desde Google Play, vuelve a abrirla e inténtalo de nuevo.',
     en: 'The phone app is out of date. Update it from Google Play, open it again and try again.',
   },
+  dnieError_phone_outdated_download: {
+    es: 'La app del móvil está desactualizada. Actualízala con el código QR que te muestra Spain Assist en Mis datos, junto a tu DNI, vuelve a abrirla e inténtalo de nuevo.',
+    en: 'The phone app is out of date. Update it with the QR code Spain Assist shows in My data, next to your DNI, open it again and try again.',
+  },
   dnieError_desktop_outdated: {
     es: 'La app del móvil es más nueva que Spain Assist en el ordenador. Actualiza Spain Assist en el ordenador e inténtalo de nuevo.',
     en: 'The phone app is newer than Spain Assist on this computer. Update Spain Assist on the computer and try again.',

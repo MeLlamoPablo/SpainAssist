@@ -40,7 +40,7 @@ import { usePersonal, useVaultStore } from '../../store/vault';
 import { chatDict } from '../chat/i18n';
 import { DnieHelp } from '../companion/DnieHelp';
 import { companionDict } from '../companion/i18n';
-import { PairingPanel } from '../companion/PairingPanel';
+import { PairingPanel, PhoneAppNotice } from '../companion/PairingPanel';
 import { CertificateMenu } from './CertificateMenu';
 import { CertificateRequestCard } from './CertificateRequestCard';
 import { vaultDict } from './i18n';
@@ -692,6 +692,8 @@ function DnieCard({
                 {tc.pair}
               </Button>
             )}
+            {/* The pairing dialog closes once a phone pairs: its update's QR shows here. */}
+            {paired ? <PhoneAppNotice status={companion} /> : null}
           </div>
         </>
       }

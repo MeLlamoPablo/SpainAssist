@@ -439,6 +439,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         // Development: a phone can't reach this machine's loopback relay.
         lanRelay: deps.appInfo.isDev && !env.e2e,
         appVersion: deps.appInfo.version,
+        fetch: deps.fetch,
         events,
         prompts,
         procedures,

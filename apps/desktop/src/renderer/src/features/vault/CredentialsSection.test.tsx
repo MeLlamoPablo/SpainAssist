@@ -135,6 +135,34 @@ describe('Mis datos: DNI with the phone', () => {
     expect(render(true, [DNIE])).not.toContain('companion-ended');
   });
 
+  it("shows the phone app's update under the paired phone, where the pairing dialog is closed", () => {
+    const phoneApp = { version: '0.3.5', page: 'https://relay.example.invalid/android' };
+    const update = render(true, [DNIE], {
+      state: 'connected',
+      device: 'Pixel 8',
+      phoneApp,
+      phoneUpdate: true,
+    });
+    expect(update).toContain('Móvil vinculado: Pixel 8');
+    expect(update).toContain('Hay una versión nueva de la app del móvil (0.3.5).');
+    expect(update).toContain('data-testid="companion-update-qr"');
+    const outdated = render(true, [DNIE], {
+      state: 'away',
+      device: 'Pixel 8',
+      outdated: { phone: 5, desktop: 6 },
+      phoneApp,
+    });
+    expect(outdated).toContain(
+      'La app del móvil está desactualizada. Actualízala y vuelve a abrirla.',
+    );
+    expect(outdated).toContain('data-testid="companion-update-qr"');
+    for (const status of [
+      { state: 'connected', device: 'Pixel 8', phoneApp },
+      { state: 'away', device: 'Pixel 8', outdated: { phone: 5, desktop: 6 } },
+    ] satisfies CompanionStatus[])
+      expect(render(true, [DNIE], status)).not.toContain('companion-update-qr');
+  });
+
   it('shows the saved pairing independently of live phone or relay status', () => {
     const paired = render(true, [DNIE], { state: 'connected', device: 'Pixel 8' });
     expect(paired).toContain('Móvil vinculado: Pixel 8');

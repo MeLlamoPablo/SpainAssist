@@ -71,7 +71,9 @@ import {
  * pairing for DNI signatures; the playground starts connected; =phone_unpaired|expired|
  * relay_refused: no pairing, the last one ended for that reason; =outdated|outdated_desktop:
  * the paired phone's app, or this one, needs an update; =stalled: the relay can't be reached,
- * "Reintentar" pairs anew) · ?dnieSaved=1|pin (a saved
+ * "Reintentar" pairs anew) · ?apk=1 (the relay offers the phone app outside Google Play: the
+ * update notices show a QR to it, and a connected phone's app is one version behind) ·
+ * ?dnieSaved=1|pin (a saved
  * DNI in Mis datos; =pin with its PIN saved) · ?certificate=inSystem|external (the saved
  * certificate is also installed in the operating system, or only there).
  */
@@ -331,7 +333,16 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
   const demoLink = 'https://relay.example.invalid/p#demo';
   const pairedUntil = new Date(Date.now() + 72 * 3600_000).toISOString();
   const companionParam = params.get('companion') ?? (params.has('playground') ? 'connected' : '');
-  let companion: CompanionStatus =
+  // `?apk=1`: the relay offers the phone app outside Google Play, newer than the phone's.
+  const withPhoneApp = (status: CompanionStatus): CompanionStatus =>
+    params.get('apk') !== '1' || status.state === 'off' || status.state === 'unavailable'
+      ? status
+      : {
+          ...status,
+          phoneApp: { version: '0.3.5', page: 'https://relay.example.invalid/android' },
+          ...(status.state === 'connected' ? { phoneUpdate: true } : {}),
+        };
+  let companion: CompanionStatus = withPhoneApp(
     companionParam === 'connected'
       ? { state: 'connected', device: 'Pixel 8', expiresAt: pairedUntil }
       : companionParam === 'away'
@@ -354,10 +365,11 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
                   companionParam === 'expired' ||
                   companionParam === 'relay_refused'
                 ? { state: 'off', reason: companionParam }
-                : { state: 'off' };
+                : { state: 'off' },
+  );
   const setCompanion = (next: CompanionStatus) => {
-    companion = next;
-    emit({ type: 'companion.changed', status: next });
+    companion = withPhoneApp(next);
+    emit({ type: 'companion.changed', status: companion });
   };
 
   // The must-update screen: `?mustUpdate=1` plays a Windows update (checking, downloading, ready);

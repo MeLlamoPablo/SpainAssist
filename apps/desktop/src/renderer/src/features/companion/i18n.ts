@@ -89,8 +89,16 @@ export const companionDict = defineDict({
     outdated: {
       phone:
         'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
+      /** `phone` while the relay offers the app outside Google Play: its QR follows. */
+      phoneDownload: 'La app del móvil está desactualizada. Actualízala y vuelve a abrirla.',
       desktop:
         'La app del móvil es más nueva que Spain Assist en el ordenador. Actualiza Spain Assist en el ordenador para firmar con el móvil.',
+    },
+    /** The phone app outside Google Play: a QR to the page that downloads it. */
+    update: {
+      available: (version: string) => `Hay una versión nueva de la app del móvil (${version}).`,
+      scan: 'Escanéalo con el móvil para actualizarla.',
+      qrLabel: 'Código para descargar la app del móvil',
     },
     /** The relay hasn't been reached for a while. */
     stalled: 'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
@@ -175,8 +183,14 @@ export const companionDict = defineDict({
     pairAgain: 'Pair again',
     outdated: {
       phone: 'The phone app is out of date. Update it from Google Play and open it again.',
+      phoneDownload: 'The phone app is out of date. Update it and open it again.',
       desktop:
         'The phone app is newer than Spain Assist on this computer. Update Spain Assist on the computer to sign with your phone.',
+    },
+    update: {
+      available: (version: string) => `There is a new version of the phone app (${version}).`,
+      scan: 'Scan it with your phone to update it.',
+      qrLabel: 'Code to download the phone app',
     },
     stalled: "Can't connect to the server. Check your internet connection.",
     retry: 'Try again',

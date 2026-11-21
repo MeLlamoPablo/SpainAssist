@@ -18,6 +18,7 @@ import {
   type CompanionAlgorithm,
   type CompanionCheck,
   type CompanionEndReason,
+  type CompanionPhoneApp,
   type CompanionStatus,
   type CredentialSummary,
   companionOutdatedSide,
@@ -40,7 +41,14 @@ import type { Logger } from '../core/logger';
 import { errorMessage, formatBytes, hostOf } from '../core/util';
 import type { SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
+import type { FetchFn } from '../remote/http';
 import { dnieChain } from './dnie-chain';
+import {
+  PHONE_APP_REFRESH_MS,
+  PHONE_APP_RETRY_MS,
+  phoneAppBehind,
+  readLatestPhoneApp,
+} from './phone-app';
 
 export interface CompanionDeps {
   /** ws(s):// or http(s):// base URL of the relay; undefined = DNI signing unavailable. */
@@ -48,6 +56,8 @@ export interface CompanionDeps {
   /** Development: put this machine's LAN address in the QR when the relay is on loopback. */
   lanRelay?: boolean;
   appVersion: string;
+  /** Reads the relay's latest phone app (`/android/latest.json`). */
+  fetch: FetchFn;
   events: EventBus;
   prompts: PromptManager;
   procedures: ProcedureService;
@@ -88,9 +98,11 @@ const ALGORITHMS: Record<SignatureDigest, CompanionAlgorithm> = {
  * version (`phone_outdated`: update the phone app; `desktop_outdated`: update this one).
  */
 type RefusalCode = PhoneSignErrorCode | 'phone_outdated' | 'desktop_outdated';
+/** `phone_outdated` while the relay offers the phone app outside Google Play: a QR downloads it. */
+type NoticeCode = RefusalCode | 'phone_outdated_download';
 
 /** What the user reads when the phone did not sign (declines and cancels show nothing). */
-const NOTICES: Partial<Record<RefusalCode, StringKey>> = {
+const NOTICES: Partial<Record<NoticeCode, StringKey>> = {
   pin_blocked: 'dnieError_pin_blocked',
   card_unsupported: 'dnieError_card_unsupported',
   no_certificate: 'dnieError_no_certificate',
@@ -105,6 +117,7 @@ const NOTICES: Partial<Record<RefusalCode, StringKey>> = {
   expired: 'dnieError_expired',
   relay_refused: 'dnieError_relay_refused',
   phone_outdated: 'dnieError_phone_outdated',
+  phone_outdated_download: 'dnieError_phone_outdated_download',
   desktop_outdated: 'dnieError_desktop_outdated',
 };
 
@@ -115,7 +128,7 @@ const REFUSAL_NOTICES: Record<CertificateRefusal, StringKey> = {
 };
 
 /** Why a DNI login wasn't approved, for the agent. */
-const LOGIN_REFUSALS: Partial<Record<RefusalCode, string>> = {
+const LOGIN_REFUSALS: Partial<Record<NoticeCode, string>> = {
   rejected: 'the user declined it on the phone',
   cancelled: 'the user cancelled it',
   timeout: 'nobody approved it in time',
@@ -127,6 +140,8 @@ const LOGIN_REFUSALS: Partial<Record<RefusalCode, string>> = {
   relay_refused: 'the relay server refused the phone connection',
   phone_outdated:
     'the Spain Assist app on the phone is out of date: the user must update it from Google Play and open it again',
+  phone_outdated_download:
+    'the Spain Assist app on the phone is out of date: the user must update it (Spain Assist shows a QR to download it, in the DNI request and in Mis datos) and open it again',
   desktop_outdated:
     'the phone app is newer than this desktop app: the user must update Spain Assist on the computer',
 };
@@ -203,10 +218,15 @@ export class CompanionService {
   private readonly unlocks = new Map<string, UnlockWaiter>();
   /** DNI login news for each procedure's agent (`takeLoginNotes`). */
   private readonly logins = new Map<string, { waiting?: string; notes: string[] }>();
+  /** The phone app the relay offers outside Google Play, as last read; undefined: none known. */
+  private phoneApp?: CompanionPhoneApp;
+  /** When the relay's phone app may be read again (0: now; Infinity: a read is under way). */
+  private phoneAppDue = 0;
 
   constructor(private readonly deps: CompanionDeps) {
     this.relayUrl = deps.relayUrl && deps.lanRelay ? lanRelayUrl(deps.relayUrl) : deps.relayUrl;
     this.signer = new PhoneSigner({ send: (m) => this.pairing?.send(m) ?? false });
+    this.refreshPhoneApp();
   }
 
   status(): CompanionStatus {
@@ -444,7 +464,7 @@ export class CompanionService {
         deps.procedures.addNotice(
           procedureId,
           'warning',
-          t(lang, NOTICES[code] ?? 'dnieError_failed'),
+          t(lang, NOTICES[this.noticeCode(code)] ?? 'dnieError_failed'),
         );
       }
       return null;
@@ -564,7 +584,8 @@ export class CompanionService {
       });
       if (!key) {
         const why =
-          (refused && LOGIN_REFUSALS[refused]) ?? `it failed (${refused ?? 'unavailable'})`;
+          (refused && LOGIN_REFUSALS[this.noticeCode(refused)]) ??
+          `it failed (${refused ?? 'unavailable'})`;
         this.loginNews(procedureId).notes.push(
           `The DNI login for ${label} was not approved: ${why}.`,
         );
@@ -803,6 +824,7 @@ export class CompanionService {
           this.signer.onEnded(status.reason === 'phone_unpaired' ? 'unpaired' : status.reason);
         }
         this.watchStall(status);
+        this.refreshPhoneApp();
         this.emit();
         const outdated = pairing.outdated;
         if (outdated) {
@@ -823,7 +845,37 @@ export class CompanionService {
     this.ended = undefined;
     this.watchStall();
     deps.logger.info('companion pairing started', { relay: new URL(relayUrl).host });
+    this.refreshPhoneApp();
     this.emit();
+  }
+
+  /**
+   * Reads the relay's latest phone app in the background: when the service starts, then when a
+   * pairing starts or changes and the last read is older than `PHONE_APP_REFRESH_MS`. A read
+   * that fails keeps what was known and never reaches the user.
+   */
+  private refreshPhoneApp(): void {
+    const { relayUrl, deps } = this;
+    if (!relayUrl || Date.now() < this.phoneAppDue) return;
+    this.phoneAppDue = Number.POSITIVE_INFINITY;
+    readLatestPhoneApp(deps.fetch, relayUrl).then(
+      (latest) => {
+        this.phoneAppDue = Date.now() + PHONE_APP_REFRESH_MS;
+        const changed =
+          latest?.version !== this.phoneApp?.version || latest?.page !== this.phoneApp?.page;
+        this.phoneApp = latest;
+        if (changed && this.pairing) this.emit();
+      },
+      (err) => {
+        this.phoneAppDue = Date.now() + PHONE_APP_RETRY_MS;
+        deps.logger.info('latest phone app not read', { error: errorMessage(err) });
+      },
+    );
+  }
+
+  /** The notice of a refusal: an out-of-date phone app is told where to update from. */
+  private noticeCode(code: RefusalCode): NoticeCode {
+    return code === 'phone_outdated' && this.phoneApp ? 'phone_outdated_download' : code;
   }
 
   /**
@@ -849,15 +901,28 @@ export class CompanionService {
 
   private describe(pairing: DesktopPairing, status: PairingStatus): CompanionStatus {
     const expiresAt = new Date(pairing.expiresAt).toISOString();
-    const outdated = pairing.outdated ? { outdated: pairing.outdated } : {};
+    const phoneApp = this.phoneApp;
+    // What is known of the phone app, whatever the state.
+    const app = {
+      ...(pairing.outdated ? { outdated: pairing.outdated } : {}),
+      ...(phoneApp ? { phoneApp } : {}),
+    };
     switch (status.state) {
       case 'connected':
-        return { state: 'connected', device: status.phone.device, expiresAt, ...outdated };
+        return {
+          state: 'connected',
+          device: status.phone.device,
+          expiresAt,
+          ...app,
+          ...(phoneApp && phoneAppBehind(status.phone.app, phoneApp.version)
+            ? { phoneUpdate: true }
+            : {}),
+        };
       // The QR works only until a phone pairs: a paired phone reconnects on its own.
       case 'away':
-        return { state: 'away', device: status.phone.device, expiresAt, ...outdated };
+        return { state: 'away', device: status.phone.device, expiresAt, ...app };
       case 'waiting':
-        return { state: 'waiting', ...link(pairing), expiresAt, ...outdated };
+        return { state: 'waiting', ...link(pairing), expiresAt, ...app };
       case 'connecting':
         return {
           state: 'connecting',
@@ -865,7 +930,7 @@ export class CompanionService {
           expiresAt,
           ...(status.phone ? { device: status.phone.device } : {}),
           ...(this.stalled ? { stalled: true } : {}),
-          ...outdated,
+          ...app,
         };
       case 'ended': {
         const reason = endReason(status.reason);

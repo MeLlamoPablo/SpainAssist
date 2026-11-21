@@ -1,4 +1,5 @@
 import {
+  type CompanionPhoneApp,
   companionOutdatedSide,
   DniAccessNumber,
   DniePin,
@@ -125,7 +126,10 @@ export function DnieSignaturePromptCard({
             {/* The request would fail once sent: say why before the user types anything. */}
             {companion.outdated ? (
               <div className="mb-4 flex">
-                <OutdatedNotice side={companionOutdatedSide(companion.outdated)} />
+                <OutdatedNotice
+                  side={companionOutdatedSide(companion.outdated)}
+                  phoneApp={companion.phoneApp}
+                />
               </div>
             ) : null}
             <UnlockForm itemId={item.id} unlock={unlock} onCancel={() => void cancel()} />
@@ -157,7 +161,10 @@ export function DnieSignaturePromptCard({
           </div>
         ) : companion.outdated && !companion.link && companion.state !== 'unavailable' ? (
           // Opening the outdated app won't help: only the update notice (and another phone).
-          <OutdatedPhone side={companionOutdatedSide(companion.outdated)} />
+          <OutdatedPhone
+            side={companionOutdatedSide(companion.outdated)}
+            phoneApp={companion.phoneApp}
+          />
         ) : (
           <PairingPanel status={companion} request />
         )}
@@ -194,7 +201,13 @@ export function DnieSignaturePromptCard({
 }
 
 /** A paired phone whose app speaks another protocol version: which app to update. */
-function OutdatedPhone({ side }: { side: 'phone' | 'desktop' }) {
+function OutdatedPhone({
+  side,
+  phoneApp,
+}: {
+  side: 'phone' | 'desktop';
+  phoneApp?: CompanionPhoneApp;
+}) {
   const tc = useT(companionDict);
   const pairAnother = async () => {
     try {
@@ -205,7 +218,7 @@ function OutdatedPhone({ side }: { side: 'phone' | 'desktop' }) {
   };
   return (
     <div className="flex flex-col gap-3" data-testid="dnie-outdated">
-      <OutdatedNotice side={side} />
+      <OutdatedNotice side={side} phoneApp={phoneApp} />
       {/* Another phone can help only when this one is behind. */}
       {side === 'phone' ? (
         <div>

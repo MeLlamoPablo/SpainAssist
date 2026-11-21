@@ -257,6 +257,11 @@ the card over NFC after the user approves.
 - The CAN and the PIN are typed on the desktop and kept there (the PIN in the vault). They reach
   the phone only inside the encrypted channel, per request.
 - Agents have no path to either.
+- While Google Play reviews the phone app, the relay can offer the APK Google Play signs
+  (`services/relay-server/README.md`, "Android APK outside Google Play"). The desktop then reads
+  the relay's `/android/latest.json` and, for a phone whose app is older or speaks an older
+  protocol, shows a QR to the relay's download page instead of naming Google Play. Only the
+  relay's configuration switches between the two.
 
 Protocol: `packages/companion/README.md`.
 

@@ -428,6 +428,19 @@ export interface CompanionStatus {
    * (`companionOutdatedSide`); cleared when a phone with this one handshakes.
    */
   outdated?: CompanionOutdated;
+  /**
+   * The phone app the relay offers outside Google Play, while it does (`/android/latest.json`):
+   * the notices that ask to update it show a QR to its page instead of naming Google Play.
+   */
+  phoneApp?: CompanionPhoneApp;
+  /** `connected` only: the phone's app is older than `phoneApp.version`. It still signs. */
+  phoneUpdate?: boolean;
+}
+
+/** The latest phone app outside Google Play: its version and the page that downloads it. */
+export interface CompanionPhoneApp {
+  version: string;
+  page: string;
 }
 
 /** The protocol versions of the phone that handshook and of this desktop. */

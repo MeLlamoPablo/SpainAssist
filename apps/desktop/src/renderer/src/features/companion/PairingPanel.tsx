@@ -1,4 +1,4 @@
-import { type CompanionStatus, companionOutdatedSide } from '@sa/shared';
+import { type CompanionPhoneApp, type CompanionStatus, companionOutdatedSide } from '@sa/shared';
 import { Loader2, RotateCw, Smartphone, TriangleAlert, WifiOff } from 'lucide-react';
 import { useMemo } from 'react';
 import { encode } from 'uqr';
@@ -12,10 +12,19 @@ import { toast } from '../../store/toast';
 import { companionDict } from './i18n';
 
 /**
- * The pairing link as a QR code. Always dark modules on a white tile, whatever the theme:
- * phone scanners read inverted codes badly.
+ * The pairing link as a QR code (or, with `update`, the small one to the phone app's download
+ * page). Always dark modules on a white tile, whatever the theme: phone scanners read inverted
+ * codes badly.
  */
-function CompanionQr({ link, size = 232 }: { link: string; size?: number }) {
+function CompanionQr({
+  link,
+  size = 232,
+  update,
+}: {
+  link: string;
+  size?: number;
+  update?: boolean;
+}) {
   const t = useT(companionDict);
   const path = useMemo(() => {
     // Leave a full quiet zone and enough redundancy for the small centre mark.
@@ -37,16 +46,19 @@ function CompanionQr({ link, size = 232 }: { link: string; size?: number }) {
   }, [link]);
   return (
     <div
-      className="relative shrink-0 overflow-hidden rounded-2xl bg-white shadow-xs ring-1 ring-line"
+      className={cn(
+        'relative shrink-0 overflow-hidden bg-white shadow-xs ring-1 ring-line',
+        update ? 'rounded-xl' : 'rounded-2xl',
+      )}
       style={{ width: size, height: size }}
     >
       <svg
         role="img"
-        aria-label={t.qrLabel}
+        aria-label={update ? t.update.qrLabel : t.qrLabel}
         viewBox={`0 0 ${path.size} ${path.size}`}
         width={size}
         height={size}
-        data-testid="companion-qr"
+        data-testid={update ? 'companion-update-qr' : 'companion-qr'}
       >
         <rect width={path.size} height={path.size} fill="#fff" />
         <path d={path.d} fill="#201c19" />
@@ -132,16 +144,27 @@ export function PairingPanel({
         </div>
       </div>
     );
-  if (status.state === 'connected')
-    return (
+  if (status.state === 'connected') {
+    const connected = (
       <p
-        className={cn('flex items-center gap-2 text-[13.5px] font-medium text-fg', className)}
+        className={cn(
+          'flex items-center gap-2 text-[13.5px] font-medium text-fg',
+          !status.phoneUpdate && className,
+        )}
         data-testid="companion-connected"
       >
         <Smartphone size={16} className="text-st-done-fg" aria-hidden />
         {t.connected(status.device ?? t.app)}
       </p>
     );
+    if (!status.phoneUpdate) return connected;
+    return (
+      <div className={cn('flex flex-col gap-3', className)}>
+        {connected}
+        <PhoneAppNotice status={status} />
+      </div>
+    );
+  }
   return (
     <div
       className={cn(
@@ -153,7 +176,9 @@ export function PairingPanel({
       data-testid="companion-pairing"
       data-state={status.state}
     >
-      {status.outdated ? <OutdatedNotice side={companionOutdatedSide(status.outdated)} /> : null}
+      {status.outdated ? (
+        <OutdatedNotice side={companionOutdatedSide(status.outdated)} phoneApp={status.phoneApp} />
+      ) : null}
       {stalled && !paired ? (
         <div className="flex size-[232px] items-center justify-center rounded-2xl bg-st-attention-bg">
           <WifiOff size={22} className="text-st-attention-fg" aria-hidden />
@@ -237,9 +262,68 @@ export function PairingPanel({
   );
 }
 
-/** The phone and this desktop speak different protocol versions: which app to update. */
-export function OutdatedNotice({ side }: { side: 'phone' | 'desktop' }) {
+/** The QR to the phone app's download page, and what to do with it. */
+function PhoneAppQr({ page, className }: { page: string; className?: string }) {
   const t = useT(companionDict);
+  return (
+    <div className={cn('flex items-center gap-3', className)}>
+      <CompanionQr link={page} size={120} update />
+      <p className="min-w-0 flex-1">{t.update.scan}</p>
+    </div>
+  );
+}
+
+/**
+ * What the paired phone's app needs while the relay offers it outside Google Play (`phoneApp`),
+ * with the QR that downloads it: an update to sign at all (`outdated`), or a newer version that
+ * can wait (`phoneUpdate`: it never blocks a signature). Nothing otherwise.
+ */
+export function PhoneAppNotice({ status }: { status: CompanionStatus }) {
+  const t = useT(companionDict);
+  const { phoneApp } = status;
+  if (!phoneApp) return null;
+  if (status.outdated && companionOutdatedSide(status.outdated) === 'phone')
+    return <OutdatedNotice side="phone" phoneApp={phoneApp} />;
+  if (status.state !== 'connected' || !status.phoneUpdate) return null;
+  return (
+    <div
+      className="basis-full rounded-lg bg-surface-2/60 px-3 py-3 text-[12.5px] text-fg-muted ring-1 ring-line ring-inset"
+      data-testid="companion-update"
+    >
+      <p className="text-[13px] font-medium text-fg">{t.update.available(phoneApp.version)}</p>
+      <PhoneAppQr page={phoneApp.page} className="mt-2.5" />
+    </div>
+  );
+}
+
+/**
+ * The phone and this desktop speak different protocol versions: which app to update. With
+ * `phoneApp` (the relay offers the phone app outside Google Play), the phone's update is a QR
+ * to its download page.
+ */
+export function OutdatedNotice({
+  side,
+  phoneApp,
+}: {
+  side: 'phone' | 'desktop';
+  phoneApp?: CompanionPhoneApp;
+}) {
+  const t = useT(companionDict);
+  if (side === 'phone' && phoneApp)
+    return (
+      <div
+        role="alert"
+        className="flex basis-full items-start gap-2 rounded-lg bg-st-attention-bg px-3 py-2 text-[13px] font-medium text-st-attention-fg ring-1 ring-st-attention-line ring-inset"
+        data-testid="companion-outdated"
+        data-side={side}
+      >
+        <TriangleAlert size={15} className="mt-0.5 shrink-0" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p>{t.outdated.phoneDownload}</p>
+          <PhoneAppQr page={phoneApp.page} className="mt-2 mb-1" />
+        </div>
+      </div>
+    );
   return (
     <p
       role="alert"
