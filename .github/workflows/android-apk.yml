@@ -1,0 +1,168 @@
+# Downloads the universal APK that Google Play signs (Play App Signing) for a version already
+# uploaded to Play, checks it, and keeps it as the workflow artifact `android-apk`. With
+# `publish`, it also attaches it to the GitHub release `android/vX.Y.Z` (created if absent, never
+# marked latest: the desktop's updater reads the latest release). The relay's /android page
+# offers that file (services/relay-server/README.md, ANDROID_APK_*). Play makes the APKs when a
+# bundle is uploaded, before any review, but not at once: the download waits up to 10 minutes.
+#
+# Google Play access trusts only tag refs (apps/mobile/README.md, "Google Play access"), and a
+# dispatch runs this file as it is at the ref it runs from: dispatch it from a tag that has it.
+# The version input, not the tag, selects the Play version.
+name: Phone APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'X.Y.Z, already uploaded to Google Play'
+        required: true
+      publish:
+        description: 'Attach the APK to the GitHub release android/vX.Y.Z'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+      publish:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Download the APK Google Play signs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      VERSION: ${{ inputs.version }}
+      PACKAGE: es.spainassist.firma
+    steps:
+      # versionCode as in apps/mobile/androidApp/build.gradle.kts.
+      - name: Check the version and the ref
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          SERVICE_ACCOUNT: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+        run: |
+          if [[ ! "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::The version must be X.Y.Z"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
+            echo "::error::Run this from a tag: Google Play access trusts only tag refs"
+            exit 1
+          fi
+          if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" || -z "$SERVICE_ACCOUNT" ]]; then
+            echo "::error::Missing PLAY_WORKLOAD_IDENTITY_PROVIDER or PLAY_SERVICE_ACCOUNT: see apps/mobile/README.md, Releasing"
+            exit 1
+          fi
+          code=$(( 10#${BASH_REMATCH[1]} * 10000 + 10#${BASH_REMATCH[2]} * 100 + 10#${BASH_REMATCH[3]} ))
+          echo "VERSION_CODE=$code" >> "$GITHUB_ENV"
+          echo "APK=$RUNNER_TEMP/SpainAssist-$VERSION.apk" >> "$GITHUB_ENV"
+      - id: auth
+        name: Authenticate with GitHub identity
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          export_environment_variables: false
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+      # generatedapks.list / generatedapks.download of the Android Publisher API.
+      - name: Download the universal APK
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          api="https://androidpublisher.googleapis.com/androidpublisher/v3/applications/$PACKAGE/generatedApks/$VERSION_CODE"
+          list="$RUNNER_TEMP/generated-apks.json"
+          start=$SECONDS
+          while :; do
+            status=$(curl -sS -o "$list" -w '%{http_code}' -H "Authorization: Bearer $PLAY_ACCESS_TOKEN" "$api")
+            if [[ "$status" == 200 ]]; then
+              found=$(jq -r '[.generatedApks[]? | select(.generatedUniversalApk.downloadId)][0] // empty | [(.generatedUniversalApk.downloadId | @uri), .certificateSha256Hash] | @tsv' "$list")
+              [[ -n "$found" ]] && break
+            elif [[ "$status" != 404 ]]; then
+              echo "::error::Google Play answered HTTP $status: $(jq -r '.error.message // empty' "$list" 2> /dev/null)"
+              exit 1
+            fi
+            if (( SECONDS - start > 600 )); then
+              echo "::error::Google Play has no universal APK for versionCode $VERSION_CODE after 10 minutes. Is that version uploaded? Run this again later."
+              exit 1
+            fi
+            sleep 30
+          done
+          echo "Google Play had the APK after $(( SECONDS - start )) s"
+          IFS=$'\t' read -r id cert <<< "$found"
+          echo "$cert" > "$RUNNER_TEMP/play-cert.txt"
+          curl -sSfL -H "Authorization: Bearer $PLAY_ACCESS_TOKEN" "$api/downloads/$id:download?alt=media" -o "$APK"
+      # The APK must be this version of this app, signed with the key Google Play reports.
+      - name: Check the APK
+        run: |
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)
+          "$tools/aapt2" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          badging=$(sed -n 1p "$RUNNER_TEMP/badging.txt")
+          echo "$badging"
+          expected="package: name='$PACKAGE' versionCode='$VERSION_CODE' versionName='$VERSION'"
+          if [[ "$badging" != "$expected"* ]]; then
+            echo "::error::The APK is not $PACKAGE $VERSION ($VERSION_CODE)"
+            exit 1
+          fi
+          certs=$("$tools/apksigner" verify --print-certs "$APK")
+          echo "$certs"
+          signer=$(grep -m 1 'Signer #1 certificate SHA-256 digest:' <<< "$certs" | awk '{print $NF}')
+          play=$(tr -d ':\n' < "$RUNNER_TEMP/play-cert.txt" | tr 'A-F' 'a-f')
+          if [[ -z "$signer" || "$signer" != "$play" ]]; then
+            echo "::error::The APK's signer ($signer) is not the key Google Play reports ($play)"
+            exit 1
+          fi
+          sha=$(sha256sum "$APK" | cut -d ' ' -f 1)
+          echo "SHA256=$sha" >> "$GITHUB_ENV"
+          {
+            echo "### SpainAssist-$VERSION.apk"
+            echo "- versionCode: $VERSION_CODE"
+            echo "- Signing certificate SHA-256: \`$signer\`"
+            echo "- File SHA-256: \`$sha\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-apk
+          path: ${{ env.APK }}
+          if-no-files-found: error
+          retention-days: 30
+      # The tag is the source the EUPL requires next to the APK. An asset already there stays:
+      # the same file is a success, another file an error.
+      - name: Attach the APK to the GitHub release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="android/v$VERSION"
+          name="SpainAssist-$VERSION.apk"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --verify-tag --latest=false \
+              --title "Spain Assist for Android $VERSION" \
+              --notes "The universal APK that Google Play signs: the same app, and the same signature, as the Google Play install. The source is this tag."
+          fi
+          digest=$(gh api "repos/$GH_REPO/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$tag\") | .assets[] | select(.name == \"$name\") | .digest // \"unknown\"")
+          if [[ -z "$digest" ]]; then
+            gh release upload "$tag" "$APK"
+          elif [[ "$digest" != "sha256:$SHA256" ]]; then
+            echo "::error::$tag already has another $name ($digest). Remove it by hand if it is wrong."
+            exit 1
+          fi
+          {
+            echo "### Relay"
+            echo "\`\`\`"
+            echo "ANDROID_APK_URL=https://github.com/$GH_REPO/releases/download/$tag/$name"
+            echo "ANDROID_APK_VERSION=$VERSION"
+            echo "ANDROID_APK_SHA256=$SHA256"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
