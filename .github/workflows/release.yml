@@ -425,8 +425,13 @@ jobs:
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release delete "$TAG" --yes
           fi
-          flags=()
-          [[ "$PRERELEASE" == true ]] && flags+=(--prerelease)
+          # The highest stable tag always takes "Latest" (the updater reads releases/latest), also
+          # from the Android releases, which never take it (android-apk.yml).
+          newest=$(gh api "repos/$GH_REPO/git/matching-refs/tags/v" --paginate --jq '.[].ref | ltrimstr("refs/tags/")' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+          flags=(--latest=false)
+          [[ "$TAG" == "$newest" ]] && flags=(--latest)
+          [[ "$PRERELEASE" == true ]] && flags=(--prerelease)
           gh release create "$TAG" installers/* \
             --verify-tag --notes "" --title "Spain Assist $VERSION" "${flags[@]}"
 
