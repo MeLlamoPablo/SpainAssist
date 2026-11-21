@@ -41,7 +41,10 @@ export interface IpcServices {
   media: MediaStore;
   browser: BrowserHolder;
   /** DNIe with the phone; absent without the `dnie-phone` feature flag. */
-  companion?: Pick<CompanionService, 'status' | 'pair' | 'pairAnother' | 'unpair' | 'unlock'>;
+  companion?: Pick<
+    CompanionService,
+    'status' | 'pair' | 'pairAnother' | 'unpair' | 'unlock' | 'skipUpdate'
+  >;
   logger: Logger;
   /** Map lookups (Mapbox, via our maps server): pins only, never stored. */
   places: Pick<Maps, 'home'> & {
@@ -261,6 +264,9 @@ export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   );
   router.register('companion.unlock', S['companion.unlock'], (itemId, values) =>
     companion().unlock(itemId, values),
+  );
+  router.register('companion.skipUpdate', S['companion.skipUpdate'], (itemId) =>
+    companion().skipUpdate(itemId),
   );
 
   const codemode = () => s.codemode;

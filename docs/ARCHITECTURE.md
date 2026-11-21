@@ -261,7 +261,10 @@ the card over NFC after the user approves.
   (`services/relay-server/README.md`, "Android APK outside Google Play"). The desktop then reads
   the relay's `/android/latest.json` and, for a phone whose app is older or speaks an older
   protocol, shows a QR to the relay's download page instead of naming Google Play. Only the
-  relay's configuration switches between the two.
+  relay's configuration switches between the two. A DNIe request offers a newer version first
+  (the card's `update` stage) and waits: it goes on when the updated app connects, or when the
+  user chooses to go on without it, which lasts for that version while the app runs. The older
+  protocol can't be skipped.
 
 Protocol: `packages/companion/README.md`.
 

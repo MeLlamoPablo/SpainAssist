@@ -82,6 +82,38 @@ describe('DNI progress card', () => {
     ).toContain('match your DNI');
   });
 
+  it('offers the phone app update first, with its QR and a way to go on without it', () => {
+    const phoneApp = { version: '0.3.5', page: 'https://relay.example.invalid/android' };
+    for (const state of ['connected', 'away'] as const) {
+      const html = render(
+        'es',
+        { stage: 'update' },
+        { state, device: 'Pixel 8', phoneApp, phoneUpdate: true },
+      );
+      expect(html).toContain('data-testid="dnie-update"');
+      expect(html).toContain('Hay una versión nueva de la app del móvil (0.3.5).');
+      expect(html).toContain('Escanéalo con el móvil para actualizarla.');
+      expect(html).toContain('data-testid="companion-update-qr"');
+      expect(html).toContain('Cuando la actualices, abre la app en el móvil y sigo.');
+      expect(html).toContain('Seguir sin actualizar');
+      // It can wait: not an alert, and the request can still be cancelled.
+      expect(html).not.toContain('role="alert"');
+      expect(html).toContain('data-testid="dnie-cancel"');
+      // Nothing of the signature yet: no CAN or PIN, no phone step, no pairing code.
+      expect(html).not.toContain('data-testid="dnie-unlock"');
+      expect(html).not.toContain('data-stage');
+      expect(html).not.toContain('Abre Spain Assist en el móvil');
+      expect(html).not.toContain('data-testid="companion-qr"');
+    }
+    const en = render(
+      'en',
+      { stage: 'update', purpose: 'login' },
+      { state: 'connected', device: 'Pixel 8', phoneApp, phoneUpdate: true },
+    );
+    expect(en).toContain('There is a new version of the phone app (0.3.5).');
+    expect(en).toContain('Continue without updating');
+  });
+
   it('asks to open the app while the paired phone is away, then follows the phone', () => {
     const away = render('es', { stage: 'phone', purpose: 'login' }, 'away');
     expect(away).toContain('Abre Spain Assist en el móvil para continuar');

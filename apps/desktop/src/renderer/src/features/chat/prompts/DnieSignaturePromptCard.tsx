@@ -29,12 +29,15 @@ import { useAppStore } from '../../../store/app';
 import { toast } from '../../../store/toast';
 import { DnieHelp } from '../../companion/DnieHelp';
 import { companionDict } from '../../companion/i18n';
-import { OutdatedNotice, PairingPanel } from '../../companion/PairingPanel';
+import { OutdatedNotice, PairingPanel, PhoneUpdateNotice } from '../../companion/PairingPanel';
 import { chatDict } from '../i18n';
 import { Markdown } from '../Markdown';
 import { PromptShell } from './PromptShell';
 
-const STAGE_ICON: Record<DnieSignatureStage, LucideIcon> = {
+/** The stages the phone goes through; `update` comes before them and has its own view. */
+type PhoneStage = Exclude<DnieSignatureStage, 'update'>;
+
+const STAGE_ICON: Record<PhoneStage, LucideIcon> = {
   unlock: KeyRound,
   phone: Smartphone,
   reviewing: ScanEye,
@@ -44,7 +47,9 @@ const STAGE_ICON: Record<DnieSignatureStage, LucideIcon> = {
 };
 
 /**
- * A signature with the DNIe in the paired phone. This card first asks for the DNIe's CAN and PIN
+ * A signature with the DNIe in the paired phone. When the phone's app is behind the one offered
+ * outside Google Play, this card first shows the QR that downloads it and waits: the user
+ * updates it or goes on without it. Then it asks for the DNIe's CAN and PIN
  * when the app doesn't have them (and again if the card refuses one): they go straight to main
  * with `companion.unlock`, never into the transcript. Then it shows the QR code until a phone
  * pairs, or asks to open the app on a paired phone that isn't connected (it gets requests only
@@ -66,14 +71,16 @@ export function DnieSignaturePromptCard({
   const [busy, setBusy] = useState(false);
   const login = prompt.purpose === 'login';
   const connected = companion.state === 'connected';
-  const StageIcon = STAGE_ICON[prompt.stage];
-  const working = prompt.stage === 'reading' || prompt.stage === 'signing';
+  const updating = prompt.stage === 'update';
+  const stage: PhoneStage = prompt.stage === 'update' ? 'phone' : prompt.stage;
+  const StageIcon = STAGE_ICON[stage];
+  const working = stage === 'reading' || stage === 'signing';
   const unlock = prompt.stage === 'unlock' ? prompt.unlock : undefined;
   const hint = login
     ? tc.login.hint
-    : prompt.stage === 'reviewing' && prompt.purpose === 'certificate'
+    : stage === 'reviewing' && prompt.purpose === 'certificate'
       ? tc.reviewingCertificate
-      : tc.stageHint[prompt.stage];
+      : tc.stageHint[stage];
 
   const cancel = async () => {
     setBusy(true);
@@ -134,12 +141,10 @@ export function DnieSignaturePromptCard({
             ) : null}
             <UnlockForm itemId={item.id} unlock={unlock} onCancel={() => void cancel()} />
           </>
+        ) : updating ? (
+          <PhoneUpdateGate itemId={item.id} phoneApp={companion.phoneApp} />
         ) : connected ? (
-          <div
-            className="flex items-start gap-3"
-            data-testid="dnie-stage"
-            data-stage={prompt.stage}
-          >
+          <div className="flex items-start gap-3" data-testid="dnie-stage" data-stage={stage}>
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-st-attention-bg text-st-attention-fg">
               {working ? (
                 <Loader2 size={19} className="animate-spin" aria-hidden />
@@ -149,9 +154,9 @@ export function DnieSignaturePromptCard({
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[14.5px] font-semibold text-fg">
-                {login && (prompt.stage === 'reviewing' || prompt.stage === 'signing')
-                  ? tc.login[prompt.stage]
-                  : tc.stage[prompt.stage]}
+                {login && (stage === 'reviewing' || stage === 'signing')
+                  ? tc.login[stage]
+                  : tc.stage[stage]}
               </p>
               <p className="mt-0.5 text-[13px] text-fg-muted">{hint}</p>
               <p className="mt-2 text-[12.5px] text-fg-subtle">
@@ -197,6 +202,44 @@ export function DnieSignaturePromptCard({
         </div>
       )}
     </PromptShell>
+  );
+}
+
+/**
+ * Before anything goes to the phone: its app has a newer version outside Google Play. The QR
+ * downloads it, and the request goes on by itself once the updated app connects. "Seguir sin
+ * actualizar" goes on now: this update isn't one the phone needs to sign.
+ */
+function PhoneUpdateGate({ itemId, phoneApp }: { itemId: string; phoneApp?: CompanionPhoneApp }) {
+  const tc = useT(companionDict);
+  const [busy, setBusy] = useState(false);
+  const skip = async () => {
+    setBusy(true);
+    try {
+      await api.invoke('companion.skipUpdate', itemId);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-3" data-testid="dnie-update">
+      {phoneApp ? <PhoneUpdateNotice phoneApp={phoneApp} /> : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="min-w-[200px] flex-1 text-[12.5px] text-fg-subtle">{tc.update.waits}</p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void skip()}
+          loading={busy}
+          disabled={busy}
+          data-testid="dnie-update-skip"
+        >
+          {tc.update.skip}
+        </Button>
+      </div>
+    </div>
   );
 }
 

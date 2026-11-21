@@ -1,6 +1,11 @@
-import { PhoneClient } from '@sa/companion';
+import { encodePairingLink, PhoneClient } from '@sa/companion';
 import { MemoryRelay } from '@sa/companion/testing';
-import { type AfirmaSignatureSummary, COMPANION_PROTOCOL } from '@sa/shared';
+import {
+  type AfirmaSignatureSummary,
+  COMPANION_PROTOCOL,
+  type DesktopToPhone,
+  type ExternalSigningKey,
+} from '@sa/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../core/i18n';
 import { createFakeFetch, createTestApp, jsonResponse, type TestApp } from '../testing/harness';
@@ -19,6 +24,17 @@ const LATEST = {
 };
 const PHONE_APP = { version: LATEST.version, page: LATEST.page };
 const STORE = { store: 'https://play.google.com/store/apps/details?id=es.spainassist.firma' };
+
+const summary: AfirmaSignatureSummary = {
+  method: 'sign',
+  format: 'CAdES',
+  algorithm: 'SHA256withRSA',
+  origin: 'https://sede.example.gob.es',
+  description: 'Firmar un texto.',
+  dataSize: 4,
+  documents: [{ mimeType: 'text/plain', data: Buffer.from('hola') }],
+  verifiable: true,
+};
 
 /** A relay whose `/android/latest.json` answers with `answer()`; any other request fails. */
 function fakeRelay(answer: () => Response) {
@@ -106,15 +122,50 @@ describe('the phone app of the paired phone', () => {
     return { relay, app, reads, companion: app.services.companion! };
   }
 
-  function phone(relay: MemoryRelay, link: string, version: string, protocol?: number) {
+  function phone(
+    relay: MemoryRelay,
+    link: string,
+    version: string,
+    protocol?: number,
+    received: DesktopToPhone[] = [],
+  ) {
     const hello = { app: version, platform: 'test', device: 'Pixel 8' } as const;
-    const client = new PhoneClient({
+    // Reads the card and signs whatever it is sent.
+    const client: PhoneClient = new PhoneClient({
       link,
       hello: protocol === undefined ? hello : ({ ...hello, protocol } as typeof hello),
       socket: { WebSocket: relay.WebSocket, backoffMs: () => 5 },
+      onMessage: (m) => {
+        received.push(m);
+        if (m.type === 'sign.request')
+          client.send({
+            type: 'sign.certificate',
+            requestId: m.requestId,
+            certificates: [Buffer.alloc(256, 1).toString('base64')],
+          });
+      },
     });
     phones.push(client);
     return client;
+  }
+
+  /** The stage of the DNI card that is waiting, if any. */
+  const stage = (a: TestApp, procedureId: string) => {
+    const prompt = a.pendingPrompt(procedureId)?.prompt;
+    return prompt?.kind === 'dnie_signature' ? prompt.stage : undefined;
+  };
+
+  /** A paired, connected phone whose app is `version`, and a saved DNI to sign with. */
+  async function paired(version: string, answer: () => Response = () => jsonResponse(200, LATEST)) {
+    const s = await setup(answer);
+    const { procedureId } = await s.app.procedureWithToken();
+    await s.app.invoke('vault.addDnie');
+    await s.app.waitFor(() => s.reads() === 1);
+    const { link } = await s.app.invoke('companion.pair');
+    const received: DesktopToPhone[] = [];
+    const client = phone(s.relay, link as string, version, undefined, received);
+    await s.app.waitFor(() => s.companion.status().state === 'connected');
+    return { ...s, procedureId, client, received };
   }
 
   /** Types the CAN and the PIN the DNI card asks for before it reaches the phone. */
@@ -215,17 +266,96 @@ describe('the phone app of the paired phone', () => {
     expect(companion.status()).not.toHaveProperty('phoneUpdate');
   });
 
+  it('offers the update before a DNI request, and goes on without it when the user says so', async () => {
+    const { app: a, companion, procedureId, received } = await paired('0.3.4');
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await a.waitFor(() => stage(a, procedureId) === 'update');
+    // Nothing goes to the phone, and nothing is asked, until the update is settled.
+    expect(received).toEqual([]);
+    expect(a.pendingPrompt(procedureId)?.prompt).not.toHaveProperty('unlock');
+    expect(companion.status()).toMatchObject({ phoneApp: PHONE_APP, phoneUpdate: true });
+
+    await a.invoke('companion.skipUpdate', a.pendingPrompt(procedureId)!.id);
+    await typeUnlock(a, procedureId);
+    const key = (await approval) as ExternalSigningKey;
+    expect(key.kind).toBe('external');
+    expect(received.filter((m) => m.type === 'sign.request')).toHaveLength(1);
+    key.release(true);
+    await a.waitFor(() => stage(a, procedureId) === undefined);
+    // Skipping twice is refused: the card has moved on.
+    await expect(a.invoke('companion.skipUpdate', 'no-such-prompt')).rejects.toThrow();
+
+    // The version the user went on without isn't offered again while the app runs.
+    const again = a.services.browser.approveSignature(procedureId, summary);
+    await a.waitFor(() => stage(a, procedureId) !== undefined);
+    expect(stage(a, procedureId)).not.toBe('update');
+    await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
+      kind: 'dnie_signature',
+      outcome: 'cancelled',
+    });
+    expect(await again).toBeNull();
+    // Mis datos still says there is a newer version.
+    expect(companion.status()).toMatchObject({ phoneUpdate: true });
+  });
+
+  it('goes on by itself once the updated phone app connects', async () => {
+    const { relay, app: a, companion, procedureId, client } = await paired('0.3.4');
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await a.waitFor(() => stage(a, procedureId) === 'update');
+    // The phone installs the update: its app closes (the offer stays), then opens as 0.3.5.
+    const pairing = encodePairingLink(client.pairing);
+    for (const p of phones.splice(0)) p.close();
+    await a.waitFor(() => companion.status().state === 'away');
+    expect(companion.status()).toMatchObject({ phoneUpdate: true });
+    expect(stage(a, procedureId)).toBe('update');
+    const received: DesktopToPhone[] = [];
+    phone(relay, pairing, '0.3.5', undefined, received);
+    await a.waitFor(() => stage(a, procedureId) === 'unlock');
+    expect(companion.status()).not.toHaveProperty('phoneUpdate');
+    await typeUnlock(a, procedureId);
+    const key = (await approval) as ExternalSigningKey;
+    expect(key.kind).toBe('external');
+    expect(received.filter((m) => m.type === 'sign.request')).toHaveLength(1);
+    key.release(true);
+  });
+
+  it('cancels a request that waits for the update', async () => {
+    const { app: a, procedureId, received } = await paired('0.3.4');
+    const approval = a.services.browser.approveSignature(procedureId, summary);
+    await a.waitFor(() => stage(a, procedureId) === 'update');
+    await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
+      kind: 'dnie_signature',
+      outcome: 'cancelled',
+    });
+    expect(await approval).toBeNull();
+    expect(received).toEqual([]);
+    // Nothing is left to skip.
+    await expect(
+      a.invoke('companion.skipUpdate', a.pendingPrompt(procedureId)?.id ?? 'gone'),
+    ).rejects.toThrow();
+  });
+
+  it('asks for nothing first when the phone app is current or the relay offers none', async () => {
+    for (const [version, answer] of [
+      ['0.3.5', LATEST],
+      ['0.3.4', STORE],
+    ] as const) {
+      const { app: a, procedureId } = await paired(version, () => jsonResponse(200, answer));
+      const approval = a.services.browser.approveSignature(procedureId, summary);
+      await a.waitFor(() => stage(a, procedureId) !== undefined);
+      expect(stage(a, procedureId)).toBe('unlock');
+      await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
+        kind: 'dnie_signature',
+        outcome: 'cancelled',
+      });
+      expect(await approval).toBeNull();
+      for (const p of phones.splice(0)) p.close();
+      await a.close();
+      app = undefined;
+    }
+  });
+
   it('sends an out-of-date phone app to the QR instead of Google Play', async () => {
-    const summary: AfirmaSignatureSummary = {
-      method: 'sign',
-      format: 'CAdES',
-      algorithm: 'SHA256withRSA',
-      origin: 'https://sede.example.gob.es',
-      description: 'Firmar un texto.',
-      dataSize: 4,
-      documents: [{ mimeType: 'text/plain', data: Buffer.from('hola') }],
-      verifiable: true,
-    };
     for (const [answer, notice, why] of [
       [LATEST, 'dnieError_phone_outdated_download', /Spain Assist shows a QR to download it/],
       [STORE, 'dnieError_phone_outdated', /update it from Google Play/],

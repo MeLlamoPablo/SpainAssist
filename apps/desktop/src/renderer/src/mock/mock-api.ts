@@ -72,7 +72,7 @@ import {
  * relay_refused: no pairing, the last one ended for that reason; =outdated|outdated_desktop:
  * the paired phone's app, or this one, needs an update; =stalled: the relay can't be reached,
  * "Reintentar" pairs anew) · ?apk=1 (the relay offers the phone app outside Google Play: the
- * update notices show a QR to it, and a connected phone's app is one version behind) ·
+ * update notices show a QR to it, and the paired phone's app is one version behind) ·
  * ?dnieSaved=1|pin (a saved
  * DNI in Mis datos; =pin with its PIN saved) · ?certificate=inSystem|external (the saved
  * certificate is also installed in the operating system, or only there).
@@ -340,7 +340,9 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
       : {
           ...status,
           phoneApp: { version: '0.3.5', page: 'https://relay.example.invalid/android' },
-          ...(status.state === 'connected' ? { phoneUpdate: true } : {}),
+          ...((status.state === 'connected' || status.state === 'away') && !status.outdated
+            ? { phoneUpdate: true }
+            : {}),
         };
   let companion: CompanionStatus = withPhoneApp(
     companionParam === 'connected'
@@ -1671,6 +1673,22 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
         );
       const { unlock: _unlock, ...prompt } = item.prompt;
       const next = { ...item, prompt: { ...prompt, stage: 'phone' as const } };
+      if (item.procedureId)
+        setCardPrompts(
+          item.procedureId,
+          cardPrompts(item.procedureId).map((i) => (i.id === item.id ? next : i)),
+        );
+      else putChat(next);
+    },
+    'companion.skipUpdate': (promptItemId) => {
+      requireDniePhone();
+      // Like main: the request goes on to the phone without the update.
+      const item = findPrompt(promptItemId);
+      if (item?.status !== 'pending' || item.prompt.kind !== 'dnie_signature')
+        throw new Error(
+          tr('Esta pregunta ya no está pendiente.', 'This question is no longer pending.'),
+        );
+      const next = { ...item, prompt: { ...item.prompt, stage: 'phone' as const } };
       if (item.procedureId)
         setCardPrompts(
           item.procedureId,

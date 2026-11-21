@@ -262,13 +262,35 @@ export function PairingPanel({
   );
 }
 
-/** The QR to the phone app's download page, and what to do with it. */
-function PhoneAppQr({ page, className }: { page: string; className?: string }) {
+/**
+ * The QR to the phone app's download page, with what it is for (`title`) and what to do with
+ * it beside it. `alert`: the update that blocks signing.
+ */
+function PhoneAppQr({ page, title, alert }: { page: string; title: string; alert?: boolean }) {
   const t = useT(companionDict);
   return (
-    <div className={cn('flex items-center gap-3', className)}>
+    <div className="flex items-center gap-3">
       <CompanionQr link={page} size={120} update />
-      <p className="min-w-0 flex-1">{t.update.scan}</p>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <p className={cn('flex items-start gap-2.5 text-[13px] font-medium', !alert && 'text-fg')}>
+          {alert ? <TriangleAlert size={15} className="mt-0.5 shrink-0" aria-hidden /> : null}
+          {title}
+        </p>
+        <p>{t.update.scan}</p>
+      </div>
+    </div>
+  );
+}
+
+/** A newer phone app outside Google Play, with the QR that downloads it. It can wait. */
+export function PhoneUpdateNotice({ phoneApp }: { phoneApp: CompanionPhoneApp }) {
+  const t = useT(companionDict);
+  return (
+    <div
+      className="basis-full rounded-lg bg-surface-2/60 p-3 text-[12.5px] text-fg-muted ring-1 ring-line ring-inset"
+      data-testid="companion-update"
+    >
+      <PhoneAppQr page={phoneApp.page} title={t.update.available(phoneApp.version)} />
     </div>
   );
 }
@@ -276,24 +298,14 @@ function PhoneAppQr({ page, className }: { page: string; className?: string }) {
 /**
  * What the paired phone's app needs while the relay offers it outside Google Play (`phoneApp`),
  * with the QR that downloads it: an update to sign at all (`outdated`), or a newer version that
- * can wait (`phoneUpdate`: it never blocks a signature). Nothing otherwise.
+ * can wait (`phoneUpdate`). Nothing otherwise.
  */
 export function PhoneAppNotice({ status }: { status: CompanionStatus }) {
-  const t = useT(companionDict);
   const { phoneApp } = status;
   if (!phoneApp) return null;
   if (status.outdated && companionOutdatedSide(status.outdated) === 'phone')
     return <OutdatedNotice side="phone" phoneApp={phoneApp} />;
-  if (status.state !== 'connected' || !status.phoneUpdate) return null;
-  return (
-    <div
-      className="basis-full rounded-lg bg-surface-2/60 px-3 py-3 text-[12.5px] text-fg-muted ring-1 ring-line ring-inset"
-      data-testid="companion-update"
-    >
-      <p className="text-[13px] font-medium text-fg">{t.update.available(phoneApp.version)}</p>
-      <PhoneAppQr page={phoneApp.page} className="mt-2.5" />
-    </div>
-  );
+  return status.phoneUpdate ? <PhoneUpdateNotice phoneApp={phoneApp} /> : null;
 }
 
 /**
@@ -313,15 +325,11 @@ export function OutdatedNotice({
     return (
       <div
         role="alert"
-        className="flex basis-full items-start gap-2 rounded-lg bg-st-attention-bg px-3 py-2 text-[13px] font-medium text-st-attention-fg ring-1 ring-st-attention-line ring-inset"
+        className="basis-full rounded-lg bg-st-attention-bg p-3 text-[13px] font-medium text-st-attention-fg ring-1 ring-st-attention-line ring-inset"
         data-testid="companion-outdated"
         data-side={side}
       >
-        <TriangleAlert size={15} className="mt-0.5 shrink-0" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p>{t.outdated.phoneDownload}</p>
-          <PhoneAppQr page={phoneApp.page} className="mt-2 mb-1" />
-        </div>
+        <PhoneAppQr page={phoneApp.page} title={t.outdated.phoneDownload} alert />
       </div>
     );
   return (

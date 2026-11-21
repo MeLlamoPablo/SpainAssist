@@ -379,6 +379,13 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     'dnie_signature · unlock',
     dnieSignature('unlock', { can: false, pin: true, refused: 'pin', triesLeft: 2 }),
   );
+  addPrompt(
+    'dnie-update',
+    'dnie',
+    t('DNI · Versión nueva de la app', 'DNI · Newer phone app'),
+    'dnie_signature · update (?apk=1)',
+    dnieSignature('update'),
+  );
   for (const stage of ['phone', 'reviewing', 'card', 'reading'] as const)
     addPrompt(
       `dnie-${stage}`,

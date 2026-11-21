@@ -322,6 +322,9 @@ export type PhoneCallOutcome = z.infer<typeof PhoneCallOutcome>;
 
 /**
  * Where a DNIe signature is (raised by the app, never by the agent):
+ * - `update`: the paired phone's app is older than the one the relay offers outside Google Play:
+ *   the card shows the QR that downloads it and waits for the update, or for the user to go on
+ *   without it (`companion.skipUpdate`). Nothing has gone to the phone yet;
  * - `unlock`: the desktop asks for the DNIe's CAN and/or PIN (`unlock`), before anything goes to
  *   the phone, or again when the card refused one;
  * - `phone`: waiting for the phone app (shows the QR code when no phone is connected);
@@ -329,6 +332,7 @@ export type PhoneCallOutcome = z.infer<typeof PhoneCallOutcome>;
  * - `reading` / `signing`: the phone is talking to the card.
  */
 export const DnieSignatureStage = z.enum([
+  'update',
   'unlock',
   'phone',
   'reviewing',

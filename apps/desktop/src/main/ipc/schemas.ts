@@ -144,6 +144,7 @@ export const SA_ARG_SCHEMAS: { [M in SaMethod]: z.ZodType<SaArgs<M>> } = {
     id,
     z.strictObject({ can: DniAccessNumber.optional(), pin: DniePin.optional() }),
   ]),
+  'companion.skipUpdate': z.tuple([id]),
   'codemode.state': none,
   'codemode.uiEvent': z.tuple([z.string().min(1).max(64), z.string().min(1).max(100), UiEvent]),
   'codemode.pins': z.tuple([

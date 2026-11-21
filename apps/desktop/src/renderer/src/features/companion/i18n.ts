@@ -99,6 +99,9 @@ export const companionDict = defineDict({
       available: (version: string) => `Hay una versión nueva de la app del móvil (${version}).`,
       scan: 'Escanéalo con el móvil para actualizarla.',
       qrLabel: 'Código para descargar la app del móvil',
+      /** A DNI request waits for the update (its `update` stage), or for the user to skip it. */
+      waits: 'Cuando la actualices, abre la app en el móvil y sigo.',
+      skip: 'Seguir sin actualizar',
     },
     /** The relay hasn't been reached for a while. */
     stalled: 'No se puede conectar con el servidor. Comprueba tu conexión a internet.',
@@ -191,6 +194,8 @@ export const companionDict = defineDict({
       available: (version: string) => `There is a new version of the phone app (${version}).`,
       scan: 'Scan it with your phone to update it.',
       qrLabel: 'Code to download the phone app',
+      waits: 'Once it’s updated, open the app on your phone and I’ll continue.',
+      skip: 'Continue without updating',
     },
     stalled: "Can't connect to the server. Check your internet connection.",
     retry: 'Try again',

@@ -222,6 +222,10 @@ export class CompanionService {
   private phoneApp?: CompanionPhoneApp;
   /** When the relay's phone app may be read again (0: now; Infinity: a read is under way). */
   private phoneAppDue = 0;
+  /** DNI requests waiting in their `update` stage: each goes on when called. */
+  private readonly updates = new Map<string, () => void>();
+  /** The phone app version the user went on without, while the app runs: not offered again. */
+  private skippedUpdate?: string;
 
   constructor(private readonly deps: CompanionDeps) {
     this.relayUrl = deps.relayUrl && deps.lanRelay ? lanRelayUrl(deps.relayUrl) : deps.relayUrl;
@@ -289,6 +293,18 @@ export class CompanionService {
     });
   }
 
+  /**
+   * The user goes on with a request waiting in its `update` stage without updating the phone
+   * app (`companion.skipUpdate`). That version isn't offered again while the app runs.
+   */
+  skipUpdate(itemId: string): void {
+    const go = this.updates.get(itemId);
+    if (!go) throw new UserError(t(this.deps.lang(), 'promptNotPending'), 'not_pending');
+    this.skippedUpdate = this.phoneApp?.version;
+    this.deps.logger.info('phone app update skipped', { version: this.skippedUpdate });
+    go();
+  }
+
   shutdown(): void {
     this.endLogin?.();
     this.signer.onEnded('unpaired');
@@ -299,8 +315,9 @@ export class CompanionService {
   }
 
   /**
-   * A signature with the DNI in the phone: shows the card, which first asks for the CAN and the
-   * PIN when the desktop doesn't have them, then the QR code when no phone is connected,
+   * A signature with the DNI in the phone: shows the card, which first offers the phone app's
+   * update when the paired phone's is behind (the user may go on without it), then asks for the
+   * CAN and the PIN when the desktop doesn't have them, then the QR code when no phone is connected,
    * sends the request, and resolves with the key once the phone has read the card's
    * certificate. Null when the user cancels, declines or it fails (with a notice).
    */
@@ -360,8 +377,10 @@ export class CompanionService {
       details,
       stage: 'phone',
     };
-    let prompt: DnieSignaturePrompt =
+    const start: DnieSignaturePrompt =
       first.can || first.pin ? { ...base, stage: 'unlock', unlock: first } : base;
+    // A newer phone app comes first: nothing goes to the phone until it is updated or skipped.
+    let prompt: DnieSignaturePrompt = this.updateToOffer() ? { ...base, stage: 'update' } : start;
 
     let itemId: string | undefined;
     const abort = new AbortController();
@@ -386,6 +405,16 @@ export class CompanionService {
       login?.signal?.removeEventListener('abort', cancel);
       if (itemId) deps.prompts.settle(itemId, { kind: 'dnie_signature', outcome });
     };
+
+    if (prompt.stage === 'update') {
+      deps.logger.info('dnie waits for the phone app update', { procedureId });
+      if (!(await this.waitUpdate(itemId, abort.signal))) {
+        settle('cancelled');
+        login?.onRefused?.('cancelled');
+        return null;
+      }
+      show(start);
+    }
 
     if (prompt.stage === 'unlock') {
       const typed = await this.waitUnlock(itemId, first, abort.signal);
@@ -790,6 +819,24 @@ export class CompanionService {
     });
   }
 
+  /**
+   * Waits in the `update` stage until the phone app is updated (a newer one connects), stops
+   * being offered, or the user goes on without it. False when the request is cancelled.
+   */
+  private waitUpdate(itemId: string | undefined, signal: AbortSignal): Promise<boolean> {
+    if (!itemId || signal.aborted) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const finish = (go: boolean) => {
+        signal.removeEventListener('abort', onAbort);
+        this.updates.delete(itemId);
+        resolve(go);
+      };
+      const onAbort = () => finish(false);
+      signal.addEventListener('abort', onAbort, { once: true });
+      this.updates.set(itemId, () => finish(true));
+    });
+  }
+
   /** Keeps the card's certificate details on the credential (shown in Mis datos). */
   private async remember(credential: CredentialSummary, certificate: Buffer): Promise<void> {
     const vault = this.deps.vault();
@@ -873,6 +920,25 @@ export class CompanionService {
     );
   }
 
+  /**
+   * The relay's phone app when the paired phone's is older (its last handshake says which it
+   * runs, also while it is away). None while the phone speaks another protocol: that update
+   * isn't optional, and has its own notice.
+   */
+  private phoneUpdate(): CompanionPhoneApp | undefined {
+    const { phoneApp, pairing } = this;
+    if (!phoneApp || !pairing || pairing.outdated) return undefined;
+    const status = pairing.status;
+    const phone = 'phone' in status ? status.phone : undefined;
+    return phone && phoneAppBehind(phone.app, phoneApp.version) ? phoneApp : undefined;
+  }
+
+  /** The update a DNI request offers before it starts: not one the user already went without. */
+  private updateToOffer(): CompanionPhoneApp | undefined {
+    const update = this.phoneUpdate();
+    return update && update.version !== this.skippedUpdate ? update : undefined;
+  }
+
   /** The notice of a refusal: an out-of-date phone app is told where to update from. */
   private noticeCode(code: RefusalCode): NoticeCode {
     return code === 'phone_outdated' && this.phoneApp ? 'phone_outdated_download' : code;
@@ -906,18 +972,11 @@ export class CompanionService {
     const app = {
       ...(pairing.outdated ? { outdated: pairing.outdated } : {}),
       ...(phoneApp ? { phoneApp } : {}),
+      ...(this.phoneUpdate() ? { phoneUpdate: true } : {}),
     };
     switch (status.state) {
       case 'connected':
-        return {
-          state: 'connected',
-          device: status.phone.device,
-          expiresAt,
-          ...app,
-          ...(phoneApp && phoneAppBehind(status.phone.app, phoneApp.version)
-            ? { phoneUpdate: true }
-            : {}),
-        };
+        return { state: 'connected', device: status.phone.device, expiresAt, ...app };
       // The QR works only until a phone pairs: a paired phone reconnects on its own.
       case 'away':
         return { state: 'away', device: status.phone.device, expiresAt, ...app };
@@ -940,6 +999,9 @@ export class CompanionService {
   }
 
   private emit(): void {
+    // Requests waiting for the phone app's update go on once there is none to offer.
+    if (this.updates.size > 0 && !this.updateToOffer())
+      for (const go of [...this.updates.values()]) go();
     this.deps.events.emit({ type: 'companion.changed', status: this.status() });
   }
 }

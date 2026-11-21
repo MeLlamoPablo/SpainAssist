@@ -309,6 +309,8 @@ export interface SaMethods {
    * (`DniAccessNumber`, `DniePin`). The only time they cross IPC: main never sends them back.
    */
   'companion.unlock': [[promptItemId: string, values: DnieUnlockValues], void];
+  /** Goes on with a DNI request waiting in its `update` stage, without updating the phone app. */
+  'companion.skipUpdate': [[promptItemId: string], void];
 
   /** Codemode: the agents (the progress meter) and the runs with open interfaces or still running. */
   'codemode.state': [[], { agents: CodemodeAgentInfo[]; runs: RunInfo[] }];
@@ -433,7 +435,10 @@ export interface CompanionStatus {
    * the notices that ask to update it show a QR to its page instead of naming Google Play.
    */
   phoneApp?: CompanionPhoneApp;
-  /** `connected` only: the phone's app is older than `phoneApp.version`. It still signs. */
+  /**
+   * The paired phone's app is older than `phoneApp.version`. It still signs: a DNI request first
+   * offers the update, and the user may go on without it (the `update` stage).
+   */
   phoneUpdate?: boolean;
 }
 
