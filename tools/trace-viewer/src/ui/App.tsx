@@ -2,10 +2,10 @@ import {
   AlertCircle,
   AppWindow,
   Bot,
-  ChevronRight,
   FolderOpen,
   Moon,
   Search,
+  Sparkles,
   Sun,
   Upload,
   Waypoints,
@@ -270,19 +270,21 @@ export function App() {
         )}
         {trace && focus ? (
           <>
-            <Header
+            <Crumbs
               trace={trace}
               focus={focus}
               onUnfocus={focus !== trace.root ? () => setFocusId(undefined) : undefined}
             />
             <div className="stage">
-              <Waterfall
-                root={focus}
-                frames={frames}
-                browser={trace.browser}
-                selectedId={selected?.id}
-                onSelect={setSelected}
-              />
+              <section className="card trace-card">
+                <Header trace={trace} focus={focus} />
+                <Waterfall
+                  root={focus}
+                  frames={frames}
+                  selectedId={selected?.id}
+                  onSelect={setSelected}
+                />
+              </section>
               {selected && (
                 <Details
                   span={selected}
@@ -373,11 +375,10 @@ function TraceItem({
           <Icon size={14} />
         </span>
         <span className="item-text">
-          <span className="item-title" title={trace.title}>
+          <span className="item-title" title={`${trace.title}\n${formatClock(root.start)}`}>
             {trace.title}
           </span>
           <span className="item-sub">
-            {formatClock(root.start).slice(5, 16)} ·{' '}
             {formatDuration((root.end ?? root.start) - root.start)}
             {cost > 0 && ` · ${formatCost(cost)}`}
           </span>
@@ -414,7 +415,7 @@ function TraceItem({
   );
 }
 
-function Header({
+function Crumbs({
   trace,
   focus,
   onUnfocus,
@@ -423,63 +424,100 @@ function Header({
   focus: Span;
   onUnfocus?: () => void;
 }) {
+  const group =
+    trace.group === 'coordinator' ? 'Coordinator' : trace.group === 'agent' ? 'Agents' : 'Browser';
+  const turn = trace.root.children.indexOf(focus) + 1;
+  return (
+    <nav className="crumbs" aria-label="Breadcrumb">
+      <span>{group}</span>
+      <Chevron />
+      {onUnfocus ? (
+        <>
+          <button type="button" onClick={onUnfocus}>
+            {trace.title}
+          </button>
+          <Chevron />
+          <span className="here">
+            {focus.kind === 'turn' && turn ? `Turn ${turn}` : focus.name}
+          </span>
+        </>
+      ) : (
+        <span className="here">{trace.title}</span>
+      )}
+    </nav>
+  );
+}
+
+function Chevron() {
+  return <span className="crumb-sep" aria-hidden />;
+}
+
+function Header({ trace, focus }: { trace: Trace; focus: Span }) {
   const stats = useMemo(() => {
     let llm = 0;
+    let tools = 0;
     let browser = 0;
     for (const s of walk(focus)) {
       if (s.kind === 'llm') llm++;
+      if (s.kind === 'tool' || s.kind === 'op') tools++;
       if (s.kind === 'browser') browser++;
     }
-    const errors = failures(focus).length;
-    return { llm, errors, browser, cost: totalCost(focus), tokens: totalTokens(focus) };
+    const tokens = totalTokens(focus);
+    return {
+      llm,
+      tools,
+      browser,
+      errors: failures(focus).length,
+      cost: totalCost(focus),
+      tokens: tokens.input + tokens.output,
+    };
   }, [focus]);
   const duration = (focus.end ?? focus.start) - focus.start;
+  const kind =
+    focus === trace.root
+      ? trace.group === 'browser'
+        ? 'Browser'
+        : trace.group === 'coordinator'
+          ? 'Coordinator'
+          : 'Agent'
+      : focus.kind === 'turn'
+        ? 'Turn'
+        : 'Span';
   return (
-    <header className="head">
-      <div className="crumbs">
-        {onUnfocus ? (
-          <>
-            <button type="button" onClick={onUnfocus}>
-              {trace.title}
-            </button>
-            <ChevronRight size={13} />
-            <span>{focus.kind === 'turn' ? 'Turn' : focus.name}</span>
-          </>
-        ) : (
-          <span>{trace.subtitle ?? trace.path}</span>
-        )}
+    <header className="card-head">
+      <div className="card-title">
+        <Sparkles size={15} className="spark" aria-hidden />
+        <strong>{kind}</strong>
+        <span className="card-sub" title={focus.name}>
+          {focus === trace.root && trace.group !== 'browser' ? trace.title : focus.name}
+        </span>
+        <span className="card-when num">{formatClock(focus.start)}</span>
       </div>
-      <h1 title={focus.name}>{focus === trace.root ? trace.title : focus.name}</h1>
       <div className="stats">
         <Stat label="Duration" value={formatDuration(duration)} />
-        <Stat label="Started" value={formatClock(focus.start)} />
-        {stats.llm > 0 && <Stat label="Model calls" value={String(stats.llm)} />}
-        {stats.tokens.input + stats.tokens.output > 0 && (
-          <Stat
-            label="Tokens"
-            value={`${formatTokens(stats.tokens.input)} → ${formatTokens(stats.tokens.output)}`}
-          />
-        )}
         {stats.cost > 0 && <Stat label="Cost" value={formatCost(stats.cost)} />}
-        {stats.browser > 0 && <Stat label="Browser calls" value={String(stats.browser)} />}
+        {stats.tokens > 0 && <Stat label="Tokens" value={formatTokens(stats.tokens)} />}
+        {stats.llm > 0 && <Stat label="LLM calls" value={String(stats.llm)} />}
+        {stats.tools > 0 && <Stat label="Tool calls" value={String(stats.tools)} />}
+        {stats.browser > 0 && <Stat label="Browser" value={String(stats.browser)} />}
         <Stat
           label="Errors"
           value={String(stats.errors)}
           tone={stats.errors ? 'error' : undefined}
         />
-        <ul className="legend" aria-label="Legend">
-          {LEGEND.map((l) => (
-            <li key={l.tone}>
-              <span className={`swatch tone-${l.tone}`} />
-              {l.label}
-            </li>
-          ))}
-          <li>
-            <span className="swatch tone-error" />
-            Failed
-          </li>
-        </ul>
       </div>
+      <ul className="legend" aria-label="Legend">
+        {LEGEND.map((l) => (
+          <li key={l.tone}>
+            <span className={`swatch tone-${l.tone}`} />
+            {l.label}
+          </li>
+        ))}
+        <li>
+          <span className="swatch tone-error" />
+          Failed
+        </li>
+      </ul>
     </header>
   );
 }

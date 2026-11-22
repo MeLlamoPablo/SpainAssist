@@ -11,15 +11,15 @@ import {
   useState,
 } from 'react';
 import { formatCost, formatDuration, formatTick, tickStep, ticks } from '../lib/format';
-import { type BrowserTrace, type Frame, type Span, totalCost, walk } from '../lib/model';
+import { type Frame, type Span, totalCost, walk } from '../lib/model';
 import { Filmstrip } from './Filmstrip';
 import { iconOf, isGroup, KIND } from './kinds';
 
-const ROW_H = 30;
+const ROW_H = 32;
 const OVERSCAN = 12;
 const MIN_TREE = 260;
 /** Room after the latest span for its duration label, as a share of the window. */
-const RIGHT_PAD = 0.07;
+const RIGHT_PAD = 0.15;
 
 interface Row {
   span: Span;
@@ -33,7 +33,6 @@ interface Row {
 export interface WaterfallProps {
   root: Span;
   frames: Frame[];
-  browser: BrowserTrace[];
   selectedId?: string;
   onSelect(span: Span | undefined): void;
 }
@@ -43,7 +42,7 @@ interface View {
   to: number;
 }
 
-export function Waterfall({ root, frames, browser, selectedId, onSelect }: WaterfallProps) {
+export function Waterfall({ root, frames, selectedId, onSelect }: WaterfallProps) {
   const rootEnd = root.end ?? root.start;
   const [collapsed, setCollapsed] = useState<Set<string>>(() => defaultCollapsed(root));
   const [zoom, setZoom] = useState<View>();
@@ -79,7 +78,6 @@ export function Waterfall({ root, frames, browser, selectedId, onSelect }: Water
     return ticks(offset, offset + width, step).map((t) => ({ t, left: x(root.start + t) }));
   }, [from, width, step, root.start, x]);
 
-  const slowest = useMemo(() => slowestIds(root), [root]);
   const pxPerMs = viewport.timeline / width;
 
   useLayoutEffect(() => {
@@ -227,14 +225,10 @@ export function Waterfall({ root, frames, browser, selectedId, onSelect }: Water
   };
 
   const hoverTime = hoverX !== undefined ? from + (hoverX / viewport.timeline) * width : undefined;
-  const hasCost = useMemo(() => totalCost(root) > 0, [root]);
-  const style = {
-    '--tree-w': `${treeWidth}px`,
-    '--cost-w': hasCost ? '64px' : '0px',
-  } as CSSProperties;
+  const style = { '--tree-w': `${treeWidth}px` } as CSSProperties;
 
   return (
-    <div className={`wf${hasCost ? '' : ' no-cost'}`} style={style}>
+    <div className="wf" style={style}>
       <div
         ref={scroller}
         className="wf-scroll"
@@ -246,8 +240,7 @@ export function Waterfall({ root, frames, browser, selectedId, onSelect }: Water
           {frames.length > 0 && (
             <div className="wf-band">
               <div className="wf-band-label">
-                <span>Screenshots</span>
-                <span className="muted">{frames.length}</span>
+                Screenshots <span className="muted num">{frames.length}</span>
               </div>
               <div className="wf-band-track">
                 <Filmstrip
@@ -265,11 +258,7 @@ export function Waterfall({ root, frames, browser, selectedId, onSelect }: Water
             </div>
           )}
           <div className="wf-ruler">
-            <div className="wf-cols">
-              <span>Span</span>
-              <span className="num">Duration</span>
-              <span className="num">Cost</span>
-            </div>
+            <div className="wf-cols">Span</div>
             <div
               className="wf-axis"
               ref={timelineRef}
@@ -334,8 +323,6 @@ export function Waterfall({ root, frames, browser, selectedId, onSelect }: Water
                 open={!collapsed.has(row.span.id)}
                 active={index === active}
                 selected={row.span.id === selectedId}
-                slowest={slowest.has(row.span.id)}
-                hasBrowser={browser.length > 0}
                 onToggle={() => toggle(row.span.id)}
                 onClick={() => {
                   setActive(index);
@@ -360,15 +347,13 @@ interface RowProps {
   open: boolean;
   active: boolean;
   selected: boolean;
-  slowest: boolean;
-  hasBrowser: boolean;
   onToggle(): void;
   onClick(): void;
   onZoom(): void;
 }
 
 function RowView(props: RowProps) {
-  const { row, x, timelineWidth, rootEnd, open, active, selected, slowest } = props;
+  const { row, x, timelineWidth, rootEnd, open, active, selected } = props;
   const { span } = row;
   const meta = KIND[span.kind];
   const Icon = iconOf(span);
@@ -384,12 +369,15 @@ function RowView(props: RowProps) {
         ? totalCost(span)
         : undefined;
   const unfinished = span.end === undefined;
+  const costText = formatCost(cost);
   const label = formatDuration(duration);
-  // The duration goes after the bar, or before it when the bar reaches the right edge.
-  const labelPx = label.length * 6.5 + 10;
+  // "6.9s · $0.12" goes after the bar, or before it when the bar reaches the right edge.
+  const labelPx = (label.length + (costText ? costText.length + 3 : 0)) * 6.8 + 12;
   const after =
     ((100 - right) / 100) * timelineWidth >= labelPx || (left / 100) * timelineWidth < labelPx;
   const tone = span.status === 'error' ? 'error' : meta.tone;
+  // Outside the zoomed window: no bar, no label.
+  const visible = right >= 0 && left <= 100;
 
   return (
     // Keys go to the tree, which holds the focus (aria-activedescendant names this row).
@@ -431,7 +419,7 @@ function RowView(props: RowProps) {
           <span className="wf-chevron-spacer" />
         )}
         <span className={`wf-icon tone-${tone}`} aria-hidden>
-          {span.status === 'error' ? <AlertCircle size={13} /> : <Icon size={13} />}
+          {span.status === 'error' ? <AlertCircle size={14} /> : <Icon size={14} />}
         </span>
         <span className="wf-name" title={span.name}>
           {span.name}
@@ -441,26 +429,30 @@ function RowView(props: RowProps) {
             {span.detail}
           </span>
         )}
-        {slowest && <span className="wf-tag">Slowest</span>}
-        {unfinished && <span className="wf-tag warn">Unfinished</span>}
+        {unfinished && <span className="wf-spin" title="Unfinished" />}
         {span.children.length > 0 && !open && <span className="wf-count">{countAll(span)}</span>}
       </div>
-      <div className="wf-dur num">{label}</div>
-      <div className="wf-cost num">{formatCost(cost)}</div>
       <div className="wf-track">
         <div className="wf-track-in">
-          <span
-            className={`wf-bar tone-${tone}${isGroup(span) ? ' group' : ''}${unfinished ? ' unfinished' : ''}`}
-            style={{ left: `${left}%`, width: `max(${barWidth}%, 2px)` }}
-          />
-          <span
-            className="wf-bar-label num"
-            style={
-              after ? { left: `calc(${right}% + 6px)` } : { right: `calc(${100 - left}% + 6px)` }
-            }
-          >
-            {label}
-          </span>
+          {visible && (
+            <>
+              <span
+                className={`wf-bar tone-${tone}${isGroup(span) ? ' group' : ''}${unfinished ? ' unfinished' : ''}`}
+                style={{ left: `${left}%`, width: `max(${barWidth}%, 4px)` }}
+              />
+              <span
+                className="wf-bar-label num"
+                style={
+                  after
+                    ? { left: `calc(${right}% + 6px)` }
+                    : { right: `calc(${100 - left}% + 6px)` }
+                }
+              >
+                {label}
+                {costText && <span className="wf-bar-cost"> · {costText}</span>}
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -472,7 +464,7 @@ function rowId(span: Span): string {
 }
 
 function stickyHeight(frames: Frame[]): number {
-  return (frames.length ? 64 : 0) + 34;
+  return (frames.length ? 72 : 0) + 38;
 }
 
 function flatten(root: Span, collapsed: Set<string>): Row[] {
@@ -510,23 +502,6 @@ function countAll(span: Span): number {
   let n = -1;
   for (const _ of walk(span)) n++;
   return n;
-}
-
-/** The slowest model call, and the slowest tool call or API call, when there are several. */
-function slowestIds(root: Span): Set<string> {
-  const pick = (kinds: Span['kind'][]) => {
-    let best: Span | undefined;
-    let count = 0;
-    for (const s of walk(root)) {
-      if (!kinds.includes(s.kind) || s.end === undefined) continue;
-      count++;
-      if (!best || s.end - s.start > (best.end ?? 0) - best.start) best = s;
-    }
-    return count > 1 ? best : undefined;
-  };
-  return new Set(
-    [pick(['llm']), pick(['tool']), pick(['op'])].filter((s): s is Span => !!s).map((s) => s.id),
-  );
 }
 
 function nearestBrowserSpan(root: Span, at: number): Span | undefined {
