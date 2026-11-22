@@ -82,9 +82,9 @@ of the 60 GitHub allows an address. A failed read keeps the last APK and tries a
 minute. While the relay has an APK:
 - `/p`'s button goes to `/android`. That link has no fragment, so the pairing payload still
   never leaves the phone's browser;
-- `/android` (Spanish, the style of `/p`, no scripts) has the download button, the version, the
-  steps to install an APK, the file's SHA-256 and a link to the source of that version (the
-  `android/vX.Y.Z` tag);
+- `/android` (Spanish, the style of `/p`, no scripts) has the download button with its version,
+  at the bottom of the screen, and the non-affiliation line. The file's SHA-256 is in
+  `/android/latest.json`, and the source of each version is its `android/vX.Y.Z` release;
 - `/android/latest.json` answers `{ "version", "url", "sha256", "page" }`, where `page` is the
   absolute URL of `/android` (with `TRUST_PROXY`, in the scheme of `X-Forwarded-Proto`). The
   desktop reads it (`apps/desktop/src/main/companion/phone-app.ts`) to tell a phone whose app is

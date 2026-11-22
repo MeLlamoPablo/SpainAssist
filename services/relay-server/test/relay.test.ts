@@ -400,16 +400,10 @@ describe('relay HTTP', () => {
     expect(page.headers.get('referrer-policy')).toBe('no-referrer');
     const html = await page.text();
     expect(html).toContain(`<a class="download" href="${apk.url}">`);
+    expect(html).toContain('Descargar para Android</a>');
     expect(html).toContain('Versión 0.3.5');
-    expect(html).toContain(apk.sha256);
-    expect(html).toContain('«Permitir de esta fuente»');
-    expect(html).toContain('«Instalar de todas formas»');
-    expect(html).toContain('Es la misma app que Google Play instalará y actualizará.');
     expect(html).toContain(
       'Spain Assist es una app privada y no representa a ninguna entidad gubernamental.',
-    );
-    expect(html).toContain(
-      'href="https://github.com/MeLlamoPablo/SpainAssist/tree/android/v0.3.5"',
     );
     expect(html).not.toContain('<script');
     expect([...html.matchAll(/url\("([^"]+)"\)/g)]).toHaveLength(3);
