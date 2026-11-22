@@ -329,6 +329,12 @@ or rating learnings (searching still works).
   browsing (HAR, page HTML, actions, trace) to build offline mock sites. Typed secrets are
   scrubbed, but **personal data is kept**: use it only with synthetic or throwaway accounts.
   Captures never leave the device.
+- **Trace viewer** (`corepack pnpm traces [<path>]`, `tools/trace-viewer`): a waterfall of the
+  coordinator's and agents' turns, model calls (tokens, cost), tool calls, codemode runs with each
+  `api.*` call and the user's waits, and a capture's browser calls and screenshots under the run
+  call that made them; a capture opens in Playwright's trace viewer. It reads a profile or a
+  transcripts export (which includes background agents). Runs' timelines come from a custom entry
+  the agent host writes into the session (`spainassist.run_trace`, outside the model's context).
 - **Chat rewind** (development builds only: the button behind `import.meta.env.DEV`, and main
   registers `chat.rewind` but refuses it unless `appInfo.isDev`). "Rebobinar" on a user message
   stops the coordinator and cuts transcript.json and its pi session back to before that message

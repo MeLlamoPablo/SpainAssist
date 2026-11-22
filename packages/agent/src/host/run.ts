@@ -28,6 +28,7 @@ import {
   recordResearchUsage,
   recordSessionSelection,
   sessionResearchLog,
+  sessionRunTrace,
 } from './session';
 
 /**
@@ -180,6 +181,7 @@ export async function runHost(
       ...(hooks.egress?.onBlocked ? { onBlocked: hooks.egress.onBlocked } : {}),
       detachAfterMs: 2 * 60_000,
       researchLog: sessionResearchLog(() => sessionManager),
+      onRunTrace: sessionRunTrace(() => sessionManager),
     });
     tools.push(codemodeTool({ engine, images, imagesSupported, language: config.language }));
   }

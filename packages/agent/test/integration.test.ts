@@ -233,7 +233,21 @@ describe('agent host over RPC (integration)', () => {
     const sessionFile = join(workDir, 'sessions', 'p1.jsonl');
     // Windows has no POSIX modes (Node reports 0o666).
     if (process.platform !== 'win32') expect(statSync(sessionFile).mode & 0o777).toBe(0o600);
-    expect(readFileSync(sessionFile, 'utf8')).toContain('Hola, quiero renovar el DNI');
+    const lines = readFileSync(sessionFile, 'utf8').trim().split('\n');
+    expect(lines.join('\n')).toContain('Hola, quiero renovar el DNI');
+    // The run's timeline, for trace viewers: a custom entry, outside the model's context.
+    const traces = lines
+      .map((line) => JSON.parse(line) as { type: string; customType?: string; data?: unknown })
+      .filter((e) => e.type === 'custom' && e.customType === 'spainassist.run_trace');
+    expect(traces.map((e) => e.data)).toEqual([
+      expect.objectContaining({
+        status: 'succeeded',
+        calls: [
+          expect.objectContaining({ op: 'vault.read' }),
+          expect.objectContaining({ op: 'user.confirm' }),
+        ],
+      }),
+    ]);
   });
 
   it('runs the coordinator with only its own tools and prompt, delegating through the bridge', async () => {

@@ -52,6 +52,7 @@ beforeEach(async () => {
   deps = {
     appInfo: { name: 'Spain Assist', version: '1.2.3', platform: 'darwin' },
     assistantDir: join(dir, 'assistant'),
+    agentsDir: join(dir, 'agents'),
     proceduresDir: join(dir, 'procedures'),
     scanTranscriptsDir: join(dir, 'scanner'),
     logsDir: join(dir, 'logs'),
@@ -72,6 +73,9 @@ describe('exportTranscripts', () => {
     await put('assistant/transcript.json', '[{"id":"a"}]');
     await put('assistant/session.jsonl', '{"type":"session"}\n');
     await put('assistant/work/notes.txt', 'agent scratch');
+    await put('agents/a_0123456789abcdef/agent.json', '{"id":"a_0123456789abcdef"}');
+    await put('agents/a_0123456789abcdef/session.jsonl', '{"type":"session"}\n');
+    await put('agents/a_0123456789abcdef/work/page.html', 'agent scratch');
     await put(
       'procedures/p_0123456789abcdef/procedure.json',
       '{"id":"p_0123456789abcdef","title":"Empadronamiento"}',
@@ -94,6 +98,8 @@ describe('exportTranscripts', () => {
       'manifest.json',
       'assistant/session.jsonl',
       'assistant/transcript.json',
+      'agents/a_0123456789abcdef/agent.json',
+      'agents/a_0123456789abcdef/session.jsonl',
       'procedures/p_0123456789abcdef/procedure.json',
       'procedures/p_0123456789abcdef/session.jsonl',
       'procedures/p_0123456789abcdef/transcript.json',

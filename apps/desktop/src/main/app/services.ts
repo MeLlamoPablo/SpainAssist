@@ -719,12 +719,13 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       exportTranscripts({
         appInfo: deps.appInfo,
         assistantDir: paths.assistantDir,
+        agentsDir,
         proceduresDir: paths.proceduresDir,
         scanTranscriptsDir: paths.scanTranscriptsDir,
         logsDir: paths.logsDir,
         downloadsDir: deps.documentDownloadsDir,
         flush: async () => {
-          await Promise.all([procedures.flush(), conversation.flush()]);
+          await Promise.all([procedures.flush(), conversation.flush(), directory.flush()]);
         },
         clock,
         lang,

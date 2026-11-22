@@ -51,11 +51,118 @@ export interface EngineDeps extends Omit<HostOpsDeps, 'procedures' | 'images' | 
   detachAfterMs: number;
   /** Where "search results reached the model" is kept; in memory without it. */
   researchLog?: ResearchLog;
+  /** Gets each run's timeline when it ends (for traces; never the model's context). */
+  onRunTrace?: (trace: RunTrace) => void;
+}
+
+/** One `api.*` call of a run, or an interface from when it opened until it closed. */
+export interface RunTraceCall {
+  /** The host operation (`browser.click`, `procedures.update`...), or `ui` for an interface. */
+  op: string;
+  /** The page's URL, or the interface's key. */
+  label?: string;
+  /** Epoch milliseconds. */
+  start: number;
+  ms: number;
+  /** The error the module got (code and message, cut). */
+  error?: string;
+}
+
+/**
+ * What a run did and when, for trace viewers (`tools/trace-viewer`): the host stores it in the
+ * agent's session file, outside the model's context. Op names and URLs only: no arguments or
+ * results beyond what the session already holds.
+ */
+export interface RunTrace {
+  runId: string;
+  title?: string;
+  startedAt: number;
+  endedAt: number;
+  status: RunOutcome['status'];
+  /** In start order; at most MAX_TRACE_CALLS (the first ones). */
+  calls: RunTraceCall[];
+  /** Calls left out past MAX_TRACE_CALLS. */
+  droppedCalls?: number;
+}
+
+/** Calls a run's trace keeps. */
+const MAX_TRACE_CALLS = 500;
+
+/** A run's trace while it runs. */
+class TraceRecorder {
+  readonly startedAt = Date.now();
+  private readonly calls: RunTraceCall[] = [];
+  private readonly openUis = new Map<string, number>();
+  private dropped = 0;
+
+  async time<T>(op: string, label: string | undefined, fn: () => Promise<T>): Promise<T> {
+    const start = Date.now();
+    try {
+      const result = await fn();
+      this.add({ op, label, start });
+      return result;
+    } catch (error) {
+      this.add({ op, label, start, error: traceError(error) });
+      throw error;
+    }
+  }
+
+  uiOpened(key: string): void {
+    if (!this.openUis.has(key)) this.openUis.set(key, Date.now());
+  }
+
+  uiClosed(key: string): void {
+    const start = this.openUis.get(key);
+    if (start === undefined) return;
+    this.openUis.delete(key);
+    this.add({ op: 'ui', label: key, start });
+  }
+
+  finish(base: Pick<RunTrace, 'runId' | 'title' | 'status'>): RunTrace {
+    // Interfaces still open when the run ended were withdrawn with it.
+    for (const key of [...this.openUis.keys()]) this.uiClosed(key);
+    const calls = [...this.calls].sort((a, b) => a.start - b.start);
+    return {
+      ...base,
+      startedAt: this.startedAt,
+      endedAt: Date.now(),
+      calls,
+      ...(this.dropped ? { droppedCalls: this.dropped } : {}),
+    };
+  }
+
+  private add(call: { op: string; label?: string; start: number; error?: string }): void {
+    if (this.calls.length >= MAX_TRACE_CALLS) {
+      this.dropped++;
+      return;
+    }
+    this.calls.push({
+      op: call.op,
+      ...(call.label ? { label: call.label.slice(0, 200) } : {}),
+      start: call.start,
+      ms: Date.now() - call.start,
+      ...(call.error ? { error: call.error } : {}),
+    });
+  }
+}
+
+function traceError(error: unknown): string {
+  const code =
+    typeof (error as { code?: unknown })?.code === 'string' ? (error as { code: string }).code : '';
+  const message = error instanceof Error ? error.message : String(error);
+  return (code ? `${code}: ${message}` : message).slice(0, 300);
+}
+
+function traceLabel(args: unknown): string | undefined {
+  const url = (args as { url?: unknown } | null)?.url;
+  return typeof url === 'string' ? url : undefined;
 }
 
 interface LiveRun {
   run: CodeRun;
   runId: string;
+  title?: string;
+  trace: TraceRecorder;
   deliver: boolean;
   searches: Search[];
   /** Dispatches the events that wait for an interface to open (set by `pollEvents`). */
@@ -109,6 +216,7 @@ export class RunEngine {
     );
     const runId = begin.runId;
     const procedures = [...begin.procedures];
+    const trace = new TraceRecorder();
     const pendingRender = new Map<string, { tree: UiNode; rev: number }>();
     const pendingDurable = new Map<string, unknown>();
     let uiChain: Promise<unknown> = Promise.resolve();
@@ -121,10 +229,12 @@ export class RunEngine {
       setMemo: (key, value) => bridge.call('run.memo', { runId, key, value }).then(() => undefined),
       deleteMemo: (key) =>
         bridge.call('run.memo', { runId, key, delete: true }).then(() => undefined),
-      openUi: (key, tree, rev) =>
-        serial(() => bridge.call('run.ui', { runId, action: 'open', key, tree, rev })).then(
+      openUi: (key, tree, rev) => {
+        trace.uiOpened(key);
+        return serial(() => bridge.call('run.ui', { runId, action: 'open', key, tree, rev })).then(
           () => undefined,
-        ),
+        );
+      },
       renderUi: (key, tree, rev) => {
         const queued = pendingRender.has(key);
         pendingRender.set(key, { tree, rev });
@@ -156,10 +266,12 @@ export class RunEngine {
           hostLog('warn', `durable value of ${runId}/${key} not saved: ${String(err)}`),
         );
       },
-      closeUi: (key, result) =>
-        serial(() => bridge.call('run.ui', { runId, action: 'close', key, result })).then(
+      closeUi: (key, result) => {
+        trace.uiClosed(key);
+        return serial(() => bridge.call('run.ui', { runId, action: 'close', key, result })).then(
           (res) => res.note,
-        ),
+        );
+      },
     };
 
     // documents.create needs search results the model read before this run was written: the
@@ -178,7 +290,7 @@ export class RunEngine {
       procedures,
       store,
       call: async (op, args, ctx) => {
-        const result = await baseOps(op, args, ctx);
+        const result = await trace.time(op, traceLabel(args), () => baseOps(op, args, ctx));
         if (op === 'search' && typeof result === 'string')
           searches.push({ query: searchQuery(args), text: result });
         if (op === 'procedures.getOrCreate' || op === 'procedures.update') {
@@ -195,7 +307,14 @@ export class RunEngine {
         setTimeout(() => live.flushWaiting?.(), 0);
       },
     });
-    const live: LiveRun = { run, runId, deliver: false, searches };
+    const live: LiveRun = {
+      run,
+      runId,
+      ...(input.title ? { title: input.title } : {}),
+      trace,
+      deliver: false,
+      searches,
+    };
     this.live.set(runId, live);
     void this.pollEvents(live).catch((err) =>
       hostLog('warn', `events of ${runId} stopped: ${String(err)}`),
@@ -240,6 +359,17 @@ export class RunEngine {
 
   private async finish(live: LiveRun, outcome: RunOutcome): Promise<void> {
     if (this.live.get(live.runId) === live) this.live.delete(live.runId);
+    try {
+      this.deps.onRunTrace?.(
+        live.trace.finish({
+          runId: live.runId,
+          ...(live.title ? { title: live.title } : {}),
+          status: outcome.status,
+        }),
+      );
+    } catch (err) {
+      hostLog('warn', `trace of ${live.runId} not kept: ${String(err)}`);
+    }
     const value =
       outcome.status === 'succeeded' && outcome.value !== undefined
         ? outcome.value.slice(0, RESULT_CHARS)

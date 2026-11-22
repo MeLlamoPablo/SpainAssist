@@ -2,7 +2,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, realpathSync } f
 import { homedir, tmpdir } from 'node:os';
 import { dirname, parse, resolve } from 'node:path';
 import type { SessionManager } from '@earendil-works/pi-coding-agent';
-import type { ResearchLog } from '../codemode/engine';
+import type { ResearchLog, RunTrace } from '../codemode/engine';
 import type { ResearchUsage } from '../research/chatgpt-research';
 
 /**
@@ -66,6 +66,21 @@ export function sessionResearchLog(
     add: () => {
       sessionManager().appendCustomEntry(RESEARCH_SEEN);
     },
+  };
+}
+
+/** Custom entry: a codemode run's timeline (`RunTrace`), for trace viewers. */
+const RUN_TRACE = 'spainassist.run_trace';
+
+/**
+ * Keeps each run's timeline in the agent's session file as a custom entry, which isn't part of
+ * the model's context: `tools/trace-viewer` draws it under the `codemode` call that started it.
+ */
+export function sessionRunTrace(
+  sessionManager: () => Pick<SessionManager, 'appendCustomEntry'>,
+): (trace: RunTrace) => void {
+  return (trace) => {
+    sessionManager().appendCustomEntry(RUN_TRACE, trace);
   };
 }
 

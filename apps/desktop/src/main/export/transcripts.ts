@@ -10,6 +10,8 @@ import { ZipTooLargeError, ZipWriter } from './zip';
 export interface TranscriptExportDeps {
   appInfo: Pick<AppInfo, 'name' | 'version' | 'platform'>;
   assistantDir: string;
+  /** Background agents: agents/<id>/ (agent.json, transcript.json, session.jsonl, run state). */
+  agentsDir: string;
   proceduresDir: string;
   scanTranscriptsDir: string;
   /** The app's logs: `main.log` and `main.1.log`, its predecessor (`core/logger`). */
@@ -42,6 +44,7 @@ interface LogEntry {
  * returns its file name. Layout: the folders of userData, without media/ and work/:
  *   manifest.json  (the app, its version, and the logs: which, their size, which were cut)
  *   assistant/transcript.json, assistant/session.jsonl
+ *   agents/<id>/agent.json, transcript.json, session.jsonl, ...  (background agents)
  *   procedures/<id>/procedure.json, transcript.json, session.jsonl
  *   scanner/<scan id>/...  (development builds only)
  *   logs/main.log, logs/main.1.log  (each cut to its last 5 MiB)
@@ -65,6 +68,8 @@ export async function exportTranscripts(deps: TranscriptExportDeps): Promise<str
         const zip = new ZipWriter(file, now);
         await zip.add('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)));
         await addFiles(zip, deps.assistantDir, 'assistant', false);
+        for (const id of await entries(deps.agentsDir, 'dir'))
+          if (isSafeId(id)) await addFiles(zip, join(deps.agentsDir, id), `agents/${id}`, false);
         for (const id of await entries(deps.proceduresDir, 'dir'))
           if (isSafeId(id))
             await addFiles(zip, join(deps.proceduresDir, id), `procedures/${id}`, false);

@@ -1,7 +1,13 @@
 import { type BridgeMethod, UI_FAILED } from '@sa/shared';
 import { describe, expect, it } from 'vitest';
-import type { BridgeCallOptions, BridgeTransport } from '../src/bridge/client';
-import { type ResearchLog, RunEngine, unreturnedSearches } from '../src/codemode/engine';
+import { type BridgeCallOptions, BridgeError, type BridgeTransport } from '../src/bridge/client';
+import {
+  type ResearchLog,
+  RunEngine,
+  type RunTrace,
+  type RunTraceCall,
+  unreturnedSearches,
+} from '../src/codemode/engine';
 import { createImageStore, RESEARCH_FIRST } from '../src/codemode/host-ops';
 import { codemodeTool } from '../src/codemode/tool';
 import type { AnyToolDefinition } from '../src/tools/common';
@@ -68,6 +74,66 @@ describe('RunEngine', () => {
     // Before, the event waited for the next poll to return (25 s in the app).
     for (let i = 0; i < 60 && !ended.length; i++) await sleep(50);
     expect(ended).toEqual([expect.objectContaining({ status: 'succeeded', value: '"heard: x"' })]);
+  });
+});
+
+describe('run traces', () => {
+  it('times each call of a run, failures with their error, and hands the trace over at its end', async () => {
+    const traces: RunTrace[] = [];
+    const bridge: BridgeTransport = {
+      async call<M extends BridgeMethod>(method: M, _params: unknown, options?: BridgeCallOptions) {
+        const answer = async (): Promise<unknown> => {
+          switch (method) {
+            case 'run.begin':
+              return { runId: 'run_1', procedures: [], state: { memo: {}, ui: {} } };
+            case 'procs.getOrCreate':
+              await sleep(40);
+              return { id: 'p_aaaaaaaaaaaaaaaa' };
+            case 'browser.open':
+              throw new BridgeError('policy_denied', 'Not an official domain', 'browser.open');
+            case 'run.events':
+              await new Promise((resolve) =>
+                options?.signal?.addEventListener('abort', resolve, { once: true }),
+              );
+              return { events: [], ended: true };
+            default:
+              return {};
+          }
+        };
+        return (await answer()) as never;
+      },
+    };
+    const engine = new RunEngine({
+      bridge,
+      images: createImageStore(),
+      imagesSupported: false,
+      detachAfterMs: 10_000,
+      onRunTrace: (trace) => traces.push(trace),
+    });
+    const outcome = await engine.start({
+      title: 'Abrir la sede',
+      source: `export async function main(api) {
+  await api.procedures.getOrCreate({ id: 'tramite', title: 'Trámite' });
+  const page = await api.browser.currentPage({ procedureId: 'p_aaaaaaaaaaaaaaaa' });
+  try { await page.goto('https://example.com/x'); } catch {}
+  return 'ok';
+}`,
+    });
+    expect(outcome.status).toBe('succeeded');
+    for (let i = 0; i < 40 && !traces.length; i++) await sleep(25);
+    expect(traces).toEqual([
+      expect.objectContaining({ runId: 'run_1', title: 'Abrir la sede', status: 'succeeded' }),
+    ]);
+    const [trace] = traces as [RunTrace];
+    expect(trace.calls.map((c) => [c.op, c.label, c.error])).toEqual([
+      ['procedures.getOrCreate', undefined, undefined],
+      ['browser.goto', 'https://example.com/x', expect.stringContaining('Not an official domain')],
+    ]);
+    const [first, second] = trace.calls as [RunTraceCall, RunTraceCall];
+    expect(first.ms).toBeGreaterThanOrEqual(35);
+    expect(second.start).toBeGreaterThanOrEqual(first.start + first.ms);
+    expect(trace.startedAt).toBeLessThanOrEqual(first.start);
+    expect(trace.endedAt).toBeGreaterThanOrEqual(second.start + second.ms);
   });
 });
 
