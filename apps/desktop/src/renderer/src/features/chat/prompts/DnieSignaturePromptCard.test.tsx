@@ -91,10 +91,9 @@ describe('DNI progress card', () => {
         { state, device: 'Pixel 8', phoneApp, phoneUpdate: true },
       );
       expect(html).toContain('data-testid="dnie-update"');
-      expect(html).toContain('Hay una versión nueva de la app del móvil (0.3.5).');
-      expect(html).toContain('Escanéalo con el móvil para actualizarla.');
+      expect(html).toContain('Hay una versión nueva de la app del móvil (0.3.5)');
+      expect(html).toContain('Escanea con el móvil para actualizarla');
       expect(html).toContain('data-testid="companion-update-qr"');
-      expect(html).toContain('Cuando la actualices, abre la app en el móvil y sigo.');
       expect(html).toContain('Seguir sin actualizar');
       // It can wait: not an alert, and the request can still be cancelled.
       expect(html).not.toContain('role="alert"');
@@ -110,7 +109,7 @@ describe('DNI progress card', () => {
       { stage: 'update', purpose: 'login' },
       { state: 'connected', device: 'Pixel 8', phoneApp, phoneUpdate: true },
     );
-    expect(en).toContain('There is a new version of the phone app (0.3.5).');
+    expect(en).toContain('There is a new version of the phone app (0.3.5)');
     expect(en).toContain('Continue without updating');
   });
 

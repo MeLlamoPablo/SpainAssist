@@ -90,17 +90,16 @@ export const companionDict = defineDict({
       phone:
         'La app del móvil está desactualizada. Actualízala desde Google Play y vuelve a abrirla.',
       /** `phone` while the relay offers the app outside Google Play: its QR follows. */
-      phoneDownload: 'La app del móvil está desactualizada. Actualízala y vuelve a abrirla.',
+      phoneDownload: 'La app del móvil está desactualizada',
       desktop:
         'La app del móvil es más nueva que Spain Assist en el ordenador. Actualiza Spain Assist en el ordenador para firmar con el móvil.',
     },
     /** The phone app outside Google Play: a QR to the page that downloads it. */
     update: {
-      available: (version: string) => `Hay una versión nueva de la app del móvil (${version}).`,
-      scan: 'Escanéalo con el móvil para actualizarla.',
+      available: (version: string) => `Hay una versión nueva de la app del móvil (${version})`,
+      scan: 'Escanea con el móvil para actualizarla',
       qrLabel: 'Código para descargar la app del móvil',
       /** A DNI request waits for the update (its `update` stage), or for the user to skip it. */
-      waits: 'Cuando la actualices, abre la app en el móvil y sigo.',
       skip: 'Seguir sin actualizar',
     },
     /** The relay hasn't been reached for a while. */
@@ -186,15 +185,14 @@ export const companionDict = defineDict({
     pairAgain: 'Pair again',
     outdated: {
       phone: 'The phone app is out of date. Update it from Google Play and open it again.',
-      phoneDownload: 'The phone app is out of date. Update it and open it again.',
+      phoneDownload: 'The phone app is out of date',
       desktop:
         'The phone app is newer than Spain Assist on this computer. Update Spain Assist on the computer to sign with your phone.',
     },
     update: {
-      available: (version: string) => `There is a new version of the phone app (${version}).`,
-      scan: 'Scan it with your phone to update it.',
+      available: (version: string) => `There is a new version of the phone app (${version})`,
+      scan: 'Scan with your phone to update it',
       qrLabel: 'Code to download the phone app',
-      waits: 'Once it’s updated, open the app on your phone and I’ll continue.',
       skip: 'Continue without updating',
     },
     stalled: "Can't connect to the server. Check your internet connection.",

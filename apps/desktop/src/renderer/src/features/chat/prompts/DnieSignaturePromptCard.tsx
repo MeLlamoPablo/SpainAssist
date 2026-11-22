@@ -223,22 +223,25 @@ function PhoneUpdateGate({ itemId, phoneApp }: { itemId: string; phoneApp?: Comp
       setBusy(false);
     }
   };
+  const button = (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => void skip()}
+      loading={busy}
+      disabled={busy}
+      data-testid="dnie-update-skip"
+    >
+      {tc.update.skip}
+    </Button>
+  );
   return (
-    <div className="flex flex-col gap-3" data-testid="dnie-update">
-      {phoneApp ? <PhoneUpdateNotice phoneApp={phoneApp} /> : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="min-w-[200px] flex-1 text-[12.5px] text-fg-subtle">{tc.update.waits}</p>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => void skip()}
-          loading={busy}
-          disabled={busy}
-          data-testid="dnie-update-skip"
-        >
-          {tc.update.skip}
-        </Button>
-      </div>
+    <div data-testid="dnie-update">
+      {phoneApp ? (
+        <PhoneUpdateNotice phoneApp={phoneApp} action={button} />
+      ) : (
+        <div className="flex justify-end">{button}</div>
+      )}
     </div>
   );
 }

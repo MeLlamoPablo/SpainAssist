@@ -1,6 +1,6 @@
 import { type CompanionPhoneApp, type CompanionStatus, companionOutdatedSide } from '@sa/shared';
 import { Loader2, RotateCw, Smartphone, TriangleAlert, WifiOff } from 'lucide-react';
-import { useMemo } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { encode } from 'uqr';
 import { BrandMark } from '../../components/brand';
 import { Button } from '../../components/ui/button';
@@ -282,15 +282,30 @@ function PhoneAppQr({ page, title, alert }: { page: string; title: string; alert
   );
 }
 
-/** A newer phone app outside Google Play, with the QR that downloads it. It can wait. */
-export function PhoneUpdateNotice({ phoneApp }: { phoneApp: CompanionPhoneApp }) {
+/**
+ * A newer phone app outside Google Play, with the QR that downloads it. It can wait. No box of
+ * its own: it sits on the row or card that holds it. `action` goes in its bottom-right corner,
+ * or under it when the space is too narrow for both.
+ */
+export function PhoneUpdateNotice({
+  phoneApp,
+  action,
+}: {
+  phoneApp: CompanionPhoneApp;
+  action?: ReactNode;
+}) {
   const t = useT(companionDict);
   return (
     <div
-      className="basis-full rounded-lg bg-surface-2/60 p-3 text-[12.5px] text-fg-muted ring-1 ring-line ring-inset"
+      className="@container relative basis-full p-3 text-[12.5px] text-fg-muted"
       data-testid="companion-update"
     >
       <PhoneAppQr page={phoneApp.page} title={t.update.available(phoneApp.version)} />
+      {action ? (
+        <div className="mt-3 flex justify-end @md:absolute @md:right-0 @md:bottom-0 @md:mt-0">
+          {action}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -325,7 +340,7 @@ export function OutdatedNotice({
     return (
       <div
         role="alert"
-        className="basis-full rounded-lg bg-st-attention-bg p-3 text-[13px] font-medium text-st-attention-fg ring-1 ring-st-attention-line ring-inset"
+        className="basis-full rounded-lg bg-st-attention-bg p-3 text-[13px] text-st-attention-fg ring-1 ring-st-attention-line ring-inset"
         data-testid="companion-outdated"
         data-side={side}
       >

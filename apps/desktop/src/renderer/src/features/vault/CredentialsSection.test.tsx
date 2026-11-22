@@ -144,7 +144,7 @@ describe('Mis datos: DNI with the phone', () => {
       phoneUpdate: true,
     });
     expect(update).toContain('Móvil vinculado: Pixel 8');
-    expect(update).toContain('Hay una versión nueva de la app del móvil (0.3.5).');
+    expect(update).toContain('Hay una versión nueva de la app del móvil (0.3.5)');
     expect(update).toContain('data-testid="companion-update-qr"');
     const outdated = render(true, [DNIE], {
       state: 'away',
@@ -152,9 +152,7 @@ describe('Mis datos: DNI with the phone', () => {
       outdated: { phone: 5, desktop: 6 },
       phoneApp,
     });
-    expect(outdated).toContain(
-      'La app del móvil está desactualizada. Actualízala y vuelve a abrirla.',
-    );
+    expect(outdated).toContain('La app del móvil está desactualizada');
     expect(outdated).toContain('data-testid="companion-update-qr"');
     for (const status of [
       { state: 'connected', device: 'Pixel 8', phoneApp },

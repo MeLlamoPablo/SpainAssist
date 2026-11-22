@@ -71,8 +71,8 @@ describe('PairingPanel', () => {
     expect(html).toContain('data-testid="companion-connected"');
     expect(html).toContain('Conectado con Pixel 8');
     expect(html).toContain('data-testid="companion-update"');
-    expect(html).toContain('Hay una versión nueva de la app del móvil (0.3.5).');
-    expect(html).toContain('Escanéalo con el móvil para actualizarla.');
+    expect(html).toContain('Hay una versión nueva de la app del móvil (0.3.5)');
+    expect(html).toContain('Escanea con el móvil para actualizarla');
     expect(html).toContain('data-testid="companion-update-qr"');
     expect(html).toContain('aria-label="Código para descargar la app del móvil"');
     expect(html).not.toContain('role="alert"');
@@ -100,8 +100,8 @@ describe('PairingPanel', () => {
     const html = render({ state: 'away', device: 'Pixel 8', outdated, phoneApp });
     expect(html).toContain('role="alert"');
     expect(html).toContain('data-side="phone"');
-    expect(html).toContain('La app del móvil está desactualizada. Actualízala y vuelve a abrirla.');
-    expect(html).toContain('Escanéalo con el móvil para actualizarla.');
+    expect(html).toContain('La app del móvil está desactualizada');
+    expect(html).toContain('Escanea con el móvil para actualizarla');
     expect(html).toContain('data-testid="companion-update-qr"');
     expect(html).not.toContain('Google Play');
     // A first pairing keeps its own QR next to it.
