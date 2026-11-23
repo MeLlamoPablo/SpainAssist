@@ -492,6 +492,18 @@ function Header({ trace, focus }: { trace: Trace; focus: Span }) {
           {focus === trace.root && trace.group !== 'browser' ? trace.title : focus.name}
         </span>
         <span className="card-when num">{formatClock(focus.start)}</span>
+        <ul className="legend" aria-label="Legend">
+          {LEGEND.map((l) => (
+            <li key={l.tone}>
+              <span className={`swatch tone-${l.tone}`} />
+              {l.label}
+            </li>
+          ))}
+          <li>
+            <span className="swatch tone-error" />
+            Failed
+          </li>
+        </ul>
       </div>
       <div className="stats">
         <Stat label="Duration" value={formatDuration(duration)} />
@@ -506,18 +518,6 @@ function Header({ trace, focus }: { trace: Trace; focus: Span }) {
           tone={stats.errors ? 'error' : undefined}
         />
       </div>
-      <ul className="legend" aria-label="Legend">
-        {LEGEND.map((l) => (
-          <li key={l.tone}>
-            <span className={`swatch tone-${l.tone}`} />
-            {l.label}
-          </li>
-        ))}
-        <li>
-          <span className="swatch tone-error" />
-          Failed
-        </li>
-      </ul>
     </header>
   );
 }

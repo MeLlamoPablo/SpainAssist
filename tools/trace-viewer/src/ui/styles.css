@@ -610,10 +610,8 @@ kbd {
 }
 
 .legend {
-  position: absolute;
-  top: 12px;
-  right: 18px;
   display: flex;
+  flex: none;
   gap: 14px;
   margin: 0;
   padding: 3px 0;
