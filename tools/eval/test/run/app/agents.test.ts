@@ -38,7 +38,7 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-function fleet(over: { now?: string; origin?: string } = {}): AgentFleet {
+function fleet(over: { now?: string; origin?: string; retryToolCalls?: boolean } = {}): AgentFleet {
   const spec = {
     runDir: root,
     bench: {
@@ -48,6 +48,7 @@ function fleet(over: { now?: string; origin?: string } = {}): AgentFleet {
       worldId: 'run-fleet',
     },
     now: over.now ?? '2026-10-16T10:00:00+02:00',
+    ...(over.retryToolCalls ? { retryToolCalls: true } : {}),
   } as unknown as EvalAppSpec;
   const deps = {
     meter: { agentBaseUrl: (key: string) => `http://127.0.0.1:4000/r/tok/a/${key}/v1` },
@@ -176,6 +177,14 @@ describe('the launch of an agent host', () => {
         configFile: file,
       },
     ]);
+  });
+
+  it('turns the tool-call retry on in the host config when the run asks for it', () => {
+    const launch = fleet({ retryToolCalls: true }).lib.buildAgentLaunch(options(config()));
+    const written = JSON.parse(
+      readFileSync(launch.env.SA_EVAL_CONFIG as string, 'utf8'),
+    ) as HostEvalConfig;
+    expect(written.retryToolCalls).toBe(true);
   });
 
   it('gives each launch of the same agent its own config file and net log (seq numbers one process)', () => {

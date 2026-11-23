@@ -213,6 +213,8 @@ export interface HostEvalConfig {
   };
   /** Frozen "now" of the agents' prompts. */
   now: string;
+  /** The tool-call retry is on (`src/host/tool-call-retry.ts`). Absent: off. */
+  retryToolCalls?: boolean;
 }
 
 export interface ResearchAnswer {
@@ -770,6 +772,8 @@ export interface EvalAppSpec {
   now: string;
   /** Record Playwright's HAR, trace and HTML per step under `browser/`. */
   captureBrowser: boolean;
+  /** The agents' hosts retry a tool call written as text (`src/host/tool-call-retry.ts`). */
+  retryToolCalls?: boolean;
   /** Restore this profile copy (a checkpoint's `profileDir`) instead of creating one. */
   restoreFrom?: { profileDir: string; browserStateFile?: string };
   /** Aborted by the run: stop everything now, cancel pending model requests. */

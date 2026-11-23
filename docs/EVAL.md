@@ -169,6 +169,14 @@ its run.
   allow for a shipped app. It needs explicit consent, is refused in CI, and never enters the product.
 - Real-model runs cost money and Codex runs spend a person's plan: they are opt-in, capped and
   logged. Everything else runs on `tools/mock-llm`. The answerer is a cheap model, metered too.
+- **The tool-call retry** (`--retry-tool-calls`, off by default) is an experiment for local models.
+  Such a model sometimes breaks a tool call (invalid JSON in a long call, or the call written in a
+  text message and cut), its server hands the body over as plain text, and the agent's work ends
+  there with the JSON as its report. With the flag, the eval host asks the model to send the call
+  again, at most twice in a row. `run.json` says the flag was on (`options.retryToolCalls`) and the
+  result counts the retries (`tool-call-retries:<n>` in its notes), so a score that needed them
+  shows it. Only the eval host has the check (`tools/eval/src/host/tool-call-retry.ts`, loaded
+  through `HostHooks.extension`): the product host does not contain it and the app cannot turn it on.
 
 ## Artifacts (`<runs root>/<runId>/`)
 

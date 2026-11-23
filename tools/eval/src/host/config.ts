@@ -74,6 +74,7 @@ export const HostEvalConfigSchema = z
     }),
     /** An ISO 8601 instant with its offset: the agents' "today". */
     now: z.iso.datetime({ offset: true }),
+    retryToolCalls: z.boolean().optional(),
   })
   .refine(
     (config) => {

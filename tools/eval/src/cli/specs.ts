@@ -157,6 +157,13 @@ const RUN_FLAG_OPTIONS: readonly OptionSpec[] = [
     description: "Leave the run's world on the SpainBench server (it is deleted by default).",
   },
   {
+    name: 'retry-tool-calls',
+    type: 'boolean',
+    description:
+      'Ask the model again when it writes a tool call as text (a broken call of a local model). ' +
+      'Off by default; the result counts the retries (tool-call-retries:<n>).',
+  },
+  {
     name: 'codex-consent',
     type: 'boolean',
     description:

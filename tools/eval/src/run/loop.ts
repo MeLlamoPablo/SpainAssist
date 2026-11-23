@@ -22,6 +22,7 @@ import type {
   SaveBenchArtifacts,
 } from '../contracts';
 import { assertValidFixture, fixtureSecrets } from '../fixtures';
+import { TOOL_CALL_RETRY_NOTE } from '../host/tool-call-retry';
 import {
   type Answerer,
   AnswererError,
@@ -136,6 +137,8 @@ export interface RunOptions {
    * it; a server that outlives the run only collects dead worlds.
    */
   keepWorld?: boolean;
+  /** The agents' hosts retry a tool call written as text (`src/host/tool-call-retry.ts`). */
+  retryToolCalls?: boolean;
 
   /** `createEvalApp` of `src/run/app`. */
   createApp: CreateEvalApp;
@@ -252,6 +255,7 @@ class FixtureRun {
   private readonly hasRequiredNegated: boolean;
   private readonly secrets = new RunSecrets();
   private readonly notes: string[] = [];
+  private toolCallRetries = 0;
   private readonly controller = new AbortController();
   private readonly watchAbort = new AbortController();
   private readonly ended = deferred<void>();
@@ -437,6 +441,7 @@ class FixtureRun {
         evaluateIntervalMs: this.evaluateIntervalMs,
         checkpoint: this.checkpointEnabled,
         keepWorld: options.keepWorld ?? false,
+        ...(options.retryToolCalls ? { retryToolCalls: true } : {}),
       },
       ...(options.benchInfo ? { bench: options.benchInfo } : {}),
       node: process.version,
@@ -525,6 +530,7 @@ class FixtureRun {
             },
             now: frozenNow(today, this.startedAt),
             captureBrowser: options.captureBrowser ?? false,
+            ...(options.retryToolCalls ? { retryToolCalls: true } : {}),
             ...(restoreFrom ? { restoreFrom } : {}),
             signal: this.controller.signal,
           },
@@ -753,6 +759,9 @@ class FixtureRun {
         break;
       case 'tool_end':
         this.onToolEnd(observation);
+        break;
+      case 'note':
+        if (observation.text.startsWith(TOOL_CALL_RETRY_NOTE)) this.toolCallRetries += 1;
         break;
       default:
         break;
@@ -1195,6 +1204,7 @@ class FixtureRun {
     const notes = [...(ending.note ? [ending.note] : []), ...this.notes];
     const unused = this.simulator?.unusedRequired() ?? [];
     if (unused.length > 0) notes.push(`unused-answers:${unused.join(',')}`);
+    if (this.toolCallRetries > 0) notes.push(`tool-call-retries:${this.toolCallRetries}`);
 
     const assemble = (endedBy: string) =>
       this.assemble({

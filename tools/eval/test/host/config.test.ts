@@ -37,6 +37,12 @@ describe('HostEvalConfig schema', () => {
     expect(parseHostEvalConfig(config)).toEqual(config);
   });
 
+  it('accepts the tool-call retry, which a config without it leaves off', () => {
+    const config = { ...valid(), retryToolCalls: true };
+    expect(parseHostEvalConfig(config)).toEqual(config);
+    expect(parseHostEvalConfig(valid())).not.toHaveProperty('retryToolCalls');
+  });
+
   it('accepts every unmapped mode', () => {
     for (const unmapped of [
       { mode: 'enotfound' },

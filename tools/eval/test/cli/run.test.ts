@@ -101,6 +101,7 @@ describe('eval run: arguments become the request', () => {
       'model-u',
       '--capture-browser',
       '--keep-world',
+      '--retry-tool-calls',
       '--codex-consent',
       '--run-id',
       'my-run',
@@ -120,6 +121,7 @@ describe('eval run: arguments become the request', () => {
       models: { assistantModel: 'model-a', procedureModel: 'model-p', answererModel: 'model-u' },
       captureBrowser: true,
       keepWorld: true,
+      retryToolCalls: true,
       codexConsent: true,
       runId: 'my-run',
       runsRoot: join(cli.cwd, 'where'),
@@ -190,6 +192,7 @@ describe('eval run: arguments become the request', () => {
       'models',
       'captureBrowser',
       'keepWorld',
+      'retryToolCalls',
       'codexConsent',
       'scenario',
     ]) {

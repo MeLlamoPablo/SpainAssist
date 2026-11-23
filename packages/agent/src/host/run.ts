@@ -270,7 +270,10 @@ export async function runHost(
           noContextFiles: true,
           systemPromptOverride: () => systemPrompt(),
           appendSystemPromptOverride: () => [],
-          extensionFactories: [{ name: 'spainassist', factory: extension }],
+          extensionFactories: [
+            { name: 'spainassist', factory: extension },
+            ...(hooks.extension ? [{ name: 'harness', factory: hooks.extension }] : []),
+          ],
         },
       });
       const result = await pi.createAgentSessionFromServices({

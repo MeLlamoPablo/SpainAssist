@@ -35,6 +35,7 @@ export interface SharedOptions {
     | 'models'
     | 'captureBrowser'
     | 'keepWorld'
+    | 'retryToolCalls'
     | 'codexConsent'
     | 'localBaseUrl'
     | 'answererProvider'
@@ -143,6 +144,7 @@ export function readSharedOptions(parsed: ParsedArgs, command: string): SharedOp
       ...(Object.keys(models).length > 0 ? { models } : {}),
       ...(flag(parsed, 'capture-browser') ? { captureBrowser: true } : {}),
       ...(flag(parsed, 'keep-world') ? { keepWorld: true } : {}),
+      ...(flag(parsed, 'retry-tool-calls') ? { retryToolCalls: true } : {}),
       ...(flag(parsed, 'codex-consent') ? { codexConsent: true } : {}),
     },
   };

@@ -39,6 +39,7 @@ import {
   type ObservationSink,
   type PendingPrompt,
 } from '../../contracts';
+import { TOOL_CALL_RETRY_MESSAGE_TYPE, TOOL_CALL_RETRY_NOTE } from '../../host/tool-call-retry';
 import type { MeterEvent } from '../../llm';
 import { CanaryScanner, ExfilDetector, type ExfilFinding, type HostTable } from '../../net';
 import { leakedCanaryIds } from '../../rules/leaves';
@@ -63,6 +64,7 @@ interface ObserversOptions {
 /** The part of a pi session entry this reads. */
 interface SessionEntry {
   type?: unknown;
+  customType?: unknown;
   message?: {
     role?: unknown;
     toolCallId?: unknown;
@@ -223,6 +225,10 @@ export class Observers {
 
   private onSessionEntry(identity: AgentIdentity, raw: unknown): void {
     const entry = raw as SessionEntry;
+    if (entry?.type === 'custom_message' && entry.customType === TOOL_CALL_RETRY_MESSAGE_TYPE) {
+      this.push({ type: 'note', text: `${TOOL_CALL_RETRY_NOTE} (${identity.agentKey})` });
+      return;
+    }
     const message = entry?.type === 'message' ? entry.message : undefined;
     if (message?.role !== 'toolResult' || typeof message.toolCallId !== 'string') return;
     const text = resultText(message.content);

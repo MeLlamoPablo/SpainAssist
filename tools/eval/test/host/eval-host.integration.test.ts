@@ -86,6 +86,7 @@ describe('the two host bundles', () => {
       'createEgressGuard',
       'research.invalid',
       'HostEvalConfig',
+      'sa-eval-tool-call-retry',
     ];
     for (const marker of markers) {
       expect(evalBundle, `the eval host has ${marker}`).toContain(marker);
@@ -573,6 +574,41 @@ describe('the eval host over RPC', () => {
       expect(systemPrompt(completions()[0] as ChatRequest)).toContain(
         'Today is Friday 2027-01-01 (Europe/Madrid).',
       );
+    });
+  });
+
+  describe('the tool-call retry', () => {
+    /** How a local model breaks a call: the body as text, cut in the middle of a string. */
+    const CUT_CALL =
+      '{"name":"codemode","args":{"source":"export async function main(api) {\\n  return \\"he';
+    /** A model that writes its call as text, and sends a real one when it is asked again. */
+    const writesItsCallAsText: ScenarioInput = {
+      rules: [
+        { when: { toolCalled: { name: 'codemode' } }, reply: { text: 'Listo.' } },
+        {
+          when: { lastUser: 'tool call written as plain text' },
+          reply: { toolCalls: [codemode('call_again', `return 'hecho';`)] },
+        },
+      ],
+      fallback: { text: CUT_CALL },
+    };
+    const said = (events: AgentEvent[]) =>
+      events.flatMap((event) => (event.type === 'assistant_end' ? [event.text] : []));
+
+    it('is off unless the config turns it on: a call written as text ends the run', async () => {
+      llm.setScenario(writesItsCallAsText);
+      const events = await ask(await start(), 'Hazlo');
+      expect(completions()).toHaveLength(1);
+      expect(events.filter((e) => e.type === 'tool_end')).toHaveLength(0);
+      expect(said(events)).toEqual([CUT_CALL]);
+    });
+
+    it('has the model send the call again, and the tool runs', async () => {
+      llm.setScenario(writesItsCallAsText);
+      const events = await ask(await start({ config: { retryToolCalls: true } }), 'Hazlo');
+      expect(completions()).toHaveLength(3);
+      expect(events.filter((e) => e.type === 'tool_end')).toHaveLength(1);
+      expect(said(events).at(-1)).toBe('Listo.');
     });
   });
 

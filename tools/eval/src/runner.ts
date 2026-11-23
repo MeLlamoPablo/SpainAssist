@@ -72,6 +72,8 @@ export interface EvaluationRequest {
   meterLimits?: MeterLimitsInput;
   captureBrowser?: boolean;
   keepWorld?: boolean;
+  /** `--retry-tool-calls`: the tool-call retry of the eval host (`src/host/tool-call-retry.ts`). */
+  retryToolCalls?: boolean;
   runsRoot?: string;
   runId?: string;
   /** `--codex-consent`; `SA_EVAL_CODEX_CONSENT=1` does the same. */
@@ -469,6 +471,7 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
       ...(request.from ? { from: request.from } : {}),
       ...(request.allowFixtureChange ? { allowFixtureChange: true } : {}),
       ...(request.keepWorld !== undefined ? { keepWorld: request.keepWorld } : {}),
+      ...(request.retryToolCalls ? { retryToolCalls: true } : {}),
       ...(request.signal ? { signal: request.signal } : {}),
       ...(request.shutdownTimeoutMs !== undefined
         ? { shutdownTimeoutMs: request.shutdownTimeoutMs }

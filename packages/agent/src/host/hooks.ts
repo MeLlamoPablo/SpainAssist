@@ -1,4 +1,5 @@
 import type { Api, Model } from '@earendil-works/pi-ai';
+import type { ExtensionFactory } from '@earendil-works/pi-coding-agent';
 import type { BridgeTransport } from '../bridge/client';
 import type { ResolvedHostConfig } from '../config';
 import type { BlockedRequest, HostResolver } from '../research/fetch';
@@ -70,4 +71,9 @@ export interface HostHooks {
   onModel?: (model: Model<Api>, config: ResolvedHostConfig) => void;
   /** The clock of "Today is ..." in the system prompts, read on every turn. Default: now. */
   now?: () => Date;
+  /**
+   * One more pi extension, loaded after the host's own: a check a harness tries before the
+   * product has it (the eval's tool-call retry, tools/eval/src/host/tool-call-retry.ts).
+   */
+  extension?: ExtensionFactory;
 }

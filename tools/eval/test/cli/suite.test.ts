@@ -118,6 +118,7 @@ describe('eval suite: the fixtures one after the other', () => {
       '--assistant-model',
       'model-a',
       '--capture-browser',
+      '--retry-tool-calls',
       '--runs-root',
       'where',
     );
@@ -131,6 +132,7 @@ describe('eval suite: the fixtures one after the other', () => {
         limits: { maxCostUsd: 0.2, maxRequests: 60 },
         models: { assistantModel: 'model-a' },
         captureBrowser: true,
+        retryToolCalls: true,
         runsRoot: join(cli.cwd, 'where'),
         env: cli.env,
         cwd: cli.cwd,

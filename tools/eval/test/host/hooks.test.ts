@@ -254,6 +254,13 @@ describe('now', () => {
   });
 });
 
+describe('the tool-call retry', () => {
+  it('is loaded only when the config asks for it', () => {
+    expect(build().hooks.extension).toBeUndefined();
+    expect(build({ retryToolCalls: true }).hooks.extension).toBeTypeOf('function');
+  });
+});
+
 describe('the deny-by-default guard (onModel)', () => {
   it('lets the model gateway through and nothing else, not even the world’s own hosts', async () => {
     const spy = vi.fn(realFetch);

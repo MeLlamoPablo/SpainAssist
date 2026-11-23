@@ -222,6 +222,17 @@ describe('tool calls', () => {
     expect(r.observed).toMatchObject([{ type: 'tool_end', toolCallId: 'lost', text: 'huérfano' }]);
   });
 
+  it('notes each time a host asks for a tool call again (the tool-call retry)', () => {
+    r.observers.sessionEntry(procedure, {
+      type: 'custom_message',
+      customType: 'sa-eval-tool-call-retry',
+      content: 'Your last reply was a tool call written as plain text…',
+    });
+    expect(r.observed).toEqual([
+      { seq: 1, t: 'now', type: 'note', text: 'tool-call-retry (procedure-a_00000000000000aa)' },
+    ]);
+  });
+
   it('ignores the other entries of a session', () => {
     r.observers.sessionEntry(procedure, { type: 'session', id: 's' });
     r.observers.sessionEntry(procedure, {

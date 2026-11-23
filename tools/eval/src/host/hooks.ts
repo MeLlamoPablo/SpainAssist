@@ -37,6 +37,7 @@ import {
 } from '../net/world-fetch';
 import { loadHostEvalConfig } from './config';
 import { createResearchStub } from './research-stub';
+import { toolCallRetry } from './tool-call-retry';
 
 /** Where a refused request was going, without its path or query (they may hold what it sent). */
 function originOf(record: { url: string; host: string }): string {
@@ -142,6 +143,9 @@ export function buildEvalHooks(config: HostEvalConfig, options: EvalHooksOptions
       restoreGlobals = guard.install();
     },
     now: clock,
+    ...(config.retryToolCalls
+      ? { extension: toolCallRetry((message) => hostLog('warn', message)) }
+      : {}),
   };
   return {
     hooks,

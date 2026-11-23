@@ -166,6 +166,8 @@ export interface RunManifest {
     evaluateIntervalMs: number;
     checkpoint: boolean;
     keepWorld: boolean;
+    /** Only when on: the hosts retried tool calls written as text (`--retry-tool-calls`). */
+    retryToolCalls?: boolean;
   };
   /** `describeBench()` of the bench part: SpainBench's version, sites and features. */
   bench?: Record<string, unknown>;

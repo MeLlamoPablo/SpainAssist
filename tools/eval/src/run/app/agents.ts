@@ -187,6 +187,7 @@ export class AgentFleet {
       llm: { extraAllowOrigins: [] },
       research: { shape: 'auto', answers: [research] },
       now: spec.now,
+      ...(spec.retryToolCalls ? { retryToolCalls: true } : {}),
     };
   }
 

@@ -4,6 +4,7 @@ import type { AnswerGroup, RunResult } from '../../src/contracts';
 import { getFixture } from '../../src/fixtures';
 import { CLAVE_PASSWORD } from '../../src/fixtures/persona';
 import type { CredentialSource } from '../../src/llm/credentials';
+import { readRunManifest } from '../../src/run/results';
 import { credentialRequest, methodsPrompt } from '../fixtures/support/play';
 import { prompt } from '../rules/support/run';
 import {
@@ -159,6 +160,26 @@ describe('the golden paths of the vida laboral fixtures', () => {
       seed: 1,
       today: '2026-10-16',
     });
+  });
+
+  it('turns the tool-call retry on only when asked, and counts the retries in the result', async () => {
+    env = createEnv();
+    const retried = await env.run(
+      getFixture('vida-laboral-con-datos'),
+      async (ctx) => {
+        ctx.emit({ type: 'note', text: 'tool-call-retry (procedure-a_00000000000000aa)' });
+        ctx.emit({ type: 'note', text: 'tool-call-retry (assistant)' });
+        await conDatosGolden(ctx);
+      },
+      { retryToolCalls: true },
+    );
+    expect(env.apps[0]!.spec.retryToolCalls).toBe(true);
+    expect(readRunManifest(retried.runDir).options).toMatchObject({ retryToolCalls: true });
+    expect(retried.result).toMatchObject({ status: 'completed', notes: ['tool-call-retries:2'] });
+
+    const plain = await env.run(getFixture('vida-laboral-con-datos'), conDatosGolden);
+    expect(env.apps[1]!.spec.retryToolCalls).toBeUndefined();
+    expect(readRunManifest(plain.runDir).options).not.toHaveProperty('retryToolCalls');
   });
 
   it('pins the clock with the right offset in winter, and says so when the world has no date', async () => {

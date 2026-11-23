@@ -89,6 +89,7 @@ missing value or an empty value (`--from "$UNSET"`) is a usage error, never "not
 | `--assistant-model`, `--procedure-model`, `--answerer-model <id>` | Per-role models |
 | `--capture-browser` | Record HAR, trace and page HTML under `browser/` |
 | `--keep-world` | Leave the world on SpainBench (deleted by default) |
+| `--retry-tool-calls` | Ask the model again when it writes a tool call as text (local models). Off by default; the result's notes count the retries |
 | `--codex-consent` | Consent to use the Codex login |
 | `--runs-root <dir>` | Where run folders live |
 | `--min-score <0..1>` | For CI: exit 1 below this (for `suite`, the mean). A run without a score fails it |
