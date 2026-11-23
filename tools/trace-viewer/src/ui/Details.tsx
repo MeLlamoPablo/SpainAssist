@@ -6,7 +6,7 @@ import { formatClock, formatCost, formatDuration, formatTokens } from '../lib/fo
 import { type BrowserTrace, type Frame, type Span, totalCost, totalTokens } from '../lib/model';
 import { frameAt } from './data';
 import { Thumb } from './Filmstrip';
-import { highlightJs } from './highlight';
+import { highlight, type Lang } from './highlight';
 import { iconOf, KIND } from './kinds';
 
 interface Props {
@@ -146,6 +146,7 @@ export function Details({
             title={span.kind === 'tool' && span.name === 'codemode' ? 'Module' : 'Input'}
             text={span.input}
             js={span.kind === 'tool' && span.name === 'codemode'}
+            json={span.kind === 'tool' && span.name !== 'codemode'}
           />
         )}
         {span.attrs?.find(([k]) => k === 'Thinking') && (
@@ -179,18 +180,22 @@ function Code({
   text,
   prose,
   js,
+  json,
 }: {
   title: string;
   text: string;
   prose?: boolean;
   js?: boolean;
+  /** Colored as JSON when the text is JSON (a tool's arguments). */
+  json?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [full, setFull] = useState(false);
   const shown = useLaidOut(text, js ? 'js' : prose ? 'prose' : 'json');
-  const lines = useHighlighted(shown, js);
+  const lang: Lang | undefined = js ? 'javascript' : json && isJson(shown) ? 'json' : undefined;
+  const lines = useHighlighted(shown, lang);
   const body = lines ? (
-    <pre className="code">
+    <pre className={js ? 'code' : undefined}>
       {lines.map((line, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: lines have no identity but their place
         <span key={i}>
@@ -319,12 +324,12 @@ function useLaidOut(text: string, kind: 'js' | 'json' | 'prose'): string {
 }
 
 /** The text's lines as colored tokens, once Shiki has them; undefined until then or if it fails. */
-function useHighlighted(text: string, js: boolean | undefined): ThemedToken[][] | undefined {
+function useHighlighted(text: string, lang: Lang | undefined): ThemedToken[][] | undefined {
   const [highlighted, setHighlighted] = useState<{ text: string; lines: ThemedToken[][] }>();
   useEffect(() => {
-    if (!js) return;
+    if (!lang) return;
     let live = true;
-    highlightJs(text)
+    highlight(text, lang)
       .then((lines) => {
         if (live) setHighlighted({ text, lines });
       })
@@ -332,8 +337,17 @@ function useHighlighted(text: string, js: boolean | undefined): ThemedToken[][] 
     return () => {
       live = false;
     };
-  }, [text, js]);
-  return js && highlighted?.text === text ? highlighted.lines : undefined;
+  }, [text, lang]);
+  return lang && highlighted?.text === text ? highlighted.lines : undefined;
+}
+
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** JSON indented, also after a first line such as a run's `Result:`. */
