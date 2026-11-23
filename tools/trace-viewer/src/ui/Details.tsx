@@ -1,10 +1,12 @@
 import { AlertCircle, Bot, Check, Copy, ExternalLink, Focus, Maximize2, X } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { ThemedToken } from 'shiki/core';
 import { formatClock, formatCost, formatDuration, formatTokens } from '../lib/format';
 import { type BrowserTrace, type Frame, type Span, totalCost, totalTokens } from '../lib/model';
 import { frameAt } from './data';
 import { Thumb } from './Filmstrip';
+import { highlightJs } from './highlight';
 import { iconOf, KIND } from './kinds';
 
 interface Props {
@@ -186,6 +188,25 @@ function Code({
   const [copied, setCopied] = useState(false);
   const [full, setFull] = useState(false);
   const shown = useLaidOut(text, js ? 'js' : prose ? 'prose' : 'json');
+  const lines = useHighlighted(shown, js);
+  const body = lines ? (
+    <pre className="code">
+      {lines.map((line, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: lines have no identity but their place
+        <span key={i}>
+          {line.map((token, j) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: neither do tokens
+            <span key={j} className="tok" style={token.htmlStyle as CSSProperties}>
+              {token.content}
+            </span>
+          ))}
+          {'\n'}
+        </span>
+      ))}
+    </pre>
+  ) : (
+    <pre className={prose ? 'prose' : js ? 'code' : undefined}>{shown}</pre>
+  );
   const actions = (
     <span className="block-actions">
       <button
@@ -230,7 +251,7 @@ function Code({
         {title}
         {!full && actions}
       </h3>
-      <pre className={prose ? 'prose' : undefined}>{shown}</pre>
+      {body}
       {full &&
         createPortal(
           <FullScreen title={title} onClose={() => setFull(false)}>
@@ -238,7 +259,7 @@ function Code({
               {title}
               {actions}
             </h3>
-            <pre className={prose ? 'prose' : undefined}>{shown}</pre>
+            {body}
           </FullScreen>,
           document.body,
         )}
@@ -295,6 +316,24 @@ function useLaidOut(text: string, kind: 'js' | 'json' | 'prose'): string {
   if (kind === 'js') return module?.from === text ? module.to : text;
   if (kind === 'json') return indentJson(text) ?? text;
   return text;
+}
+
+/** The text's lines as colored tokens, once Shiki has them; undefined until then or if it fails. */
+function useHighlighted(text: string, js: boolean | undefined): ThemedToken[][] | undefined {
+  const [highlighted, setHighlighted] = useState<{ text: string; lines: ThemedToken[][] }>();
+  useEffect(() => {
+    if (!js) return;
+    let live = true;
+    highlightJs(text)
+      .then((lines) => {
+        if (live) setHighlighted({ text, lines });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [text, js]);
+  return js && highlighted?.text === text ? highlighted.lines : undefined;
 }
 
 /** JSON indented, also after a first line such as a run's `Result:`. */

@@ -60,6 +60,7 @@ folders or logs). Don't commit or share a real profile's files.
 | `src/lib/zip.ts` | A zip reader for the browser and Node (`DecompressionStream`, lazy) |
 | `src/server/api.ts` | The Vite plugin: the opened files, uploads, Playwright's viewer |
 | `src/ui/` | The waterfall (virtualized rows, keyboard tree), filmstrip, details |
+| `src/ui/highlight.ts` | Syntax colors for codemode modules (Shiki: the JavaScript grammar, GitHub's light and dark themes) |
 | `src/demo.ts` | The `--demo` profile |
 
 The demo launches the Chromium playwright-core expects (`corepack pnpm --filter @sa/desktop

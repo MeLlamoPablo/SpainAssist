@@ -1218,6 +1218,29 @@ kbd {
 .block pre.prose {
   font: 13px / 1.55 var(--sans);
 }
+/* A module: Biome breaks its lines, so the panel scrolls sideways instead of wrapping them. */
+.block pre.code {
+  white-space: pre;
+  word-break: normal;
+}
+/* Shiki's tokens carry both themes' colors (src/ui/highlight.ts). */
+.tok {
+  color: var(--shiki-light);
+  font-style: var(--shiki-light-font-style);
+  font-weight: var(--shiki-light-font-weight);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tok {
+    color: var(--shiki-dark);
+    font-style: var(--shiki-dark-font-style);
+    font-weight: var(--shiki-dark-font-weight);
+  }
+}
+:root[data-theme="dark"] .tok {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style);
+  font-weight: var(--shiki-dark-font-weight);
+}
 .block.error h3 {
   justify-content: flex-start;
   color: var(--error);
