@@ -130,6 +130,8 @@ describe('run traces', () => {
       ['browser.goto', 'https://example.com/x', expect.stringContaining('Not an official domain')],
     ]);
     const [first, second] = trace.calls as [RunTraceCall, RunTraceCall];
+    expect(first.result).toBe('{"id":"p_aaaaaaaaaaaaaaaa"}');
+    expect(second.result).toBeUndefined();
     expect(first.ms).toBeGreaterThanOrEqual(35);
     expect(second.start).toBeGreaterThanOrEqual(first.start + first.ms);
     expect(trace.startedAt).toBeLessThanOrEqual(first.start);

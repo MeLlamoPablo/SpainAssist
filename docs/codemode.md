@@ -151,8 +151,8 @@ ending and lasts the conversation; with no research backend there is no gate.
 
 **Run traces.** When a run ends, the host appends its timeline to the session as another custom
 entry outside the model's context (`spainassist.run_trace`): the run's id, title, outcome, start
-and end, and each `api.*` call (op, start, duration, error; the URL of `browser.goto` and
-`fetchUrl`), plus each interface from open to close; at most 500 calls. `tools/trace-viewer`
+and end, and each `api.*` call (op, start, duration, error, what it gave the module; the URL of
+`browser.goto` and `fetchUrl`), plus each interface from open to close; at most 500 calls, 16,000 characters of each result and 200,000 of all. `tools/trace-viewer`
 draws it under the `codemode` call that started the run.
 
 **Research can't be cut by the module.** `api.search` resolves to a `String` object whose

@@ -61,7 +61,14 @@ interface RunTraceData {
   startedAt: number;
   endedAt: number;
   status: 'succeeded' | 'failed' | 'cancelled';
-  calls: { op: string; label?: string; start: number; ms: number; error?: string }[];
+  calls: {
+    op: string;
+    label?: string;
+    start: number;
+    ms: number;
+    error?: string;
+    result?: string;
+  }[];
   droppedCalls?: number;
 }
 
@@ -246,6 +253,7 @@ function runSpan(data: RunTraceData, id: () => string): Span {
       end: call.start + call.ms,
       detail: call.label,
       error: call.error,
+      output: call.result,
       children: [],
     };
   });

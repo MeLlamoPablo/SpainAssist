@@ -27,8 +27,8 @@ The layout of the app's `userData` folder, which the transcripts export keeps
 
 A run's calls come from the `spainassist.run_trace` custom entry the agent host writes into the
 session when the run ends (`RunEngine.onRunTrace`, `packages/agent/src/host/session.ts`): op names,
-start, duration, error, and the URL of `browser.goto`/`fetchUrl`. Nothing of it reaches the
-model. Runs from before it existed show as their `codemode` call alone.
+start, duration, error, what each call gave the module (cut), and the URL of
+`browser.goto`/`fetchUrl`. Nothing of it reaches the model. Runs from before it existed show as their `codemode` call alone.
 
 A capture's Playwright calls are also drawn under the `browser.*` call of the run that made them
 (by time, among the agents that served the capture's procedure), and its screenshots run along the

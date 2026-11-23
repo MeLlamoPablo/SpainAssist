@@ -66,12 +66,14 @@ export interface RunTraceCall {
   ms: number;
   /** The error the module got (code and message, cut). */
   error?: string;
+  /** What the module got back: text, else JSON; cut, and only while the run's budget lasts. */
+  result?: string;
 }
 
 /**
  * What a run did and when, for trace viewers (`tools/trace-viewer`): the host stores it in the
- * agent's session file, outside the model's context. Op names and URLs only: no arguments or
- * results beyond what the session already holds.
+ * agent's session file, outside the model's context. Op names, URLs and what each call gave the
+ * module (which the app already keeps free of secrets: it types them itself); no arguments.
  */
 export interface RunTrace {
   runId: string;
@@ -87,6 +89,9 @@ export interface RunTrace {
 
 /** Calls a run's trace keeps. */
 const MAX_TRACE_CALLS = 500;
+/** Characters of one call's result a trace keeps, and of all its calls' results. */
+const TRACE_RESULT_CHARS = 16_000;
+const TRACE_RESULTS_CHARS = 200_000;
 
 /** A run's trace while it runs. */
 class TraceRecorder {
@@ -94,12 +99,13 @@ class TraceRecorder {
   private readonly calls: RunTraceCall[] = [];
   private readonly openUis = new Map<string, number>();
   private dropped = 0;
+  private resultChars = 0;
 
   async time<T>(op: string, label: string | undefined, fn: () => Promise<T>): Promise<T> {
     const start = Date.now();
     try {
       const result = await fn();
-      this.add({ op, label, start });
+      this.add({ op, label, start, result: this.keep(result) });
       return result;
     } catch (error) {
       this.add({ op, label, start, error: traceError(error) });
@@ -131,7 +137,31 @@ class TraceRecorder {
     };
   }
 
-  private add(call: { op: string; label?: string; start: number; error?: string }): void {
+  /** A call's result as text, cut, while the run's budget for results lasts. */
+  private keep(value: unknown): string | undefined {
+    if (value === undefined || this.resultChars >= TRACE_RESULTS_CHARS) return undefined;
+    let text: string | undefined;
+    try {
+      text = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch {
+      return undefined;
+    }
+    if (!text) return undefined;
+    const kept = text.slice(
+      0,
+      Math.min(TRACE_RESULT_CHARS, TRACE_RESULTS_CHARS - this.resultChars),
+    );
+    this.resultChars += kept.length;
+    return kept;
+  }
+
+  private add(call: {
+    op: string;
+    label?: string;
+    start: number;
+    error?: string;
+    result?: string;
+  }): void {
     if (this.calls.length >= MAX_TRACE_CALLS) {
       this.dropped++;
       return;
@@ -142,6 +172,7 @@ class TraceRecorder {
       start: call.start,
       ms: Date.now() - call.start,
       ...(call.error ? { error: call.error } : {}),
+      ...(call.result !== undefined ? { result: call.result } : {}),
     });
   }
 }

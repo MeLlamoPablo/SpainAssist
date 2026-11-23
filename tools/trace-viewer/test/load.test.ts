@@ -160,6 +160,37 @@ describe('parseSession', () => {
     expect(second.children[0]).toMatchObject({ status: 'error', error: 'Rate limited' });
     expect(root.end).toBe(t0 + 62_000);
   });
+
+  it('shows what each call of a run gave the module', () => {
+    const text = [
+      line({ type: 'session', version: 3, id: 'x', timestamp: iso(0) }),
+      line({
+        type: 'message',
+        id: 'u1',
+        parentId: null,
+        timestamp: iso(0),
+        message: { role: 'user', content: 'Mira la página', timestamp: t0 },
+      }),
+      line({
+        type: 'custom',
+        id: 'k1',
+        parentId: 'u1',
+        timestamp: iso(2_000),
+        customType: RUN_TRACE,
+        data: {
+          runId: 'run_1',
+          startedAt: t0 + 100,
+          endedAt: t0 + 1_000,
+          status: 'succeeded',
+          calls: [{ op: 'browser.snapshot', start: t0 + 200, ms: 35, result: '- heading "DGT"' }],
+        },
+      }),
+    ].join('\n');
+    const op = [...walk(parseSession(text, { id: 's', title: 'Agent' }))].find(
+      (s) => s.kind === 'op',
+    );
+    expect(op?.output).toBe('- heading "DGT"');
+  });
 });
 
 describe('Playwright traces', () => {
