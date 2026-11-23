@@ -222,84 +222,96 @@ describe('Playwright traces', () => {
     }
   });
 
-  it('places a capture’s calls under the agent’s browser call that made them', async () => {
-    const bytes = new Uint8Array(fixture('trace.zip'));
-    const zip = readZip(bytes);
-    // Find when the fill happened, then write an agent whose run did a browser.fill then.
-    const probe = await loadSource(sourceFromBytes('trace.zip', bytes));
-    const fill = probe.traces[0]!.root.children.find((s) => s.name === 'fill')!;
-    const at = (ms: number) => new Date(fill.start + ms).toISOString();
-    const session = [
-      line({ type: 'session', version: 3, id: 'x', timestamp: at(-5_000) }),
-      line({
-        type: 'message',
-        id: 'u1',
-        parentId: null,
-        timestamp: at(-5_000),
-        message: { role: 'user', content: 'Busca', timestamp: fill.start - 5_000 },
-      }),
-      line({
-        type: 'custom',
-        id: 'k1',
-        parentId: 'u1',
-        timestamp: at(5_000),
-        customType: RUN_TRACE,
-        data: {
-          runId: 'run_1',
-          startedAt: fill.start - 1_000,
-          endedAt: fill.start + 1_000,
-          status: 'succeeded',
-          calls: [
-            {
-              op: 'browser.fill',
-              start: fill.start - 10,
-              ms: (fill.end ?? fill.start) - fill.start + 12,
-            },
-          ],
-        },
-      }),
-    ].join('\n');
-    const files = new Map<string, Uint8Array>([
-      ['agents/a_1/session.jsonl', new TextEncoder().encode(session)],
-      [
-        'agents/a_1/agent.json',
-        new TextEncoder().encode(
-          JSON.stringify({ status: 'Buscando', kind: 'worker', procedures: ['p_1'] }),
-        ),
-      ],
-      ['agents/a_2/session.jsonl', new TextEncoder().encode(session)],
-      [
-        'agents/a_2/agent.json',
-        new TextEncoder().encode(JSON.stringify({ status: 'Otro', procedures: ['p_2'] })),
-      ],
-      [
-        'procedures/p_1/procedure.json',
-        new TextEncoder().encode(JSON.stringify({ title: 'Cita DNI' })),
-      ],
-      ['procedures/p_1/capture/2026-11-22T10-09-52-123Z/trace.zip', bytes],
-    ]);
-    const source: Source = {
-      name: 'profile',
-      files: [...files.keys()],
-      read: async (p) => files.get(p)!,
-    };
-    const { traces, problems } = await loadSource(source);
-    expect(problems).toEqual([]);
-    expect(traces.map((t) => [t.group, t.title])).toEqual([
-      ['agent', 'Buscando'],
-      ['agent', 'Otro'],
-      ['browser', 'Cita DNI · 2026-11-22 10:09:52'],
-    ]);
-    const [agent, other] = traces as [(typeof traces)[0], (typeof traces)[0]];
-    const op = [...walk(agent.root)].find((s) => s.kind === 'op')!;
-    expect(op.children.map((s) => s.name)).toEqual(['fill']);
-    expect(zip.names.length).toBeGreaterThan(0);
-    expect(agent.browser.map((b) => b.id)).toEqual([
-      'procedures/p_1/capture/2026-11-22T10-09-52-123Z/trace.zip',
-    ]);
-    // The other agent served another procedure.
-    expect([...walk(other.root)].filter((s) => s.kind === 'browser')).toEqual([]);
-  });
+  it.each([
+    {
+      layout: 'the app’s profile',
+      profile: '',
+      capture: 'procedures/p_1/capture/2026-11-22T10-09-52-123Z/trace.zip',
+    },
+    {
+      layout: 'an eval run',
+      profile: 'profile/',
+      capture: 'browser/p_1/2026-11-22T10-09-52-123Z/trace.zip',
+    },
+  ])(
+    'places a capture’s calls under the agent’s browser call that made them, in $layout',
+    async ({ profile, capture }) => {
+      const bytes = new Uint8Array(fixture('trace.zip'));
+      const zip = readZip(bytes);
+      // Find when the fill happened, then write an agent whose run did a browser.fill then.
+      const probe = await loadSource(sourceFromBytes('trace.zip', bytes));
+      const fill = probe.traces[0]!.root.children.find((s) => s.name === 'fill')!;
+      const at = (ms: number) => new Date(fill.start + ms).toISOString();
+      const session = [
+        line({ type: 'session', version: 3, id: 'x', timestamp: at(-5_000) }),
+        line({
+          type: 'message',
+          id: 'u1',
+          parentId: null,
+          timestamp: at(-5_000),
+          message: { role: 'user', content: 'Busca', timestamp: fill.start - 5_000 },
+        }),
+        line({
+          type: 'custom',
+          id: 'k1',
+          parentId: 'u1',
+          timestamp: at(5_000),
+          customType: RUN_TRACE,
+          data: {
+            runId: 'run_1',
+            startedAt: fill.start - 1_000,
+            endedAt: fill.start + 1_000,
+            status: 'succeeded',
+            calls: [
+              {
+                op: 'browser.fill',
+                start: fill.start - 10,
+                ms: (fill.end ?? fill.start) - fill.start + 12,
+              },
+            ],
+          },
+        }),
+      ].join('\n');
+      const files = new Map<string, Uint8Array>([
+        [`${profile}agents/a_1/session.jsonl`, new TextEncoder().encode(session)],
+        [
+          `${profile}agents/a_1/agent.json`,
+          new TextEncoder().encode(
+            JSON.stringify({ status: 'Buscando', kind: 'worker', procedures: ['p_1'] }),
+          ),
+        ],
+        [`${profile}agents/a_2/session.jsonl`, new TextEncoder().encode(session)],
+        [
+          `${profile}agents/a_2/agent.json`,
+          new TextEncoder().encode(JSON.stringify({ status: 'Otro', procedures: ['p_2'] })),
+        ],
+        [
+          `${profile}procedures/p_1/procedure.json`,
+          new TextEncoder().encode(JSON.stringify({ title: 'Cita DNI' })),
+        ],
+        [capture, bytes],
+      ]);
+      const source: Source = {
+        name: 'profile',
+        files: [...files.keys()],
+        read: async (p) => files.get(p)!,
+      };
+      const { traces, problems } = await loadSource(source);
+      expect(problems).toEqual([]);
+      expect(traces.map((t) => [t.group, t.title])).toEqual([
+        ['agent', 'Buscando'],
+        ['agent', 'Otro'],
+        ['browser', 'Cita DNI · 2026-11-22 10:09:52'],
+      ]);
+      const [agent, other] = traces as [(typeof traces)[0], (typeof traces)[0]];
+      const op = [...walk(agent.root)].find((s) => s.kind === 'op')!;
+      expect(op.children.map((s) => s.name)).toEqual(['fill']);
+      expect(zip.names.length).toBeGreaterThan(0);
+      expect(agent.browser.map((b) => b.id)).toEqual([capture]);
+      // The other agent served another procedure.
+      expect([...walk(other.root)].filter((s) => s.kind === 'browser')).toEqual([]);
+    },
+  );
 });
 
 describe('format', () => {

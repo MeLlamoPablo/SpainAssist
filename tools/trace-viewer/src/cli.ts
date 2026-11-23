@@ -6,7 +6,8 @@
  *
  * <path>: a userData folder (default: SA_USER_DATA_DIR, else the app's own), an extracted or
  * zipped transcripts export (Ajustes → Exportar historial), a browser capture run, a Playwright
- * trace.zip or a session.jsonl. Files can also be dropped on the page.
+ * trace.zip or a session.jsonl, or an eval run's folder or id (`<runs root>/<runId>`, see
+ * `tools/eval`). Files can also be dropped on the page.
  */
 import { existsSync } from 'node:fs';
 import os from 'node:os';
@@ -26,6 +27,22 @@ function defaultUserData(): string {
   return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, '.config'), 'SpainAssistant');
 }
 
+/** The eval's runs root (`defaultRunsRoot` in `tools/eval/src/run/results.ts`). */
+function evalRunsRoot(): string {
+  const override = process.env.SPAINBENCH_DATA_DIR?.trim();
+  if (override) return path.join(path.resolve(override), 'runs');
+  const home = os.homedir();
+  const absolute = (value: string | undefined) =>
+    value && path.isAbsolute(value) ? value : undefined;
+  const data =
+    process.platform === 'darwin'
+      ? path.join(home, 'Library', 'Application Support')
+      : process.platform === 'win32'
+        ? (absolute(process.env.LOCALAPPDATA) ?? path.join(home, 'AppData', 'Local'))
+        : (absolute(process.env.XDG_DATA_HOME) ?? path.join(home, '.local', 'share'));
+  return path.join(data, 'spainbench', 'runs');
+}
+
 const args = process.argv.slice(2);
 const portFlag = args.indexOf('--port');
 const port = portFlag >= 0 ? Number(args.splice(portFlag, 2)[1]) : undefined;
@@ -36,6 +53,12 @@ let input = given ? path.resolve(cwd, given) : (process.env.SA_USER_DATA_DIR ?? 
 if (args.includes('--demo')) {
   console.log('Recording the demo: the mock sede in Chromium…');
   input = await makeDemo(path.join(os.tmpdir(), 'sa-traces-demo'));
+}
+
+// A bare eval run id.
+if (given && !existsSync(input) && /^[\w.-]+$/.test(given)) {
+  const run = path.join(evalRunsRoot(), given);
+  if (existsSync(run)) input = run;
 }
 
 if (!existsSync(input)) {

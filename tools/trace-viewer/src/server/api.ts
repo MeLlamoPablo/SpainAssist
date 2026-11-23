@@ -79,7 +79,11 @@ export function openSource(input: string): OpenedSource {
       }
     }
   };
-  visit(path, 0);
+  // An eval run (`tools/eval`): its app profile and browser captures. The sessions' other copies
+  // (`transcripts/`, `checkpoints/`) would show each agent three times.
+  if (existsSync(join(path, 'run.json')) && existsSync(join(path, 'profile')))
+    for (const name of ['profile', 'browser']) visit(join(path, name), 1);
+  else visit(path, 0);
   return { name: path, kind: 'dir', root: path, files: files.sort() };
 }
 

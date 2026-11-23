@@ -8,6 +8,7 @@ capture in Playwright's own trace viewer (DOM snapshots, network, console), serv
 ```sh
 corepack pnpm traces                     # your development profile (SA_USER_DATA_DIR, else the app's)
 corepack pnpm traces <path>              # a profile, an export, a capture or a single file
+corepack pnpm traces <runId|runDir>      # an eval run: its profile/ and browser/ (tools/eval)
 corepack pnpm traces --demo              # a demo: the mock sede in Chromium, and its agents
 ```
 
@@ -23,6 +24,7 @@ The layout of the app's `userData` folder, which the transcripts export keeps
 | `assistant/session-v2.jsonl` | The coordinator: one row per turn, model calls, its `agent_*` tools (each links to the agent's trace) |
 | `agents/<id>/session.jsonl`, `agent.json` | A background agent: turns, model calls (tokens, cost, thinking), `codemode` calls (the module), runs |
 | `procedures/<id>/capture/<run>/trace.zip` | A browser capture (`SA_BROWSER_CAPTURE=1`, development builds): its Playwright calls and screenshots |
+| `<eval run>/profile/…`, `browser/<id>/<run>/trace.zip` | An eval run (`tools/eval`): the same layout under `profile/`, and the capture every run makes. Its other copies of the sessions (`transcripts/`, `checkpoints/`) are left out |
 | any `*.jsonl` / `*.zip` | A pi session / a Playwright trace (e2e `test-results`, `playwright show-trace` files) |
 
 A run's calls come from the `spainassist.run_trace` custom entry the agent host writes into the

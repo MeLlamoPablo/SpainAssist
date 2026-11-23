@@ -10,14 +10,19 @@ afterEach(async () => {
   if (dir) await rm(dir, { recursive: true, force: true });
 });
 
+/** A temporary folder holding these files. */
+async function folderWith(paths: string[]): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'sa-traces-'));
+  for (const path of paths) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), 'x');
+  }
+  return root;
+}
+
 describe('openSource', () => {
   it('lists only what traces are made of, never the vault, media, work files or logs', async () => {
-    dir = await mkdtemp(join(tmpdir(), 'sa-traces-'));
-    const put = async (path: string) => {
-      await mkdir(dirname(join(dir!, path)), { recursive: true });
-      await writeFile(join(dir!, path), 'x');
-    };
-    for (const path of [
+    dir = await folderWith([
       'assistant/session-v2.jsonl',
       'assistant/work/notes.jsonl',
       'agents/a_1/session.jsonl',
@@ -31,8 +36,7 @@ describe('openSource', () => {
       'logs/main.log',
       '.hidden/session.jsonl',
       'settings.json',
-    ])
-      await put(path);
+    ]);
     expect(openSource(dir).files).toEqual([
       'agents/a_1/agent.json',
       'agents/a_1/session.jsonl',
@@ -44,6 +48,25 @@ describe('openSource', () => {
       kind: 'file',
       files: ['session.jsonl'],
     });
+  });
+
+  it('lists an eval run’s profile and browser captures, not its other copies of the sessions', async () => {
+    dir = await folderWith([
+      'run.json',
+      'events.jsonl',
+      'profile/agents/a_1/session.jsonl',
+      'profile/procedures/p_1/procedure.json',
+      'browser/p_1/run/trace.zip',
+      'browser/p_1/run/actions.jsonl',
+      'transcripts/agent-a_1/session.jsonl',
+      'checkpoints/1/app/profile/agents/a_1/session.jsonl',
+    ]);
+    expect(openSource(dir).files).toEqual([
+      'browser/p_1/run/actions.jsonl',
+      'browser/p_1/run/trace.zip',
+      'profile/agents/a_1/session.jsonl',
+      'profile/procedures/p_1/procedure.json',
+    ]);
   });
 });
 

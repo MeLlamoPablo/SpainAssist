@@ -7,6 +7,9 @@
  *   procedures/<id>/session.jsonl               agents of older versions, one per procedure
  *   procedures/<id>/capture/<run>/trace.zip     browser captures (SA_BROWSER_CAPTURE=1)
  *
+ * An eval run's folder (`tools/eval`) has that layout under `profile/`, and its captures in
+ * `browser/<procedure id>/<run>/trace.zip`.
+ *
  * Any other `*.jsonl` is read as a pi session and any other `*.zip` as a Playwright trace, so a
  * single file opens too. Browser calls are also placed under the `browser.*` call of the run
  * that made them, by time, among the agents that served the capture's procedure.
@@ -43,6 +46,8 @@ export function sourceFromBytes(name: string, bytes: Uint8Array): Source {
 }
 
 const SESSION = /(?:^|\/)[^/]+\.jsonl$/;
+/** A browser capture: the app's (`procedures/<id>/capture/<run>/`), or an eval run's (`browser/<id>/<run>/`). */
+const CAPTURE = /(?:^|\/)(?:procedures\/([^/]+)\/capture|browser\/([^/]+))\/([^/]+)\//;
 
 export async function loadSource(source: Source): Promise<Loaded> {
   const problems: string[] = [];
@@ -81,11 +86,16 @@ export async function loadSource(source: Source): Promise<Loaded> {
     try {
       const zip = readZip(await source.read(path));
       if (!isPlaywrightTrace(zip)) continue;
-      const procedureId = /(?:^|\/)procedures\/([^/]+)\/capture\//.exec(path)?.[1];
+      const capture = CAPTURE.exec(path);
+      const procedureId = capture?.[1] ?? capture?.[2];
+      const procedureJson = `procedures/${procedureId}/procedure.json`;
       const procedure = procedureId
-        ? await json(`procedures/${procedureId}/procedure.json`)
+        ? await json(
+            source.files.find((f) => f === procedureJson || f.endsWith(`/${procedureJson}`)) ??
+              procedureJson,
+          )
         : undefined;
-      const run = /capture\/([^/]+)\//.exec(path)?.[1];
+      const run = capture?.[3];
       const title = [str(procedure?.title), run ? runTime(run) : undefined]
         .filter(Boolean)
         .join(' · ');
