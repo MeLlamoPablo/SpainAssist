@@ -81,7 +81,7 @@ export interface RunLimits {
   memoryBytes: number;
   /** Longest synchronous stretch of module code. Default 5 s. */
   sliceMs: number;
-  /** Host operations in flight at once; the rest wait. Default 8. */
+  /** Host operations in flight at once; the rest wait. Default 10, as api.parallelize. */
   concurrency: number;
   /** Logs kept. Default 20,000 characters. */
   logChars: number;
@@ -101,7 +101,7 @@ export type RunOutcome =
 const DEFAULT_LIMITS: RunLimits = {
   memoryBytes: 64 * 1024 * 1024,
   sliceMs: 5_000,
-  concurrency: 8,
+  concurrency: 10,
   logChars: 20_000,
 };
 

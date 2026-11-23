@@ -437,14 +437,19 @@ describe('codemode runtime', () => {
     expect(outcome.status).toBe('failed');
   });
 
-  it('parallelize settles every task with a concurrency limit', async () => {
+  it('parallelize settles every task, at most 10 at once across all its calls', async () => {
     let active = 0;
     let peak = 0;
     const outcome = await startRun(
       `export async function main(api) {
-        const tasks = [1, 2, 3, 4, 5, 6].map((n) => () => api.search('q' + n));
+        const searches = (from) => [0, 1, 2, 3, 4, 5].map((n) => () => api.search('q' + (from + n)));
+        const tasks = searches(0);
         tasks.push(Promise.reject(new Error('nope')));
-        const results = await api.parallelize(tasks, { concurrency: 2 });
+        const [results] = await Promise.all([
+          api.parallelize(tasks),
+          api.parallelize(searches(6)),
+          api.parallelize(searches(12)),
+        ]);
         return results.map((r) => r.status);
       }`,
       {
@@ -466,7 +471,7 @@ describe('codemode runtime', () => {
       'fulfilled',
       'rejected',
     ]);
-    expect(peak).toBeLessThanOrEqual(2);
+    expect(peak).toBe(10);
   });
 
   it('builds Playwright-shaped locators and sends them as data', async () => {

@@ -122,7 +122,7 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
   agent no call to make; `api.vault.save` is for personal data found elsewhere.
 - `api.procedures`: `list`, `get` (a full id or one of the agent's keys), `getOrCreate({ id, title, …card })`, and handles with `update`
   (optimistic concurrency), `refresh`, `context`/`setContext` (private working context).
-- `api.parallelize(tasks, { concurrency })` (allSettled with a limit), `api.setStatus(status)` (the
+- `api.parallelize(tasks)` (allSettled; functions share one queue per run, 10 at once), `api.setStatus(status)` (the
   agent's line on the meter, an ongoing action: "Analizando la página de Correos…"; the
   coordinator sets it in `agent_start` and `agent_message`), `api.output.image(image)`.
 - `api.search`, `api.fetchUrl`, `api.fetch` (public HTTP, the old run_script fetch), `api.boe`,

@@ -682,24 +682,36 @@ export const KERNEL = String.raw`
   // Everything else
   // ------------------------------------------------------------------------------------------
 
-  function parallelize(tasks, options) {
-    if (!Array.isArray(tasks)) throw new TypeError('parallelize(tasks) needs an array of promises or functions.');
-    var limit = Math.max(1, Math.min(16, (options && options.concurrency) || 4));
-    var results = new Array(tasks.length);
-    var next = 0;
-    function worker() {
-      if (next >= tasks.length) return Promise.resolve();
-      var i = next++;
-      var t = tasks[i];
-      return Promise.resolve()
-        .then(function () { return typeof t === 'function' ? t() : t; })
-        .then(function (value) { results[i] = { status: 'fulfilled', value: value }; },
-              function (reason) { results[i] = { status: 'rejected', reason: reason }; })
-        .then(worker);
+  /** Tasks of every parallelize call in this run share one queue: at most this many run at once. */
+  var PARALLEL_LIMIT = 10;
+  var parallelActive = 0;
+  var parallelQueue = [];
+
+  function parallelSlot() {
+    if (parallelActive < PARALLEL_LIMIT) {
+      parallelActive++;
+      return Promise.resolve();
     }
-    var workers = [];
-    for (var w = 0; w < Math.min(limit, tasks.length); w++) workers.push(worker());
-    return Promise.all(workers).then(function () { return results; });
+    return new Promise(function (resolve) { parallelQueue.push(resolve); });
+  }
+
+  function releaseParallelSlot() {
+    var waiting = parallelQueue.shift();
+    if (waiting) waiting();
+    else parallelActive--;
+  }
+
+  function parallelize(tasks) {
+    if (!Array.isArray(tasks)) throw new TypeError('parallelize(tasks) needs an array of promises or functions.');
+    return Promise.all(tasks.map(function (t) {
+      var work = typeof t === 'function'
+        ? parallelSlot().then(function () {
+            return Promise.resolve().then(t).finally(releaseParallelSlot);
+          })
+        : Promise.resolve(t);
+      return work.then(function (value) { return { status: 'fulfilled', value: value }; },
+                       function (reason) { return { status: 'rejected', reason: reason }; });
+    }));
   }
 
   /**

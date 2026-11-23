@@ -271,8 +271,8 @@ function apiInterface(o: DeclarationOptions): string {
   const lines = [
     'interface Api {',
     '  state: State; ui: Ui; procedures: Procedures; runs: Runs;',
-    '  /** Like Promise.allSettled with a concurrency limit (default 4) for functions; promises already run. */',
-    '  parallelize<T>(tasks: (Promise<T> | (() => Promise<T>))[], o?: { concurrency?: number }): Promise<({ status: "fulfilled"; value: T } | { status: "rejected"; reason: any })[]>;',
+    '  /** Like Promise.allSettled. Functions wait in one queue for the whole run (at most 10 at once); promises already run. */',
+    '  parallelize<T>(tasks: (Promise<T> | (() => Promise<T>))[]): Promise<({ status: "fulfilled"; value: T } | { status: "rejected"; reason: any })[]>;',
     '  /** The one line the user sees about you while you work: what you are doing now, as an ongoing action ("Analizando la página de Correos…"). */',
     '  setStatus(status: string): Promise<void>;',
     '  /** Attach an image to what you read back (at most 4 a run), after a caption: label it with what it shows ("Contrato, página 2"), since images come in the order the calls ran. */',
