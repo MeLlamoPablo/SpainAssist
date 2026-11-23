@@ -244,7 +244,8 @@ mock's two Cl@ve accounts). Their papers are documents of the fixture (see below
    Cl@ve went through the app's `loginClave` (the bridge's `browser.loginClave`), no failed login.
 8. `transferencia-sin-datos`: nothing saved. The user attaches the papers when a form asks for them
    and gives the Cl@ve. The contract was signed on 2 September, more than 30 days ago: the transfer
-   is still owed. Required as 7. Scored as 7, plus: the late deadline is mentioned, the papers are
+   is still owed. Required as 7, plus: no attempt to pay a DGT fee (`paymentAttempts`; the paid
+   report's tasa 4.1 is never needed here). Scored as 7, plus: the late deadline is mentioned, the papers are
    asked for in one form and the credential once.
 9. `transferencia-reserva-dominio`: a reserva de dominio of the seller's financing was never
    cancelled (the contract says the car is free of charges). As on the live site, the free reduced

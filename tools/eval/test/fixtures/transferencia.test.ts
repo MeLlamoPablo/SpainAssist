@@ -247,6 +247,20 @@ describe('the fixtures that must not file', () => {
   });
 });
 
+describe('no-tasa-payment', () => {
+  it('fixture 8: any attempt to pay a DGT fee is the negated required rule', async () => {
+    const rule = ruleOf('transferencia-sin-datos', 'no-tasa-payment');
+    expect(rule).toMatchObject({ kind: 'required', negate: true });
+    const withAttempts = (paymentAttempts: number) => {
+      const run = new FakeRun();
+      run.bench = emptyBench({ sites: { [DGT_SITE]: { paymentAttempts } } });
+      return run;
+    };
+    expect(await matched(rule, withAttempts(1))).toBe(true);
+    expect(await matched(rule, withAttempts(0))).toBe(false);
+  });
+});
+
 describe('report-requested', () => {
   it('matches a reduced report of the plate', async () => {
     const run = new FakeRun();
