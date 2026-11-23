@@ -96,7 +96,6 @@ describe.skipIf(!repo || !chromiumCached)('the app on the real SpainBench', () =
         worldId,
       },
       now: NOW,
-      captureBrowser: false,
       signal: new AbortController().signal,
     };
     const app = await createEvalAppWith(
@@ -188,7 +187,6 @@ describe.skipIf(!repo || !chromiumCached)('the app on the real SpainBench', () =
         worldId,
       },
       now: NOW,
-      captureBrowser: false,
       signal: new AbortController().signal,
     };
     let app: EvalApp | undefined;
@@ -293,7 +291,6 @@ describe.skipIf(!repo || !chromiumCached)('the app on the real SpainBench', () =
         worldId,
       },
       now: NOW,
-      captureBrowser: false,
       signal: new AbortController().signal,
     };
     let app: EvalApp | undefined;

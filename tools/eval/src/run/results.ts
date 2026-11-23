@@ -155,6 +155,7 @@ export interface RunManifest {
   /** The limits the run enforced (the fixture's, with the caller's overrides). */
   limits: RunLimits;
   options: {
+    /** The browser was recorded under `browser/`: every run since the option was removed. */
     captureBrowser: boolean;
     /**
      * The app ran codemode (docs/codemode.md), its only harness since the classic one was removed:

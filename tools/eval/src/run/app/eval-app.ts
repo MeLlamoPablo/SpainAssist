@@ -727,14 +727,11 @@ export async function createEvalAppWith(
           browserLog,
           { now: clock },
         ),
-        ...(spec.captureBrowser
-          ? {
-              capture: {
-                dir: join(runDir, 'browser'),
-                scratchDir: join(runDir, 'tmp', 'browser-capture'),
-              },
-            }
-          : {}),
+        // Every run records the browser (HAR, trace, HTML per step) under `browser/`.
+        capture: {
+          dir: join(runDir, 'browser'),
+          scratchDir: join(runDir, 'tmp', 'browser-capture'),
+        },
       }),
       hostScript: hostBundle,
       clock,

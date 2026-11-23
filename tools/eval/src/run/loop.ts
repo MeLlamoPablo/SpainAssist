@@ -103,7 +103,6 @@ export interface RunOptions {
   limits?: Partial<RunLimits>;
   /** Independent samples of the same conversation in the replay cache. */
   cacheVariant?: string;
-  captureBrowser?: boolean;
   /** Continue a checkpoint of an earlier run of the same fixture. */
   from?: CheckpointRef;
   /**
@@ -435,7 +434,7 @@ class FixtureRun {
       cache: options.cache,
       limits: this.limits,
       options: {
-        captureBrowser: options.captureBrowser ?? false,
+        captureBrowser: true,
         codemode: true,
         settleTimeoutMs: this.settleTimeoutMs,
         evaluateIntervalMs: this.evaluateIntervalMs,
@@ -529,7 +528,6 @@ class FixtureRun {
               worldId: this.worldId,
             },
             now: frozenNow(today, this.startedAt),
-            captureBrowser: options.captureBrowser ?? false,
             ...(options.retryToolCalls ? { retryToolCalls: true } : {}),
             ...(restoreFrom ? { restoreFrom } : {}),
             signal: this.controller.signal,

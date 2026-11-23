@@ -146,7 +146,6 @@ export interface StackOptions {
   provider?: 'mock' | 'codex';
   /** Replaces the credential source (the key the meter forwards). */
   credentials?: CredentialSource;
-  captureBrowser?: boolean;
   restoreFrom?: EvalAppSpec['restoreFrom'];
   runDir?: string;
   hostBundle: string;
@@ -212,7 +211,6 @@ export async function startWorld(options: StackOptions) {
       worldId: 'run-app-test',
     },
     now: NOW,
-    captureBrowser: options.captureBrowser ?? false,
     ...(options.restoreFrom ? { restoreFrom: options.restoreFrom } : {}),
     signal: abort.signal,
   };

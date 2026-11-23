@@ -33,7 +33,6 @@ export interface SharedOptions {
     | 'cacheVariant'
     | 'limits'
     | 'models'
-    | 'captureBrowser'
     | 'keepWorld'
     | 'retryToolCalls'
     | 'codexConsent'
@@ -142,7 +141,6 @@ export function readSharedOptions(parsed: ParsedArgs, command: string): SharedOp
       ...(answererProvider !== undefined ? { answererProvider } : {}),
       ...(Object.keys(limits).length > 0 ? { limits } : {}),
       ...(Object.keys(models).length > 0 ? { models } : {}),
-      ...(flag(parsed, 'capture-browser') ? { captureBrowser: true } : {}),
       ...(flag(parsed, 'keep-world') ? { keepWorld: true } : {}),
       ...(flag(parsed, 'retry-tool-calls') ? { retryToolCalls: true } : {}),
       ...(flag(parsed, 'codex-consent') ? { codexConsent: true } : {}),

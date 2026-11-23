@@ -70,7 +70,6 @@ export interface EvaluationRequest {
   models?: Partial<EvalModelChoice>;
   /** Overrides of the meter's caps. */
   meterLimits?: MeterLimitsInput;
-  captureBrowser?: boolean;
   keepWorld?: boolean;
   /** `--retry-tool-calls`: the tool-call retry of the eval host (`src/host/tool-call-retry.ts`). */
   retryToolCalls?: boolean;
@@ -467,7 +466,6 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
       runId: plan.runId,
       ...(request.limits ? { limits: request.limits } : {}),
       ...(request.cacheVariant ? { cacheVariant: request.cacheVariant } : {}),
-      ...(request.captureBrowser !== undefined ? { captureBrowser: request.captureBrowser } : {}),
       ...(request.from ? { from: request.from } : {}),
       ...(request.allowFixtureChange ? { allowFixtureChange: true } : {}),
       ...(request.keepWorld !== undefined ? { keepWorld: request.keepWorld } : {}),

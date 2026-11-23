@@ -130,7 +130,6 @@ describe('layout and permissions', () => {
     const outcome = await env.run(miniFixture(), doIt, {
       benchInfo: { version: '1.2.3', features: ['plants', 'collector'] },
       limits: { maxToolCalls: 7 },
-      captureBrowser: true,
       cacheVariant: 'sample-2',
       clock: () => new Date('2026-10-17T06:30:15Z'),
     });
@@ -161,7 +160,6 @@ describe('layout and permissions', () => {
       startedAt: '2026-10-17T06:30:15.000Z',
     });
     expect(manifest.resume).toBeUndefined();
-    expect(env.apps[0]!.spec.captureBrowser).toBe(true);
     expect(env.meter.last.options).toMatchObject({
       variant: 'sample-2',
       cache: 'off',

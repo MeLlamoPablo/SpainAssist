@@ -145,13 +145,6 @@ const MODEL_OPTIONS: readonly OptionSpec[] = [
 ];
 const RUN_FLAG_OPTIONS: readonly OptionSpec[] = [
   {
-    name: 'capture-browser',
-    type: 'boolean',
-    description:
-      'Record HAR, trace and page HTML under <run>/browser. Typed secrets stay visible there: ' +
-      'synthetic accounts only.',
-  },
-  {
     name: 'keep-world',
     type: 'boolean',
     description: "Leave the run's world on the SpainBench server (it is deleted by default).",

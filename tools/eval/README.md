@@ -17,8 +17,8 @@ What a run is, the scoring contract and the design principles: [`docs/EVAL.md`](
   SpainBench variant id; the text stays in the private repo.
 - Tests are offline. Tests against SpainBench skip unless `SPAINBENCH_DIR` names the private repo's
   checkout. Tests never contact real government sites or paid APIs.
-- A run's browser capture (`--capture-browser`) keeps typed passwords: only synthetic accounts are
-  ever typed. Never record with a real account.
+- Every run records the browser under `<run>/browser/`, and the recording keeps typed passwords:
+  only synthetic accounts are ever typed. Never record with a real account.
 
 ## Setup
 
@@ -87,7 +87,6 @@ missing value or an empty value (`--from "$UNSET"`) is a usage error, never "not
 | `--max-cost <usd>`, `--max-tool-calls <n>`, `--max-requests <n>`, `--wall-clock <minutes>` | Override the fixture's limits |
 | `--model <id>` | The model of every role. `local` needs it |
 | `--assistant-model`, `--procedure-model`, `--answerer-model <id>` | Per-role models |
-| `--capture-browser` | Record HAR, trace and page HTML under `browser/` |
 | `--keep-world` | Leave the world on SpainBench (deleted by default) |
 | `--retry-tool-calls` | Ask the model again when it writes a tool call as text (local models). Off by default; the result's notes count the retries |
 | `--codex-consent` | Consent to use the Codex login |

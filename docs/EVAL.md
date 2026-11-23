@@ -195,7 +195,7 @@ written as `~`. Runs only ever use synthetic accounts, and secrets never reach `
 | `bench/` | SpainBench's state, request log, downloads and snapshot (masked) |
 | `llm/meter.jsonl` | This run's lines of the ledger |
 | `profile/`, `checkpoints/<n>/`, `restore/` | The app's user data; checkpoints (`manifest.json`, `bench-snapshot.json`, `app/`); a resumed run's copy |
-| `browser/`, `logs/` | Playwright capture (only with `--capture-browser`); app, host and SpainBench logs |
+| `browser/`, `logs/` | Playwright capture (HAR, trace, HTML per step; every run); app, host and SpainBench logs |
 
 ## Fixtures
 

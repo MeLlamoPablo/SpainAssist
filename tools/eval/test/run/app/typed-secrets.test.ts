@@ -1,9 +1,9 @@
 /**
  * Secrets in a run: a password the user types goes to the page and nowhere else; one that reaches
  * the model, a run or a stranger is found by `secretLeaks()`, and no file of the run keeps it
- * (the browser's recording, which the run asks for, is the one place that does, and says so).
+ * (the browser's recording, which every run makes, is the one place that does, and says so).
  */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { CLAVE_PASSWORD } from '../../../src/fixtures';
@@ -46,12 +46,8 @@ browserSuite('typed secrets', () => {
   }
 
   describe('the user types a password into a page', () => {
-    async function login(captureBrowser: boolean): Promise<Stack> {
-      const stack = await startStack({
-        hostBundle: host.bundle,
-        scenario: loginScenario(),
-        captureBrowser,
-      });
+    async function login(): Promise<Stack> {
+      const stack = await startStack({ hostBundle: host.bundle, scenario: loginScenario() });
       await stack.app.send('sácame la vida laboral');
       const prompt = await waitFor(
         () => stack.app.pendingPrompts()[0],
@@ -75,8 +71,8 @@ browserSuite('typed secrets', () => {
       return stack;
     }
 
-    it('is typed into the page, which posts it, and is a leak nowhere', async () => {
-      const stack = await login(false);
+    it('is typed into the page, which posts it, and stays only in the browser recording', async () => {
+      const stack = await login();
       try {
         const post = stack
           .of('net')
@@ -108,17 +104,9 @@ browserSuite('typed secrets', () => {
       } finally {
         await stack.close();
       }
-      // Nothing of the run keeps it, the profile included.
-      expect(filesContaining(stack.runDir, CLAVE_PASSWORD)).toEqual([]);
-      expect(existsSync(join(stack.runDir, 'browser'))).toBe(false);
+      // Nothing of the run keeps it outside the browser recording, the profile included.
       const browserLog = await readNetLog(join(stack.runDir, 'net', 'browser.jsonl'));
       expect(JSON.stringify(browserLog)).not.toContain(CLAVE_PASSWORD);
-      removeRunDir(stack.runDir);
-    }, 180_000);
-
-    it('stays in the browser recording when the run asks for one, and only there', async () => {
-      const stack = await login(true);
-      await stack.close();
       const holders = filesContaining(stack.runDir, encodeURIComponent(CLAVE_PASSWORD));
       expect(holders.length).toBeGreaterThan(0);
       expect(holders.every((file) => file.startsWith(join(stack.runDir, 'browser')))).toBe(true);

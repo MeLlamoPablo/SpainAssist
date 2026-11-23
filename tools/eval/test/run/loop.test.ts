@@ -142,7 +142,6 @@ describe('the golden paths of the vida laboral fixtures', () => {
     expect(spec.runId).toBe(outcome.runId);
     expect(spec.runDir).toBe(outcome.runDir);
     expect(spec.provider).toBe('mock');
-    expect(spec.captureBrowser).toBe(false);
     expect(spec.restoreFrom).toBeUndefined();
     expect(spec.bench).toEqual({
       publicOrigin: env.bench.publicOrigin,

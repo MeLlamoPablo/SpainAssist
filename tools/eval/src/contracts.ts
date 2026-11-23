@@ -770,8 +770,6 @@ export interface EvalAppSpec {
   bench: { publicOrigin: string; scoringOrigin: string; hosts: BenchHost[]; worldId: string };
   /** The frozen "now" of the agents (ISO 8601 with offset); also the clock of the app. */
   now: string;
-  /** Record Playwright's HAR, trace and HTML per step under `browser/`. */
-  captureBrowser: boolean;
   /** The agents' hosts retry a tool call written as text (`src/host/tool-call-retry.ts`). */
   retryToolCalls?: boolean;
   /** Restore this profile copy (a checkpoint's `profileDir`) instead of creating one. */
