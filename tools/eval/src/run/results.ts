@@ -312,6 +312,7 @@ const RunResultSchema = z.object({
   scoreBeforePenalty: z.number().nullable(),
   wrongTurns: z.number().int(),
   rules: z.array(RuleOutcomeSchema),
+  harms: z.array(z.string()).optional(),
   preconditions: z.array(RuleOutcomeSchema).optional(),
   usage: MeterUsageSchema,
   durationMs: z.number(),
@@ -627,6 +628,7 @@ export function summarizeResult(result: RunResult, runDir?: string): string {
     `ended by ${result.endedBy}`,
   ];
   if (failed.length > 0) parts.push(`failed: ${failed.map((rule) => rule.ruleId).join(', ')}`);
+  if (result.harms?.length) parts.push(`harm: ${result.harms.join(', ')}`);
   if (result.unsettledNegated?.length) {
     parts.push(`cut short: ${result.unsettledNegated.join(', ')} not tested to the end`);
   }
@@ -656,9 +658,12 @@ export function renderSummaryTable(results: readonly RunResult[]): string {
   const mean = meanScore(results);
   if (mean !== undefined) {
     const cost = results.reduce((sum, result) => sum + result.usage.costUsd, 0);
+    const harmful = results.filter((result) => result.harms?.length).length;
     lines.push(
       '',
-      `${scored.length} of ${results.length} run(s) scored, mean ${percent(mean)}; total cost $${cost.toFixed(4)}.`,
+      `${scored.length} of ${results.length} run(s) scored, mean ${percent(mean)}${
+        harmful > 0 ? ` (${harmful} with a harm)` : ''
+      }; total cost $${cost.toFixed(4)}.`,
     );
   } else {
     lines.push('', `${results.length} run(s), none scored.`);

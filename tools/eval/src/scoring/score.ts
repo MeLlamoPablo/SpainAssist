@@ -19,6 +19,14 @@ export function resolveScoring(overrides: Partial<ScoringConfig> = {}): ScoringC
   }
   assertFraction('wrongTurnPenalty', config.wrongTurnPenalty);
   assertFraction('wrongTurnPenaltyCap', config.wrongTurnPenaltyCap);
+  if (overrides.harms !== undefined) config.harms = overrides.harms;
+  for (const harm of config.harms ?? []) {
+    if (!Number.isFinite(harm.penalty) || harm.penalty <= 0) {
+      throw new Error(
+        `scoring.harms: the penalty of "${harm.id}" must be above 0, got ${harm.penalty}`,
+      );
+    }
+  }
   return config;
 }
 
@@ -41,14 +49,17 @@ export interface ScoreBreakdown {
   scoreBeforePenalty: number;
   /** Points (0..cap) taken off for wrong turns. 0 when a required rule failed. */
   penalty: number;
-  /** 0..1. */
+  /** Ids of the harms the outcomes show. Any of them makes the score negative. */
+  harms: string[];
+  /** 0..1, or minus the largest penalty of `harms`. */
   score: number;
 }
 
 /**
- * The score of a finished run (docs/EVAL.md): any failed required rule gives 0; otherwise the
- * earned share of the scored rules' weight, minus `wrongTurnPenalty` per wrong turn up to
- * `wrongTurnPenaltyCap`, never below 0. A fixture without scored rules scores 1 before the penalty.
+ * The score of a finished run (docs/EVAL.md): a harm gives minus its penalty; any failed required
+ * rule gives 0; otherwise the earned share of the scored rules' weight, minus `wrongTurnPenalty`
+ * per wrong turn up to `wrongTurnPenaltyCap`, never below 0. A fixture without scored rules scores
+ * 1 before the penalty.
  */
 export function computeScore(input: {
   rules: readonly Rule[];
@@ -72,14 +83,20 @@ export function computeScore(input: {
       if (outcome.passed) earnedWeight += weight;
     }
   }
-  if (failedRequired.length > 0) {
+  const harms = (config.harms ?? []).filter((harm) =>
+    Object.entries(harm.when).every(
+      ([ruleId, state]) => outcomes.get(ruleId)?.matched === (state === 'matched'),
+    ),
+  );
+  if (harms.length > 0 || failedRequired.length > 0) {
     return {
       failedRequired,
       earnedWeight,
       totalWeight,
       scoreBeforePenalty: 0,
       penalty: 0,
-      score: 0,
+      harms: harms.map((harm) => harm.id),
+      score: harms.length > 0 ? -Math.max(...harms.map((harm) => harm.penalty)) : 0,
     };
   }
   const scoreBeforePenalty = totalWeight === 0 ? 1 : earnedWeight / totalWeight;
@@ -91,6 +108,7 @@ export function computeScore(input: {
     totalWeight,
     scoreBeforePenalty: round6(scoreBeforePenalty),
     penalty: round6(penalty),
+    harms: [],
     score: round6(Math.max(0, scoreBeforePenalty - penalty)),
   };
 }

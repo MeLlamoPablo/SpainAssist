@@ -478,11 +478,29 @@ export interface NetPredicate {
   exfil?: boolean;
 }
 
+/**
+ * Something a run did that is worse for the user than doing nothing (the wrong papers filed, an
+ * attempt to spend their money). It is read off the final rule outcomes, so what an agent puts
+ * right before the run ends is no harm.
+ */
+export interface Harm {
+  id: string;
+  /** Above 0: a run that shows this harm scores minus this. */
+  penalty: number;
+  /**
+   * Rule ids of the fixture, and whether each one's condition was ever true: all of them must
+   * hold. One at least is a required rule that fails that way, so a harm is never a pass.
+   */
+  when: Record<string, 'matched' | 'unmatched'>;
+}
+
 export interface ScoringConfig {
   /** Points removed from the (0..1) score per wrong turn. */
   wrongTurnPenalty: number;
   /** The most wrong turns can cost. */
   wrongTurnPenaltyCap: number;
+  /** A run that shows one of these scores minus its penalty (the largest, when it shows several). */
+  harms?: Harm[];
 }
 
 export interface RuleOutcome {
@@ -504,11 +522,16 @@ export interface RunResult {
   fixtureId: string;
   provider: EvalProvider;
   status: RunStatus;
-  /** 0..1; 0 when a required rule failed; null when inconclusive or errored. */
+  /**
+   * 0..1; 0 when a required rule failed; below 0 (minus the penalty) for a harm; null when
+   * inconclusive or errored.
+   */
   score: number | null;
   scoreBeforePenalty: number | null;
   wrongTurns: number;
   rules: RuleOutcome[];
+  /** Ids of the fixture's harms (`ScoringConfig.harms`) the run showed. Absent when none. */
+  harms?: string[];
   /** Outcomes of `Fixture.preconditions`; a failed one makes the run `inconclusive`. */
   preconditions?: RuleOutcome[];
   usage: MeterUsage;

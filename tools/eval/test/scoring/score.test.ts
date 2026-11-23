@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Rule, RuleOutcome } from '../../src/contracts';
+import type { Rule, RuleOutcome, ScoringConfig } from '../../src/contracts';
 import { computeScore, DEFAULT_SCORING, resolveScoring } from '../../src/scoring';
 import { round6, ruleWeight } from '../../src/scoring/score';
 
@@ -122,6 +122,49 @@ describe('computeScore', () => {
     it('ignore negative or fractional counts', () => {
       expect(score(rules, { r: true, a: true }, -3).score).toBe(1);
       expect(score(rules, { r: true, a: true }, 1.9).penalty).toBe(0.05);
+    });
+  });
+
+  describe('harms', () => {
+    const rules = [required('filed'), required('papers'), required('paid', true), scored('a')];
+    const scoring: Partial<ScoringConfig> = {
+      harms: [
+        { id: 'wrong-papers', penalty: 2, when: { filed: 'matched', papers: 'unmatched' } },
+        { id: 'tried-to-pay', penalty: 0.5, when: { paid: 'matched' } },
+      ],
+    };
+    const harmed = (matched: Record<string, boolean>) => score(rules, matched, 0, scoring);
+
+    it('score minus the penalty, whatever else was earned', () => {
+      expect(harmed({ filed: true, papers: true, paid: true, a: true })).toMatchObject({
+        failedRequired: ['paid'],
+        harms: ['tried-to-pay'],
+        scoreBeforePenalty: 0,
+        score: -0.5,
+      });
+    });
+
+    it('score minus the largest penalty when the run shows several', () => {
+      expect(harmed({ filed: true, paid: true })).toMatchObject({
+        harms: ['wrong-papers', 'tried-to-pay'],
+        score: -2,
+      });
+    });
+
+    it('need every rule of the pattern: a run that did nothing scores 0', () => {
+      expect(harmed({})).toMatchObject({
+        failedRequired: ['filed', 'papers'],
+        harms: [],
+        score: 0,
+      });
+      expect(harmed({ filed: true, papers: true, a: true })).toMatchObject({ harms: [], score: 1 });
+    });
+
+    it('have a penalty above 0', () => {
+      const withPenalty = (penalty: number) => ({ harms: [{ id: 'h', penalty, when: {} }] });
+      expect(() => resolveScoring(withPenalty(0))).toThrow(/penalty of "h" must be above 0/);
+      expect(() => resolveScoring(withPenalty(Number.NaN))).toThrow(/penalty/);
+      expect(resolveScoring(withPenalty(2)).harms).toHaveLength(1);
     });
   });
 

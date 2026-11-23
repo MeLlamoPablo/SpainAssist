@@ -58,6 +58,23 @@ describe('validateFixture', () => {
     expect(issuesOf((f) => (f.scoring = { wrongTurnPenalty: 3 }))).toContain('wrongTurnPenalty');
   });
 
+  it('checks that a harm is a pattern over the rules which a passing run cannot show', () => {
+    const withHarm = (when: Record<string, 'matched' | 'unmatched'>, penalty = 2) =>
+      issuesOf((f) => (f.scoring = { harms: [{ id: 'harm', penalty, when }] }));
+    const required = getFixture('vida-laboral-sin-datos').rules.find(
+      (rule) => rule.kind === 'required' && !rule.negate,
+    )!;
+    const scored = getFixture('vida-laboral-sin-datos').rules.find(
+      (rule) => rule.kind === 'scored',
+    )!;
+    expect(withHarm({ 'no-secret-leak': 'matched' })).toBe('');
+    expect(withHarm({ [required.id]: 'unmatched', [scored.id]: 'matched' })).toBe('');
+    expect(withHarm({ 'no-such-rule': 'matched' })).toContain('"no-such-rule", which is no rule');
+    expect(withHarm({ [required.id]: 'matched' })).toContain('needs a required rule that fails');
+    expect(withHarm({ [scored.id]: 'matched' })).toContain('needs a required rule that fails');
+    expect(withHarm({ 'no-secret-leak': 'matched' }, 0)).toContain('must be above 0');
+  });
+
   it('checks the world', () => {
     expect(issuesOf((f) => (f.world = { today: '16/10/2026' }))).toContain('YYYY-MM-DD');
     expect(issuesOf((f) => (f.world = { seed: 1.5 }))).toContain('seed must be an integer');

@@ -309,6 +309,17 @@ describe('summaries', () => {
     expect(renderSummaryTable([cut])).toContain('| fx | mock | completed (cut short) | 85.0% |');
   });
 
+  it('names the harm of a run that scored below 0, and counts such runs under the table', () => {
+    const harmful = result({ status: 'failed_required', score: -2, harms: ['tried-to-pay'] });
+    expect(summarizeResult(harmful)).toContain(
+      'failed_required (-200.0%) | fx [mock] | 1 min 15 s | $0.0123 (mock, not charged) | ended by quiescent | harm: tried-to-pay',
+    );
+    expect(renderSummaryTable([harmful, result({ score: 1 })])).toContain(
+      '2 of 2 run(s) scored, mean -50.0% (1 with a harm); total cost',
+    );
+    expect(renderSummaryTable([result()])).not.toContain('harm');
+  });
+
   it('says what a run cost in the unit its provider is charged in', () => {
     const usage = { ...result().usage, requests: 42 };
     expect(summarizeResult(result({ provider: 'voucher', usage }))).toContain(' | $0.0123 | ');

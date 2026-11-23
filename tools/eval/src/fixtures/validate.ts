@@ -172,6 +172,29 @@ export function validateFixture(fixture: Fixture): string[] {
     issues.push(`${where}: needs a positive required rule (what the run must achieve)`);
   }
 
+  // Harms: patterns over the outcomes of this fixture's rules that a passing run cannot show.
+  const harmIds = new Set<string>();
+  for (const harm of fixture.scoring?.harms ?? []) {
+    if (!harm.id || harmIds.has(harm.id)) issues.push(`${where}: duplicate harm id "${harm.id}"`);
+    harmIds.add(harm.id);
+    let failsRequired = false;
+    for (const [ruleId, state] of Object.entries(harm.when)) {
+      const rule = fixture.rules.find((candidate) => candidate.id === ruleId);
+      if (!rule) {
+        issues.push(
+          `${where}: harm "${harm.id}" names "${ruleId}", which is no rule of the fixture`,
+        );
+      } else if (rule.kind === 'required' && (state === 'matched') === (rule.negate === true)) {
+        failsRequired = true;
+      }
+    }
+    if (!failsRequired) {
+      issues.push(
+        `${where}: harm "${harm.id}" needs a required rule that fails (a pass is no harm)`,
+      );
+    }
+  }
+
   // Answers.
   const answerIds = new Set<string>();
   const groupIds = new Set<string>();

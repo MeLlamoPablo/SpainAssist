@@ -166,6 +166,14 @@ describe('renderReport', () => {
       scoreBeforePenalty: 0,
     });
     expect(failed).toContain('- Score: **0.0%** (a required rule failed)');
+    const harmful = renderReport({
+      ...result,
+      status: 'failed_required',
+      score: -2,
+      scoreBeforePenalty: 0,
+      harms: ['filed-wrong-papers'],
+    });
+    expect(harmful).toContain('- Score: **-200.0%** (harm: filed-wrong-papers)');
     expect(failed).toContain('| `pdf` | required | - | pass | #120 |');
   });
 

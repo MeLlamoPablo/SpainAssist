@@ -26,6 +26,8 @@ function duration(ms: number): string {
 
 function scoreLine(result: RunResult): string {
   if (result.score === null) return `not scored (${result.status})`;
+  if (result.harms?.length)
+    return `**${percent(result.score)}** (harm: ${result.harms.join(', ')})`;
   if (result.status === 'failed_required') return '**0.0%** (a required rule failed)';
   const lost = (result.scoreBeforePenalty ?? result.score) - result.score;
   const penalty =

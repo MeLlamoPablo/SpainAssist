@@ -107,6 +107,30 @@ describe('assembleRunResult', () => {
     expect(result.notes).toEqual(['ended-by:limit:wallClock']);
   });
 
+  it('scores below 0, and names the harm, when the run shows a harm of the fixture', () => {
+    const harmful: Partial<AssembleInput> = {
+      fixture: {
+        id: 'fx',
+        rules,
+        scoring: { harms: [{ id: 'leaked', penalty: 2, when: { leak: 'matched' } }] },
+      },
+      outcomes: [out('pdf', true), out('leak', true), out('offered', true), out('clean', false)],
+      endedBy: 'required-failed',
+    };
+    expect(assembleRunResult(input(harmful))).toMatchObject({
+      status: 'failed_required',
+      score: -2,
+      scoreBeforePenalty: 0,
+      harms: ['leaked'],
+    });
+    expect(assembleRunResult(input({ ...harmful, endedBy: 'error' }))).toMatchObject({
+      status: 'error',
+      score: null,
+    });
+    expect(assembleRunResult(input({ ...harmful, endedBy: 'error' }))).not.toHaveProperty('harms');
+    expect(assembleRunResult(input())).not.toHaveProperty('harms');
+  });
+
   it('fails with score 0 when a negated required rule matched', () => {
     const result = assembleRunResult(
       input({
