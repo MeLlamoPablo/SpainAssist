@@ -5,14 +5,17 @@
  *   GET  /api/file?path=<rel>   one of those files
  *   POST /api/upload            keeps a dropped trace.zip in memory, answers { url }
  *   GET  /api/upload/<id>       it, for the Playwright trace viewer
+ *   POST /api/format            a codemode module laid out by Biome (422 when it does not parse)
  *   GET  /playwright/...        Playwright's own trace viewer, from playwright-core
  *
  * Folders are listed only as far as traces go: sessions, agent and procedure records, zips.
  * Media, vault, work folders and logs are never listed nor served.
  */
+import { spawn } from 'node:child_process';
 import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import type { Plugin } from 'vite';
 
@@ -80,6 +83,33 @@ export function openSource(input: string): OpenedSource {
   return { name: path, kind: 'dir', root: path, files: files.sort() };
 }
 
+/** A codemode module laid out by Biome, or undefined when it does not parse. */
+export function formatModule(source: string): Promise<string | undefined> {
+  const biome = createRequire(import.meta.url).resolve('@biomejs/biome/bin/biome');
+  return new Promise((done) => {
+    // Outside the repository, so that no biome.json changes the layout.
+    const child = spawn(
+      process.execPath,
+      [
+        biome,
+        'format',
+        '--stdin-file-path=module.js',
+        '--indent-style=space',
+        '--line-width=80',
+        '--javascript-formatter-quote-style=single',
+      ],
+      { cwd: tmpdir(), stdio: ['pipe', 'pipe', 'ignore'] },
+    );
+    let out = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      out += chunk;
+    });
+    child.on('error', () => done(undefined));
+    child.on('close', (code) => done(code === 0 ? out : undefined));
+    child.stdin.end(source);
+  });
+}
+
 /** Playwright's trace viewer (static files), from the playwright-core this package installs. */
 function playwrightViewerDir(): string | undefined {
   try {
@@ -143,6 +173,13 @@ export function tracesApi(input: string | undefined): Plugin {
       uploads.set(id, Buffer.concat(chunks));
       for (const key of uploads.keys()) if (uploads.size > MAX_UPLOADS) uploads.delete(key);
       return send(res, 200, { url: `/api/upload/${id}/trace.zip` });
+    }
+    if (url.pathname === '/api/format' && req.method === 'POST') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const formatted = await formatModule(Buffer.concat(chunks).toString('utf8'));
+      if (formatted === undefined) return send(res, 422, 'The module does not parse');
+      return send(res, 200, formatted);
     }
     const upload = /^\/api\/upload\/(\d+)\/trace\.zip$/.exec(url.pathname);
     if (upload) {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readableSelector } from '../src/lib/playwright';
-import { openSource } from '../src/server/api';
+import { formatModule, openSource } from '../src/server/api';
 
 let dir: string | undefined;
 afterEach(async () => {
@@ -55,5 +55,24 @@ describe('readableSelector', () => {
       '#form › text "Continuar"',
     );
     expect(readableSelector('[name="oficina"]')).toBe('[name="oficina"]');
+  });
+});
+
+describe('formatModule', () => {
+  it('lays out a codemode module, and gives up on one that does not parse', async () => {
+    expect(
+      await formatModule(
+        'export async function main(api) { const vault = await api.vault.read({}); return vault.documents.map(d => ({id: d.id, name: d.name})) }',
+      ),
+    ).toBe(
+      [
+        'export async function main(api) {',
+        '  const vault = await api.vault.read({});',
+        '  return vault.documents.map((d) => ({ id: d.id, name: d.name }));',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    expect(await formatModule('return 1 +')).toBeUndefined();
   });
 });

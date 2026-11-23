@@ -1354,3 +1354,37 @@ kbd {
     box-shadow: var(--shadow-pop);
   }
 }
+
+.block-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+.full-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  padding: 32px;
+  background: color-mix(in oklab, black 45%, transparent);
+}
+.full-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.35);
+}
+.block.full-panel pre {
+  flex: 1;
+  max-height: none;
+  font-size: 13px;
+  white-space: pre;
+  word-break: normal;
+}
+.block.full-panel pre.prose {
+  white-space: pre-wrap;
+}

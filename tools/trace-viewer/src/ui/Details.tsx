@@ -1,5 +1,6 @@
-import { AlertCircle, Bot, Check, Copy, ExternalLink, Focus, X } from 'lucide-react';
-import { useState } from 'react';
+import { AlertCircle, Bot, Check, Copy, ExternalLink, Focus, Maximize2, X } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatClock, formatCost, formatDuration, formatTokens } from '../lib/format';
 import { type BrowserTrace, type Frame, type Span, totalCost, totalTokens } from '../lib/model';
 import { frameAt } from './data';
@@ -142,6 +143,7 @@ export function Details({
           <Code
             title={span.kind === 'tool' && span.name === 'codemode' ? 'Module' : 'Input'}
             text={span.input}
+            js={span.kind === 'tool' && span.name === 'codemode'}
           />
         )}
         {span.attrs?.find(([k]) => k === 'Thinking') && (
@@ -170,27 +172,139 @@ function Fact({ label, value, wide }: { label: string; value: string; wide?: boo
   );
 }
 
-function Code({ title, text, prose }: { title: string; text: string; prose?: boolean }) {
+function Code({
+  title,
+  text,
+  prose,
+  js,
+}: {
+  title: string;
+  text: string;
+  prose?: boolean;
+  js?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
+  const [full, setFull] = useState(false);
+  const shown = useLaidOut(text, js ? 'js' : prose ? 'prose' : 'json');
+  const actions = (
+    <span className="block-actions">
+      <button
+        type="button"
+        className="icon-btn sm"
+        aria-label={`Copy ${title.toLowerCase()}`}
+        onClick={() => {
+          void navigator.clipboard?.writeText(shown).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          });
+        }}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+      </button>
+      {full ? (
+        <button
+          type="button"
+          className="icon-btn sm"
+          aria-label="Close full screen"
+          onClick={() => setFull(false)}
+          // biome-ignore lint/a11y/noAutofocus: the dialog's way out takes the focus when it opens
+          autoFocus
+        >
+          <X size={12} />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="icon-btn sm"
+          aria-label={`Show ${title.toLowerCase()} full screen`}
+          onClick={() => setFull(true)}
+        >
+          <Maximize2 size={12} />
+        </button>
+      )}
+    </span>
+  );
   return (
     <section className="block">
       <h3>
         {title}
-        <button
-          type="button"
-          className="icon-btn sm"
-          aria-label={`Copy ${title.toLowerCase()}`}
-          onClick={() => {
-            void navigator.clipboard?.writeText(text).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1200);
-            });
-          }}
-        >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-        </button>
+        {!full && actions}
       </h3>
-      <pre className={prose ? 'prose' : undefined}>{text}</pre>
+      <pre className={prose ? 'prose' : undefined}>{shown}</pre>
+      {full &&
+        createPortal(
+          <FullScreen title={title} onClose={() => setFull(false)}>
+            <h3>
+              {title}
+              {actions}
+            </h3>
+            <pre className={prose ? 'prose' : undefined}>{shown}</pre>
+          </FullScreen>,
+          document.body,
+        )}
     </section>
   );
+}
+
+function FullScreen({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose(): void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // The waterfall's Escape would also close the details.
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [onClose]);
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a click on the backdrop closes, as Escape does
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Escape is handled on the window
+    <div className="full-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="full-panel block" role="dialog" aria-modal="true" aria-label={title}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The text laid out to read: a codemode module by Biome (on the server), JSON indented. */
+function useLaidOut(text: string, kind: 'js' | 'json' | 'prose'): string {
+  const [module, setModule] = useState<{ from: string; to: string }>();
+  useEffect(() => {
+    if (kind !== 'js') return;
+    let live = true;
+    fetch('/api/format', { method: 'POST', body: text })
+      .then((res) => (res.ok ? res.text() : undefined))
+      .then((to) => {
+        if (live && to) setModule({ from: text, to });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [text, kind]);
+  if (kind === 'js') return module?.from === text ? module.to : text;
+  if (kind === 'json') return indentJson(text) ?? text;
+  return text;
+}
+
+/** JSON indented, also after a first line such as a run's `Result:`. */
+function indentJson(text: string): string | undefined {
+  const start = /(?:^|\n)\s*[[{]/.exec(text);
+  if (!start) return undefined;
+  const at = start.index + start[0].length - 1;
+  try {
+    return text.slice(0, at) + JSON.stringify(JSON.parse(text.slice(at)), null, 2);
+  } catch {
+    return undefined;
+  }
 }
