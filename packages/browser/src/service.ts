@@ -119,6 +119,36 @@ const CRLSET_SETTLE_MS = 5_000;
  * is ever sent there.
  */
 const NO_COMPONENT_UPDATES = '--component-updater=url-source=http://127.0.0.1:9/';
+/**
+ * macOS: without NativeNotifications and SystemNotifications, Chrome for Testing connects its app
+ * and its "Helper (Alerts)" app to the notification server at launch, and on the first launch
+ * macOS shows a "Notifications may include alerts…" banner for each. The agent's browser never
+ * shows notifications. Chromium reads only the last `--disable-features`, so this one repeats
+ * Playwright's own list (playwright-core 1.64.1, `chromiumSwitches.ts`); launch.test.ts fails
+ * when Playwright's list changes.
+ */
+const MAC_DISABLE_FEATURES = `--disable-features=${[
+  'AvoidUnnecessaryBeforeUnloadCheckSync',
+  'DestroyProfileOnBrowserClose',
+  'DialMediaRouteProvider',
+  'GlobalMediaControls',
+  'HttpsUpgrades',
+  'LensOverlay',
+  'MediaRouter',
+  'PaintHolding',
+  'ThirdPartyStoragePartitioning',
+  'BlockOriginHeaderModificationOnRedirect',
+  'AvoidCorsURLLoaderRestartOnRedirect',
+  'Translate',
+  'AutoDeElevate',
+  'OptimizationHints',
+  'NetworkTimeServiceQuerying',
+  'AimEnabled',
+  'msForceBrowserSignIn',
+  'msEdgeUpdateLaunchServicesPreferredVersion',
+  'NativeNotifications',
+  'SystemNotifications',
+].join(',')}`;
 /** Temporary profiles of CRLSet launches, in the OS temp directory. */
 export const PROFILE_PREFIX = 'sa-agent-profile-';
 /**
@@ -1082,6 +1112,7 @@ export class PlaywrightBrowserService implements BrowserService {
       headless,
       args: [
         ...(this.opts.startHidden ? ['--start-minimized'] : []),
+        ...(process.platform === 'darwin' ? [MAC_DISABLE_FEATURES] : []),
         // Trust the sidecar's key: only hosts with a client certificate present it.
         ...(this.opts.certificates?.launchArgs ?? []),
         ...(this.opts.launchArgs ?? []),
