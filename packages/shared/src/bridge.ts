@@ -132,6 +132,9 @@ const Ref = z
   .max(4000)
   .describe('Element ref from the latest snapshot, e.g. "e12"');
 
+/** A saved document, by its name ("Contrato de compraventa.jpeg", or without the extension). */
+const DocumentName = z.string().trim().min(1).max(255);
+
 // ---------------------------------------------------------------------------------------------
 // Methods
 // ---------------------------------------------------------------------------------------------
@@ -189,33 +192,36 @@ export const BridgeParams = {
   /** Save personal data learned during the conversation. */
   'vault.save': z.object({ items: z.array(PersonalDataInput).min(1).max(30) }),
   /**
-   * The saved documents' ids and names, nothing else: the coordinator's host checks the documents
-   * its messages link (packages/agent/src/host/document-links.ts).
+   * The saved documents' ids and names, nothing else: the coordinator's host keeps the links of
+   * its messages as ids and shows the model names (packages/agent/src/host/document-links.ts).
    */
   'vault.documents': z.object({}),
-  /** Read the contents of one saved document (procedure agents read it with document_read). */
-  'vault.document': z.object({ documentId: z.string().min(1).max(120) }),
+  /**
+   * Read the contents of one saved document. Agents choose documents by name, never by id
+   * (`findDocumentByName`: the name with or without its extension).
+   */
+  'vault.document': z.object({ document: DocumentName }),
   /**
    * Give a saved document a readable name ("DNI (anverso)"), for files the user attached under
    * their camera's or scanner's name. The app keeps the original file extension.
    */
   'vault.renameDocument': z.object({
-    documentId: z.string().min(1).max(120),
+    document: DocumentName,
     name: z.string().trim().min(1).max(120),
   }),
 
   /**
    * Sign a saved PDF with the user's certificate or DNI, with a visible signature: the user picks
-   * where it goes and approves it in the app; the signed PDF replaces the document (same id).
+   * where it goes and approves it in the app; the signed PDF replaces the document (same name).
    */
-  'vault.signDocument': z.object({ documentId: z.string().min(1).max(120) }),
+  'vault.signDocument': z.object({ document: DocumentName }),
   /**
    * Fill in a saved PDF: each value goes where the agent pointed on the page (fractions of the
    * displayed page, from its top left), into the form field, box or line there. A blank gives a
    * new document; a copy filled earlier is filled again from its blank, in place.
    */
   'vault.fillDocument': z.object({
-    documentId: z.string().min(1).max(120),
+    document: DocumentName,
     values: z
       .array(
         z.object({
@@ -302,7 +308,7 @@ export const BridgeParams = {
     index: z.number().int().min(0).optional(),
   }),
   'browser.screenshot': z.object({ fullPage: z.boolean().default(false) }),
-  'browser.upload': z.object({ ref: Ref, documentIds: z.array(z.string()).min(1).max(10) }),
+  'browser.upload': z.object({ ref: Ref, documents: z.array(DocumentName).min(1).max(10) }),
   /** Enable TLS client-certificate login for this procedure's browser (may ask the user). */
   'browser.useCertificate': z.object({
     credentialId: z.string(),
@@ -493,7 +499,7 @@ export type BridgeParamsOf<M extends BridgeMethod> = z.input<(typeof BridgeParam
 
 export interface VaultReadResult {
   personal: { key: string; label: string; value: string }[];
-  documents: { id: string; name: string; mimeType: string; createdAt: string }[];
+  documents: { name: string; mimeType: string; createdAt: string }[];
   credentials: {
     id: string;
     kind: string;
@@ -511,13 +517,13 @@ export interface BridgeResults {
   'prompt.phoneCall': Extract<PromptResponse, { kind: 'phone_call' }>;
   'vault.read': VaultReadResult;
   'vault.save': { saved: string[] };
-  'vault.documents': { documents: { id: string; name: string }[] };
-  'vault.document': { id: string; name: string; mimeType: string; dataBase64: string };
-  'vault.renameDocument': { documentId: string; name: string };
-  'vault.signDocument': { documentId: string; name: string; signed: boolean };
-  'vault.fillDocument': { documentId: string; name: string; pages: number[]; warnings: string[] };
-  'vault.createDocument': { documentId: string; name: string; pages: number };
-  'downloads.save': { documentId: string; name: string };
+  'vault.documents': { documents: { id: string; name: string; previousNames?: string[] }[] };
+  'vault.document': { name: string; mimeType: string; dataBase64: string };
+  'vault.renameDocument': { name: string };
+  'vault.signDocument': { name: string; signed: boolean };
+  'vault.fillDocument': { name: string; pages: number[]; warnings: string[] };
+  'vault.createDocument': { name: string; pages: number };
+  'downloads.save': { name: string };
   'downloads.list': { downloads: BrowserObservation['downloads'] };
   'browser.open': BrowserObservation;
   'browser.snapshot': BrowserObservation;

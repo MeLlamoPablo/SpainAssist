@@ -139,7 +139,7 @@ export class ChatService {
     for (const a of attachments) {
       const doc = vault.getDocument(a.documentId);
       if (!doc) continue;
-      lines.push(`- ${doc.name} (${doc.mimeType}, documentId: ${doc.id})`);
+      lines.push(`- ${doc.name} (${doc.mimeType})`);
       if (
         IMAGE_TYPES.has(doc.mimeType) &&
         doc.size <= MAX_IMAGE_BYTES &&

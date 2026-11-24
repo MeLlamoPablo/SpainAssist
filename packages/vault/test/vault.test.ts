@@ -352,12 +352,45 @@ describe('documents', () => {
       bytes: Buffer.from('foto'),
     });
     const renamed = await vault.renameDocument(doc.id, '  DNI (anverso).jpg ');
-    expect(renamed).toEqual({ ...doc, name: 'DNI (anverso).jpg' });
+    expect(renamed).toEqual({ ...doc, name: 'DNI (anverso).jpg', previousNames: ['IMG_2034.jpg'] });
     expect(vault.getDocument(doc.id)?.name).toBe('DNI (anverso).jpg');
     expect((await vault.readDocument(doc.id)).toString()).toBe('foto');
     await expectVaultError(vault.renameDocument(doc.id, ' '), 'invalid_input');
     await expectVaultError(vault.renameDocument('nope', 'x.jpg'), 'not_found');
     expect(vault.getDocument(doc.id)?.name).toBe('DNI (anverso).jpg');
+  });
+
+  it('gives each document its own name: "name (2).ext" when another has it', async () => {
+    const { vault } = await openVault();
+    const add = (name: string) =>
+      vault.addDocument({
+        name,
+        mimeType: 'application/pdf',
+        source: 'user',
+        bytes: Buffer.from('x'),
+      });
+    const first = await add('Contrato.pdf');
+    expect((await add('Contrato.pdf')).name).toBe('Contrato (2).pdf');
+    expect((await add('Contrato.pdf')).name).toBe('Contrato (3).pdf');
+    const other = await add('Recibo.pdf');
+    expect((await vault.renameDocument(other.id, 'Contrato.pdf')).name).toBe('Contrato (4).pdf');
+    // Its own name is not taken by itself.
+    expect((await vault.renameDocument(first.id, 'Contrato.pdf')).name).toBe('Contrato.pdf');
+    await expectVaultError(add('a<b>.pdf'), 'invalid_input');
+  });
+
+  it('keeps every earlier name of a renamed document, across a reopen', async () => {
+    const { vault, dir } = await openVault();
+    const doc = await vault.addDocument({
+      name: 'IMG_1.jpg',
+      mimeType: 'image/jpeg',
+      source: 'user',
+      bytes: Buffer.from('foto'),
+    });
+    await vault.renameDocument(doc.id, 'DNI.jpg');
+    await vault.renameDocument(doc.id, 'DNI (anverso).jpg');
+    const reopened = await Vault.open(dir, keys());
+    expect(reopened.getDocument(doc.id)?.previousNames).toEqual(['IMG_1.jpg', 'DNI.jpg']);
   });
 
   it('remembers the blank form a document was filled in from, across a reopen', async () => {

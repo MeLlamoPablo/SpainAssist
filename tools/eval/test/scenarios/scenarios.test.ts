@@ -246,12 +246,12 @@ describe('the coordinator', () => {
     expect((await chat.turn()).text).toMatch(/Me pongo con tu vida laboral/);
 
     chat.user(
-      '[Report from agent a_0123456789abcdef "Sacando tu vida laboral…" · procedures: p_0123456789abcdef "Vida laboral" (done)]\nHecho.\nSaved documents: 6f1d8c0e-3c52-4a52-9f0e-5a8d0d1c7a11 "Informe de vida laboral.pdf"',
+      '[Report from agent a_0123456789abcdef "Sacando tu vida laboral…" · procedures: p_0123456789abcdef "Vida laboral" (done)]\nHecho.\nSaved documents: "Informe de vida laboral.pdf"',
     );
     const report = await chat.turn();
     expect(report.calls).toEqual([]);
     expect(report.text.split('\n').at(-1)).toBe(
-      '[Informe de vida laboral.pdf](sa:document/6f1d8c0e-3c52-4a52-9f0e-5a8d0d1c7a11)',
+      '[Informe de vida laboral.pdf](<sa:document/Informe de vida laboral.pdf>)',
     );
     // It never asks the user: the agent does.
     expect(chat.said.flatMap((reply) => reply.calls.map((call) => call.name))).toEqual([

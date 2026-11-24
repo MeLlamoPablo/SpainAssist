@@ -49,16 +49,15 @@ it('fills a blank into a new document, then that copy again from the blank, in p
 
   const first = await app.rpc(
     'vault.fillDocument',
-    { documentId: blank.id, values: values('Primera') },
+    { document: 'EX-15', values: values('Primera') },
     token,
   );
-  const copyId = first.body.result?.documentId as string;
   expect(first.body.result).toEqual({
-    documentId: copyId,
     name: 'EX-15 (rellenado).pdf',
     pages: [1],
     warnings: [],
   });
+  const copyId = app.vault.listDocuments().find((d) => d.id !== blank.id)?.id ?? '';
   expect(app.vault.getDocument(copyId)).toMatchObject({
     source: 'agent',
     procedureId,
@@ -69,10 +68,11 @@ it('fills a blank into a new document, then that copy again from the blank, in p
 
   const again = await app.rpc(
     'vault.fillDocument',
-    { documentId: copyId, values: values('Segunda'), name: 'Solicitud NIE' },
+    { document: 'EX-15 (rellenado).pdf', values: values('Segunda'), name: 'Solicitud NIE' },
     token,
   );
-  expect(again.body.result).toMatchObject({ documentId: copyId, name: 'Solicitud NIE.pdf' });
+  expect(again.body.result).toMatchObject({ name: 'Solicitud NIE.pdf' });
+  expect(app.vault.getDocument(copyId)?.name).toBe('Solicitud NIE.pdf');
   expect(app.vault.listDocuments()).toHaveLength(2);
   // Filled again from the blank: the first value is gone.
   const { text } = await extractText(
@@ -92,7 +92,7 @@ it('refuses what is not a PDF it can fill', async () => {
   });
   const notPdf = await app.rpc(
     'vault.fillDocument',
-    { documentId: photo.id, values: values('x') },
+    { document: photo.name, values: values('x') },
     token,
   );
   expect(notPdf.body.error).toMatchObject({
@@ -108,7 +108,7 @@ it('refuses what is not a PDF it can fill', async () => {
   });
   const unreadable = await app.rpc(
     'vault.fillDocument',
-    { documentId: broken.id, values: values('x') },
+    { document: broken.name, values: values('x') },
     token,
   );
   expect(unreadable.body.error).toMatchObject({
@@ -118,7 +118,7 @@ it('refuses what is not a PDF it can fill', async () => {
 
   const missing = await app.rpc(
     'vault.fillDocument',
-    { documentId: 'nope', values: values('x') },
+    { document: 'nope', values: values('x') },
     token,
   );
   expect(missing.body.error?.code).toBe('not_found');

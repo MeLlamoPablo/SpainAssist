@@ -1,6 +1,7 @@
 import {
   APPOINTMENT_MORE,
   type FormField,
+  findDocumentByName,
   type UiElement,
   type UiEvent,
   type UiHandler,
@@ -31,6 +32,7 @@ import { common } from '../../i18n/common';
 import { api, errorMessage } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { toast } from '../../store/toast';
+import { useDocuments } from '../../store/vault';
 import { AppointmentPicker } from '../chat/prompts/AppointmentPicker';
 import { chipClass, DocumentPicker } from '../chat/prompts/FormPromptCard';
 import { MapOptionsPicker } from '../chat/prompts/MapOptionsPicker';
@@ -507,15 +509,18 @@ function UiProvince({ node }: { node: UiElement }) {
   );
 }
 
+/** Its value is the document's name: agents choose documents by name, never by id. */
 function UiDocument({ node }: { node: UiElement }) {
   const [value, setValue] = useLocalValue<string>(node, 'value', '');
+  const documents = useDocuments();
+  const chosen = value ? findDocumentByName(documents, value) : undefined;
   return (
     <UiField node={node}>
       {({ id, describedBy }) => (
         <DocumentPicker
           inputId={id}
-          value={value}
-          onChange={setValue}
+          value={chosen && 'found' in chosen ? chosen.found.id : ''}
+          onChange={(_id, name) => setValue(name)}
           {...(describedBy ? { describedBy } : {})}
         />
       )}

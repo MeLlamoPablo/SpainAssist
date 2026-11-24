@@ -287,35 +287,36 @@ describe('agent host over RPC (integration)', () => {
     expect(JSON.stringify(toolResult.messages)).toContain('Started agent a_1');
   });
 
-  it('has the coordinator write again, once per prompt, a message linking an unsaved document', async () => {
+  it('keeps document links as ids, shows the model names, and has it write a wrong one again', async () => {
+    const id = '31fd58e9-8e9f-4436-81b6-496c5a011435';
     bridge.setHandler('vault.documents', () => ({
-      documents: [{ id: '31fd58e9-8e9f-4436-81b6-496c5a011435', name: 'Modelo 790-012.pdf' }],
+      documents: [{ id, name: 'Modelo 790-012.pdf' }],
     }));
-    const miscopied = '[Modelo 790-012](sa:document/31fd58e9-8e9f-4436-81b6-4965c0101135)';
+    const wrong = '[Modelo 790-012](<sa:document/Modelo 790-021.pdf>)';
     llm.setScenario({
       rules: [
         {
           when: {
-            lastUser: '^Your last message links [\\s\\S]*\\n- (?<id>[\\w-]+): Modelo 790-012',
+            lastUser: '^Your last message links [\\s\\S]*\\n- (?<name>Modelo 790-012[^\\n]*)',
           },
-          reply: { text: 'Aquí tienes el impreso.\n\n[Modelo 790-012](sa:document/{{id}})' },
+          reply: { text: 'Aquí tienes el impreso.\n\n[Modelo 790-012](<sa:document/{{name}}>)' },
         },
         {
           when: { lastUser: 'impreso' },
-          reply: { text: `Aquí tienes el impreso.\n\n${miscopied}` },
+          reply: { text: `Aquí tienes el impreso.\n\n${wrong}` },
         },
       ],
     });
     const { client, events } = await start(undefined, undefined, { role: 'orchestrator' });
     await client.prompt('Dame el impreso');
     await waitFor(events, isRunEnd);
-    expect(bridge.callsTo('vault.documents')).toHaveLength(1);
     expect(bridge.callsTo('vault.read')).toEqual([]);
-    const rewrite = llm.requests().at(-1)?.body as ChatRequest;
-    expect(rewrite.messages?.at(-1)).toMatchObject({ role: 'user' });
-    expect(JSON.stringify(rewrite.messages?.at(-1))).toContain(
-      'sa:document/31fd58e9-8e9f-4436-81b6-4965c0101135',
+    const last = llm.requests().at(-1)?.body as ChatRequest;
+    const rewrite = JSON.stringify(last.messages?.at(-1));
+    expect(rewrite).toContain(
+      'links \\"Modelo 790-021.pdf\\", but no saved document has that name',
     );
+    expect(rewrite).not.toContain(id);
     const flow = events.filter((e) => e.type !== 'log' && e.type !== 'usage');
     const first = flow.find((e) => e.type === 'assistant_start');
     expect(flow.filter((e) => e.type !== 'assistant_delta').map((e) => e.type)).toEqual([
@@ -331,20 +332,24 @@ describe('agent host over RPC (integration)', () => {
       type: 'assistant_rewrite',
       messageId: first?.type === 'assistant_start' ? first.messageId : '',
     });
+    // The app gets (and the session keeps) the link by id.
     expect(flow.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
-      text: 'Aquí tienes el impreso.\n\n[Modelo 790-012](sa:document/31fd58e9-8e9f-4436-81b6-496c5a011435)',
+      text: `Aquí tienes el impreso.\n\n[Modelo 790-012](sa:document/${id})`,
     });
 
-    // A model that gets it wrong again is not asked twice.
-    llm.setScenario({ rules: [], fallback: { text: `Sigue mal.\n\n${miscopied}` } });
+    // A model that gets it wrong again is not asked twice; it reads its old links by name.
+    llm.setScenario({ rules: [], fallback: { text: `Sigue mal.\n\n${wrong}` } });
     const from = events.length;
     const requests = llm.requests().length;
     await client.prompt('Dámelo otra vez');
     await waitFor(events, isRunEnd, { from });
     expect(llm.requests().length - requests).toBe(2);
+    const context = JSON.stringify(llm.requests()[requests]?.body);
+    expect(context).toContain('[Modelo 790-012](<sa:document/Modelo 790-012.pdf>)');
+    expect(context).not.toContain(id);
     expect(events.slice(from).filter((e) => e.type === 'assistant_rewrite')).toHaveLength(1);
     expect(events.filter((e) => e.type === 'assistant_end').at(-1)).toMatchObject({
-      text: `Sigue mal.\n\n${miscopied}`,
+      text: `Sigue mal.\n\n${wrong}`,
     });
   });
 

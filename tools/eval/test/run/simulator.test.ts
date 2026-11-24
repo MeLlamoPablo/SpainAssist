@@ -996,6 +996,9 @@ describe('pacing and stopping', () => {
 
 describe('document fields', () => {
   const sale = SALE_YARIS;
+  /** The persona's documents as the vault names them: a picker's value is the name, never an id. */
+  const ITP = 'Justificante_Modelo621_6212410391207.pdf';
+  const TASA = 'Justificante_Tasa_791263051942.pdf';
   const onHand = (): FixtureDocument[] => [
     itp(
       sale,
@@ -1049,7 +1052,7 @@ describe('document fields', () => {
     ]);
     expect(t.app.responses[0]!.response).toMatchObject({
       kind: 'form',
-      values: { impuesto: 'doc-1', tasa: 'doc-2' },
+      values: { impuesto: ITP, tasa: TASA },
       dismissed: false,
     });
     expect(t.answered()).toMatchObject([{ itemId: 'form-docs', by: 'structured' }]);
@@ -1069,8 +1072,8 @@ describe('document fields', () => {
     await t.sim.settled();
     expect(t.app.documents.map((d) => d.id)).toEqual(['saved-1', 'doc-2']);
     expect(t.app.responses.map((r) => r.response)).toMatchObject([
-      { values: { impuesto: 'doc-2', tasa: 'saved-1' } },
-      { values: { impuesto: 'doc-2', tasa: 'saved-1' } },
+      { values: { impuesto: ITP, tasa: TASA } },
+      { values: { impuesto: ITP, tasa: TASA } },
     ]);
   });
 
@@ -1085,7 +1088,7 @@ describe('document fields', () => {
     t.show(papers('form-mixed', [{ key: 'email', type: 'email', label: 'Correo' }]));
     await t.sim.settled();
     expect(t.app.responses[0]!.response).toMatchObject({
-      values: { email: 'marta.jimenez.ortiz@hotmail.com', impuesto: 'doc-1', tasa: 'doc-2' },
+      values: { email: 'marta.jimenez.ortiz@hotmail.com', impuesto: ITP, tasa: TASA },
     });
     expect(JSON.stringify(answerer.state.requests)).not.toContain('Justificante_');
     expect(t.app.order.filter((step) => step.startsWith('addDocument'))).toHaveLength(2);
@@ -1112,7 +1115,7 @@ describe('document fields', () => {
     expect(t.fatal).toEqual([]);
     expect(t.app.responses[0]!.response).toMatchObject({
       kind: 'form',
-      values: { impuesto: 'doc-1', tasa: 'doc-2' },
+      values: { impuesto: ITP, tasa: TASA },
       dismissed: false,
     });
     expect(t.answered()).toMatchObject([{ itemId: 'form-optional', by: 'answerer' }]);
@@ -1136,7 +1139,7 @@ describe('document fields', () => {
       }),
     );
     await t.sim.settled();
-    expect(t.app.responses[0]!.response).toMatchObject({ values: { tasa1: 'doc-1' } });
+    expect(t.app.responses[0]!.response).toMatchObject({ values: { tasa1: TASA } });
     const values = (t.app.responses[0]!.response as { values?: Record<string, unknown> }).values;
     expect(values).not.toHaveProperty('tasa2');
     expect(values).not.toHaveProperty('contrato');

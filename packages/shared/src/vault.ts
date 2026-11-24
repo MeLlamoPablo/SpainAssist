@@ -494,8 +494,62 @@ export const DocumentMeta = z.object({
    * starts from that blank.
    */
   filledFrom: z.string().optional(),
+  /** Its earlier names, oldest first: agents that use one learn the current name. */
+  previousNames: z.array(z.string()).optional(),
 });
 export type DocumentMeta = z.infer<typeof DocumentMeta>;
+
+/** Document names compare after Unicode normalization ("ó" typed either way is one name). */
+const sameName = (a: string, b: string) => a.normalize('NFC') === b.normalize('NFC');
+
+/** A name without its extension ("Contrato.pdf" → "Contrato"). */
+function stem(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+/**
+ * `name` if no other document has it, otherwise the first free "name (2).ext", "name (3).ext"…:
+ * agents use names to choose documents, so each name is one document.
+ */
+export function uniqueDocumentName(name: string, taken: string[]): string {
+  if (!taken.some((other) => sameName(other, name))) return name;
+  const base = stem(name);
+  const extension = name.slice(base.length);
+  for (let n = 2; ; n++) {
+    const candidate = `${base} (${n})${extension}`;
+    if (!taken.some((other) => sameName(other, candidate))) return candidate;
+  }
+}
+
+/** What a name an agent gave finds among the saved documents (`findDocumentByName`). */
+export type DocumentLookup<T> =
+  | { found: T }
+  /** No document has the name, but this one had it before a rename. */
+  | { renamed: T }
+  /** The name without extension fits several documents. */
+  | { ambiguous: T[] }
+  | { missing: true };
+
+/**
+ * The document an agent means by `name`: its exact name, or its name without the extension
+ * when only one document has that stem. A name used before a rename gives `renamed`, so the
+ * agent learns the new one instead of reaching another document.
+ */
+export function findDocumentByName<T extends { name: string; previousNames?: string[] }>(
+  documents: T[],
+  name: string,
+): DocumentLookup<T> {
+  const exact = documents.find((doc) => sameName(doc.name, name));
+  if (exact) return { found: exact };
+  const byStem = documents.filter((doc) => sameName(stem(doc.name), name));
+  if (byStem.length === 1) return { found: byStem[0]! };
+  if (byStem.length > 1) return { ambiguous: byStem };
+  const renamed = documents.find((doc) =>
+    doc.previousNames?.some((old) => sameName(old, name) || sameName(stem(old), name)),
+  );
+  return renamed ? { renamed } : { missing: true };
+}
 
 /** One signature of a signed PDF, read from the file (ours or anybody else's). */
 export const DocumentSignature = z.object({

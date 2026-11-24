@@ -67,7 +67,7 @@ interface Ui {
 //  <TextField label value onChange type?="text"|"email"|"phone"|"number"|"date"(YYYY-MM-DD)|"textarea" placeholder? help? error? required?/>
 //  <Select label options={[{value,label}]} value onChange/> <Choice label? options value onChange/> (2–6 buttons)
 //  <MultiChoice options value={string[]} onChange/> <Checkbox label checked onChange={(b: boolean)}/>
-//  <Province value onChange/> <DocumentPicker label value onChange/> (a saved document id; the user can add or scan one)
+//  <Province value onChange/> <DocumentPicker label value onChange/> (a saved document's name; the user can add or scan one)
 //  <Map options={[{value,label,address}]} value onChange/> (places; address = street, number, town; the app
 //    locates and sorts them by distance; present throws code "bad_request" listing addresses it can't find)
 //  <Appointment slots={["YYYY-MM-DDTHH:MM"]} value onChange allowMore?/> ("more" = none suits)
@@ -142,7 +142,8 @@ const VAULT = `
 interface Vault {
   read(options?: { keys?: string[] }): Promise<{
     personal: { key: string; label: string; value: string }[];
-    documents: { id: string; name: string; mimeType: string; createdAt: string }[];
+    /** Each name is one document: use it wherever a document is asked for. */
+    documents: { name: string; mimeType: string; createdAt: string }[];
     credentials: { id: string; kind: string; label: string; policy: "auto"|"ask"; usernameHint?: string; certificate?: { holderName?: string; issuer: string; validTo: string } }[];
   }>;
   /** Saves personal data the user gave (never passwords, PINs or codes). Keys: ${PERSONAL_FIELDS.map((f) => f.key).join(', ')}; anything else is "custom.<slug>" with a label. */
@@ -152,29 +153,30 @@ interface Documents {
   /** A saved document: its text, or an image to show yourself with api.output.image. PDFs: the text
    *  of every page (truncated: true when cut), or with page (from 1) that page's text and image
    *  (scans have no text: look at their pages). */
-  read(id: string, options?: { page?: number }): Promise<{ id: string; name: string; mimeType: string; text?: string; pages?: number; truncated?: boolean; image?: Image }>;
+  read(name: string, options?: { page?: number }): Promise<{ name: string; mimeType: string; text?: string; pages?: number; truncated?: boolean; image?: Image }>;
   /** Keeps a browser download (downloadId from page results) in the user's documents under a
    *  readable name ("Justificante cita DNI"). Unsaved downloads vanish when the app restarts. */
-  saveDownload(downloadId: string, name: string): Promise<{ documentId: string; name: string }>;
-  /** Gives a saved document a short readable name ("DNI (anverso)"); its extension is kept. */
-  rename(id: string, name: string): Promise<{ documentId: string; name: string }>;
+  saveDownload(downloadId: string, name: string): Promise<{ name: string }>;
+  /** Gives a saved document a short readable name ("DNI (anverso)"); its extension is kept. From
+   *  then on, use the new name. */
+  rename(name: string, newName: string): Promise<{ name: string }>;
   /** Fills in a saved PDF the way a person does with a pen. Look at its pages first (read with
    *  page, then api.output.image), then point at where each value goes: x, y in pixels of that
    *  page's image, the middle of the blank box, line or checkbox. The value lands in the form
    *  field, box or line there; a tick is an X. Gives a filled copy (the blank stays) and the
-   *  pages written on: look at them. To correct anything, fill the copy (its id) again with ALL
+   *  pages written on: look at them. To correct anything, fill the copy (its name) again with ALL
    *  the values: it starts again from the blank. */
-  fill(id: string, values: ({ page: number; x: number; y: number } & ({ text: string } | { check: true }))[], options?: { name?: string }): Promise<{ documentId: string; name: string; pages: { page: number; image: Image }[]; warnings: string[] }>;
+  fill(name: string, values: ({ page: number; x: number; y: number } & ({ text: string } | { check: true }))[], options?: { name?: string }): Promise<{ name: string; pages: { page: number; image: Image }[]; warnings: string[] }>;
   /** Writes a new PDF in their documents from Markdown. Always research first what this kind of
    *  document legally requires (content, formalities, what must be done with it afterwards, like
    *  taxes or registration) and follow it. ___[Label] is a field to fill in, one underscore wide
    *  per character of the answer, with room to write it by hand (a date in words: 25);
    *  <div class="columns"><div>…</div><div>…</div></div> sets blocks side by side (signatures). */
-  create(name: string, markdown: string): Promise<{ documentId: string; name: string; pages: number }>;
+  create(name: string, markdown: string): Promise<{ name: string; pages: number }>;
   /** Signs a saved PDF with the user's certificate or DNI, no website needed: the user places the
    *  visible signature and approves it in the app (signed: false if they didn't). The signed PDF
-   *  replaces the document (same id). */
-  sign(id: string): Promise<{ documentId: string; name: string; signed: boolean }>;
+   *  replaces the document (same name). */
+  sign(name: string): Promise<{ name: string; signed: boolean }>;
 }
 interface Image { imageId: string; mimeType: string; width?: number; height?: number }`;
 
@@ -211,8 +213,8 @@ interface Locator {
   filter(o: { hasText?: string; hasNotText?: string }): Locator; or(other: Locator): Locator; nth(i: number): Locator; first(): Locator; last(): Locator; all(): Promise<Locator[]>;
   click(): Promise<ActionResult>; fill(value: string, o?: { submit?: boolean }): Promise<ActionResult>; press(key: string): Promise<ActionResult>;
   check(): Promise<ActionResult>; uncheck(): Promise<ActionResult>; selectOption(values: string | string[]): Promise<ActionResult>;
-  /** Uploads saved documents (vault ids). */
-  setInputFiles(documentIds: string | string[]): Promise<ActionResult>; hover(): Promise<void>; focus(): Promise<void>;
+  /** Uploads saved documents, by name ("Contrato de compraventa.jpeg"). */
+  setInputFiles(names: string | string[]): Promise<ActionResult>; hover(): Promise<void>; focus(): Promise<void>;
   textContent(): Promise<string|null>; innerText(): Promise<string>; inputValue(): Promise<string>; getAttribute(n: string): Promise<string|null>;
   isVisible(): Promise<boolean>; isEnabled(): Promise<boolean>; isChecked(): Promise<boolean>; count(): Promise<number>;
   allTextContents(): Promise<string[]>; allInnerTexts(): Promise<string[]>;

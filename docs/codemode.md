@@ -129,7 +129,7 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
   `api.vault`, `api.documents`, `api.feedback`, `api.runs.cancel`.
 - Agents: `api.browser.currentPage()` → a Playwright-shaped `Page` (locators:
   `getByRole`, `getByLabel`, `getByText`, `locator`, `filter`, `nth`…; actions: `click`, `fill`,
-  `selectOption`, `check`, `setInputFiles(documentIds)`; reads: `textContent`, `count`,
+  `selectOption`, `check`, `setInputFiles(names)`; reads: `textContent`, `count`,
   `allTextContents`, `evaluate`…; `snapshot()`, the one way to look at a page; the app-typed secrets
   `fillFromVault`, `loginClave`, `fillFromUser`; `useCertificate`), `api.user.confirm`,
   `requestAction`, `requestCredential`, `phoneCall`.

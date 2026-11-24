@@ -22,10 +22,10 @@ export function coordinatorRules(): Rule[] {
       id: 'coordinator-relays-document',
       when: {
         ...COORDINATOR,
-        lastUser: `${REPORT_PREFIX}[\\s\\S]*Saved documents: (?<doc>[0-9a-f-]{36}) "(?<docname>[^"]*)"`,
+        lastUser: `${REPORT_PREFIX}[\\s\\S]*Saved documents: "(?<docname>[^"]*)"`,
       },
       reply: {
-        text: 'Listo: tienes tu vida laboral en [tus documentos](sa:vault/documents).\n[{{docname}}](sa:document/{{doc}})',
+        text: 'Listo: tienes tu vida laboral en [tus documentos](sa:vault/documents).\n[{{docname}}](<sa:document/{{docname}}>)',
       },
     },
     {

@@ -141,6 +141,17 @@ native prompt is cancelled (its run hears it was interrupted).
 - **Phone calls**: the prompt can record the call and transcribe it through the gateway. Audio is
   never stored.
 
+### Documents by name (the model never sees their ids)
+Agents choose saved documents by name, the way the user sees them: `api.vault.read`, chat
+attachments and reports list names, and `api.documents.*`, `setInputFiles` and a `DocumentPicker`'s
+value take them. A misread name is easy to notice; a miscopied UUID is not. So each name is one
+document: the vault gives a taken name " (2)" before its extension, and remembers earlier names,
+so a call with a name used before a rename gets the new one in its error. Main finds the document
+(`findDocumentByName`: the whole name, or the name without extension when only one fits) and keeps
+using ids itself. The coordinator links documents as `[x](<sa:document/Name.pdf>)`; its host
+stores the link by id (`message_end`), so a rename breaks no link, and shows the model the current
+name again in later turns (`context`), in `packages/agent/src/host/document-links.ts`.
+
 ### Credentials and certificates (the model never sees secrets)
 Agents refer to credentials by id. Main checks the policy (ask first, Touch ID when available), the
 domain allowlist for that credential kind, and the input type, then types the secret itself.
@@ -209,7 +220,7 @@ signed file still starts with the original bytes.
 
 The agent fills in PDF forms the way a person does with a pen (`api.documents.fill` → bridge
 `vault.fillDocument` → `fillPdf` of `@sa/signer`): it looks at a page's image
-(`api.documents.read(id, { page })`, rendered by pdf.js in the agent host) and points at where
+(`api.documents.read(name, { page })`, rendered by pdf.js in the agent host) and points at where
 each value goes, in that image's pixels. The value lands in what the PDF's geometry puts under the
 point: a form field, an empty box (its borders, from the page's drawing operators, with no printed
 text inside), a line to write on, or the point itself. No field names or labels reach the agent;

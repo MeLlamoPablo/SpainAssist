@@ -47,7 +47,7 @@ const VaultKey = PersonalFieldKey.refine((key) => !hiddenFromAgents(key), {
 /**
  * Props of each native component, validated by main before the renderer sees a tree. Values are
  * what the user picks: strings (text, options, dates YYYY-MM-DD, slots YYYY-MM-DDTHH:MM,
- * document ids), string arrays (MultiChoice) and booleans (Checkbox).
+ * document names), string arrays (MultiChoice) and booleans (Checkbox).
  */
 export const UI_COMPONENT_PROPS = {
   /** The root the runtime wraps every tree in. */
@@ -133,10 +133,10 @@ export const UI_COMPONENT_PROPS = {
     vaultKey: VaultKey,
     onChange: Handler,
   }),
-  /** A saved document, or one the user adds or scans now; the value is its document id. */
+  /** A saved document, or one the user adds or scans now; the value is the document's name. */
   DocumentPicker: z.object({
     label: Label,
-    value: z.string().max(120).optional(),
+    value: z.string().max(255).optional(),
     help: Short.optional(),
     error: Short.optional(),
     onChange: Handler,

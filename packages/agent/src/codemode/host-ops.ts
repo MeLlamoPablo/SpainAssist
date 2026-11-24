@@ -254,7 +254,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
         return observe(
           bridge.call(
             'browser.upload',
-            { ref: target(), documentIds: (a.documentIds as string[]) ?? [] },
+            { ref: target(), documents: (a.documents as string[]) ?? [] },
             opts,
           ),
         );
@@ -375,11 +375,11 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
   async function readDocument(a: Record<string, unknown>, signal: AbortSignal) {
     const doc = await bridge.call(
       'vault.document',
-      { documentId: str(a.id, 'id', 120) },
+      { document: str(a.name, 'name', 255) },
       { signal },
     );
     const bytes = Buffer.from(doc.dataBase64, 'base64');
-    const base = { id: doc.id, name: doc.name, mimeType: doc.mimeType };
+    const base = { name: doc.name, mimeType: doc.mimeType };
     if (doc.mimeType === 'application/pdf') {
       if (a.page !== undefined) {
         let page: Awaited<ReturnType<typeof pdfPage>>;
@@ -433,8 +433,8 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
   }
 
   /** Which document (and page) an image shows, for its caption. */
-  function documentSource(doc: { id: string; name: string }, page?: number): string {
-    return `${page ? `page ${page} of ` : ''}document "${doc.name}" (id ${doc.id})`;
+  function documentSource(doc: { name: string }, page?: number): string {
+    return `${page ? `page ${page} of ` : ''}document "${doc.name}"`;
   }
 
   async function fillDocument(a: Record<string, unknown>, signal: AbortSignal) {
@@ -444,10 +444,10 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
         'Filling in a PDF needs a model that can see its pages: ask the user to fill it in.',
         'not_started',
       );
-    const id = str(a.id, 'id', 120);
+    const name = str(a.name, 'name', 255);
     if (!Array.isArray(a.values) || a.values.length === 0)
       throw new HostOpError('bad_request', 'values: a non-empty list.', 'not_started');
-    const doc = await bridge.call('vault.document', { documentId: id }, { signal });
+    const doc = await bridge.call('vault.document', { document: name }, { signal });
     if (doc.mimeType !== 'application/pdf')
       throw new HostOpError('bad_request', 'Only PDF documents can be filled in.', 'not_started');
     // The agent points in pixels of the page images documents.read gives; the app wants
@@ -493,26 +493,24 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
     const filled = await bridge.call(
       'vault.fillDocument',
       {
-        documentId: id,
+        document: name,
         values,
-        ...(typeof a.name === 'string' && a.name.trim() ? { name: str(a.name, 'name', 120) } : {}),
+        ...(typeof a.copyName === 'string' && a.copyName.trim()
+          ? { name: str(a.copyName, 'name', 120) }
+          : {}),
       },
       { signal, procedureId: primary() },
     );
     // The pages written on, to look at (a run shows at most four images).
-    const copy = await bridge.call('vault.document', { documentId: filled.documentId }, { signal });
+    const copy = await bridge.call('vault.document', { document: filled.name }, { signal });
     const bytes = Buffer.from(copy.dataBase64, 'base64');
     const pages = [];
     for (const n of filled.pages.slice(0, 4))
       pages.push({
         page: n,
-        image: pageImage(
-          await pdfPage(bytes, n, { image: true }),
-          documentSource({ id: filled.documentId, name: filled.name }, n),
-        ),
+        image: pageImage(await pdfPage(bytes, n, { image: true }), documentSource(filled, n)),
       });
     return {
-      documentId: filled.documentId,
       name: filled.name,
       pages,
       warnings: filled.warnings,
@@ -700,7 +698,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
       'documents.rename': (a, signal) =>
         bridge.call(
           'vault.renameDocument',
-          { documentId: str(a.id, 'id', 120), name: str(a.name, 'name', 120) },
+          { document: str(a.name, 'name', 255), name: str(a.newName, 'newName', 120) },
           { signal },
         ),
       'documents.fill': fillDocument,
@@ -716,7 +714,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
       'documents.sign': (a, signal) =>
         bridge.call(
           'vault.signDocument',
-          { documentId: str(a.id, 'id', 120) },
+          { document: str(a.name, 'name', 255) },
           { signal, procedureId: primary() },
         ),
       'feedback.search': async (a, signal) =>

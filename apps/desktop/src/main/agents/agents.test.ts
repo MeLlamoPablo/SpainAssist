@@ -93,7 +93,7 @@ describe('the coordinator', () => {
     expect(app.agentLib.clients).toHaveLength(1);
   });
 
-  it('gets attached images and document ids', async () => {
+  it('gets attached images and document names, never ids', async () => {
     await withProvider();
     const doc = await app.invoke('vault.addDocument', {
       name: 'dni.png',
@@ -109,7 +109,8 @@ describe('the coordinator', () => {
     });
     await app.services.chat.settled();
     const last = app.agentFor(ASSISTANT_AGENT_ID)!.client.prompts.at(-1)!;
-    expect(last.text).toContain(`dni.png (image/png, documentId: ${doc.id})`);
+    expect(last.text).toContain('dni.png (image/png)');
+    expect(last.text).not.toContain(doc.id);
     expect(last.images).toEqual([{ mimeType: 'image/png', dataBase64: 'iVBORw==' }]);
     expect(conversation().at(-1)).toMatchObject({
       type: 'user',
@@ -388,8 +389,9 @@ describe('background agents', () => {
     expect(report.startsWith(`${AGENT_REPORT_PREFIX} ${agentId} "Renovar el DNI"`)).toBe(true);
     expect(report).toContain(`${procedureId} "Renovar el DNI" (planned · next: Elegir oficina)`);
     expect(report.length).toBeLessThan(800 + 300);
-    // Documents the run saved are named with their ids, so the coordinator can link them.
-    expect(report.endsWith(`\nSaved documents: ${saved.id} "Justificante.pdf"`)).toBe(true);
+    // Documents the run saved are named, so the coordinator can link them (never by id).
+    expect(report.endsWith('\nSaved documents: "Justificante.pdf"')).toBe(true);
+    expect(report).not.toContain(saved.id);
     expect(report).not.toContain(older.id);
     // The user sees a compact row, not the report as a message.
     expect(conversation().at(-1)).toMatchObject({

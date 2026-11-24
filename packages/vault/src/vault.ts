@@ -17,6 +17,7 @@ import {
   PersonalDataSource,
   type SecretSummary,
   type StorageInfo,
+  uniqueDocumentName,
   type VaultOverview,
 } from '@sa/shared';
 import { exportPkcs12, type ImportedCertificate, importCertificate } from './certificate';
@@ -123,11 +124,12 @@ function invalid(message: string): VaultError {
   return new VaultError('invalid_input', message);
 }
 
-/** A document's name: the last part of a path, trimmed. */
+/** A document's name: the last part of a path, trimmed. No "<" or ">": agents link documents
+ *  as `<sa:document/name>`. */
 function documentName(name: unknown): string {
   if (typeof name !== 'string') throw invalid('The document needs a name');
   const last = name.split(/[\\/]/).pop()!.trim();
-  if (!last || last.length > 255 || CONTROL_CHARS.test(last)) {
+  if (!last || last.length > 255 || CONTROL_CHARS.test(last) || /[<>]/.test(last)) {
     throw invalid('The document name is not valid');
   }
   return last;
@@ -405,7 +407,7 @@ export class Vault {
       if (!options || typeof options !== 'object') throw invalid('Invalid document');
       const bytes = toBuffer(options.bytes, 'The document');
       if (bytes.length > MAX_DOCUMENT_SIZE) throw invalid('The document is too large (max 50 MB)');
-      const name = documentName(options.name);
+      const name = this.freeDocumentName(documentName(options.name));
       const mimeType = typeof options.mimeType === 'string' ? options.mimeType.toLowerCase() : '';
       if (!MIME_PATTERN.test(mimeType)) throw invalid('The document type is not valid');
       if (!DocumentSource.safeParse(options.source).success)
@@ -447,12 +449,27 @@ export class Vault {
     });
   }
 
-  /** Gives a saved document another name; its file and everything else stay. */
+  /** `name`, or "name (2)…" when another document has it (`uniqueDocumentName`). */
+  private freeDocumentName(name: string, exceptId?: string): string {
+    const taken = [...this.state.documents.values()]
+      .filter((d) => d.id !== exceptId)
+      .map((d) => d.name);
+    return uniqueDocumentName(name, taken);
+  }
+
+  /** Gives a saved document another name; its file and everything else stay. The old name is
+   *  kept in `previousNames`. */
   async renameDocument(id: string, newName: string): Promise<DocumentMeta> {
     return this.lock.run(async () => {
       const meta = typeof id === 'string' ? this.state.documents.get(id) : undefined;
       if (!meta) throw notFound('Document');
-      const renamed = { ...meta, name: documentName(newName) };
+      const name = this.freeDocumentName(documentName(newName), id);
+      if (name === meta.name) return { ...meta };
+      const renamed = {
+        ...meta,
+        name,
+        previousNames: [...(meta.previousNames ?? []), meta.name],
+      };
       await this.commit((draft) => {
         draft.documents.set(id, renamed);
       });

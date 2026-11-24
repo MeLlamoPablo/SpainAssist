@@ -583,8 +583,8 @@ export const KERNEL = String.raw`
     uncheck() { return this._op('check', { checked: false }); }
     setChecked(checked) { return this._op('check', { checked: !!checked }); }
     selectOption(values) { return this._op('selectOption', { values: [].concat(values).map(function (v) { return typeof v === 'object' && v ? (v.label || v.value) : String(v); }) }); }
-    /** Uploads saved documents (ids from api.vault.read) into a file field. */
-    setInputFiles(documentIds) { return this._op('setInputFiles', { documentIds: [].concat(documentIds) }); }
+    /** Uploads saved documents (names from api.vault.read) into a file field. */
+    setInputFiles(names) { return this._op('setInputFiles', { documents: [].concat(names) }); }
     textContent() { return this._op('textContent'); }
     innerText() { return this._op('innerText'); }
     inputValue() { return this._op('inputValue'); }
@@ -774,12 +774,12 @@ export const KERNEL = String.raw`
       save: function (items) { return call('vault.save', { items: items }); },
     },
     documents: {
-      read: function (id, options) { return call('documents.read', Object.assign({ id: id }, options || {})); },
+      read: function (name, options) { return call('documents.read', Object.assign({ name: name }, options || {})); },
       saveDownload: function (downloadId, name) { return call('documents.saveDownload', { downloadId: downloadId, name: name }); },
-      rename: function (id, name) { return call('documents.rename', { id: id, name: name }); },
-      fill: function (id, values, options) { return call('documents.fill', Object.assign({ id: id, values: values }, options || {})); },
+      rename: function (name, newName) { return call('documents.rename', { name: name, newName: newName }); },
+      fill: function (name, values, options) { return call('documents.fill', { name: name, values: values, copyName: (options || {}).name }); },
       create: function (name, markdown) { return call('documents.create', { name: name, markdown: markdown }); },
-      sign: function (id) { return call('documents.sign', { id: id }); },
+      sign: function (name) { return call('documents.sign', { name: name }); },
     },
     feedback: {
       search: function (input) { return call('feedback.search', typeof input === 'string' ? { query: input } : input); },

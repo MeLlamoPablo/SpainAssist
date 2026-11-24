@@ -354,16 +354,44 @@ describe('bridge: vault', () => {
       source: 'user',
       bytes: Buffer.from('%PDF-1.7'),
     });
-    const read = await app.rpc('vault.document', { documentId: doc.id }, token);
+    const read = await app.rpc('vault.document', { document: doc.name }, token);
     expect(read.body.result).toEqual({
-      id: doc.id,
       name: 'padron.pdf',
       mimeType: 'application/pdf',
       dataBase64: Buffer.from('%PDF-1.7').toString('base64'),
     });
+    // Agents may leave out the extension.
+    expect((await app.rpc('vault.document', { document: 'padron' }, token)).body.result).toEqual(
+      read.body.result,
+    );
 
-    const missing = await app.rpc('vault.document', { documentId: 'nope' }, token);
-    expect(missing.body.error?.code).toBe('not_found');
+    const missing = await app.rpc('vault.document', { document: 'nope' }, token);
+    expect(missing.body.error).toEqual({
+      code: 'not_found',
+      message: 'No document is named "nope". Saved documents: "padron.pdf".',
+    });
+  });
+
+  it('agents choose documents by name: a short name for two, or an old one, gets the name to use', async () => {
+    const add = (name: string) =>
+      app.vault.addDocument({
+        name,
+        mimeType: 'image/jpeg',
+        source: 'user',
+        bytes: Buffer.from('x'),
+      });
+    await add('Recibo.jpg');
+    await add('Recibo.pdf');
+    const photo = await add('WhatsApp Image.jpeg');
+    await app.vault.renameDocument(photo.id, 'Tarjeta ITV.jpeg');
+    const error = async (document: string) =>
+      (await app.rpc('vault.document', { document }, token)).body.error?.message;
+    expect(await error('Recibo')).toBe(
+      '"Recibo" could be "Recibo.jpg" or "Recibo.pdf": give the whole name.',
+    );
+    expect(await error('WhatsApp Image.jpeg')).toBe(
+      'No document is named "WhatsApp Image.jpeg" now: it was renamed to "Tarjeta ITV.jpeg".',
+    );
   });
 
   it('vault.renameDocument gives a document a readable name and keeps its extension', async () => {
@@ -375,13 +403,13 @@ describe('bridge: vault', () => {
     });
     const renamed = await app.rpc(
       'vault.renameDocument',
-      { documentId: doc.id, name: 'DNI/anverso.jpg' },
+      { document: 'IMG_2034.JPG', name: 'DNI/anverso.jpg' },
       token,
     );
-    expect(renamed.body.result).toEqual({ documentId: doc.id, name: 'DNI-anverso.JPG' });
+    expect(renamed.body.result).toEqual({ name: 'DNI-anverso.JPG' });
     expect(app.vault.getDocument(doc.id)?.name).toBe('DNI-anverso.JPG');
 
-    const missing = await app.rpc('vault.renameDocument', { documentId: 'nope', name: 'x' }, token);
+    const missing = await app.rpc('vault.renameDocument', { document: 'nope', name: 'x' }, token);
     expect(missing.body.error?.code).toBe('not_found');
   });
 });
@@ -406,11 +434,8 @@ describe('bridge: downloads', () => {
       { downloadId, name: 'Justificante de cita / DNI.PDF' },
       token,
     );
-    expect(saved.body.result).toEqual({
-      documentId: expect.any(String),
-      name: 'Justificante de cita - DNI.pdf',
-    });
-    const doc = app.vault.getDocument(saved.body.result.documentId);
+    expect(saved.body.result).toEqual({ name: 'Justificante de cita - DNI.pdf' });
+    const doc = app.vault.listDocuments().find((d) => d.name === saved.body.result.name);
     expect(doc).toMatchObject({ source: 'download', procedureId });
     expect((await app.vault.readDocument(doc!.id)).toString()).toBe('%PDF-1.7');
     expect(app.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
@@ -842,14 +867,14 @@ describe('bridge: browser and credentials', () => {
       source: 'user',
       bytes: Buffer.from('%PDF'),
     });
-    const res = await app.rpc('browser.upload', { ref: 'e9', documentIds: [doc.id] }, token);
+    const res = await app.rpc('browser.upload', { ref: 'e9', documents: [doc.name] }, token);
     expect(res.body.ok).toBe(true);
     const call = app.browser.calls.find((c) => c.method === 'upload');
     expect(call?.args[1]).toEqual([
       { name: 'dni.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') },
     ]);
     expect(
-      (await app.rpc('browser.upload', { ref: 'e9', documentIds: ['d_nope'] }, token)).body.error
+      (await app.rpc('browser.upload', { ref: 'e9', documents: ['nope.pdf'] }, token)).body.error
         ?.code,
     ).toBe('not_found');
   });

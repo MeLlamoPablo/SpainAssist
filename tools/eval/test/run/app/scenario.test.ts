@@ -144,7 +144,8 @@ browserSuite('the app of a run, end to end', () => {
       const result = ends[1]?.text ?? '';
       expect(result).toMatch(/^\[Run run_[a-f0-9]+ \(Sacar tu vida laboral\) succeeded\]/);
       expect(result).toContain('marco del idp');
-      expect(result).toContain(`"documentId":"${documentId}"`);
+      expect(result).toContain('"saved":{"name":"Informe de prueba.pdf"}');
+      expect(result).not.toContain(documentId);
 
       // Every tool call of a model that started also ended, with its own id; steps have no end.
       const started = stack
@@ -174,7 +175,8 @@ browserSuite('the app of a run, end to end', () => {
         ['assistant', 'Empiezo con tu vida laboral.'],
         ['procedure', 'Le he preguntado al usuario; sigo en cuanto conteste.'],
         ['assistant', 'Sigo con tu vida laboral.'],
-        ['procedure', `Hecho: el informe está guardado (${documentId}).`],
+        ['procedure', 'Hecho: el informe está guardado ("Informe de prueba.pdf").'],
+        // The coordinator linked it by name; the host keeps the link by id.
         ['assistant', `Listo, ya está guardada.\n[Vida laboral](sa:document/${documentId})`],
       ]);
       // An agent is no procedure's: what it acts on is in its run's steps.

@@ -34,7 +34,7 @@ const AgentStartParams = Type.Object({
     minLength: 1,
     maxLength: 8000,
     description:
-      "The user's goal in their own words and everything they told you that matters (situation, city, dates, preferences, document ids). Never limits they did not set. Not their saved data: the agent reads it itself.",
+      "The user's goal in their own words and everything they told you that matters (situation, city, dates, preferences, document names). Never limits they did not set. Not their saved data: the agent reads it itself.",
   }),
   procedures: Type.Optional(
     Type.Array(ProcedureId, {

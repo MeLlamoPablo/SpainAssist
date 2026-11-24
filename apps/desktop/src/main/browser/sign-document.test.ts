@@ -68,7 +68,7 @@ async function addPdf() {
 
 it('shows the PDF to place the signature, then replaces the document with the signed one', async () => {
   const { pdf, doc } = await addPdf();
-  const call = app.rpc('vault.signDocument', { documentId: doc.id }, token);
+  const call = app.rpc('vault.signDocument', { document: doc.name }, token);
   await app.waitFor(() => !!app.pendingPrompt(procedureId));
   const item = app.pendingPrompt(procedureId)!;
   const prompt = item.prompt as PdfSignaturePrompt;
@@ -91,7 +91,6 @@ it('shows the PDF to place the signature, then replaces the document with the si
     placement: { page: 1, rect: [60, 60, 260, 130] },
   });
   expect((await call).body.result).toEqual({
-    documentId: doc.id,
     name: 'Contrato.pdf',
     signed: true,
   });
@@ -131,14 +130,13 @@ it('lists no signatures for a PDF nobody signed', async () => {
 
 it('leaves the document as it was when the user does not sign', async () => {
   const { pdf, doc } = await addPdf();
-  const call = app.rpc('vault.signDocument', { documentId: doc.id }, token);
+  const call = app.rpc('vault.signDocument', { document: doc.name }, token);
   await app.waitFor(() => !!app.pendingPrompt(procedureId));
   await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
     kind: 'pdf_signature',
     approved: false,
   });
   expect((await call).body.result).toEqual({
-    documentId: doc.id,
     name: 'Contrato.pdf',
     signed: false,
   });
@@ -150,7 +148,7 @@ it('withdraws the card when the agent stops waiting, so a retry shows only one',
   const { pdf, doc } = await addPdf();
   const controller = new AbortController();
   const call = app
-    .rpc('vault.signDocument', { documentId: doc.id }, token, { signal: controller.signal })
+    .rpc('vault.signDocument', { document: doc.name }, token, { signal: controller.signal })
     .catch(() => undefined);
   await app.waitFor(() => !!app.pendingPrompt(procedureId));
   controller.abort();
@@ -167,6 +165,6 @@ it('refuses documents that are not PDFs', async () => {
     source: 'user',
     bytes: Buffer.from('jpeg'),
   });
-  const reply = await app.rpc('vault.signDocument', { documentId: doc.id }, token);
+  const reply = await app.rpc('vault.signDocument', { document: doc.name }, token);
   expect(reply.body).toMatchObject({ ok: false, error: { code: 'bad_request' } });
 });

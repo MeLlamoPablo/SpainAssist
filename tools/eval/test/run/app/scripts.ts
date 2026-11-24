@@ -29,9 +29,9 @@ export const coordinatorRules: Rule[] = [
     id: 'coordinator-relays-document',
     when: {
       ...COORDINATOR,
-      lastUser: `${REPORT_PREFIX}[\\s\\S]*Saved documents: (?<doc>[0-9a-f-]{36})`,
+      lastUser: `${REPORT_PREFIX}[\\s\\S]*Saved documents: "(?<doc>[^"]+)"`,
     },
-    reply: { text: 'Listo, ya está guardada.\n[Vida laboral](sa:document/{{doc}})' },
+    reply: { text: 'Listo, ya está guardada.\n[Vida laboral](<sa:document/{{doc}}>)' },
   },
   {
     // The agent names the document itself: the app's report lists only the documents saved
@@ -39,9 +39,9 @@ export const coordinatorRules: Rule[] = [
     id: 'coordinator-relays-named-document',
     when: {
       ...COORDINATOR,
-      lastUser: `${REPORT_PREFIX}[\\s\\S]*guardado \\((?<doc>[0-9a-f-]{36})\\)`,
+      lastUser: `${REPORT_PREFIX}[\\s\\S]*guardado \\("(?<doc>[^"]+)"\\)`,
     },
-    reply: { text: 'Listo, ya está guardada.\n[Vida laboral](sa:document/{{doc}})' },
+    reply: { text: 'Listo, ya está guardada.\n[Vida laboral](<sa:document/{{doc}}>)' },
   },
   {
     id: 'coordinator-relays',
@@ -126,8 +126,8 @@ export function vidaScenario(): ScenarioInput {
         },
         {
           id: 'report',
-          when: { lastUser: '"documentId":"(?<doc>[0-9a-f-]{36})"' },
-          text: 'Hecho: el informe está guardado ({{doc}}).',
+          when: { lastUser: '"saved":\\{"name":"(?<doc>[^"]+)"\\}' },
+          text: 'Hecho: el informe está guardado ("{{doc}}").',
         },
       ]),
     ],

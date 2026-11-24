@@ -8,7 +8,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { BridgeClient } from '../src/bridge/client';
 import { parseHostConfig } from '../src/config';
 import { BridgeCredentialStore, normalizeCredential } from '../src/host/credentials';
-import { linkedDocumentIds, unknownDocumentsMessage } from '../src/host/document-links';
+import {
+  linkDocumentsById,
+  linkDocumentsByName,
+  linkedDocuments,
+  type SavedDocument,
+  unknownDocumentsMessage,
+} from '../src/host/document-links';
 import { templateFor } from '../src/host/model';
 import { prepareSessionFile, recordResearchUsage, sessionResearchLog } from '../src/host/session';
 import { agentHostPath, buildAgentLaunch } from '../src/launch';
@@ -160,26 +166,71 @@ describe('system prompt', () => {
     const prompt = buildCoordinatorPrompt({ language: 'es' });
     const links = [...prompt.matchAll(/\((sa:[^)\s]+)\)/g)].map((m) => m[1]);
     expect(links).toContain('sa:vault/documents');
-    expect(links).toContain('sa:document/<id>');
     for (const link of links)
       expect(parseAppLink(link.replace('<id>', 'p_0123456789abcdef')), link).not.toBeNull();
+  });
+
+  it('teaches the coordinator to link documents by name, in angle brackets', () => {
+    const prompt = buildCoordinatorPrompt({ language: 'es' });
+    expect(prompt).toContain('(<sa:document/Its exact name.pdf>)');
+    expect(prompt).not.toMatch(/sa:document\/<id>/);
   });
 });
 
 describe('document links', () => {
-  it('finds each linked document once, cards and inline links alike', () => {
+  const contract: SavedDocument = { id: 'doc-1', name: 'Contrato de compraventa.jpeg' };
+  const copy: SavedDocument = { id: 'doc-2', name: 'Contrato (2).pdf' };
+  const itv: SavedDocument = {
+    id: 'doc-3',
+    name: 'Tarjeta ITV.jpeg',
+    previousNames: ['WhatsApp Image 2026-10-15 at 12.26.10.jpeg'],
+  };
+  const saved = [contract, copy, itv];
+
+  it('reads the three forms of a link, each document once', () => {
     expect(
-      linkedDocumentIds(
-        'Mira [el impreso](sa:document/doc-1) y [la tasa](sa:document/doc-2).\n\n[Impreso](sa:document/doc-1)\n[Trámites](sa:procedures)',
+      linkedDocuments(
+        [
+          '[El contrato](<sa:document/Contrato de compraventa.jpeg>)',
+          '[La copia](sa:document/Contrato (2).pdf)',
+          '[Otra vez](sa:document/Contrato%20de%20compraventa.jpeg)',
+          '[Trámites](sa:procedures)',
+        ].join('\n'),
       ),
-    ).toEqual(['doc-1', 'doc-2']);
-    expect(linkedDocumentIds('Sin enlaces.')).toEqual([]);
+    ).toEqual(['Contrato de compraventa.jpeg', 'Contrato (2).pdf']);
+    expect(linkedDocuments('Sin enlaces.')).toEqual([]);
   });
 
-  it('names the unknown ids and lists the saved documents', () => {
-    const message = unknownDocumentsMessage(['doc-x'], [{ id: 'doc-1', name: 'Impreso.pdf' }]);
-    expect(message).toContain('links sa:document/doc-x, but no saved document has that id');
-    expect(message).toContain('\n- doc-1: Impreso.pdf\n');
+  it('keeps links as ids: by name, without extension or by an earlier name', () => {
+    const text = [
+      'Aquí está [el contrato](<sa:document/Contrato de compraventa>)',
+      'y [la copia](sa:document/Contrato (2).pdf),',
+      'y [la ITV](<sa:document/WhatsApp Image 2026-10-15 at 12.26.10.jpeg>).',
+      '[Perdido](<sa:document/Nada.pdf>)',
+    ].join('\n');
+    expect(linkDocumentsById(text, saved)).toBe(
+      [
+        'Aquí está [el contrato](sa:document/doc-1)',
+        'y [la copia](sa:document/doc-2),',
+        'y [la ITV](sa:document/doc-3).',
+        '[Perdido](<sa:document/Nada.pdf>)',
+      ].join('\n'),
+    );
+  });
+
+  it('shows the model current names, never ids', () => {
+    const stored =
+      '[ITV](sa:document/doc-3) [Borrado](sa:document/0f1e2d3c-4b5a-4968-8778-695a4b3c2d1e)';
+    expect(linkDocumentsByName(stored, saved)).toBe(
+      '[ITV](<sa:document/Tarjeta ITV.jpeg>) [Borrado](<sa:document/(deleted document)>)',
+    );
+  });
+
+  it('names the unknown documents and lists the saved ones by name', () => {
+    const message = unknownDocumentsMessage(['Nada.pdf'], [contract]);
+    expect(message).toContain('links "Nada.pdf", but no saved document has that name');
+    expect(message).toContain('\n- Contrato de compraventa.jpeg\n');
+    expect(message).not.toContain('doc-1');
     expect(unknownDocumentsMessage(['a', 'b'], [])).toContain('There are no saved documents.');
   });
 });

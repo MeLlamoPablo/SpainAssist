@@ -36,6 +36,7 @@ import {
   PersonalFieldKey,
   personalFieldDef,
   type SecretSummary,
+  uniqueDocumentName,
   type VaultOverview,
 } from '@sa/shared';
 import {
@@ -130,7 +131,10 @@ export class MemoryVault implements VaultPort {
   async addDocument(opts: AddDocumentOptions): Promise<DocumentMeta> {
     const meta: DocumentMeta = {
       id: `d_${hex()}`,
-      name: opts.name,
+      name: uniqueDocumentName(
+        opts.name,
+        this.listDocuments().map((d) => d.name),
+      ),
       mimeType: opts.mimeType,
       size: opts.bytes.byteLength,
       source: opts.source,
@@ -167,7 +171,17 @@ export class MemoryVault implements VaultPort {
   async renameDocument(id: string, name: string): Promise<DocumentMeta> {
     const doc = this.documents.get(id);
     if (!doc) throw new VaultError('not_found', 'Document not found');
-    doc.meta = { ...doc.meta, name };
+    const others = this.listDocuments().filter((d) => d.id !== id);
+    const free = uniqueDocumentName(
+      name,
+      others.map((d) => d.name),
+    );
+    if (free === doc.meta.name) return { ...doc.meta };
+    doc.meta = {
+      ...doc.meta,
+      name: free,
+      previousNames: [...(doc.meta.previousNames ?? []), doc.meta.name],
+    };
     return { ...doc.meta };
   }
 

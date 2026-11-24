@@ -519,7 +519,8 @@ export function DocumentPicker({
 }: {
   inputId: string;
   value: string;
-  onChange: (id: string) => void;
+  /** The chosen document's id, and its name (an interface's value: agents see no ids). */
+  onChange: (id: string, name: string) => void;
   procedureId?: string;
   describedBy?: string;
 }) {
@@ -535,7 +536,7 @@ export function DocumentPicker({
     setUploading(true);
     try {
       const doc = await uploadToVault(file, { procedureId });
-      onChange(doc.id);
+      onChange(doc.id, doc.name);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -610,7 +611,7 @@ export function DocumentPicker({
                   key={doc.id}
                   type="button"
                   onClick={() => {
-                    onChange(doc.id);
+                    onChange(doc.id, doc.name);
                     setOpen(false);
                   }}
                   className={cn(

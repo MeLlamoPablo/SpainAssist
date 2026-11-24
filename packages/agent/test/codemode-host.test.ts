@@ -56,7 +56,6 @@ function ops(
 }
 
 const PDF_DOCUMENT = {
-  id: 'doc-1',
   name: 'Tasas.pdf',
   mimeType: 'application/pdf',
   dataBase64: readFileSync(join(import.meta.dirname, 'fixtures', 'pdf', 'tasas.pdf')).toString(
@@ -77,14 +76,15 @@ describe('encodeTarget', () => {
 describe('host operations', () => {
   it('read a PDF whole, or one page with its image', async () => {
     const { run, images } = ops({ 'vault.document': PDF_DOCUMENT });
-    const whole = (await run('documents.read', { id: 'doc-1' })) as Record<string, unknown>;
-    expect(whole).toMatchObject({ id: 'doc-1', name: 'Tasas.pdf', pages: 2 });
+    const whole = (await run('documents.read', { name: 'Tasas' })) as Record<string, unknown>;
+    expect(whole).toMatchObject({ name: 'Tasas.pdf', pages: 2 });
+    expect(whole).not.toHaveProperty('id');
     expect(whole.text).toContain('Renovación: 12,00 euros');
     expect(whole.text).toContain('Familia numerosa: exento.');
     expect(whole).not.toHaveProperty('image');
     expect(whole).not.toHaveProperty('truncated');
 
-    const second = (await run('documents.read', { id: 'doc-1', page: 2 })) as {
+    const second = (await run('documents.read', { name: 'Tasas.pdf', page: 2 })) as {
       text: string;
       pages: number;
       image: { imageId: string; mimeType: string };
@@ -98,7 +98,7 @@ describe('host operations', () => {
     // A4 portrait: the longer side is the height.
     expect(png.readUInt32BE(20)).toBe(1600);
 
-    await expect(run('documents.read', { id: 'doc-1', page: 3 })).rejects.toMatchObject({
+    await expect(run('documents.read', { name: 'Tasas.pdf', page: 3 })).rejects.toMatchObject({
       code: 'bad_request',
       message: "This PDF has 2 pages; page 3 doesn't exist.",
     });
@@ -108,30 +108,33 @@ describe('host operations', () => {
     const { run, calls } = ops({
       'vault.document': PDF_DOCUMENT,
       'vault.fillDocument': {
-        documentId: 'doc-2',
         name: 'Tasas (rellenado).pdf',
         pages: [2],
         warnings: ['Value 1 ("Ana"): written smaller to fit.'],
       },
     });
-    const page = (await run('documents.read', { id: 'doc-1', page: 1 })) as {
+    const page = (await run('documents.read', { name: 'Tasas.pdf', page: 1 })) as {
       image: { width: number; height: number };
     };
     // US Letter portrait: 612 × 792 points, 1600 px high.
     expect(page.image).toMatchObject({ width: 1236, height: 1600 });
 
     const filled = await run('documents.fill', {
-      id: 'doc-1',
+      name: 'Tasas.pdf',
       values: [
         { page: 1, x: 618.18, y: 400, text: 'Ana' },
         { page: 2, x: 0, y: 1600, check: true },
       ],
-      name: 'Tasas rellenas',
+      copyName: 'Tasas rellenas',
     });
     const fill = calls.find((c) => c.method === 'vault.fillDocument');
     expect(fill).toMatchObject({
       procedureId: 'p_aaaaaaaaaaaaaaaa',
-      params: { documentId: 'doc-1', name: 'Tasas rellenas' },
+      params: { document: 'Tasas.pdf', name: 'Tasas rellenas' },
+    });
+    // The filled copy's pages come from the copy, by its name.
+    expect(calls.filter((c) => c.method === 'vault.document').at(-1)?.params).toEqual({
+      document: 'Tasas (rellenado).pdf',
     });
     const values =
       (fill?.params as { values: Record<string, unknown>[] } | undefined)?.values ?? [];
@@ -139,35 +142,38 @@ describe('host operations', () => {
     expect(values[0]?.x).toBeCloseTo(0.5, 3);
     expect(values[0]?.y).toBeCloseTo(0.25, 3);
     expect(values[1]).toEqual({ page: 2, x: 0, y: 1, check: true });
+    expect(filled).not.toHaveProperty('documentId');
     expect(filled).toMatchObject({
-      documentId: 'doc-2',
       name: 'Tasas (rellenado).pdf',
       pages: [{ page: 2, image: { mimeType: 'image/png', width: 1236, height: 1600 } }],
       warnings: ['Value 1 ("Ana"): written smaller to fit.'],
     });
 
     await expect(
-      run('documents.fill', { id: 'doc-1', values: [{ page: 1, x: 1300, y: 10, text: 'x' }] }),
+      run('documents.fill', {
+        name: 'Tasas.pdf',
+        values: [{ page: 1, x: 1300, y: 10, text: 'x' }],
+      }),
     ).rejects.toMatchObject({
       code: 'bad_request',
       message: "Value 1: (1300, 10) is outside page 1's image (1236×1600 px).",
     });
     await expect(
-      run('documents.fill', { id: 'doc-1', values: [{ page: 1, x: 10, y: 10 }] }),
+      run('documents.fill', { name: 'Tasas.pdf', values: [{ page: 1, x: 10, y: 10 }] }),
     ).rejects.toMatchObject({ code: 'bad_request', message: 'Value 1: give text or check: true.' });
   });
 
   it('fill nothing for a model that cannot see the pages', async () => {
     const { run, calls } = ops({ 'vault.document': PDF_DOCUMENT }, undefined, false);
     await expect(
-      run('documents.fill', { id: 'doc-1', values: [{ page: 1, x: 10, y: 10, text: 'x' }] }),
+      run('documents.fill', { name: 'Tasas.pdf', values: [{ page: 1, x: 10, y: 10, text: 'x' }] }),
     ).rejects.toMatchObject({ code: 'policy_denied' });
     expect(calls).toEqual([]);
   });
 
   it('read a PDF page as text only for a model that cannot see images', async () => {
     const { run } = ops({ 'vault.document': PDF_DOCUMENT }, undefined, false);
-    const page = await run('documents.read', { id: 'doc-1', page: 1 });
+    const page = await run('documents.read', { name: 'Tasas.pdf', page: 1 });
     expect(page).toMatchObject({ pages: 2 });
     expect(page).not.toHaveProperty('image');
   });

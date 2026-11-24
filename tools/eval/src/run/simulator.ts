@@ -154,8 +154,7 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
   let stopped = false;
   let answerer: Promise<Answerer> | undefined;
   const documents: readonly FixtureDocument[] = fixture.seed?.documents ?? [];
-  /** Vault ids of the persona's documents once picked (saved or uploaded), by key; names by id. */
-  const documentIds = new Map<string, string>();
+  /** Vault names of the persona's documents once picked (saved or uploaded), by key. */
   const documentNames = new Map<string, string>();
 
   const busy = () => !stopped && (working || queue.length > 0);
@@ -449,23 +448,29 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
   // Answering
   // -------------------------------------------------------------------------------------------
 
-  /** The vault id of a persona's document: the saved one, or uploaded the first time it is picked. */
-  async function documentId(document: FixtureDocument, prompt: PendingPrompt): Promise<string> {
-    const known = documentIds.get(document.key);
+  /**
+   * The vault name of a persona's document (a DocumentPicker's value, as the app sends it): the
+   * saved one, or uploaded the first time it is picked (the vault may add " (2)" to its name).
+   */
+  async function documentName(document: FixtureDocument, prompt: PendingPrompt): Promise<string> {
+    const known = documentNames.get(document.key);
     if (known) return known;
     const file = renderDocument(document);
-    let id = document.saved
-      ? (await app.vaultDocuments()).find((saved) => saved.name === file.name)?.id
-      : undefined;
-    id ??= await app.addDocument({
-      name: file.name,
-      mimeType: file.mimeType,
-      bytes: file.bytes,
-      ...(prompt.procedureId ? { procedureId: prompt.procedureId } : {}),
-    });
-    documentIds.set(document.key, id);
-    documentNames.set(id, file.name);
-    return id;
+    const saved = document.saved
+      ? (await app.vaultDocuments()).some((doc) => doc.name === file.name)
+      : false;
+    let name = file.name;
+    if (!saved) {
+      const id = await app.addDocument({
+        name: file.name,
+        mimeType: file.mimeType,
+        bytes: file.bytes,
+        ...(prompt.procedureId ? { procedureId: prompt.procedureId } : {}),
+      });
+      name = (await app.vaultDocuments()).find((doc) => doc.id === id)?.name ?? file.name;
+    }
+    documentNames.set(document.key, name);
+    return name;
   }
 
   /**
@@ -496,7 +501,7 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
         continue;
       }
       taken.add(document.key);
-      picked[field.key] = await documentId(document, prompt);
+      picked[field.key] = await documentName(document, prompt);
     }
     return picked;
   }
@@ -557,8 +562,7 @@ export function createUserSimulator(options: UserSimulatorOptions): UserSimulato
     for (const field of prompt.fields ?? []) {
       const value = response.values?.[field.key];
       if (value === undefined || field.secret || field.type === 'secret') continue;
-      const label = (raw: string) =>
-        field.options?.find((o) => o.value === raw)?.label ?? documentNames.get(raw) ?? raw;
+      const label = (raw: string) => field.options?.find((o) => o.value === raw)?.label ?? raw;
       const shown = Array.isArray(value) ? value.map(label).join(', ') : label(String(value));
       lines.push(`${field.label}: ${shown}`);
     }

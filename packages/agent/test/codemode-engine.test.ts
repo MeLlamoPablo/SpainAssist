@@ -371,10 +371,9 @@ describe('output.image', () => {
             case 'run.begin':
               return { runId: 'run_1', procedures: [], state: { memo: {}, ui: {} } };
             case 'vault.document': {
-              const id = (params as { documentId: string }).documentId;
+              const id = (params as { document: string }).document;
               await sleep((docs.length - docs.indexOf(id)) * 15);
               return {
-                id,
                 name: `Foto ${id}.jpg`,
                 mimeType: 'image/jpeg',
                 dataBase64: Buffer.from(id).toString('base64'),
@@ -421,11 +420,11 @@ describe('output.image', () => {
   }));`);
     // doc_c finished first: the captions, not the order, say which image is which.
     expect(shown).toEqual([
-      'Image 1: Foto 3 — document "Foto doc_c.jpg" (id doc_c)',
+      'Image 1: Foto 3 — document "Foto doc_c.jpg"',
       '<doc_c>',
-      'Image 2: document "Foto doc_b.jpg" (id doc_b)',
+      'Image 2: document "Foto doc_b.jpg"',
       '<doc_b>',
-      'Image 3: Foto 1 — document "Foto doc_a.jpg" (id doc_a)',
+      'Image 3: Foto 1 — document "Foto doc_a.jpg"',
       '<doc_a>',
     ]);
   });
@@ -443,8 +442,8 @@ describe('output.image', () => {
     ]);
     expect(shown.at(-1)).toBe(
       'Not shown (at most 4 images per run; show the rest in another run):\n' +
-        'Image 5: doc_e — document "Foto doc_e.jpg" (id doc_e)\n' +
-        'Image 6: doc_f — document "Foto doc_f.jpg" (id doc_f)',
+        'Image 5: doc_e — document "Foto doc_e.jpg"\n' +
+        'Image 6: doc_f — document "Foto doc_f.jpg"',
     );
   });
 });

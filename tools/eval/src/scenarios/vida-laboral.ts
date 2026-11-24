@@ -155,7 +155,7 @@ export function fromDownload(
   const saved = await api.documents.saveDownload(downloads[0].downloadId, 'Informe de vida laboral');${
     options.readReport
       ? `
-  const report = await api.documents.read(saved.documentId);`
+  const report = await api.documents.read(saved.name);`
       : ''
   }
   await procedure.update({
@@ -164,7 +164,7 @@ export function fromDownload(
     steps: ${STEPS}.map((s) => ({ ...s, status: 'done' })),
     nextAction: null,
   });
-  return '${SAVED} ' + saved.documentId${options.readReport ? " + '\\n\\n' + report.text" : ''};`,
+  return '${SAVED} ' + saved.name${options.readReport ? " + '\\n\\n' + report.text" : ''};`,
     { title: 'Sacar tu vida laboral' },
   );
 }

@@ -5,6 +5,8 @@ import {
   type CredentialPrompt,
   type CredentialSummary,
   credentialAllowedOn,
+  type DocumentMeta,
+  findDocumentByName,
   hiddenFromAgents,
   type Language,
   type PhoneCallPrompt,
@@ -141,6 +143,30 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       'info',
       t(lang(), 'savedToVault', { labels }),
       agentId === ASSISTANT_AGENT_ID || !deps.procedures.has(agentId) ? undefined : agentId,
+    );
+  }
+
+  /** The saved document an agent means by `name` (`findDocumentByName`); agents never see ids. */
+  function documentNamed(name: string): DocumentMeta {
+    const documents = deps.vault().listDocuments();
+    const lookup = findDocumentByName(documents, name);
+    if ('found' in lookup) return lookup.found;
+    if ('renamed' in lookup)
+      throw new BridgeError(
+        'not_found',
+        `No document is named "${name}" now: it was renamed to "${lookup.renamed.name}".`,
+      );
+    if ('ambiguous' in lookup)
+      throw new BridgeError(
+        'not_found',
+        `"${name}" could be ${lookup.ambiguous.map((d) => `"${d.name}"`).join(' or ')}: give the whole name.`,
+      );
+    const names = documents.slice(0, 30).map((d) => `"${d.name}"`);
+    throw new BridgeError(
+      'not_found',
+      names.length > 0
+        ? `No document is named "${name}". Saved documents: ${names.join(', ')}.`
+        : `No document is named "${name}": there are no saved documents.`,
     );
   }
 
@@ -408,7 +434,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
           .filter((p) => (!keys || keys.has(p.key)) && !hiddenFromAgents(p.key))
           .map((p) => ({ key: p.key, label: p.label, value: p.value })),
         documents: vault.listDocuments().map((d) => ({
-          id: d.id,
           name: d.name,
           mimeType: d.mimeType,
           createdAt: d.createdAt,
@@ -455,17 +480,19 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       documents: deps
         .vault()
         .listDocuments()
-        .map((d) => ({ id: d.id, name: d.name })),
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          ...(d.previousNames ? { previousNames: d.previousNames } : {}),
+        })),
     }),
     'vault.document': async (params) => {
       const vault = deps.vault();
-      const meta = vault.getDocument(params.documentId);
-      if (!meta) throw new BridgeError('not_found', `No document with id "${params.documentId}".`);
+      const meta = documentNamed(params.document);
       if (meta.size > MAX_READ_DOCUMENT_BYTES)
         throw new BridgeError('bad_request', 'The document is too large to read (max 25 MB).');
       const bytes = await vault.readDocument(meta.id);
       return {
-        id: meta.id,
         name: meta.name,
         mimeType: meta.mimeType,
         dataBase64: Buffer.from(bytes).toString('base64'),
@@ -473,8 +500,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
     },
     'vault.renameDocument': async (params) => {
       const vault = deps.vault();
-      const meta = vault.getDocument(params.documentId);
-      if (!meta) throw new BridgeError('not_found', `No document with id "${params.documentId}".`);
+      const meta = documentNamed(params.document);
       let renamed: { id: string; name: string };
       try {
         renamed = await vault.renameDocument(meta.id, documentFileName(params.name, meta.name));
@@ -482,13 +508,12 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
         throw new BridgeError('bad_request', truncate(errorMessage(err), 300));
       }
       vaultChanged();
-      return { documentId: renamed.id, name: renamed.name };
+      return { name: renamed.name };
     },
 
     'vault.fillDocument': async (params, ctx) => {
       const vault = deps.vault();
-      const meta = vault.getDocument(params.documentId);
-      if (!meta) throw new BridgeError('not_found', `No document with id "${params.documentId}".`);
+      const meta = documentNamed(params.document);
       if (!deps.signer) throw new BridgeError('unavailable', 'Filling in PDFs is not available.');
       if (meta.mimeType !== 'application/pdf')
         throw new BridgeError('bad_request', 'Only PDF documents can be filled in.');
@@ -533,7 +558,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       }
       vaultChanged();
       return {
-        documentId: saved.id,
         name: saved.name,
         pages: filled.pages,
         warnings: filled.warnings,
@@ -557,21 +581,20 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
         procedureId: ctx.procedureId,
       });
       vaultChanged();
-      return { documentId: saved.id, name: saved.name, pages: created.pages };
+      return { name: saved.name, pages: created.pages };
     },
 
     'vault.signDocument': async (params, ctx) => {
-      const meta = deps.vault().getDocument(params.documentId);
-      if (!meta) throw new BridgeError('not_found', `No document with id "${params.documentId}".`);
+      const meta = documentNamed(params.document);
       if (meta.mimeType !== 'application/pdf') {
         throw new BridgeError('bad_request', 'Only PDF documents can be signed.');
       }
       try {
         const signed = await deps.browser.signDocument(ctx.procedureId, meta.id, ctx.signal);
-        return { documentId: signed.id, name: signed.name, signed: true };
+        return { name: signed.name, signed: true };
       } catch (err) {
         if (err instanceof UserError && err.code === 'cancelled') {
-          return { documentId: meta.id, name: meta.name, signed: false };
+          return { name: meta.name, signed: false };
         }
         throw new BridgeError('bad_request', truncate(errorMessage(err), 300));
       }
@@ -590,7 +613,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
           'not_found',
           'No such download in this procedure (it may be saved already). Use a downloadId from a browser result.',
         );
-      return { documentId: saved.id, name: saved.name };
+      return { name: saved.name };
     },
     'downloads.list': async (_params, ctx) => ({
       downloads: deps.browser.downloads
@@ -743,13 +766,12 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
     'browser.upload': async (params, ctx) => {
       const vault = deps.vault();
       const files: { name: string; mimeType: string; buffer: Buffer }[] = [];
-      for (const id of params.documentIds) {
-        const meta = vault.getDocument(id);
-        if (!meta) throw new BridgeError('not_found', `No document with id "${id}".`);
+      for (const name of params.documents) {
+        const meta = documentNamed(name);
         files.push({
           name: meta.name,
           mimeType: meta.mimeType,
-          buffer: Buffer.from(await vault.readDocument(id)),
+          buffer: Buffer.from(await vault.readDocument(meta.id)),
         });
       }
       return observe(ctx.procedureId, (b) => b.upload(ctx.procedureId, params.ref, files));

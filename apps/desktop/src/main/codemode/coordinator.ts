@@ -288,7 +288,7 @@ export class CodemodeCoordinator {
       .filter((d) => d.procedureId && procedures.includes(d.procedureId) && d.createdAt >= since)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 5)
-      .map((d) => `${d.id} "${d.name}"`);
+      .map((d) => `"${d.name}"`);
     return saved.length ? `\nSaved documents: ${saved.join('; ')}` : '';
   }
 

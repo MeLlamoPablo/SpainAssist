@@ -23,9 +23,9 @@ So neither names nor heuristic labels reach the agent. It reasons from the page 
 
 The agent works like a person with a pen:
 
-1. `api.documents.read(id, { page })`: the page's text and its image (1600 px on the longer side;
+1. `api.documents.read(name, { page })`: the page's text and its image (1600 px on the longer side;
    `image.width`/`height` give the size), which the agent looks at with `api.output.image`.
-2. `api.documents.fill(id, values)`: each value is `{ page, x, y, text }` or
+2. `api.documents.fill(name, values)`: each value is `{ page, x, y, text }` or
    `{ page, x, y, check: true }`, with x, y in pixels of that page's image: the middle of the box,
    line or checkbox where it goes.
 3. fill returns the filled pages' images. The agent checks them; to correct anything it fills the

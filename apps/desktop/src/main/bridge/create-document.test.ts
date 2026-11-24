@@ -23,8 +23,8 @@ it('saves the written PDF in the documents, with its fields, for the procedure',
     { name: 'Contrato de préstamo', markdown: '# Contrato\n\nDomicilio: ______[Domicilio]' },
     token,
   );
-  const documentId = reply.body.result?.documentId as string;
-  expect(reply.body.result).toEqual({ documentId, name: 'Contrato de préstamo.pdf', pages: 1 });
+  expect(reply.body.result).toEqual({ name: 'Contrato de préstamo.pdf', pages: 1 });
+  const [{ id: documentId }] = app.vault.listDocuments();
   expect(app.vault.getDocument(documentId)).toMatchObject({
     mimeType: 'application/pdf',
     source: 'agent',
