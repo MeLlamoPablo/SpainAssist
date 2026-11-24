@@ -57,14 +57,16 @@ function Badge({
 }
 
 /** Shows `tip` beside `children` while the pointer or the focus is on them. */
-function Hover({ tip, children }: { tip: ReactNode; children: ReactNode }) {
+function Hover({ tip, right, children }: { tip: ReactNode; right?: boolean; children: ReactNode }) {
   const [at, setAt] = useState<{ x: number; y: number; below: boolean }>();
   const show = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
     const below = r.top < window.innerHeight / 2;
+    // Beside it (the sidebar's list), else under or over it.
+    const [top, bottom] = right ? [r.top - 10, r.bottom + 10] : [r.bottom + 6, r.top - 6];
     setAt({
-      x: Math.min(r.left, window.innerWidth - 380),
-      y: below ? r.bottom + 6 : r.top - 6,
+      x: Math.min(right ? r.right + 8 : r.left, window.innerWidth - 380),
+      y: below ? top : bottom,
       below,
     });
   };
@@ -164,7 +166,7 @@ export function EvalSummary({ run, onOpen }: { run: EvalRun; onOpen(check: EvalC
           const Icon = c.passed ? CircleCheck : CircleX;
           return (
             <li key={c.ruleId}>
-              <Hover tip={<CheckText check={c} />}>
+              <Hover tip={<CheckText check={c} />} right>
                 <button type="button" disabled={!c.spanId} onClick={() => onOpen(c)}>
                   <Icon size={13} className={c.passed ? 'pass' : 'fail'} aria-hidden />
                   <span className="eval-rule">{c.ruleId}</span>
