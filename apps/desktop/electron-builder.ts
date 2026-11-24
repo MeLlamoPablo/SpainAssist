@@ -26,7 +26,7 @@
  *   only the MSIX).
  * - Linux ships as a .deb, the only Linux target.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildSidecar } from '@sa/sidecar/build';
 // The beforePack context has the same type as afterPack's (`PackContext`, not exported).
@@ -99,6 +99,29 @@ async function beforePack(context: AfterPackContext): Promise<void> {
   stageChromium(path.join(projectDir, 'vendor', `${platform}-${arch}`, BUNDLED_CHROMIUM_DIR));
 }
 
+/** Where updates come from (`publish`): GitHub Releases. */
+const PUBLISH = { provider: 'github', owner: 'MeLlamoPablo', repo: 'SpainAssist' } as const;
+
+/**
+ * Writes `app-update.yml` into the macOS app, where electron-updater reads where updates come
+ * from. electron-builder writes it only when the same run makes a dmg or zip, and release.yml
+ * packs the app alone (`package:mac:app`, `--mac dir`), then makes the dmg and zip from the
+ * notarized app with `--prepackaged`, which can't change it: without this, v0.3.0 to v0.5.0 on
+ * macOS never updated. afterPack runs before signing, so the signature covers the file. The
+ * content is electron-builder's own: `publish` and the updater's cache folder.
+ */
+async function afterPack(context: AfterPackContext): Promise<void> {
+  if (context.electronPlatformName !== 'darwin') return;
+  const file = path.join(context.packager.getResourcesDir(context.appOutDir), 'app-update.yml');
+  if (existsSync(file)) return;
+  const { provider, owner, repo } = PUBLISH;
+  const cacheDir = context.packager.appInfo.updaterCacheDirName;
+  writeFileSync(
+    file,
+    `owner: ${owner}\nrepo: ${repo}\nprovider: ${provider}\nupdaterCacheDirName: ${cacheDir}\n`,
+  );
+}
+
 /** Microsoft Store identity of the app (Partner Center, Store ID 9ND5MF94VKGC). */
 const STORE_IDENTITY = {
   identityName: '28203PabloCaballero.SpainAssist',
@@ -147,6 +170,7 @@ const config: Configuration = {
   // The UI is in Spanish and English: drop Chromium's other locales.
   electronLanguages: ['en', 'es'],
   beforePack,
+  afterPack,
   electronFuses: {
     // The agent host runs this binary as Node (ELECTRON_RUN_AS_NODE). Turn it off when the host
     // moves to utilityProcess.
@@ -166,7 +190,7 @@ const config: Configuration = {
   // `latest*.yml` update files next to the installers. CI uploads them to the release itself
   // (`--publish never`, .github/workflows/release.yml). Windows, macOS (from the zip, signed
   // releases only) and the Linux .deb update themselves.
-  publish: { provider: 'github', owner: 'MeLlamoPablo', repo: 'SpainAssist' },
+  publish: PUBLISH,
   mac: {
     target: ['dmg', 'zip'],
     category: 'public.app-category.productivity',

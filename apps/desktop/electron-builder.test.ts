@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { sidecarBinaryPath } from '@sa/sidecar';
-import type { Configuration, FileSet } from 'electron-builder';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AfterPackContext, Configuration, FileSet } from 'electron-builder';
+import { afterEach, assert, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { BUNDLED_CHROMIUM_DIR } from './src/main/browser/bundled';
 import { NSIS_UNINSTALL_KEY } from './src/main/migrate/nsis-install';
 
@@ -111,6 +112,18 @@ describe('electron-builder config', () => {
     });
   });
 
+  // release.yml packs the macOS app alone (`--mac dir`), where electron-builder writes no
+  // app-update.yml: v0.3.0 to v0.5.0 on macOS never updated.
+  it('writes where updates come from into a macOS app packed alone, before signing', async () => {
+    const config = await loadConfig();
+    const resources = await packMacApp(config);
+    const updateConfig = readFileSync(path.join(resources, 'app-update.yml'), 'utf8');
+    expect(parseFlatYaml(updateConfig)).toEqual({
+      ...(config.publish as object),
+      updaterCacheDirName: '@sadesktop-updater',
+    });
+  });
+
   it('ships the Chromium beforePack stages to where the packaged app looks for it', async () => {
     const resources = (await loadConfig()).extraResources as FileSet[];
     expect(resources).toContainEqual({
@@ -162,4 +175,37 @@ function uuidV5(name: string, namespace: string): string {
   hash[8] = (hash[8] & 0x3f) | 0x80;
   const hex = hash.subarray(0, 16).toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * Runs the config's afterPack on an empty macOS app packed with the `dir` target alone, as
+ * release.yml's `package:mac:app` does, and returns its Resources folder.
+ */
+async function packMacApp(config: Configuration): Promise<string> {
+  const appOutDir = mkdtempSync(path.join(os.tmpdir(), 'sa-pack-'));
+  onTestFinished(() => rmSync(appOutDir, { recursive: true, force: true }));
+  const resources = path.join(appOutDir, 'Spain Assist.app', 'Contents', 'Resources');
+  mkdirSync(resources, { recursive: true });
+  const context = {
+    electronPlatformName: 'darwin',
+    appOutDir,
+    targets: [{ name: 'dir' }],
+    packager: {
+      getResourcesDir: () => resources,
+      appInfo: { updaterCacheDirName: '@sadesktop-updater' },
+    },
+  } as unknown as AfterPackContext;
+  assert(typeof config.afterPack === 'function', 'the config has an afterPack hook');
+  await config.afterPack(context);
+  return resources;
+}
+
+/** `key: value` lines, the only YAML app-update.yml holds. */
+function parseFlatYaml(text: string): Record<string, string> {
+  return Object.fromEntries(
+    text
+      .trim()
+      .split('\n')
+      .map((line) => line.split(': ') as [string, string]),
+  );
 }
