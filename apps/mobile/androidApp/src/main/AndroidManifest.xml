@@ -6,8 +6,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Without NFC the app can't read the DNIe: don't offer it to phones without one. -->
-    <uses-feature android:name="android.hardware.nfc" android:required="true" />
+    <!-- The app needs NFC to read the DNIe, but Play's pre-review check flags a required NFC
+         feature. Phones without NFC install it and see the "no NFC" banner on the start screen. -->
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <!-- Pairing secrets live in the Keystore-encrypted store: never back them up. -->

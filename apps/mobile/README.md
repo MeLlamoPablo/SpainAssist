@@ -192,7 +192,9 @@ even when a previous build with that code was only a draft. Keep released tags f
   `keytool -list -v -keystore ~/spainassist-upload.jks -alias upload | grep SHA256:`; the
   workflow's "Check the signature" step prints it as well). Without them, links open the
   relay's `/p` page, which offers "Abrir en la app".
-- **NFC.** The app requires `android.hardware.nfc`.
+- **NFC.** The manifest declares `android.hardware.nfc` as optional, so Play's pre-review check
+  doesn't flag it. On a phone without NFC, the start screen shows the "no NFC" banner and
+  disables the scan button.
 - **APK outside Google Play.** `.github/workflows/android-apk.yml` downloads the universal APK
   that Google Play signs for a version already in Play, checks its package, version and
   signature, and keeps it as the artifact `android-apk`. With `publish`, it attaches it to the
