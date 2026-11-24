@@ -330,7 +330,8 @@ or rating learnings (searching still works).
   it, and packaged builds download it from master on GitHub at most once an hour (the bundled or
   last read one when GitHub fails), so **a push that changes it changes every installed app**. A
   ChatGPT account runs each list's first model its plan offers (`packages/agent/README.md`).
-- **Error reports.** Packaged builds send crashes and uncaught errors to our GlitchTip (Sentry
+- **Error reports.** Packaged builds send crashes, uncaught errors and every `warn` and `error` line
+  of the main logger (the errors the app catches, a few per message and run) to our GlitchTip (Sentry
   protocol), when both the `error-reports` flag and the user's anonymous learnings sharing setting are
   on. Only errors are sent: no breadcrumbs, no tracing, no memory dumps. Every event is scrubbed with `@sa/pii`.
 

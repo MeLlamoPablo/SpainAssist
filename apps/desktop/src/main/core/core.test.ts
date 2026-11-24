@@ -270,7 +270,7 @@ describe('env', () => {
     ).toBe(PRODUCTION_SERVICES.mapsServerUrl);
   });
 
-  it('sends error reports from packaged builds, and from development builds only when asked', () => {
+  it('sends error reports from packaged builds, and from development and e2e builds only when asked', () => {
     const dsn = 'https://abc@errors.example.com/1';
     expect(parseEnv({}, { packaged: true }).errorReportsDsn).toBe(
       PRODUCTION_SERVICES.errorReportsDsn,
@@ -280,7 +280,8 @@ describe('env', () => {
     );
     expect(parseEnv({}).errorReportsDsn).toBeUndefined();
     expect(parseEnv({ SA_ERROR_REPORTS_DSN: dsn }).errorReportsDsn).toBe(dsn);
-    expect(parseEnv({ SA_ERROR_REPORTS_DSN: dsn, SA_E2E: '1' }).errorReportsDsn).toBeUndefined();
+    expect(parseEnv({ SA_E2E: '1' }).errorReportsDsn).toBeUndefined();
+    expect(parseEnv({ SA_ERROR_REPORTS_DSN: dsn, SA_E2E: '1' }).errorReportsDsn).toBe(dsn);
   });
 
   it('rejects malformed SA_PROVIDER', () => {

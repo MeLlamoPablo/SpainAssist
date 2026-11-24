@@ -9,7 +9,7 @@ import { join } from 'node:path';
  *  - obvious secret shapes (Bearer tokens, sk-... keys, JWTs) are masked as a last line of defense.
  */
 
-type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface Logger {
   debug(msg: string, data?: unknown): void;
@@ -22,7 +22,13 @@ export interface Logger {
   addSecret(value: string | undefined | null): void;
 }
 
-type LogSink = (line: string, level: LogLevel) => void;
+/** A line's scope and message, without its data: error reports group lines by them. */
+export interface LogEntry {
+  scope?: string;
+  msg: string;
+}
+
+export type LogSink = (line: string, level: LogLevel, entry: LogEntry) => void;
 
 const LEVELS: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
@@ -91,7 +97,7 @@ export interface CreateLoggerOptions {
   dir?: string;
   level?: LogLevel;
   console?: boolean;
-  /** Extra sinks (tests). */
+  /** Extra sinks: error reports (errors/reports.ts), tests. */
   sinks?: LogSink[];
 }
 
@@ -141,7 +147,7 @@ export function createLogger(opts: CreateLoggerOptions = {}): Logger & { close()
     line = mask.apply(line);
     for (const sink of sinks) {
       try {
-        sink(line, level);
+        sink(line, level, { scope, msg });
       } catch {
         // never let logging break the app
       }

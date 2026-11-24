@@ -368,6 +368,7 @@ async function main(): Promise<void> {
     dir: paths.logsDir,
     level: env.logLevel ?? (isDev ? 'debug' : 'info'),
     console: isDev && !env.e2e,
+    sinks: errorReports ? [errorReports.logSink] : [],
   });
   const log = logger;
   for (const warning of env.warnings) log.warn(warning);

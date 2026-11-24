@@ -22,7 +22,8 @@ import type { UserKey } from '../providers/manager';
  *                            LAN address. E2e runs have none unless this points at one
  *   SA_ERROR_REPORTS_DSN     development only: send error reports to this Sentry-compatible DSN
  *                            (packaged builds use PRODUCTION_SERVICES.errorReportsDsn). Without
- *                            it, development builds send none. The `error-reports` flag and the
+ *                            it, development and e2e builds send none (e2e/tests/error-reports.spec.ts
+ *                            sets one). The `error-reports` flag and the
  *                            anonymous data sharing setting still apply (SA_FEATURE_FLAGS=error-reports turns it on)
  *   SA_FEATURE_FLAGS         development only: comma-separated Unleash flag names to turn on,
  *                            instead of asking Unleash (e.g. "dnie-phone"), each with an optional
@@ -222,9 +223,7 @@ export function parseEnv(input: NodeJS.ProcessEnv, opts: { packaged?: boolean } 
     (out.e2e ? undefined : PRODUCTION_SERVICES.relayServerUrl);
   out.errorReportsDsn = opts.packaged
     ? PRODUCTION_SERVICES.errorReportsDsn
-    : out.e2e
-      ? undefined
-      : parseUrl('SA_ERROR_REPORTS_DSN', env.SA_ERROR_REPORTS_DSN, warnings);
+    : parseUrl('SA_ERROR_REPORTS_DSN', env.SA_ERROR_REPORTS_DSN, warnings);
   const deciderUrl = parseUrl('SA_DECIDER_URL', env.SA_DECIDER_URL, warnings);
   if (out.e2e) {
     // Test runners may only send a supplied dummy key to a loopback mock.

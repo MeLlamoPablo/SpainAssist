@@ -2,6 +2,8 @@ import { homedir } from 'node:os';
 import { scrubPii } from '@sa/pii';
 import type { InstallChannel } from '@sa/shared';
 import * as Sentry from '@sentry/electron/main';
+import type { LogSink } from '../core/logger';
+import { createLogReporter } from './log-reports';
 import { scrubReport } from './scrub';
 
 export interface ErrorReports {
@@ -10,12 +12,17 @@ export interface ErrorReports {
    * anonymous data sharing setting. Until it is set (flags load after `ready`) nothing is sent.
    */
   setGate(allowed: () => boolean): void;
+  /** The main logger's sink: its `warn` and `error` lines become reports (log-reports.ts). */
+  logSink: LogSink;
 }
 
 /**
  * Error reports to GlitchTip with the Sentry SDK. Must run before `ready`: the SDK
  * registers the `sentry-ipc` scheme the renderer's SDK hands its events to main through, so
  * renderer errors pass the same gate and scrubbing.
+ *
+ * Uncaught errors and rejections, child-process crashes, and every `warn` and `error` line of
+ * the main logger (`logSink`), which covers the errors the app catches.
  *
  * Only errors: no tracing, sessions, breadcrumbs (they hold URLs, console lines and clicked UI
  * text), local variables or minidumps (process memory), and no offline queue (an opt-out must
@@ -57,9 +64,19 @@ export function startErrorReports(opts: {
     beforeSend: (event) => (allowed() ? scrubReport(event, { homeDir, scrubPii }) : null),
     beforeSendTransaction: () => null,
   });
+  const logs = createLogReporter((report) =>
+    Sentry.captureEvent({
+      level: report.level,
+      message: report.message,
+      fingerprint: report.fingerprint,
+      ...(report.scope ? { logger: report.scope, tags: { scope: report.scope } } : {}),
+    }),
+  );
   return {
     setGate(gate) {
       allowed = gate;
+      logs.open();
     },
+    logSink: logs.sink,
   };
 }
