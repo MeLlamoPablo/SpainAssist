@@ -36,6 +36,21 @@ A capture's Playwright calls are also drawn under the `browser.*` call of the ru
 (by time, among the agents that served the capture's procedure), and its screenshots run along the
 top of the agent's timeline.
 
+### An eval run's checks
+
+An eval run also shows its checks: the fixture's rules, as `result.json` judged them. Each check
+that held at some point goes on the call that was in flight then (the rule's `firstSeenAtSeq` in
+`events.jsonl`): the innermost `api.*` call of the tool call in progress, else the call in flight
+at that time, else the model call or tool call that ended just before. A green badge is a check
+that passed, a red one a check that failed; a folded span shows its children's badges, dimmed.
+Hover a badge for what the rule asks, the event at which it first held, how the eval judged it
+and what it does to the score (a failed required check, a scored check's share of the points, a
+harm). The sidebar lists all the checks; one tied to a call opens it. Checks that never held
+(a required rule never met, a scored rule not earned) have no call.
+
+What each rule asks, the weights and the harms come from the fixture as `@sa/eval` has it now
+(`src/server/eval.ts`), so they can differ from the version that ran.
+
 ## Using it
 
 - The sidebar lists traces; a selected agent lists its turns. A turn is what one message set off.
@@ -61,6 +76,8 @@ folders or logs). Don't commit or share a real profile's files.
 | `src/lib/load.ts` | Files → traces, and browser calls placed under the run calls that made them |
 | `src/lib/zip.ts` | A zip reader for the browser and Node (`DecompressionStream`, lazy) |
 | `src/server/api.ts` | The Vite plugin: the opened files, uploads, Playwright's viewer |
+| `src/server/eval.ts` | An eval run's checks (`eval.json`): outcomes, their moment, the fixture's facts |
+| `src/lib/checks.ts` | Checks placed on spans, and what each does to the score |
 | `src/ui/` | The waterfall (virtualized rows, keyboard tree), filmstrip, details |
 | `src/ui/highlight.ts` | Syntax colors for codemode modules and tools' JSON input (Shiki: the JavaScript and JSON grammars, GitHub's light and dark themes) |
 | `src/demo.ts` | The `--demo` profile |

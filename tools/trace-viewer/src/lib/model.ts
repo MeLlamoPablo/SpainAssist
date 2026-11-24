@@ -2,6 +2,7 @@
  * What the viewer draws: a tree of timed spans per trace. Times are epoch milliseconds, so spans
  * from different files (an agent's pi session, a Playwright trace) line up on one clock.
  */
+import type { EvalCheck } from './checks.ts';
 
 export type SpanKind =
   /** A whole agent session (the root). */
@@ -48,6 +49,10 @@ export interface Span {
   attrs?: [string, string][];
   /** The Playwright trace this span comes from (browser spans). */
   browser?: { traceId: string; callId?: string };
+  /** The model's id of a tool call (`tool` spans). */
+  toolCallId?: string;
+  /** An eval run's checks that this span made pass or fail (`placeChecks`). */
+  checks?: EvalCheck[];
   children: Span[];
 }
 

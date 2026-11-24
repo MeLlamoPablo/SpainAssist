@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import type { ThemedToken } from 'shiki/core';
 import { formatClock, formatCost, formatDuration, formatTokens } from '../lib/format';
 import { type BrowserTrace, type Frame, type Span, totalCost, totalTokens } from '../lib/model';
+import { CheckText } from './Checks';
 import { frameAt } from './data';
 import { Thumb } from './Filmstrip';
 import { highlight, type Lang } from './highlight';
@@ -120,6 +121,15 @@ export function Details({
             <pre>{span.error}</pre>
           </section>
         )}
+
+        {span.checks?.length ? (
+          <section className="block">
+            <h3>Eval checks</h3>
+            {span.checks.map((check) => (
+              <CheckText key={check.ruleId} check={check} />
+            ))}
+          </section>
+        ) : null}
 
         {(before || after) && (
           <section className="block">

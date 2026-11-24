@@ -2,7 +2,7 @@
  * The viewer's local API, as a Vite plugin (loopback only):
  *
  *   GET  /api/source            what was opened: { name, kind: 'dir' | 'file', files }
- *   GET  /api/file?path=<rel>   one of those files
+ *   GET  /api/file?path=<rel>   one of those files (`eval.json`: an eval run's checks, made here)
  *   POST /api/upload            keeps a dropped trace.zip in memory, answers { url }
  *   GET  /api/upload/<id>       it, for the Playwright trace viewer
  *   POST /api/format            a codemode module laid out by Biome (422 when it does not parse)
@@ -18,6 +18,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import type { Plugin } from 'vite';
+import { EVAL_FILE } from '../lib/checks.ts';
+import { isEvalRun, readEvalRun } from './eval.ts';
 
 const LISTED =
   /(?:\.jsonl|(?:^|\/)agent\.json|(?:^|\/)procedure\.json|(?:^|\/)capture\.json|\.zip)$/;
@@ -135,6 +137,18 @@ export function tracesApi(input: string | undefined): Plugin {
       problem = `Cannot open ${input}: ${err instanceof Error ? err.message : String(err)}`;
     }
   }
+  // An eval run's checks: read once, on the first request.
+  let evalRun: Promise<object | undefined> | undefined;
+  const checks = () => {
+    evalRun ??=
+      source?.kind === 'dir' && isEvalRun(source.root)
+        ? readEvalRun(source.root).catch((err) => {
+            console.warn(`The eval run's checks: ${err instanceof Error ? err.message : err}`);
+            return undefined;
+          })
+        : Promise.resolve(undefined);
+    return evalRun;
+  };
   const viewer = playwrightViewerDir();
   const uploads = new Map<string, Buffer>();
   let uploadCount = 0;
@@ -158,14 +172,14 @@ export function tracesApi(input: string | undefined): Plugin {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname === '/api/source') {
       if (problem) return send(res, 500, problem);
-      return send(
-        res,
-        200,
-        source ? { name: source.name, kind: source.kind, files: source.files } : { name: null },
-      );
+      if (!source) return send(res, 200, { name: null });
+      const files = (await checks()) ? [...source.files, EVAL_FILE] : source.files;
+      return send(res, 200, { name: source.name, kind: source.kind, files });
     }
     if (url.pathname === '/api/file') {
       const rel = url.searchParams.get('path') ?? '';
+      const run = rel === EVAL_FILE ? await checks() : undefined;
+      if (run) return send(res, 200, run);
       // Only what the listing named: never a path outside it.
       if (!source?.files.includes(rel)) return send(res, 404, 'Not found');
       return sendFile(res, join(source!.root, ...rel.split('/')));

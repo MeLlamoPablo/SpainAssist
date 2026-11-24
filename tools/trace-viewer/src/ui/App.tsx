@@ -21,6 +21,7 @@ import {
   totalTokens,
   walk,
 } from '../lib/model';
+import { EvalSummary } from './Checks';
 import { Details } from './Details';
 import { type Opened, openFile, openInPlaywright, openServerSource } from './data';
 import { LEGEND } from './kinds';
@@ -180,6 +181,20 @@ export function App() {
               onChange={(e) => setQuery(e.target.value)}
             />
           </label>
+        )}
+
+        {opened?.eval && (
+          <EvalSummary
+            run={opened.eval}
+            onOpen={(check) => {
+              const target = opened.traces.find((t) => t.id === check.traceId);
+              const span = target && [...walk(target.root)].find((s) => s.id === check.spanId);
+              if (!target || !span) return;
+              setTraceId(target.id);
+              setFocusId(undefined);
+              setSelected(span);
+            }}
+          />
         )}
 
         <nav className="list" aria-label="Traces">

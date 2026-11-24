@@ -165,6 +165,7 @@ export function parseSession(text: string, meta: SessionMeta): Span {
             start: at,
             detail: toolDetail(call),
             input: toolInput(call),
+            ...(call.id ? { toolCallId: call.id } : {}),
             children: [],
           };
           parent.children.push(span);

@@ -786,6 +786,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.3.0
         version: 5.3.0
+      '@sa/eval':
+        specifier: workspace:*
+        version: link:../eval
       '@sa/mock-sede':
         specifier: workspace:*
         version: link:../../apps/mock-sede

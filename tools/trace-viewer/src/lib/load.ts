@@ -8,12 +8,14 @@
  *   procedures/<id>/capture/<run>/trace.zip     browser captures (SA_BROWSER_CAPTURE=1)
  *
  * An eval run's folder (`tools/eval`) has that layout under `profile/`, and its captures in
- * `browser/<procedure id>/<run>/trace.zip`.
+ * `browser/<procedure id>/<run>/trace.zip`. The server adds its checks (`eval.json`), which go on
+ * the spans that made them pass or fail (`placeChecks`).
  *
  * Any other `*.jsonl` is read as a pi session and any other `*.zip` as a Playwright trace, so a
  * single file opens too. Browser calls are also placed under the `browser.*` call of the run
  * that made them, by time, among the agents that served the capture's procedure.
  */
+import { consequence, EVAL_FILE, type EvalRun, placeChecks } from './checks';
 import { type BrowserTrace, type Span, type Trace, walk } from './model';
 import { parseSession } from './pi';
 import { isPlaywrightTrace, parsePlaywrightTrace } from './playwright';
@@ -33,6 +35,8 @@ export interface Loaded {
   traces: Trace[];
   /** Files that could not be read, and why. */
   problems: string[];
+  /** An eval run's checks, placed on the spans that made them pass or fail. */
+  eval?: EvalRun;
 }
 
 /** A source of one opened or dropped file: an export zip, a trace.zip or a session. */
@@ -126,7 +130,12 @@ export async function loadSource(source: Source): Promise<Loaded> {
       procedures: b.procedureId ? [b.procedureId] : [],
       browser: [b],
     });
-  return { traces, problems };
+  const evalRun = (await json(EVAL_FILE)) as EvalRun | undefined;
+  if (evalRun) {
+    placeChecks(evalRun, traces);
+    for (const check of evalRun.checks) check.consequence = consequence(check, evalRun);
+  }
+  return { traces, problems, ...(evalRun ? { eval: evalRun } : {}) };
 }
 
 function order(t: Trace): number {

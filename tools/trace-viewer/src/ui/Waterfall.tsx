@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { formatCost, formatDuration, formatTick, tickStep, ticks } from '../lib/format';
 import { type Frame, type Span, totalCost, walk } from '../lib/model';
+import { CheckBadges, nestedChecks } from './Checks';
 import { Filmstrip } from './Filmstrip';
 import { iconOf, isGroup, KIND } from './kinds';
 
@@ -56,8 +57,13 @@ export function Waterfall({ root, frames, selectedId, onSelect }: WaterfallProps
   const scroller = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
 
+  /** The selection the rows were last scrolled to; reset with the rows of a new root. */
+  const revealed = useRef<string>(undefined);
+  const rootChanged = useRef(false);
+
   // A new trace or turn: everything starts over.
   useEffect(() => {
+    rootChanged.current = true;
     setCollapsed(defaultCollapsed(root));
     setZoom(undefined);
     setActive(0);
@@ -119,13 +125,30 @@ export function Waterfall({ root, frames, selectedId, onSelect }: WaterfallProps
       el.scrollTop = top + ROW_H - el.clientHeight + stickyHeight(frames);
   };
 
-  // Keep the selected span's row in view and focused (e.g. picked from the filmstrip).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the selection changes.
+  // Keep the selected span's row in view and focused (e.g. picked from the filmstrip, or an
+  // eval check's span): folded ancestors open first.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the selection changes, or its ancestors opened.
   useEffect(() => {
-    if (!selectedId) return;
+    // These rows are still the old root's folds: wait for the new ones.
+    if (rootChanged.current) {
+      rootChanged.current = false;
+      revealed.current = undefined;
+      return;
+    }
+    if (!selectedId) {
+      revealed.current = undefined;
+      return;
+    }
+    if (revealed.current === selectedId) return;
     const i = rows.findIndex((r) => r.span.id === selectedId);
+    const path = i < 0 ? ancestorsOf(root, selectedId) : undefined;
+    if (path?.length) {
+      setCollapsed((prev) => new Set([...prev].filter((id) => !path.some((s) => s.id === id))));
+      return;
+    }
+    revealed.current = selectedId;
     if (i >= 0) focusRow(i);
-  }, [selectedId]);
+  }, [selectedId, rows]);
 
   const onKey = (e: KeyboardEvent) => {
     const row = rows[active];
@@ -429,6 +452,10 @@ function RowView(props: RowProps) {
             {span.detail}
           </span>
         )}
+        {span.checks?.length ? <CheckBadges checks={span.checks} /> : null}
+        {!open && span.children.length > 0 && (
+          <CheckBadges checks={span.children.flatMap(nestedChecks)} nested />
+        )}
         {unfinished && <span className="wf-spin" title="Unfinished" />}
         {span.children.length > 0 && !open && <span className="wf-count">{countAll(span)}</span>}
       </div>
@@ -496,6 +523,16 @@ function defaultCollapsed(root: Span): Set<string> {
     if (span.children.length > 60 || span.kind === 'browser') out.add(span.id);
   }
   return out;
+}
+
+/** The spans from the root down to the span with this id, without it; undefined when absent. */
+function ancestorsOf(root: Span, id: string): Span[] | undefined {
+  if (root.id === id) return [];
+  for (const child of root.children) {
+    const path = ancestorsOf(child, id);
+    if (path) return [root, ...path];
+  }
+  return undefined;
 }
 
 function countAll(span: Span): number {
