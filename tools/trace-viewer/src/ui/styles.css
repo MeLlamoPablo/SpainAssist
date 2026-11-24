@@ -1263,6 +1263,18 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 9px;
 }
+.shot-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  cursor: zoom-in;
+}
+.shot-btn:hover {
+  opacity: 0.85;
+}
 .shots figcaption {
   margin-top: 5px;
   color: var(--text-3);
@@ -1417,4 +1429,14 @@ kbd {
 }
 .block.full-panel pre.prose {
   white-space: pre-wrap;
+}
+.full-shot {
+  min-height: 0;
+  overflow: auto;
+}
+.full-shot img {
+  display: block;
+  max-width: min(100%, 1600px);
+  border: 1px solid var(--border);
+  border-radius: 9px;
 }

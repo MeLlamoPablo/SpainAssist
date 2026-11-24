@@ -126,16 +126,18 @@ export function Details({
             <h3>Page</h3>
             <div className="shots">
               {before && (
-                <figure>
-                  <Thumb frame={before} alt="The page before" />
-                  <figcaption>Before · +{formatDuration(before.at - root.start)}</figcaption>
-                </figure>
+                <Shot
+                  frame={before}
+                  alt="The page before"
+                  caption={`Before · +${formatDuration(before.at - root.start)}`}
+                />
               )}
               {after && after !== before && (
-                <figure>
-                  <Thumb frame={after} alt="The page after" />
-                  <figcaption>After · +{formatDuration(after.at - root.start)}</figcaption>
-                </figure>
+                <Shot
+                  frame={after}
+                  alt="The page after"
+                  caption={`After · +${formatDuration(after.at - root.start)}`}
+                />
               )}
             </div>
           </section>
@@ -172,6 +174,46 @@ function Fact({ label, value, wide }: { label: string; value: string; wide?: boo
         {value}
       </dd>
     </div>
+  );
+}
+
+/** A screenshot that opens full screen on a click. */
+function Shot({ frame, alt, caption }: { frame: Frame; alt: string; caption: string }) {
+  const [full, setFull] = useState(false);
+  return (
+    <figure>
+      <button
+        type="button"
+        className="shot-btn"
+        aria-label={`Show ${alt.toLowerCase()} full screen`}
+        onClick={() => setFull(true)}
+      >
+        <Thumb frame={frame} alt={alt} />
+      </button>
+      <figcaption>{caption}</figcaption>
+      {full &&
+        createPortal(
+          <FullScreen title={caption} onClose={() => setFull(false)}>
+            <h3>
+              {caption}
+              <button
+                type="button"
+                className="icon-btn sm"
+                aria-label="Close full screen"
+                onClick={() => setFull(false)}
+                // biome-ignore lint/a11y/noAutofocus: the dialog's way out takes the focus when it opens
+                autoFocus
+              >
+                <X size={12} />
+              </button>
+            </h3>
+            <div className="full-shot">
+              <Thumb frame={frame} alt={alt} />
+            </div>
+          </FullScreen>,
+          document.body,
+        )}
+    </figure>
   );
 }
 
