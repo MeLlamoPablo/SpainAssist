@@ -38,7 +38,6 @@ export interface AndroidApk {
 
 export const DEFAULT_ANDROID_PACKAGE = 'es.spainassist.firma';
 
-
 const fonts = new Map(
   [
     ['inter-latin-wght-normal.woff2', 'font/woff2'],

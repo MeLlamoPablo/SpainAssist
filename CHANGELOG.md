@@ -3,6 +3,45 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.5.1 (2026-11-24)
+
+Installed apps update to it, except on macOS: 0.3.0 to 0.5.0 on macOS can't update themselves,
+so Mac users download 0.5.1 once by hand. The phone app goes from 0.3.5 to 0.5.1, to align with
+the desktop. What changed since 0.5.0.
+
+### App
+
+- **macOS updates work again.** The macOS app now knows where its updates come from; 0.3.0 to
+  0.5.0 shipped without it. (c2466ba)
+- **The phone app's updates.** While Google Play reviews the phone app, the relay offers its APK
+  on a download page, and the desktop app shows a QR to it when the paired phone's app is out of
+  date. A DNI request offers the update first, and can go on without it. (14f22a6, 843bc93,
+  f3594a1, 274bec0, 293f514, c6516bc)
+- **English all the way.** Agents write for English users in English: their prompts' examples
+  follow the app's language, they say "My data", and saved-data notices use the app's
+  language. (8de2ff6, 45baf21)
+- **Smaller fixes:**
+  - Agents choose documents by name, never by id, so they no longer upload the wrong one.
+    (8730879)
+  - The agent's browser no longer makes macOS show "Chrome for Testing" notification banners.
+    (ded8d0c)
+  - Every warning and error the app logs goes to the error reports, not only crashes. (44b8cad)
+
+### Phone app
+
+- Phones without NFC can install the app; the start screen says the phone has no NFC.
+  (7ae30d5)
+- The APK that Google Play signs is attached to each Android release. (c8b5af7, c928092)
+
+### Maintenance
+
+- Codemode: one queue per run for api.parallelize, 10 at once. (3eb7cad)
+- Run traces and a trace viewer for agents, runs, the browser and eval runs; SpainBench scores
+  harms below 0 and records the browser on every run. (50885ab, d992985 and 19 more)
+- CI: the highest desktop tag always takes the Latest release, and suites that flake on slow
+  runners run once more. (d40ace8, 5fcb17a)
+- Version 0.5.1 everywhere, the phone app included.
+
 ## 0.5.0 (2026-11-20)
 
 Installed apps update to it. What changed since 0.4.0.
