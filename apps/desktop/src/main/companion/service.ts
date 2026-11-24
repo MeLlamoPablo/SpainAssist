@@ -141,7 +141,7 @@ const LOGIN_REFUSALS: Partial<Record<NoticeCode, string>> = {
   phone_outdated:
     'the Spain Assist app on the phone is out of date: the user must update it from Google Play and open it again',
   phone_outdated_download:
-    'the Spain Assist app on the phone is out of date: the user must update it (Spain Assist shows a QR to download it, in the DNI request and in Mis datos) and open it again',
+    "the Spain Assist app on the phone is out of date: the user must update it (Spain Assist shows a QR to download it, in the DNI request and next to the DNI in the user's saved data) and open it again",
   desktop_outdated:
     'the phone app is newer than this desktop app: the user must update Spain Assist on the computer',
 };

@@ -76,8 +76,8 @@ interface Ui {
 //    locates and sorts them by distance; present throws code "bad_request" listing addresses it can't find)
 //  <Appointment slots={["YYYY-MM-DDTHH:MM"]} value onChange allowMore?/> ("more" = none suits)
 //  <Actions><Button type?="primary"|"secondary"|"danger"|"ghost" disabled? loading? onClick/></Actions>
-// vaultKey="email" (a Mis datos key, or "custom.<slug>") on TextField, Select, Choice or Province: when the
-//   interface closes, the app saves the field's value to Mis datos itself (unless it has an error). Never add a
+// vaultKey="email" (a ${l('Mis datos', 'My data')} key, or "custom.<slug>") on TextField, Select, Choice or Province: when the
+//   interface closes, the app saves the field's value to ${l('Mis datos', 'My data')} itself (unless it has an error). Never add a
 //   "save my data" checkbox or call api.vault.save for these answers. Prefill value from api.vault.read.
 // Ask everything you need in one interface, each thing once: a follow-up field renders only for the answer that
 //   needs it ({choice === "x" && <TextField …/>}), never labelled ${l('"(si …)"', '"(if …)"')}, and close returns only what is shown.
@@ -142,7 +142,7 @@ interface FetchedPage { url: string; title?: string; text: string /* markdown */
 interface FetchResponse { ok: boolean; status: number; url: string; headers: Record<string,string>; text(): Promise<string>; json(): Promise<any> }`;
 
 const vault = (l: ByLanguage) => `
-/** The user's saved data ("Mis datos"). Values of personal data; credentials as summaries only. */
+/** The user's saved data (${l('"Mis datos"', '"My data"')}). Values of personal data; credentials as summaries only. */
 interface Vault {
   read(options?: { keys?: string[] }): Promise<{
     personal: { key: string; label: string; value: string }[];

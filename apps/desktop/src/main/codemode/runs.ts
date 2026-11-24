@@ -115,7 +115,7 @@ function rejectedAnswersNote(key: string, rejected: PersonalSaveIssue[]): string
   const dates = rejected.some((r) => r.reason === 'invalid_date')
     ? ' Dates are DD/MM/YYYY or YYYY-MM-DD.'
     : '';
-  return `Mis datos did not save these answers of the interface "${key}": ${list}.${dates} Ask the user again, or save a corrected value with api.vault.save.`;
+  return `The app did not save these answers of the interface "${key}" to the user's data: ${list}.${dates} Ask the user again, or save a corrected value with api.vault.save.`;
 }
 
 export interface RunServiceDeps {

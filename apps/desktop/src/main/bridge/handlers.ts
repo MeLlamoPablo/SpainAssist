@@ -64,7 +64,8 @@ export interface BridgeHandlerDeps {
   approvalTtlMs?: number;
 }
 
-function personalLabel(key: string, lang: Language, fallback?: string): string {
+/** A personal data field's label in the app's language (the vault keeps the one it was saved with). */
+export function personalLabel(key: string, lang: Language, fallback?: string): string {
   return personalFieldDef(key)?.label[lang] ?? fallback ?? key.replace(/^custom\./, '');
 }
 
@@ -73,7 +74,7 @@ function refuseHiddenKey(key: string | undefined): void {
   throw new BridgeError(
     'policy_denied',
     PIN_KEY.test(key)
-      ? 'PINs are secrets, not personal data: agents never ask for, save or type them. A one-time PIN goes through browser_fill_from_user. The user saves the DNI PIN in Mis datos (DNI con el móvil), and only the paired phone gets it.'
+      ? 'PINs are secrets, not personal data: agents never ask for, save or type them. A one-time PIN goes through browser_fill_from_user. The user saves the DNI PIN in the app, with their DNI, and only the paired phone gets it.'
       : `"${key}" is not available to agents.`,
   );
 }

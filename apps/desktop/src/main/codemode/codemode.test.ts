@@ -380,6 +380,14 @@ describe('answers for Mis datos', () => {
     children: [],
   });
   const tree = (...children: UiNode[]): UiNode => ({ type: 'Root', props: {}, children });
+  /** A new run shows the fields in one interface, and the user closes it at once. */
+  const answer = async (app: HeadlessApp, token: string, ...fields: UiNode[]) => {
+    const { result } = await call(app, token, 'run.begin', { source: 's' });
+    const ui = (action: string, extra: Record<string, unknown>) =>
+      call(app, token, 'run.ui', { runId: result.runId, action, key: 'datos', ...extra });
+    expect((await ui('open', { rev: 1, tree: tree(...fields) })).ok).toBe(true);
+    return ui('close', { result: null });
+  };
 
   it('are saved by the app when the interface closes: fields with a vaultKey, unless flagged', async () => {
     const { app, agentLib } = await open();
@@ -432,15 +440,12 @@ describe('answers for Mis datos', () => {
   it('save Spanish dates as ISO, and tell the agent which answers the vault refused', async () => {
     const { app, agentLib } = await open();
     const { token } = await anAgent(app, agentLib);
-    const { result } = await call(app, token, 'run.begin', { source: 's' });
-    const ui = (action: string, extra: Record<string, unknown>) =>
-      call(app, token, 'run.ui', { runId: result.runId, action, key: 'datos', ...extra });
-    const answers = tree(
+    const closed = await answer(
+      app,
+      token,
       field({ vaultKey: 'dniExpiry', value: '04/12/2026' }),
       field({ vaultKey: 'passportExpiry', value: '31/02/2026' }),
     );
-    expect((await ui('open', { rev: 1, tree: answers })).ok).toBe(true);
-    const closed = await ui('close', { result: null });
     expect(closed.result).toEqual({
       note: expect.stringContaining('passportExpiry (invalid_date)'),
     });
@@ -449,6 +454,27 @@ describe('answers for Mis datos', () => {
       app.services.vault.overview().personal.find((p) => p.key === key);
     expect(personal('dniExpiry')).toMatchObject({ value: '2026-12-04', source: 'form' });
     expect(personal('passportExpiry')).toBeUndefined();
+  });
+
+  it("are named in the app's language, whatever the agent labelled them", async () => {
+    const { app, agentLib } = await open();
+    await app.invoke('settings.update', { language: 'en' });
+    const { token } = await anAgent(app, agentLib);
+    await answer(
+      app,
+      token,
+      field({ vaultKey: 'email', label: 'Correo electrónico', value: 'lucia@example.es' }),
+      field({
+        vaultKey: 'custom.referencia_catastral',
+        label: 'Referencia catastral',
+        value: '9872023VH5797S0001WX',
+      }),
+    );
+    // A custom field has only the label it was saved with.
+    expect(app.services.conversation.transcript().at(-1)).toMatchObject({
+      type: 'notice',
+      text: 'Saved to My data: Email, Referencia catastral.',
+    });
   });
 
   it('may not name what agents never see (the CAN, PINs)', async () => {

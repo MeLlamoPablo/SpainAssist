@@ -338,7 +338,7 @@ describe('the API declaration', () => {
     ].join('\n');
     const officialNames = /"trámites"|Cl@ve Móvil|"Enviar petición"/g;
     expect(prompts.replace(officialNames, '')).not.toMatch(/[áéíóúñ¿¡]/);
-    expect(prompts).not.toMatch(/Buscando|Gratis|Saltar|answer in theirs/);
+    expect(prompts).not.toMatch(/Buscando|Gratis|Saltar|answer in theirs|Mis datos/);
     expect(prompts).toContain('"Checking the Correos page…"');
   });
 });

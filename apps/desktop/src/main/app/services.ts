@@ -14,7 +14,7 @@ import {
 import type { Sidecar } from '@sa/sidecar';
 import { certificateInfo, type KeyProvider } from '@sa/vault';
 import { AgentManager } from '../agents/manager';
-import { createBridgeHandlers } from '../bridge/handlers';
+import { createBridgeHandlers, personalLabel } from '../bridge/handlers';
 import { type BridgeCall, BridgeServer } from '../bridge/server';
 import { TokenRegistry } from '../bridge/tokens';
 import { BrowserHolder } from '../browser/holder';
@@ -297,7 +297,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
       );
       if (saved.length) {
         events.emit({ type: 'vault.changed' });
-        const labels = saved.map((p) => p.label).join(', ');
+        const labels = saved.map((p) => personalLabel(p.key, lang(), p.label)).join(', ');
         conversation.addNotice('info', t(lang(), 'savedToVault', { labels }));
       }
       return rejected;

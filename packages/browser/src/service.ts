@@ -2294,7 +2294,7 @@ export class PlaywrightBrowserService implements BrowserService {
           s.notes.push(
             call.method === 'requestCert'
               ? `The app generated the certificate request's key (kept in the user's vault) and gave the request to ${host || 'the page'}, which now sends it to FNMT. Continue with the page; FNMT emails the request code that the download needs.`
-              : `The certificate from ${host || 'the page'} is now in the user's vault as a digital certificate (Mis datos → Credenciales). The app can use it for certificate logins and signatures.`,
+              : `The certificate from ${host || 'the page'} is now in the user's vault as a digital certificate, with their saved credentials. The app can use it for certificate logins and signatures.`,
           );
         } else {
           this.log.info('FNMT call failed', {
