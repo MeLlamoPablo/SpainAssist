@@ -84,7 +84,7 @@ export function Details({
           {(span.attrs ?? [])
             .filter(([k]) => k !== 'Thinking')
             .map(([k, v]) => (
-              <Fact key={k} label={k} value={v} />
+              <Fact key={k} label={k} value={v} copy={k === 'Run'} />
             ))}
         </dl>
 
@@ -166,12 +166,45 @@ export function Details({
   );
 }
 
-function Fact({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+function Fact({
+  label,
+  value,
+  wide,
+  copy,
+}: {
+  label: string;
+  value: string;
+  wide?: boolean;
+  /** A click copies the value (a run's id, cut short here). */
+  copy?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
   return (
     <div className={wide ? 'wide' : undefined}>
       <dt>{label}</dt>
       <dd className="num" title={value}>
-        {value}
+        {copy ? (
+          <button
+            type="button"
+            className="fact-copy"
+            title={`Copy ${value}`}
+            onClick={() => {
+              void navigator.clipboard?.writeText(value).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1200);
+              });
+            }}
+          >
+            <span>{copied ? 'Copied' : value}</span>
+            {copied ? (
+              <Check size={12} className="fact-copy-icon" />
+            ) : (
+              <Copy size={12} className="fact-copy-icon" />
+            )}
+          </button>
+        ) : (
+          value
+        )}
       </dd>
     </div>
   );

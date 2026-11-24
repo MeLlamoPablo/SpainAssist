@@ -1156,6 +1156,29 @@ kbd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.fact-copy {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: copy;
+}
+.fact-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fact-copy-icon {
+  flex: none;
+  color: var(--text-3);
+}
+.fact-copy:hover .fact-copy-icon {
+  color: var(--text);
+}
 .details-actions {
   display: flex;
   flex-wrap: wrap;
