@@ -1157,27 +1157,18 @@ kbd {
   white-space: nowrap;
 }
 .fact-copy {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
   max-width: 100%;
+  overflow: hidden;
   padding: 0;
   border: 0;
   background: none;
   color: inherit;
   font: inherit;
-  cursor: copy;
-}
-.fact-copy span {
-  overflow: hidden;
+  text-align: left;
   text-overflow: ellipsis;
-}
-.fact-copy-icon {
-  flex: none;
-  color: var(--text-3);
-}
-.fact-copy:hover .fact-copy-icon {
-  color: var(--text);
+  white-space: nowrap;
+  cursor: copy;
 }
 .details-actions {
   display: flex;

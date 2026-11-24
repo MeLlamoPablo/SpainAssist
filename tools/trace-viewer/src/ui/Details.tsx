@@ -195,12 +195,7 @@ function Fact({
               });
             }}
           >
-            <span>{copied ? 'Copied' : value}</span>
-            {copied ? (
-              <Check size={12} className="fact-copy-icon" />
-            ) : (
-              <Copy size={12} className="fact-copy-icon" />
-            )}
+            {copied ? 'Copied' : value}
           </button>
         ) : (
           value
