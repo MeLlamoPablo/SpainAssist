@@ -1,4 +1,4 @@
-import type { CompanionStatus, SaEvent } from '@sa/shared';
+import type { SaEvent } from '@sa/shared';
 import { api } from '../lib/api';
 import { useAppStore } from './app';
 import { useChatStore } from './chat';
@@ -105,10 +105,7 @@ async function loadInitialState(): Promise<void> {
       api.invoke('providers.status'),
       api.invoke('procedures.list'),
       api.invoke('chat.state'),
-      // Without the DNIe feature flag, main refuses the pairing calls.
-      appInfo.then((i): Promise<CompanionStatus> | CompanionStatus =>
-        i.features.dniePhone !== 'off' ? api.invoke('companion.status') : { state: 'unavailable' },
-      ),
+      api.invoke('companion.status'),
       api.invoke('updates.status'),
       api.invoke('dataImport.status'),
       api.invoke('codemode.state'),

@@ -117,14 +117,13 @@ describe('defaults', () => {
       isDev: false,
       isE2E: true,
       features: {
-        dniePhone: 'off',
         mustUpdate: false,
         errorReports: false,
       },
       errorReports: false,
     });
     expect((await app.invoke('settings.get')).language).toBe('es');
-    expect(app.services.companion).toBeUndefined();
+    expect(app.services.companion).toBeDefined();
     expect(app.paths.userData).toBe(join(root, 'userData'));
     expect(app.paths.tmpDir.startsWith(join(root, 'os-tmp'))).toBe(true);
     // The renderer API has every method the window has.
@@ -135,17 +134,16 @@ describe('defaults', () => {
   it('takes language, features, version and capture from the options', async () => {
     const { app } = await open({
       language: 'en',
-      features: { dniePhone: 'release' },
+      features: { mustUpdate: true },
       version: '9.9.9',
       capture: true,
     });
     expect(await app.invoke('app.info')).toMatchObject({
       version: '9.9.9',
       isDev: true,
-      features: { dniePhone: 'release', mustUpdate: false },
+      features: { mustUpdate: true, errorReports: false },
     });
     expect((await app.invoke('settings.get')).language).toBe('en');
-    expect(app.services.companion).toBeDefined();
   });
 
   it("keeps the sidecar's error pages in the app's language", async () => {
@@ -164,12 +162,11 @@ describe('defaults', () => {
   it('reads nothing from process.env', async () => {
     vi.stubEnv('SA_KEY_SERVER_URL', 'https://keys.attacker.test');
     vi.stubEnv('SA_FEEDBACK_SERVER_URL', 'https://feedback.attacker.test');
-    vi.stubEnv('SA_FEATURE_FLAGS', 'dnie-phone');
+    vi.stubEnv('SA_FEATURE_FLAGS', 'error-reports');
     vi.stubEnv('SA_EXTRA_TRUSTED_HOSTS', 'localhost');
     vi.stubEnv('SA_USER_DATA_DIR', join(root, 'elsewhere'));
     const { app, agentLib } = await openWithProvider();
     expect((await app.invoke('app.info')).features).toEqual({
-      dniePhone: 'off',
       mustUpdate: false,
       errorReports: false,
     });

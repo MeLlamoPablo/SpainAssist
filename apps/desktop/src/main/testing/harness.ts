@@ -160,7 +160,6 @@ export async function createTestApp(opts: TestAppOptions = {}) {
       isDev: opts.isDev ?? true,
       isE2E: true,
       features: {
-        dniePhone: 'release',
         mustUpdate: false,
         errorReports: false,
         ...opts.features,

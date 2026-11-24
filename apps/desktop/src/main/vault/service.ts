@@ -43,11 +43,6 @@ export interface VaultServiceDeps {
   /** shell.openPath: resolves with an error message, or '' on success. */
   openPath(path: string): Promise<string>;
   lang: () => Language;
-  /**
-   * DNIe with the phone (`dnie-phone` feature flag). Off: a saved `dnie` credential stays in the
-   * vault, hidden from Mis datos, and none can be added.
-   */
-  dniePhone: boolean;
   /** Drops active browser contexts that may retain a deleted client certificate. */
   onCredentialDeleted?(id: string): Promise<void>;
   /** The OS save dialog, for certificate exports; none without a window. */
@@ -106,17 +101,9 @@ export class VaultService {
 
   overview(): VaultOverview {
     this.refreshOsCertificates();
-    const overview = this.deps.vault.overview({
+    return this.deps.vault.overview({
       biometricAvailable: this.deps.biometric.available(),
     });
-    if (this.deps.dniePhone) return overview;
-    return { ...overview, credentials: overview.credentials.filter((c) => c.kind !== 'dnie') };
-  }
-
-  /** A credential Mis datos doesn't show (the DNIe without its feature flag) can't be changed. */
-  private requireVisible(id: string): void {
-    if (!this.deps.dniePhone && this.deps.vault.getCredential(id)?.kind === 'dnie')
-      throw new UserError(t(this.deps.lang(), 'vaultNotFound'), 'not_found');
   }
 
   setPersonal(items: PersonalDataInput[]): Promise<VaultOverview> {
@@ -289,8 +276,6 @@ export class VaultService {
 
   addDnie(): Promise<CredentialSummary> {
     return this.guard(async () => {
-      if (!this.deps.dniePhone)
-        throw new UserError(t(this.deps.lang(), 'dniePhoneOff'), 'unavailable');
       const summary = await this.deps.vault.addDnie();
       this.changed();
       return summary;
@@ -300,7 +285,6 @@ export class VaultService {
   /** Mis datos: saves, changes or (null) forgets the DNIe PIN. It never comes back. */
   setDniePin(id: string, pin: string | null): Promise<CredentialSummary> {
     return this.guard(async () => {
-      this.requireVisible(id);
       if (pin) this.deps.logger.addSecret(pin);
       const summary = await this.deps.vault.setDniePin(id, pin);
       this.changed();
@@ -346,7 +330,6 @@ export class VaultService {
 
   setCredentialPolicy(id: string, policy: CredentialPolicy): Promise<CredentialSummary> {
     return this.guard(async () => {
-      this.requireVisible(id);
       const summary = await this.deps.vault.setCredentialPolicy(id, policy);
       this.changed();
       return summary;
@@ -355,7 +338,6 @@ export class VaultService {
 
   deleteCredential(id: string): Promise<VaultOverview> {
     return this.guard(async () => {
-      this.requireVisible(id);
       await this.deps.vault.deleteCredential(id);
       await this.deps.onCredentialDeleted?.(id);
       this.changed();

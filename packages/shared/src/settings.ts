@@ -238,30 +238,8 @@ export const PRODUCTION_SERVICES = {
   },
 } as const;
 
-/**
- * How far the DNIe through the phone app is released, from the `dnie-phone` flag's variant:
- * - `off`: the app behaves as if it didn't exist; a saved `dnie` credential stays in the vault,
- *   hidden.
- * - `prerelease`: the phone app is in a closed test. Until the user saves their DNIe, which they
- *   do once they have the app, Mis datos shows an "Acceso anticipado" card instead of "Lo tengo",
- *   and agents don't offer the DNIe.
- * - `release`: offered to everyone. A flag that is on without a variant means this, as it did
- *   before the flag had variants.
- */
-export type DniePhoneStage = 'off' | 'prerelease' | 'release';
-
-/** Whether the app offers the DNIe through the phone (cards, pairing, the agents' tools). */
-export function dniePhoneOffered(stage: DniePhoneStage, dnieSaved: boolean): boolean {
-  return stage === 'release' || (stage === 'prerelease' && dnieSaved);
-}
-
 /** Feature flags, read from Unleash when the app starts. Off when Unleash can't be reached. */
 export interface FeatureFlags {
-  /**
-   * The DNIe through the phone app: signatures and logins, the "DNIe con el móvil"
-   * card and pairing in Mis datos, the relay connection.
-   */
-  dniePhone: DniePhoneStage;
   /**
    * This version may no longer be used: the app shows only the must-update screen. Unleash
    * targets it with a constraint on the `appVersion` context field (e.g. SEMVER_LT 0.3.0), which
@@ -277,13 +255,11 @@ export interface FeatureFlags {
 
 /** Unleash flag name of each feature flag. */
 export const FEATURE_FLAG_NAMES: Record<keyof FeatureFlags, string> = {
-  dniePhone: 'dnie-phone',
   mustUpdate: 'must-update',
   errorReports: 'error-reports',
 };
 
 export const FEATURES_OFF: FeatureFlags = {
-  dniePhone: 'off',
   mustUpdate: false,
   errorReports: false,
 };

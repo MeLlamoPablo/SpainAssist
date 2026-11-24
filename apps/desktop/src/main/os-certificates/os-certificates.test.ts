@@ -258,7 +258,6 @@ describe('the vault with external certificates', () => {
       downloadsDir: join(dir, 'Downloads'),
       openPath: async () => '',
       lang: () => 'es',
-      dniePhone: true,
       osCertificates: os,
       onCredentialDeleted: async () => {
         closedBrowsers++;

@@ -77,7 +77,7 @@ const info: AppInfo = {
   installChannel: 'dev',
   isDev: true,
   isE2E: false,
-  features: { ...FEATURES_OFF, dniePhone: 'release' },
+  features: FEATURES_OFF,
   errorReports: false,
 };
 

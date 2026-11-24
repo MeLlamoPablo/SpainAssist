@@ -2,7 +2,6 @@ import {
   type AppInfo,
   type CompanionStatus,
   DEFAULT_SETTINGS,
-  type DniePhoneStage,
   FEATURES_OFF,
   type VaultOverview,
 } from '@sa/shared';
@@ -26,22 +25,16 @@ vi.mock('../../store/procedures', () => ({
   useProcedureStore: (selector: (state: typeof procedures) => unknown) => selector(procedures),
 }));
 
-/** `true` and `false` stand for `release` and `off`. */
-type Stage = DniePhoneStage | boolean;
-
-const info = (stage: Stage): AppInfo => ({
+const info: AppInfo = {
   name: 'Spain Assist',
   version: '0.0.0-test',
   platform: 'darwin',
   installChannel: 'dev',
   isDev: true,
   isE2E: false,
-  features: {
-    ...FEATURES_OFF,
-    dniePhone: stage === true ? 'release' : stage === false ? 'off' : stage,
-  },
+  features: FEATURES_OFF,
   errorReports: false,
-});
+};
 
 const DNIE = {
   id: 'cred-dnie',
@@ -52,13 +45,12 @@ const DNIE = {
 } as const;
 
 function render(
-  stage: Stage,
   credentials: VaultOverview['credentials'] = [],
   companion: CompanionStatus = { state: 'off' },
   certificateRequests: VaultOverview['certificateRequests'] = [],
 ): string {
   store.state = {
-    info: info(stage),
+    info,
     settings: DEFAULT_SETTINGS,
     companion,
   };
@@ -77,42 +69,21 @@ function render(
 }
 
 describe('Mis datos: DNI with the phone', () => {
-  it('has no DNI card without the feature flag, even with a saved DNI', () => {
-    for (const html of [render(false), render(false, [DNIE])]) {
-      expect(html).not.toContain('DNI con el móvil');
-      expect(html).not.toContain('Vincular el móvil');
-      expect(html).toContain('Cl@ve Móvil');
-      expect(html).toContain('Certificado digital');
-    }
-  });
-
-  it('offers to add the DNI, or shows the saved one with its pairing, with the flag on', () => {
-    const add = render(true);
+  it('offers to add the DNI, or shows the saved one with its pairing', () => {
+    const add = render();
     expect(add).toContain('DNI con el móvil');
     expect(add).toContain('Lo tengo');
-    const saved = render(true, [DNIE]);
+    const saved = render([DNIE]);
     expect(saved).toContain('data-testid="credential-dnie"');
     expect(saved).toContain('Vincular el móvil');
   });
 
-  it('shows the early-access card in prerelease, never "Lo tengo", until the DNI is saved', () => {
-    const early = render('prerelease');
-    expect(early).toContain('DNI con el móvil');
-    expect(early).toContain('Acceso anticipado');
-    expect(early).toContain('Probar');
-    expect(early).not.toContain('Lo tengo');
-    const saved = render('prerelease', [DNIE]);
-    expect(saved).toContain('data-testid="credential-dnie"');
-    expect(saved).not.toContain('Acceso anticipado');
-    expect(render('release')).not.toContain('Acceso anticipado');
-  });
-
   it('offers to save the DNI PIN, or delete a saved one (never shown)', () => {
-    const none = render(true, [{ ...DNIE, hasPin: false }]);
+    const none = render([{ ...DNIE, hasPin: false }]);
     expect(none).toContain('dnie-pin-row');
     expect(none).not.toContain('Sin guardar');
     expect(none).toContain('Guardar PIN');
-    const saved = render(true, [{ ...DNIE, hasPin: true }]);
+    const saved = render([{ ...DNIE, hasPin: true }]);
     expect(saved).toContain('Guardado. El asistente nunca lo ve.');
     expect(saved).not.toContain('Cambiar');
     expect(saved).toContain('Borrar');
@@ -127,17 +98,17 @@ describe('Mis datos: DNI with the phone', () => {
         'El servidor de enlace ha rechazado la conexión. Inténtalo de nuevo más tarde.',
     } as const;
     for (const [reason, text] of Object.entries(ended)) {
-      const html = render(true, [DNIE], { state: 'off', reason } as CompanionStatus);
+      const html = render([DNIE], { state: 'off', reason } as CompanionStatus);
       expect(html).toContain('Ningún móvil vinculado');
       expect(html).toContain(text);
       expect(html).toContain('Vincular el móvil');
     }
-    expect(render(true, [DNIE])).not.toContain('companion-ended');
+    expect(render([DNIE])).not.toContain('companion-ended');
   });
 
   it("shows the phone app's update under the paired phone, where the pairing dialog is closed", () => {
     const phoneApp = { version: '0.3.5', page: 'https://relay.example.invalid/android' };
-    const update = render(true, [DNIE], {
+    const update = render([DNIE], {
       state: 'connected',
       device: 'Pixel 8',
       phoneApp,
@@ -146,7 +117,7 @@ describe('Mis datos: DNI with the phone', () => {
     expect(update).toContain('Móvil vinculado: Pixel 8');
     expect(update).toContain('Hay una versión nueva de la app del móvil (0.3.5)');
     expect(update).toContain('data-testid="companion-update-qr"');
-    const outdated = render(true, [DNIE], {
+    const outdated = render([DNIE], {
       state: 'away',
       device: 'Pixel 8',
       outdated: { phone: 5, desktop: 6 },
@@ -158,11 +129,11 @@ describe('Mis datos: DNI with the phone', () => {
       { state: 'connected', device: 'Pixel 8', phoneApp },
       { state: 'away', device: 'Pixel 8', outdated: { phone: 5, desktop: 6 } },
     ] satisfies CompanionStatus[])
-      expect(render(true, [DNIE], status)).not.toContain('companion-update-qr');
+      expect(render([DNIE], status)).not.toContain('companion-update-qr');
   });
 
   it('shows the saved pairing independently of live phone or relay status', () => {
-    const paired = render(true, [DNIE], { state: 'connected', device: 'Pixel 8' });
+    const paired = render([DNIE], { state: 'connected', device: 'Pixel 8' });
     expect(paired).toContain('Móvil vinculado: Pixel 8');
     expect(paired).toContain('Desvincular');
     expect(paired).not.toContain('Conectado');
@@ -173,9 +144,9 @@ describe('Mis datos: DNI with the phone', () => {
       { state: 'away', device: 'Pixel 8', outdated: { phone: 5, desktop: 6 } },
       { state: 'connected', device: 'Pixel 8', outdated: { phone: 7, desktop: 6 } },
     ] satisfies CompanionStatus[]) {
-      expect(render(true, [DNIE], status)).toBe(paired);
+      expect(render([DNIE], status)).toBe(paired);
     }
-    const unpaired = render(true, [DNIE], { state: 'connecting', stalled: true });
+    const unpaired = render([DNIE], { state: 'connecting', stalled: true });
     expect(unpaired).toContain('Ningún móvil vinculado');
     expect(unpaired).toContain('Vincular el móvil');
     expect(unpaired).not.toContain('Desvincular');
@@ -194,13 +165,12 @@ describe('Mis datos: FNMT certificate requests', () => {
   };
 
   it('shows no request without one', () => {
-    expect(render(false)).not.toContain('En proceso');
+    expect(render()).not.toContain('En proceso');
   });
 
   it('shows each pending request "En proceso", with its site, procedure and key line', () => {
     procedures.byId = { 'p-fnmt': { id: 'p-fnmt', title: 'Certificado digital (FNMT)' } };
-    // Requests only exist if the feature flag was on: they show whatever the flags say now.
-    const html = render(false, [], { state: 'off' }, [REQUEST, { ...REQUEST, id: 'req-2' }]);
+    const html = render([], { state: 'off' }, [REQUEST, { ...REQUEST, id: 'req-2' }]);
     expect(html.match(/data-testid="certificate-request"/g)).toHaveLength(2);
     expect(html).toContain('En proceso');
     expect(html).toContain('Solicitado hace 3 horas');
@@ -216,7 +186,7 @@ describe('Mis datos: FNMT certificate requests', () => {
   it('offers to discard a request only once it is 30 days old', () => {
     const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
     const discard = (createdAt: string) =>
-      render(false, [], { state: 'off' }, [{ ...REQUEST, createdAt }]).includes(
+      render([], { state: 'off' }, [{ ...REQUEST, createdAt }]).includes(
         'aria-label="Descartar la solicitud"',
       );
     expect(discard(daysAgo(29))).toBe(false);
@@ -226,7 +196,7 @@ describe('Mis datos: FNMT certificate requests', () => {
 
   it('leaves out the procedure once it is deleted', () => {
     procedures.byId = {};
-    const html = render(false, [], { state: 'off' }, [REQUEST]);
+    const html = render([], { state: 'off' }, [REQUEST]);
     expect(html).toContain('En proceso');
     expect(html).not.toContain('Trámite');
   });

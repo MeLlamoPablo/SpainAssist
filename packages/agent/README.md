@@ -162,7 +162,7 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 | `research.exa` | BYOK and custom endpoints: `api.search` on Exa instead of `web_research` (the optional key comes from the app at call time) |
 | `research.boeBaseUrl`, `research.exaBaseUrl`, `research.allowPrivateHosts` | Tests / e2e (mock sede on localhost) |
 | `feedback` | `{submit, vote}` when the app has a feedback server: `api.feedback.search`, plus submit and vote when on |
-| `dniePhone` | The DNIe through the phone app (`dnie-phone` flag) is offered |
+| `dniePhone` | The DNIe through the phone app is offered |
 | `extraTrustedHosts` | Dev/e2e hosts allowed for credentials |
 | `timeZone` | For "today" in the prompt; default `Europe/Madrid` |
 

@@ -69,7 +69,6 @@ describe('exporting a certificate from Mis datos', () => {
       downloadsDir: join(dir, 'Downloads'),
       openPath: async () => '',
       lang: () => 'es',
-      dniePhone: true,
       chooseSavePath: async (request) => {
         requests.push(request);
         // Touch ID came first.

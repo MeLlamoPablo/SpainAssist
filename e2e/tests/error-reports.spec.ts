@@ -28,7 +28,7 @@ test.use({
     const { port } = server.address() as AddressInfo;
     await use({
       SA_ERROR_REPORTS_DSN: `http://e2ekey@127.0.0.1:${port}/1`,
-      SA_FEATURE_FLAGS: 'dnie-phone,error-reports',
+      SA_FEATURE_FLAGS: 'error-reports',
       // A startup warning (env.ts), logged before the flags open the gate.
       SA_MAPS_SERVER_URL: 'not a url',
     });

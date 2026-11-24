@@ -171,7 +171,7 @@ const STRINGS = {
     es: '{host} te pide firmar, pero no tienes ningún certificado digital guardado. Añade un certificado o tu DNI en Mis datos.',
     en: '{host} asks you to sign, but you have no digital certificate saved. Add a certificate or your DNI in My data.',
   },
-  /** Without the `dnie-phone` feature flag. */
+  /** A BrowserHolder without the DNIe companion. */
   noCertificateOnly: {
     es: '{host} te pide firmar, pero no tienes ningún certificado digital guardado. Añádelo en Mis datos.',
     en: '{host} asks you to sign, but you have no digital certificate saved. Add it in My data.',
@@ -230,11 +230,6 @@ const STRINGS = {
   codemodeUiClosed: {
     es: 'Esta pregunta ya no está abierta.',
     en: 'This question is no longer open.',
-  },
-  /** IPC calls for the DNI without the `dnie-phone` feature flag. */
-  dniePhoneOff: {
-    es: 'El DNI con el móvil no está disponible en esta versión de la app.',
-    en: "DNI with your phone isn't available in this version of the app.",
   },
   /** `companion.unlock` without what the prompt asks for. */
   dnieUnlockMissing: {

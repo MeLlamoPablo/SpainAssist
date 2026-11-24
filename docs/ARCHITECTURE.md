@@ -259,12 +259,9 @@ Until its certificate arrives, Mis datos → Credenciales shows a request as "En
 user can discard it with its key.
 
 ### DNIe with the phone
-Behind the `dnie-phone` flag, whose variant sets the stage (`DniePhoneStage`): `prerelease`
-shows an "Acceso anticipado" card in Mis datos instead of "Lo tengo", and offers the DNIe once the
-user saves it, which they do once they have the phone app (a closed test); `release`, or the flag on without a variant, offers it to everyone. The
-user pairs the phone with a one-time QR. Signatures and
-certificate logins then go to the phone over the relay, end-to-end encrypted, and the phone reads
-the card over NFC after the user approves.
+Offered to everyone ("Lo tengo" in Mis datos). The user pairs the phone with a one-time QR.
+Signatures and certificate logins then go to the phone over the relay, end-to-end encrypted, and
+the phone reads the card over NFC after the user approves.
 - The CAN and the PIN are typed on the desktop and kept there (the PIN in the vault). They reach
   the phone only inside the encrypted channel, per request.
 - Agents have no path to either.

@@ -94,22 +94,6 @@ describe('bridge: prompts', () => {
       expect(JSON.stringify(body)).not.toContain('S3cret!pass');
       expect((await askFor('dnie', undefined)).result).toEqual({ kind: 'credential' });
     });
-
-    it('refuses to ask for the DNI without the phone app', async () => {
-      const off = await createTestApp({ features: { dniePhone: 'off' } });
-      try {
-        const { token: offToken } = await off.procedureWithToken();
-        const res = await off.rpc(
-          'prompt.credential',
-          { credential: 'dnie', title: 'Añade tu DNI', message: 'Lo necesito.' },
-          offToken,
-        );
-        expect(res.body).toMatchObject({ ok: false, error: { code: 'bad_request' } });
-        expect(off.pendingPrompt(procedureId)).toBeUndefined();
-      } finally {
-        await off.close();
-      }
-    });
   });
 
   it('deleting the procedure cancels its pending prompt', async () => {

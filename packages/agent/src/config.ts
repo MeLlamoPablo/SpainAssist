@@ -82,8 +82,8 @@ export const AgentHostConfigSchema = z.object({
    */
   feedback: z.object({ submit: z.boolean(), vote: z.boolean() }).optional(),
   /**
-   * The DNIe through the phone app (`dnie-phone` feature flag): the system prompt and
-   * `page.useCertificate` offer it. Off by default.
+   * The DNIe through the phone app: the system prompt and `page.useCertificate` offer it. Off by
+   * default; the desktop app always turns it on.
    */
   dniePhone: z.boolean().default(false),
   /**

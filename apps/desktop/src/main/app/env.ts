@@ -26,10 +26,9 @@ import type { UserKey } from '../providers/manager';
  *                            sets one). The `error-reports` flag and the
  *                            anonymous data sharing setting still apply (SA_FEATURE_FLAGS=error-reports turns it on)
  *   SA_FEATURE_FLAGS         development only: comma-separated Unleash flag names to turn on,
- *                            instead of asking Unleash (e.g. "dnie-phone"), each with an optional
- *                            variant after a colon ("dnie-phone:prerelease");
+ *                            instead of asking Unleash (e.g. "error-reports");
  *                            "" = all off. E2e runs never ask Unleash: without it, every
- *                            feature is off. `dev:local` turns every flag on
+ *                            feature is off. `dev:local` turns every flag off
  *   SA_EXTRA_TRUSTED_HOSTS   comma-separated host suffixes allowed for credentials (mock sede)
  *   SA_BROWSER_HEADLESS      1/0: development/e2e headless override (no visible help window)
  *   SA_CRLSET_FIXTURE=1      development only: enforce the bundled fixture CRLSet

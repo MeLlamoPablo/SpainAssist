@@ -37,7 +37,7 @@ corepack pnpm dev:local             # the desktop app, pointed at them
   `MAPBOX_TOKEN` and `LITELLM_URL` are set. `--mocks` adds the mock LLM and the mock sede;
   `--only key-server,mock-sede` picks services. Ctrl+C stops them all.
 - `corepack pnpm dev:local` points the four `SA_*_SERVER_URL` variables at `127.0.0.1` and turns
-  on the `dnie-phone` flag.
+  every feature flag off.
 - Without `LITELLM_ADMIN_URL` the key server issues mock keys for the mock LLM, so onboarding
   works fully offline. Without `LITELLM_URL` the feedback server only searches (no sharing or
   votes).
@@ -237,9 +237,8 @@ seeds on its first start. The app has two frontend tokens built in
 (`PRODUCTION_SERVICES.flagsTokens`): `desktop` for the `production` environment (packaged
 builds) and `api-key-default-development` for `development` (development builds; created in
 Unleash's UI and added to the state by hand). The flags themselves are created by hand in
-Unleash's UI (project `default`): `dnie-phone` (type experiment; its strategy's variant
-`prerelease` or `release` sets the DNIe's stage, and on without a variant means `release`, which is
-also all that versions up to 0.3.0 understand), `must-update` (constrained on the `appVersion` context field,
+Unleash's UI (project `default`): `dnie-phone` (on for versions up to 0.5.1, which still read it:
+from the next version on, the DNIe is offered to everyone), `must-update` (constrained on the `appVersion` context field,
 e.g. `SEMVER_LT 0.3.0`: without a constraint it blocks every version) and `error-reports` (type
 kill switch, on in production). The desktop reads them at start-up, and every flag is off when
 Unleash can't be reached (`FEATURE_FLAG_NAMES` in `@sa/shared`).

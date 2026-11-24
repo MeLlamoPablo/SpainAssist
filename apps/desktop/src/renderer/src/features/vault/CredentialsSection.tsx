@@ -7,13 +7,11 @@ import {
 } from '@sa/shared';
 import {
   ArrowUpRight,
-  ExternalLink,
   FileKey,
   IdCard,
   KeyRound,
   type LucideIcon,
   Plus,
-  Rocket,
   ShieldCheck,
   Smartphone,
   Trash,
@@ -63,10 +61,6 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
   const clave = overview.credentials.find((c) => c.kind === 'clave_permanente');
   const movil = overview.credentials.find((c) => c.kind === 'clave_movil');
   const certs = overview.credentials.filter((c) => c.kind === 'certificate');
-  // DNIe with the phone is behind a feature flag (main hides a saved one without it, too). In
-  // prerelease, an early-access card stands in for "Lo tengo" until the DNIe is saved.
-  const dnieStage = useAppStore((s) => s.info?.features.dniePhone ?? 'off');
-  const [earlyOpen, setEarlyOpen] = useState(false);
   const dnie = overview.credentials.find((c) => c.kind === 'dnie');
   const biometric = overview.storage.biometricAvailable;
 
@@ -152,26 +146,9 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
         )}
 
         {/* DNIe, read by the phone */}
-        {dnie && dnieStage !== 'off' ? (
+        {dnie ? (
           <DnieCard credential={dnie} biometric={biometric} />
-        ) : dnieStage === 'prerelease' ? (
-          <AddCard
-            icon={IdCard}
-            title={t.credentials.dnie.title}
-            badge={
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-st-progress-bg px-2 text-[13px] text-st-progress-fg">
-                <Rocket size={14} aria-hidden />
-                {t.credentials.dnie.earlyAccess}
-              </span>
-            }
-            body={t.credentials.dnie.what}
-            action={
-              <Button variant="secondary" icon={ShieldCheck} onClick={() => setEarlyOpen(true)}>
-                {t.credentials.dnie.try}
-              </Button>
-            }
-          />
-        ) : dnieStage !== 'release' ? null : (
+        ) : (
           <AddCard
             icon={IdCard}
             title={t.credentials.dnie.title}
@@ -218,7 +195,6 @@ export function CredentialsSection({ overview }: { overview: VaultOverview }) {
         )}
       </div>
       <ClaveDialog open={claveOpen} onOpenChange={setClaveOpen} />
-      <DnieEarlyAccessDialog open={earlyOpen} onOpenChange={setEarlyOpen} />
       <CertificateDialog open={certOpen} onOpenChange={setCertOpen} initialFile={certFile} />
     </div>
   );
@@ -1113,68 +1089,6 @@ function CertificateDialog({
         </Field>
         <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
       </form>
-    </Dialog>
-  );
-}
-
-const EARLY_ACCESS_CONTACT_URL = 'https://x.com/pabcrab/';
-
-/** The DNIe's prerelease: the phone app is in a closed test, so the user asks for an invitation. */
-function DnieEarlyAccessDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const t = useT(vaultDict);
-  const tc = useT(common);
-  const [busy, setBusy] = useState(false);
-
-  const enable = async () => {
-    setBusy(true);
-    try {
-      // Like "Lo tengo": the card goes straight to its PIN and pairing.
-      await api.invoke('vault.addDnie');
-      await reloadVault();
-      onOpenChange(false);
-      toast.success(t.credentials.dnie.saved);
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={t.credentials.dnie.earlyTitle}
-      closeLabel={tc.close}
-      width="sm"
-      footer={
-        <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {t.credentials.dnie.earlyBack}
-          </Button>
-          <Button variant="primary" loading={busy} onClick={() => void enable()}>
-            {t.credentials.dnie.earlyEnable}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col items-start gap-3 pt-1 text-[14px] text-fg-muted">
-        <p>{t.credentials.dnie.earlyAndroid}</p>
-        <p>{t.credentials.dnie.earlyInvite}</p>
-        <Button
-          variant="link"
-          icon={ExternalLink}
-          onClick={() => void api.invoke('app.openExternal', EARLY_ACCESS_CONTACT_URL)}
-        >
-          {t.credentials.dnie.earlyContact}
-        </Button>
-      </div>
     </Dialog>
   );
 }

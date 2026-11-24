@@ -40,8 +40,8 @@ export interface IpcServices {
   vault: VaultService;
   media: MediaStore;
   browser: BrowserHolder;
-  /** DNIe with the phone; absent without the `dnie-phone` feature flag. */
-  companion?: Pick<
+  /** DNIe with the phone. */
+  companion: Pick<
     CompanionService,
     'status' | 'pair' | 'pairAnother' | 'unpair' | 'unlock' | 'skipUpdate'
   >;
@@ -81,11 +81,7 @@ export interface IpcServices {
 /** Registers every SaMethods handler on the router. */
 export function registerIpcHandlers(router: IpcRouter, s: IpcServices): void {
   const lang = () => s.settings.get().language;
-  /** The flag is enforced here too, not only by the UI that hides the feature. */
-  const companion = () => {
-    if (!s.companion) throw new UserError(t(lang(), 'dniePhoneOff'), 'unavailable');
-    return s.companion;
-  };
+  const companion = () => s.companion;
 
   router.register('places.locateHome', S['places.locateHome'], (address) => s.places.home(address));
   router.register('places.pins', S['places.pins'], (itemId, fieldKey) =>

@@ -153,7 +153,7 @@ export const test = base.extend<{ harness: Harness } & E2eOptions>({
         SA_USER_DATA_DIR: userData,
         SA_KEY_SERVER_URL: keyUrl,
         SA_FEEDBACK_SERVER_URL: feedbackUrl,
-        SA_FEATURE_FLAGS: 'dnie-phone',
+        SA_FEATURE_FLAGS: '',
         SA_EXTRA_TRUSTED_HOSTS: 'localhost,127.0.0.1',
         ...(parity
           ? { SA_CRLSET_FIXTURE: '1', SA_BROWSER_HEADLESS: '0' }

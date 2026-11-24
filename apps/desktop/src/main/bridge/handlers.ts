@@ -55,11 +55,6 @@ export interface BridgeHandlerDeps {
   certificateOrigins: readonly string[];
   logger: Logger;
   lang: () => Language;
-  /**
-   * DNI with the phone (`dnie-phone` feature flag). Off: agents never see a saved `dnie`
-   * credential, and using one fails with an explanation.
-   */
-  dniePhone: boolean;
   /** How long an "ask before use" approval covers the same credential + site (default 2 min). */
   approvalTtlMs?: number;
 }
@@ -171,16 +166,11 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
     );
   }
 
-  /** A saved credential the agent may use (the DNI only with its feature flag). */
+  /** A saved credential the agent may use. */
   function requireCredential(id: string): CredentialSummary {
     const credential = deps.vault().getCredential(id);
     if (!credential)
       throw new BridgeError('not_found', 'No such credential. Call vault_read to list them.');
-    if (credential.kind === 'dnie' && !deps.dniePhone)
-      throw new BridgeError(
-        'bad_request',
-        'The DNI through the phone is not available in this version of the app. Log in with Cl@ve or a digital certificate (.p12) instead, or tell the user which methods this site accepts.',
-      );
     return credential;
   }
 
@@ -405,8 +395,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
           'bad_request',
           'Log in with browser_login_clave: it asks the user for their Cl@ve Permanente when none is saved.',
         );
-      if (!deps.dniePhone)
-        throw new BridgeError('bad_request', 'The DNI with the phone is not available.');
       const prompt: CredentialPrompt = { kind: 'credential', ...params };
       const response = await deps.prompts.ask(ctx.procedureId, prompt, { signal: ctx.signal });
       if (response.kind !== 'credential') throw new BridgeError('internal', 'Unexpected response.');
@@ -439,25 +427,22 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
           mimeType: d.mimeType,
           createdAt: d.createdAt,
         })),
-        credentials: vault
-          .listCredentials()
-          .filter((c) => deps.dniePhone || c.kind !== 'dnie')
-          .map((c) => ({
-            id: c.id,
-            kind: c.kind,
-            label: c.label,
-            policy: c.policy,
-            ...(c.usernameHint ? { usernameHint: c.usernameHint } : {}),
-            ...(c.certificate
-              ? {
-                  certificate: {
-                    ...(c.certificate.holderName ? { holderName: c.certificate.holderName } : {}),
-                    issuer: c.certificate.issuer,
-                    validTo: c.certificate.validTo,
-                  },
-                }
-              : {}),
-          })),
+        credentials: vault.listCredentials().map((c) => ({
+          id: c.id,
+          kind: c.kind,
+          label: c.label,
+          policy: c.policy,
+          ...(c.usernameHint ? { usernameHint: c.usernameHint } : {}),
+          ...(c.certificate
+            ? {
+                certificate: {
+                  ...(c.certificate.holderName ? { holderName: c.certificate.holderName } : {}),
+                  issuer: c.certificate.issuer,
+                  validTo: c.certificate.validTo,
+                },
+              }
+            : {}),
+        })),
       };
     },
 

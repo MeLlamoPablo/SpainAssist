@@ -6,7 +6,6 @@ import type { CaptureOptions } from '@sa/browser';
 import {
   type AppInfo,
   ASSISTANT_AGENT_ID,
-  dniePhoneOffered,
   type Language,
   type UiEvent,
   type WindowControlsStyle,
@@ -163,8 +162,8 @@ export interface MainServices {
   vault: VaultService;
   media: MediaStore;
   browser: BrowserHolder;
-  /** DNIe with the phone; only with the `dnie-phone` feature flag. */
-  companion?: CompanionService;
+  /** DNIe with the phone. */
+  companion: CompanionService;
   feedback: FeedbackService;
   /** Agents, their runs and the coordinator that drives them (docs/codemode.md). */
   codemode: {
@@ -186,15 +185,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   const logger = deps.logger;
   const clock = deps.clock ?? systemClock;
   const ids = deps.ids ?? newId;
-  // In prerelease the DNIe's plumbing (pairing, relay, a saved DNIe) is there from launch, so the
-  // user can save their DNIe without a restart; agents only offer it once it is saved.
-  const dnieStage = deps.appInfo.features.dniePhone;
-  const dniePhone = dnieStage !== 'off';
-  const dnieOffered = () =>
-    dniePhoneOffered(
-      dnieStage,
-      vaultPort.listCredentials().some((c) => c.kind === 'dnie'),
-    );
 
   const assistant = assistantPaths(paths.assistantDir);
   for (const dir of [
@@ -367,7 +357,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
               },
             }
           : {}),
-        dniePhone: dnieOffered(),
+        dniePhone: true,
         certificateRequests: true,
       };
     },
@@ -420,7 +410,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     openPath: deps.openPath,
     openSystemCertificates: deps.openSystemCertificates,
     lang,
-    dniePhone,
     onCredentialDeleted: () => browser.closeAll(),
     chooseSavePath: deps.chooseSavePath,
     ...(osCertificates ? { osCertificates } : {}),
@@ -432,24 +421,21 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
   );
   await vault.cleanupTmp();
 
-  // Behind the feature flag: without it there is no pairing and no relay connection.
-  const companion = dniePhone
-    ? new CompanionService({
-        relayUrl: env.relayServerUrl,
-        // Development: a phone can't reach this machine's loopback relay.
-        lanRelay: deps.appInfo.isDev && !env.e2e,
-        appVersion: deps.appInfo.version,
-        fetch: deps.fetch,
-        events,
-        prompts,
-        procedures,
-        vault: vaultFn,
-        ...(deps.signer ? { certificateInfo: deps.signer.certificateInfo } : {}),
-        ...(deps.relaySocket ? { socket: deps.relaySocket } : {}),
-        logger: logger.child('companion'),
-        lang,
-      })
-    : undefined;
+  const companion = new CompanionService({
+    relayUrl: env.relayServerUrl,
+    // Development: a phone can't reach this machine's loopback relay.
+    lanRelay: deps.appInfo.isDev && !env.e2e,
+    appVersion: deps.appInfo.version,
+    fetch: deps.fetch,
+    events,
+    prompts,
+    procedures,
+    vault: vaultFn,
+    ...(deps.signer ? { certificateInfo: deps.signer.certificateInfo } : {}),
+    ...(deps.relaySocket ? { socket: deps.relaySocket } : {}),
+    logger: logger.child('companion'),
+    lang,
+  });
 
   const certificates = await deps.startSidecar?.().then(
     (sidecar) => {
@@ -503,7 +489,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     events,
     ...(deps.signer ? { signer: deps.signer } : {}),
     certificateRequests: certificateRequests.handle,
-    ...(companion ? { companion } : {}),
+    companion,
     ...(osCertificates ? { osCertificates } : {}),
     ...(deps.signerFetch ? { fetch: deps.signerFetch } : {}),
     logger: logger.child('browser'),
@@ -563,7 +549,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
         certificateOrigins: deps.certificateOrigins,
         logger: logger.child('bridge'),
         lang,
-        dniePhone,
       }),
       ...createCodemodeHandlers({
         runs,
@@ -597,16 +582,6 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     certificates?.setLanguage(next.language);
     void agents.stopAll();
   });
-  // Agents read whether the DNIe is offered when they start (buildConfig): in prerelease, saving
-  // or deleting the DNIe changes it, so restart them.
-  if (dnieStage === 'prerelease') {
-    let offered = dnieOffered();
-    events.on((e) => {
-      if (e.type !== 'vault.changed' || dnieOffered() === offered) return;
-      offered = !offered;
-      void agents.stopAll();
-    });
-  }
 
   async function deleteProcedure(id: string): Promise<void> {
     procedures.require(id);
@@ -626,7 +601,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
     await agents.stopAll();
     prompts.cancelEverything();
     tokens.revokeAll();
-    companion?.unpair();
+    companion.unpair();
     await browser.closeAll();
     await vaultPort.wipe();
     await procedures.deleteAll();
@@ -643,7 +618,7 @@ export async function createMainServices(deps: MainDeps): Promise<MainServices> 
 
   async function shutdown(): Promise<void> {
     prompts.suspend();
-    companion?.shutdown();
+    companion.shutdown();
     await agents.stopAll().catch(() => {});
     await browser.closeAll().catch(() => {});
     await certificates?.close().catch(() => {});

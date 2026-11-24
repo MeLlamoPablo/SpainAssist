@@ -25,12 +25,11 @@ function load(handler: Parameters<typeof createFakeFetch>[0]) {
 describe('loadFeatureFlags', () => {
   it("reads the flags that are on from Unleash's frontend API", async () => {
     const { fetch, flags } = load(() =>
-      jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
+      jsonResponse(200, { toggles: [{ name: 'error-reports', enabled: true }] }),
     );
     expect(await flags).toEqual({
-      dniePhone: 'release',
       mustUpdate: false,
-      errorReports: false,
+      errorReports: true,
     });
     const request = fetch.requests[0];
     expect(request?.url.pathname).toBe('/api/frontend');
@@ -48,7 +47,7 @@ describe('loadFeatureFlags', () => {
   it('reports to Unleash that each flag was checked once, on or off', async () => {
     const { fetch, flags } = load((req) =>
       req.url.pathname === '/api/frontend'
-        ? jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] })
+        ? jsonResponse(200, { toggles: [{ name: 'error-reports', enabled: true }] })
         : jsonResponse(202, {}),
     );
     await flags;
@@ -64,8 +63,8 @@ describe('loadFeatureFlags', () => {
         start: expect.any(String),
         stop: expect.any(String),
         toggles: {
-          'dnie-phone': { yes: 1, no: 0, variants: {} },
           'must-update': { yes: 0, no: 1, variants: {} },
+          'error-reports': { yes: 1, no: 0, variants: {} },
         },
       },
     });
@@ -74,50 +73,22 @@ describe('loadFeatureFlags', () => {
   it('keeps the flags when the metrics report fails', async () => {
     const { fetch, flags } = load((req) =>
       req.url.pathname === '/api/frontend'
-        ? jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] })
+        ? jsonResponse(200, { toggles: [{ name: 'error-reports', enabled: true }] })
         : jsonResponse(500, {}),
     );
     expect(await flags).toEqual({
-      dniePhone: 'release',
       mustUpdate: false,
-      errorReports: false,
+      errorReports: true,
     });
     await vi.waitFor(() => expect(fetch.requests).toHaveLength(2));
   });
 
-  it('turns on DNI with the phone only when dnie-phone is on', async () => {
-    const on = load(() =>
-      jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true }] }),
-    ).flags;
-    expect(await on).toEqual({
-      dniePhone: 'release',
-      mustUpdate: false,
-      errorReports: false,
+  it('reads SA_FEATURE_FLAGS names, ignoring flags it does not know', () => {
+    // `dnie-phone` stays on in Unleash for versions up to 0.5.1.
+    expect(featuresFromNames(['dnie-phone', 'error-reports'])).toEqual({
+      ...FEATURES_OFF,
+      errorReports: true,
     });
-    const off = load(() =>
-      jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: false }] }),
-    ).flags;
-    expect((await off).dniePhone).toBe('off');
-  });
-
-  it("reads the DNI's stage from the dnie-phone variant", async () => {
-    const stage = async (variant: { name: string; enabled: boolean }) =>
-      (
-        await load(() =>
-          jsonResponse(200, { toggles: [{ name: 'dnie-phone', enabled: true, variant }] }),
-        ).flags
-      ).dniePhone;
-    expect(await stage({ name: 'prerelease', enabled: true })).toBe('prerelease');
-    expect(await stage({ name: 'release', enabled: true })).toBe('release');
-    // On without variants, as before the flag had them.
-    expect(await stage({ name: 'disabled', enabled: false })).toBe('release');
-  });
-
-  it('takes the variant from SA_FEATURE_FLAGS after a colon', () => {
-    expect(featuresFromNames(['dnie-phone:prerelease']).dniePhone).toBe('prerelease');
-    expect(featuresFromNames(['dnie-phone:release']).dniePhone).toBe('release');
-    expect(featuresFromNames(['dnie-phone']).dniePhone).toBe('release');
-    expect(featuresFromNames(['error-reports'])).toEqual({ ...FEATURES_OFF, errorReports: true });
   });
 
   it('blocks this version only when must-update is on', async () => {
@@ -125,7 +96,6 @@ describe('loadFeatureFlags', () => {
       jsonResponse(200, { toggles: [{ name: 'must-update', enabled: true }] }),
     ).flags;
     expect(await on).toEqual({
-      dniePhone: 'off',
       mustUpdate: true,
       errorReports: false,
     });

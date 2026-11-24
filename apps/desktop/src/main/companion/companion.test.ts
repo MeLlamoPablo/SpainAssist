@@ -995,117 +995,19 @@ it('enables DNI browser login after origin policy, desktop consent and phone app
   });
 });
 
-describe('without the dnie-phone feature flag', () => {
-  async function setupOff() {
-    const relay = new MemoryRelay();
-    app = await createTestApp({
-      env: { relayServerUrl: 'wss://relay.example.test' },
-      relaySocket: relay.WebSocket,
-      features: { dniePhone: 'off' },
-    });
-    // Saved while the flag was on.
-    const dnie = await app.vault.addDnie();
-    const session = await app.procedureWithToken();
-    return { relay, app, dnie, ...session };
-  }
-
-  it('never starts the companion and refuses pairing and new DNI credentials', async () => {
-    const { relay, app: a } = await setupOff();
-    expect(a.services.companion).toBeUndefined();
-    for (const method of [
-      'companion.status',
-      'companion.pair',
-      'companion.unpair',
-      'companion.pairAnother',
-    ] as const)
-      await expect(a.invoke(method)).rejects.toThrow('no está disponible');
-    await expect(a.invoke('vault.addDnie')).rejects.toThrow('no está disponible');
-    await expect(a.invoke('companion.unlock', 'q-1', { can: CAN, pin: PIN })).rejects.toThrow(
-      'no está disponible',
-    );
-    expect(relay.rooms.size).toBe(0);
-    expect(a.events.some((e) => e.type === 'companion.changed')).toBe(false);
+it('offers the DNI to every agent, before the user saves one', async () => {
+  const a = await createTestApp({
+    env: { relayServerUrl: 'wss://relay.example.test' },
+    relaySocket: new MemoryRelay().WebSocket,
   });
-
-  it('hides a saved DNI from Mis datos and agents, and keeps it stored', async () => {
-    const { app: a, dnie, token } = await setupOff();
-    expect((await a.invoke('vault.overview')).credentials).toEqual([]);
-    expect((await a.rpc('vault.read', {}, token)).body.result.credentials).toEqual([]);
-    await expect(a.invoke('vault.deleteCredential', dnie.id)).rejects.toThrow();
-    await expect(a.invoke('vault.setCredentialPolicy', dnie.id, 'auto')).rejects.toThrow();
-    expect(a.vault.getCredential(dnie.id)).toMatchObject({ kind: 'dnie', policy: 'ask' });
-
-    // Flags are read at start-up: the next launch with the flag on shows it again.
-    await a.restart({ dniePhone: 'release' });
-    expect((await a.invoke('vault.overview')).credentials).toMatchObject([{ id: dnie.id }]);
-    expect(a.services.companion).toBeDefined();
-  });
-
-  it('refuses DNI logins with an explanation and leaves the DNI out of signatures', async () => {
-    const { relay, app: a, dnie, procedureId, token } = await setupOff();
-    const login = await a.rpc('browser.useCertificate', { credentialId: dnie.id }, token);
-    expect(login.body.error).toMatchObject({
-      code: 'bad_request',
-      message: expect.stringContaining('DNI through the phone is not available'),
-    });
-    expect(a.pendingPrompt(procedureId)).toBeUndefined();
-
-    // AutoFirma: with only the DNI saved, there is no certificate to offer.
-    expect(await a.services.browser.approveSignature(procedureId, summary)).toBeNull();
-    expect(a.pendingPrompt(procedureId)).toBeUndefined();
-    expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
-      type: 'notice',
-      text: 'sede.example.gob.es te pide firmar, pero no tienes ningún certificado digital guardado. Añádelo en Mis datos.',
-    });
-    expect(relay.rooms.size).toBe(0);
-    expect(a.browser.certificates).toEqual([]);
-  });
-
-  it('tells agents the DNI is off (prompt and tools)', async () => {
-    const { app: a } = await setupOff();
-    const provider = {
-      baseUrl: 'http://127.0.0.1:8789/v1',
-      api: 'openai-completions',
-      model: 'mock-model',
-    } as const;
-    expect((await a.invoke('providers.setCustom', provider)).ok).toBe(true);
-    const { agentId } = await a.startProcedure();
-    expect(a.agentFor(agentId)?.launch.config).toMatchObject({ dniePhone: false });
-    await a.restart({ dniePhone: 'release' });
-    await a.say('Otro trámite');
-    const { agentId: next } = await a.startProcedure('Otro trámite');
-    expect(a.agentFor(next)?.launch.config).toMatchObject({ dniePhone: true });
-  });
-});
-
-describe('in the prerelease of the dnie-phone feature flag', () => {
-  it('starts the companion, and offers the DNI to agents while it is saved', async () => {
-    const a = await createTestApp({
-      env: { relayServerUrl: 'wss://relay.example.test' },
-      relaySocket: new MemoryRelay().WebSocket,
-      features: { dniePhone: 'prerelease' },
-    });
-    app = a;
-    expect(a.services.companion).toBeDefined();
-    const provider = {
-      baseUrl: 'http://127.0.0.1:8789/v1',
-      api: 'openai-completions',
-      model: 'mock-model',
-    } as const;
-    expect((await a.invoke('providers.setCustom', provider)).ok).toBe(true);
-    const { agentId } = await a.startProcedure();
-    expect(a.agentFor(agentId)?.launch.config).toMatchObject({ dniePhone: false });
-
-    // "Ya tengo la app, habilitar DNI" saves the DNI.
-    const dnie = await a.invoke('vault.addDnie');
-    expect((await a.invoke('vault.overview')).credentials).toMatchObject([{ id: dnie.id }]);
-    await a.say('Otro trámite');
-    const { agentId: next } = await a.startProcedure('Otro trámite');
-    expect(a.agentFor(next)?.launch.config).toMatchObject({ dniePhone: true });
-
-    await a.invoke('vault.deleteCredential', dnie.id);
-    await a.say('Un trámite más');
-    const { agentId: last } = await a.startProcedure('Un trámite más');
-    expect(a.agentFor(last)?.launch.config).toMatchObject({ dniePhone: false });
-  });
+  app = a;
+  expect(a.services.companion).toBeDefined();
+  const provider = {
+    baseUrl: 'http://127.0.0.1:8789/v1',
+    api: 'openai-completions',
+    model: 'mock-model',
+  } as const;
+  expect((await a.invoke('providers.setCustom', provider)).ok).toBe(true);
+  const { agentId } = await a.startProcedure();
+  expect(a.agentFor(agentId)?.launch.config).toMatchObject({ dniePhone: true });
 });
