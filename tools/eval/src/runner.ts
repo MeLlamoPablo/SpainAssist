@@ -87,9 +87,9 @@ export interface EvaluationRequest {
   localBaseUrl?: string;
   /**
    * `local` only: the answerer goes to this provider instead of the local server (its model then
-   * defaults to the product's answerer), through a meter run of its own.
+   * defaults to that provider's answerer), through a meter run of its own.
    */
-  answererProvider?: 'voucher';
+  answererProvider?: 'voucher' | 'codex';
   /** SpainBench's environment (`SPAINBENCH_DIR`, `SPAINBENCH_URL`...); default `process.env`. */
   env?: Record<string, string | undefined>;
   /** Base of a relative `SPAINBENCH_DIR` and `runsRoot` (default: the process' directory). */
@@ -139,9 +139,11 @@ export function defaultCache(provider: EvalProvider): CacheMode {
 export function defaultModels(
   provider: EvalProvider,
   models: Partial<EvalModelChoice> = {},
+  answererProvider: EvalProvider = provider,
 ): EvalModelChoice {
   return {
-    answererModel: provider === 'codex' ? DEFAULT_CODEX_ANSWERER_MODEL : DEFAULT_ANSWERER_MODEL,
+    answererModel:
+      answererProvider === 'codex' ? DEFAULT_CODEX_ANSWERER_MODEL : DEFAULT_ANSWERER_MODEL,
     answererThinking: DEFAULT_ANSWERER_THINKING,
     ...models,
   };
@@ -179,7 +181,7 @@ export interface PreparedEvaluation {
   /** The `local` provider's server (`EvaluationRequest.localBaseUrl`, checked). */
   localBaseUrl?: string;
   /** `EvaluationRequest.answererProvider` and its credential. */
-  answerer?: { provider: 'voucher'; credentials: CredentialSource };
+  answerer?: { provider: 'voucher' | 'codex'; credentials: CredentialSource };
 }
 
 /**
@@ -243,6 +245,7 @@ export async function prepareEvaluation(request: EvaluationRequest): Promise<Pre
           provider: request.answererProvider,
           cache,
           home,
+          ...(request.codexConsent !== undefined ? { consent: request.codexConsent } : {}),
           env,
         }),
       }
@@ -428,9 +431,13 @@ export async function runEvaluation(request: EvaluationRequest): Promise<RunOutc
           : provider === 'local'
             ? plan.localBaseUrl
             : CODEX_BASE_URL;
-    const models = defaultModels(provider, request.models);
+    const models = defaultModels(provider, request.models, plan.answerer?.provider);
     const answererUpstream =
-      plan.answerer?.provider === 'voucher' ? { voucher: plan.voucherBaseUrl } : {};
+      plan.answerer?.provider === 'voucher'
+        ? { voucher: plan.voucherBaseUrl }
+        : plan.answerer?.provider === 'codex'
+          ? { codex: CODEX_BASE_URL }
+          : {};
     meter = await createMeter({
       home: plan.home,
       upstreams: { ...answererUpstream, ...(upstream ? { [provider]: upstream } : {}) },

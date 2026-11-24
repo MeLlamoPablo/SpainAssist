@@ -241,7 +241,7 @@ describe('eval run: arguments become the request', () => {
     expect(request.runId).toMatch(/^vida-laboral-sin-datos-local-/);
   });
 
-  it('sends the answerer of a local run to the voucher with --answerer-provider', async () => {
+  async function runLocalWithAnswerer(...answererArgs: string[]): Promise<EvaluationRequest> {
     const harness = runCli();
     cli = harness.cli;
     await cli.run(
@@ -255,12 +255,32 @@ describe('eval run: arguments become the request', () => {
       'm',
       '--procedure-model',
       'm',
-      '--answerer-provider',
-      'voucher',
+      ...answererArgs,
     );
-    const request = harness.requests[0] as EvaluationRequest;
+    return harness.requests[0] as EvaluationRequest;
+  }
+
+  it('sends the answerer of a local run to the voucher with --answerer-provider', async () => {
+    const request = await runLocalWithAnswerer('--answerer-provider', 'voucher');
     expect(request.answererProvider).toBe('voucher');
     expect(request.models).toEqual({ assistantModel: 'm', procedureModel: 'm' });
+  });
+
+  it('sends the answerer of a local run to Codex, with its own model and the consent', async () => {
+    const request = await runLocalWithAnswerer(
+      '--answerer-provider',
+      'codex',
+      '--answerer-model',
+      'gpt-6.2-sol',
+      '--codex-consent',
+    );
+    expect(request.answererProvider).toBe('codex');
+    expect(request.codexConsent).toBe(true);
+    expect(request.models).toEqual({
+      assistantModel: 'm',
+      procedureModel: 'm',
+      answererModel: 'gpt-6.2-sol',
+    });
   });
 
   it('turns --from <runId>#<n> and <runDir>#<n> into a checkpoint of that run folder', async () => {
@@ -399,10 +419,10 @@ describe('eval run: usage errors (exit 2, nothing started)', () => {
       ['vida-laboral-sin-datos', '--base-url', 'http://localhost:1234/v1'],
       /--base-url is the local model server's: it cannot be used with --provider voucher/,
     ));
-  it('refuses an answerer provider that is not the voucher, or without a local run', async () => {
+  it('refuses an answerer provider that is not the voucher or Codex, or without a local run', async () => {
     await refused(
-      ['vida-laboral-sin-datos', '--answerer-provider', 'codex'],
-      /--answerer-provider must be one of voucher/,
+      ['vida-laboral-sin-datos', '--answerer-provider', 'mock'],
+      /--answerer-provider must be one of voucher, codex/,
     );
     await refused(
       ['vida-laboral-sin-datos', '--answerer-provider', 'voucher'],

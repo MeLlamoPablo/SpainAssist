@@ -91,7 +91,7 @@ export interface RunOptions {
   meter: MeterHandle;
   credentials: CredentialSource;
   /**
-   * The answerer's own provider, when it is not the agents' (a local run with a voucher answerer):
+   * The answerer's own provider, when it is not the agents' (a local run with a voucher or Codex answerer):
    * its calls go through a meter run of their own, opened the first time the answerer is needed.
    */
   answerer?: { provider: EvalProvider; credentials: CredentialSource };

@@ -119,6 +119,8 @@ describe('small decisions', () => {
     });
     expect(defaultModels('mock').answererModel).toBe(DEFAULT_ANSWERER_MODEL);
     expect(defaultModels('codex').answererModel).toBe(DEFAULT_CODEX_ANSWERER_MODEL);
+    expect(defaultModels('local', {}, 'codex').answererModel).toBe(DEFAULT_CODEX_ANSWERER_MODEL);
+    expect(defaultModels('local', {}, 'voucher').answererModel).toBe(DEFAULT_ANSWERER_MODEL);
     expect(DEFAULT_CODEX_ANSWERER_MODEL).not.toBe(DEFAULT_ANSWERER_MODEL);
     expect(
       defaultModels('voucher', { assistantModel: 'a', procedureModel: 'p', answererModel: 'u' }),
@@ -250,6 +252,22 @@ describe('prepareEvaluation refuses before anything starts', () => {
       env: { ...BENCH_ENV, SA_EVAL_CODEX_CONSENT: '1' },
     }).catch((e: unknown) => e);
     expect(viaEnv).toBeInstanceOf(CodexAuthError);
+    none();
+  });
+
+  it('a Codex answerer of a local run needs the consent and a login too', async () => {
+    const { scenario: _scenario, ...local } = request({
+      provider: 'local',
+      localBaseUrl: 'http://localhost:1234/v1',
+      answererProvider: 'codex',
+      models: { assistantModel: 'm', procedureModel: 'm' },
+    });
+    await expect(prepareEvaluation(local)).rejects.toBeInstanceOf(CodexConsentError);
+    const error = await prepareEvaluation({ ...local, codexConsent: true }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(CodexAuthError);
+    expect((error as CodexAuthError).code).toBe('missing');
     none();
   });
 

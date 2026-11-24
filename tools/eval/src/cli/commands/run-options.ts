@@ -81,7 +81,7 @@ export function readSharedOptions(parsed: ParsedArgs, command: string): SharedOp
   const answererProviderText = text('answerer-provider');
   const answererProvider =
     answererProviderText !== undefined
-      ? choiceOption('answerer-provider', answererProviderText, ['voucher'] as const)
+      ? choiceOption('answerer-provider', answererProviderText, ['voucher', 'codex'] as const)
       : undefined;
   if (answererProvider !== undefined && provider !== 'local') {
     throw new UsageError(

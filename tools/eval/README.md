@@ -81,7 +81,7 @@ missing value or an empty value (`--from "$UNSET"`) is a usage error, never "not
 | `--provider mock\|voucher\|codex\|local` | Who answers the agents. Default `mock` with `--scenario`, else `voucher` |
 | `--scenario <name>` | Scripted model for `mock`: `oracle`, `robust`, `susceptible`, `lost` |
 | `--base-url <url>` | `local` only (required): your model server's OpenAI-compatible `/v1` URL, e.g. LM Studio |
-| `--answerer-provider voucher` | `local` only: the answerer goes through the voucher key. A run note gives its cost, which the run's cost leaves out |
+| `--answerer-provider voucher\|codex` | `local` only: the answerer goes through the voucher key or the Codex login (`codex` needs `--codex-consent`). A run note gives its cost, which the run's cost leaves out |
 | `--cache off\|record\|replay\|auto` | Default `auto` for paid providers, `off` for `mock` and `local`. `replay` needs no key or gateway |
 | `--cache-variant <x>` | Keeps independent recorded samples apart (use a new `x` with `record`) |
 | `--max-cost <usd>`, `--max-tool-calls <n>`, `--max-requests <n>`, `--wall-clock <minutes>` | Override the fixture's limits |

@@ -54,8 +54,9 @@ const ANSWERER_PROVIDER_OPTION: OptionSpec = {
   type: 'string',
   arg: 'name',
   description:
-    'With --provider local: who answers the answerer instead of the local server. Only voucher ' +
-    "(the answerer then defaults to the product's answerer model, through the voucher key).",
+    'With --provider local: who answers the answerer instead of the local server: voucher ' +
+    "(the answerer then defaults to the product's answerer model, through the voucher key) or " +
+    'codex (default gpt-6-luna, through the Codex login; needs --codex-consent).',
 };
 const SCENARIO_OPTION: OptionSpec = {
   name: 'scenario',
