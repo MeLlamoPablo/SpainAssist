@@ -11,6 +11,16 @@ export const LANGUAGE_NAMES: Record<'es' | 'en', string> = {
   en: 'English',
 };
 
+export type ByLanguage = (es: string, en: string) => string;
+
+/**
+ * Picks a prompt's example text in the app's language. Models copy the language of examples
+ * (statuses, steps, labels) over any rule, so every example the user may see is in that language.
+ */
+export function byLanguage(language: 'es' | 'en'): ByLanguage {
+  return (es, en) => (language === 'es' ? es : en);
+}
+
 /** The user's time zone if Intl knows it, otherwise Europe/Madrid. */
 function resolveTimeZone(timeZone = 'Europe/Madrid'): string {
   try {

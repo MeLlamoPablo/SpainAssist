@@ -1,4 +1,5 @@
 import { PERSONAL_FIELDS } from '@sa/shared';
+import { type ByLanguage, byLanguage } from '../prompt/system';
 
 /**
  * The `.d.ts` the model reads: the codemode agents' API, documentation only (modules are
@@ -6,6 +7,8 @@ import { PERSONAL_FIELDS } from '@sa/shared';
  * when to use what. Keep it compact: it is in every request.
  */
 export interface DeclarationOptions {
+  /** The app's language: the examples the model copies are in it (prompt/system.ts, byLanguage). */
+  language: 'es' | 'en';
   /** `api.search` is available (research backend configured). */
   search: boolean;
   /** Community learnings: search, plus submit / vote when on. */
@@ -15,11 +18,12 @@ export interface DeclarationOptions {
 }
 
 export function buildDeclarations(o: DeclarationOptions): string {
-  const parts: string[] = [HEADER, STATE, UI, PROCEDURES, RUNS];
+  const l = byLanguage(o.language);
+  const parts: string[] = [HEADER, STATE, ui(l), procedures(l), RUNS];
   if (o.search) parts.push(SEARCH);
-  parts.push(WEB, VAULT);
+  parts.push(WEB, vault(l));
   if (o.feedback) parts.push(FEEDBACK(o.feedback));
-  parts.push(BROWSER(!!o.dniePhone), USER, apiInterface(o));
+  parts.push(browser(!!o.dniePhone, l), USER, apiInterface(o, l));
   return parts.join('\n');
 }
 
@@ -44,13 +48,13 @@ interface State {
   keys(): string[];
 }`;
 
-const UI = `
+const ui = (l: ByLanguage) => `
 /** Native interfaces for the user. Rendering needs no model turn: the run keeps going. */
 interface Ui {
   /** Shows render() until a handler calls close(result); resolves with result. Keys are shared by
    *  all your runs: once closed, a key returns its stored result without showing anything.
    *  It appears above the user's procedures, apart from them and without saying which procedure
-   *  it is for: title it so it reads on its own ("Cita para renovar el DNI"). */
+   *  it is for: title it so it reads on its own (${l('"Cita para renovar el DNI"', '"Appointment to renew your DNI"')}). */
   present<R>(key: string, render: () => JSX.Element): Promise<R>;
   /** From a handler. Pass the key when several interfaces are open or after an await. */
   close(result: unknown, key?: string): Promise<void>;
@@ -76,10 +80,10 @@ interface Ui {
 //   interface closes, the app saves the field's value to Mis datos itself (unless it has an error). Never add a
 //   "save my data" checkbox or call api.vault.save for these answers. Prefill value from api.vault.read.
 // Ask everything you need in one interface, each thing once: a follow-up field renders only for the answer that
-//   needs it ({choice === "x" && <TextField …/>}), never labelled "(si …)", and close returns only what is shown.
-//   Offer a way out ("Saltar"/"No lo sé") when the answer may not exist.`;
+//   needs it ({choice === "x" && <TextField …/>}), never labelled ${l('"(si …)"', '"(if …)"')}, and close returns only what is shown.
+//   Offer a way out (${l('"Saltar"/"No lo sé"', `"Skip"/"I don't know"`)}) when the answer may not exist.`;
 
-const PROCEDURES = `
+const procedures = (l: ByLanguage) => `
 /** A procedure as the user sees it in the app. Updates use optimistic concurrency: they throw "conflict"
  *  when anyone changed it since you read it (refresh(), reconsider, retry). */
 interface Procedure extends ProcedureFields {
@@ -100,10 +104,10 @@ interface ProcedureFields {
   steps: { id: string; title: string; status: "pending"|"current"|"done"|"skipped"|"failed"; detail?: string; owner?: "agent"|"user"|"administration" }[];
   /** What THIS user must have: documents, fees, credentials. Only what applies to them. */
   requirements: { id: string; label: string; detail?: string; status: "missing"|"have"|"not_needed" }[];
-  /** 2–4 key facts: {label: "Coste", value: "Gratis"}. */
+  /** 2–4 key facts: ${l('{label: "Coste", value: "Gratis"}', '{label: "Cost", value: "Free"}')}. */
   facts: { label: string; value: string }[];
   sources: { title: string; url: string }[];
-  /** A handover to the user or the administration ("Ve a la comisaría con…"), never your own work. */
+  /** A handover to the user or the administration (${l('"Ve a la comisaría con…"', '"Go to the police station with…"')}), never your own work. */
   nextAction?: { text: string; owner: "user"|"administration"; appointment?: { address: string; startsAt: string /* local YYYY-MM-DDTHH:mm */ } };
 }
 type ProcedurePatch = Partial<Omit<ProcedureFields, "nextAction">> & { nextAction?: ProcedureFields["nextAction"] | null };
@@ -137,7 +141,7 @@ const WEB = `
 interface FetchedPage { url: string; title?: string; text: string /* markdown */; truncated: boolean; nextOffset?: number }
 interface FetchResponse { ok: boolean; status: number; url: string; headers: Record<string,string>; text(): Promise<string>; json(): Promise<any> }`;
 
-const VAULT = `
+const vault = (l: ByLanguage) => `
 /** The user's saved data ("Mis datos"). Values of personal data; credentials as summaries only. */
 interface Vault {
   read(options?: { keys?: string[] }): Promise<{
@@ -155,9 +159,9 @@ interface Documents {
    *  (scans have no text: look at their pages). */
   read(name: string, options?: { page?: number }): Promise<{ name: string; mimeType: string; text?: string; pages?: number; truncated?: boolean; image?: Image }>;
   /** Keeps a browser download (downloadId from page results) in the user's documents under a
-   *  readable name ("Justificante cita DNI"). Unsaved downloads vanish when the app restarts. */
+   *  readable name (${l('"Justificante cita DNI"', '"DNI appointment receipt"')}). Unsaved downloads vanish when the app restarts. */
   saveDownload(downloadId: string, name: string): Promise<{ name: string }>;
-  /** Gives a saved document a short readable name ("DNI (anverso)"); its extension is kept. From
+  /** Gives a saved document a short readable name (${l('"DNI (anverso)"', '"DNI (front)"')}); its extension is kept. From
    *  then on, use the new name. */
   rename(name: string, newName: string): Promise<{ name: string }>;
   /** Fills in a saved PDF the way a person does with a pen. Look at its pages first (read with
@@ -197,7 +201,7 @@ interface Feedback {
 const REOPEN_HEADED =
   'The browser is headless (no window). If a site refuses it after you opened it (blocked, 403, a bot check that never ends, a captcha that rejects correct answers), reopen the procedure in a visible browser window: cookies kept, the current page loaded again, but what was typed and not submitted is lost, so judge whether a form must be filled or submitted again. Never as a first attempt, and not for captchas the user can solve from the app.';
 
-const BROWSER = (dnie: boolean) => `
+const browser = (dnie: boolean, l: ByLanguage) => `
 /** The procedure's browser (the app's own Chromium; one per procedure, shared by its tabs).
  *  Playwright's API where it makes sense, all async. Locators wait and are strict like Playwright's. */
 interface Browser {
@@ -213,7 +217,7 @@ interface Locator {
   filter(o: { hasText?: string; hasNotText?: string }): Locator; or(other: Locator): Locator; nth(i: number): Locator; first(): Locator; last(): Locator; all(): Promise<Locator[]>;
   click(): Promise<ActionResult>; fill(value: string, o?: { submit?: boolean }): Promise<ActionResult>; press(key: string): Promise<ActionResult>;
   check(): Promise<ActionResult>; uncheck(): Promise<ActionResult>; selectOption(values: string | string[]): Promise<ActionResult>;
-  /** Uploads saved documents, by name ("Contrato de compraventa.jpeg"). */
+  /** Uploads saved documents, by name (${l('"Contrato de compraventa.jpeg"', '"Purchase contract.jpeg"')}). */
   setInputFiles(names: string | string[]): Promise<ActionResult>; hover(): Promise<void>; focus(): Promise<void>;
   textContent(): Promise<string|null>; innerText(): Promise<string>; inputValue(): Promise<string>; getAttribute(n: string): Promise<string|null>;
   isVisible(): Promise<boolean>; isEnabled(): Promise<boolean>; isChecked(): Promise<boolean>; count(): Promise<number>;
@@ -269,15 +273,15 @@ interface User {
   phoneCall(o: { title: string; organization: string; phoneNumber: string; purpose: string; questions: string[]; haveAtHand?: string[]; openingScript?: string; hours?: string }): Promise<{ outcome: "done"|"unreachable"|"skipped"; transcript?: string; notes?: string }>;
 }`;
 
-function apiInterface(o: DeclarationOptions): string {
+function apiInterface(o: DeclarationOptions, l: ByLanguage): string {
   const lines = [
     'interface Api {',
     '  state: State; ui: Ui; procedures: Procedures; runs: Runs;',
     '  /** Like Promise.allSettled. Functions wait in one queue for the whole run (at most 10 at once); promises already run. */',
     '  parallelize<T>(tasks: (Promise<T> | (() => Promise<T>))[]): Promise<({ status: "fulfilled"; value: T } | { status: "rejected"; reason: any })[]>;',
-    '  /** The one line the user sees about you while you work: what you are doing now, as an ongoing action ("Analizando la página de Correos…"). */',
+    `  /** The one line the user sees about you while you work: what you are doing now, as an ongoing action (${l('"Analizando la página de Correos…"', '"Checking the Correos page…"')}). */`,
     '  setStatus(status: string): Promise<void>;',
-    '  /** Attach an image to what you read back (at most 4 a run), after a caption: label it with what it shows ("Contrato, página 2"), since images come in the order the calls ran. */',
+    `  /** Attach an image to what you read back (at most 4 a run), after a caption: label it with what it shows (${l('"Contrato, página 2"', '"Contract, page 2"')}), since images come in the order the calls ran. */`,
     '  output: { image(image: Image, label?: string): void };',
   ];
   if (o.search)

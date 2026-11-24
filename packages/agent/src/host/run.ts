@@ -187,6 +187,7 @@ export async function runHost(
   }
   const declarations = codemode
     ? buildDeclarations({
+        language: config.language,
         search: researchTools.length > 0,
         ...(config.feedback ? { feedback: config.feedback } : {}),
         dniePhone: config.dniePhone,

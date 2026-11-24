@@ -6,6 +6,7 @@ import type { BridgeCallOptions, BridgeTransport } from '../src/bridge/client';
 import { buildDeclarations } from '../src/codemode/declarations';
 import { createHostOps, createImageStore, encodeTarget } from '../src/codemode/host-ops';
 import { buildCodemodePrompt } from '../src/prompt/codemode';
+import { buildCoordinatorPrompt } from '../src/prompt/coordinator';
 import { startRun } from './helpers/codemode';
 
 /** A bridge that records calls and answers from a table. */
@@ -263,6 +264,7 @@ describe('host operations', () => {
 describe('the API declaration', () => {
   it('documents the agents’ API, compactly', () => {
     const d = buildDeclarations({
+      language: 'es',
       search: true,
       feedback: { submit: true, vote: true },
       dniePhone: true,
@@ -277,7 +279,11 @@ describe('the API declaration', () => {
   });
 
   it('every API in the declaration exists in the sandbox', async () => {
-    const d = buildDeclarations({ search: true, feedback: { submit: true, vote: true } });
+    const d = buildDeclarations({
+      language: 'es',
+      search: true,
+      feedback: { submit: true, vote: true },
+    });
     const api = /interface Api \{([\s\S]*?)\n\}/.exec(d)?.[1] ?? '';
     const names = [...api.matchAll(/^ {2}(?:readonly )?(\w+)[(:?]/gm)].map((m) => m[1]);
     // Several namespaces on one line: "state: State; ui: Ui; …".
@@ -289,7 +295,7 @@ describe('the API declaration', () => {
   });
 
   it('goes into the agents’ system prompt with the rules', () => {
-    const declarations = buildDeclarations({ search: true });
+    const declarations = buildDeclarations({ language: 'es', search: true });
     const prompt = buildCodemodePrompt({
       language: 'es',
       research: 'web_research',
@@ -310,5 +316,29 @@ describe('the API declaration', () => {
     expect(prompt).toContain('Create the procedures with api.procedures.getOrCreate once you know');
     // Calling procedures "cards" made agents write "tarjeta" to the user (only paying by card stays).
     expect(prompt).not.toMatch(/\b(the|a|procedure|plan|several) cards?\b|card's|ProcedureCard/i);
+  });
+
+  it('gives an English user only English examples', () => {
+    // Models copy the examples' language over any rule: Spanish ones made statuses, procedures
+    // and replies Spanish for English users. Only official names stay in Spanish.
+    const declarations = buildDeclarations({
+      language: 'en',
+      search: true,
+      feedback: { submit: true, vote: true },
+      dniePhone: true,
+    });
+    const prompts = [
+      buildCodemodePrompt({
+        language: 'en',
+        research: 'exa',
+        certificateRequests: true,
+        declarations,
+      }),
+      buildCoordinatorPrompt({ language: 'en' }),
+    ].join('\n');
+    const officialNames = /"trámites"|Cl@ve Móvil|"Enviar petición"/g;
+    expect(prompts.replace(officialNames, '')).not.toMatch(/[áéíóúñ¿¡]/);
+    expect(prompts).not.toMatch(/Buscando|Gratis|Saltar|answer in theirs/);
+    expect(prompts).toContain('"Checking the Correos page…"');
   });
 });

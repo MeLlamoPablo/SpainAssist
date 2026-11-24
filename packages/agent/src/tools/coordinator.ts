@@ -22,13 +22,13 @@ const ProcedureId = Type.String({
   description: 'Procedure id from procedure_list, e.g. "p_0123456789abcdef"',
 });
 
-const STATUS_RULE = 'an ongoing action in the user\'s language, a few everyday words ending in "…"';
+const STATUS_RULE = 'an ongoing action, a few everyday words ending in "…"';
 
 const AgentStartParams = Type.Object({
   status: Type.String({
     minLength: 1,
     maxLength: 120,
-    description: `What the agent starts doing, as ${STATUS_RULE}: "Buscando cómo pedir el voto por correo…". The user sees it while it works.`,
+    description: `What the agent starts doing, as ${STATUS_RULE}. The user sees it while it works.`,
   }),
   brief: Type.String({
     minLength: 1,
@@ -61,7 +61,7 @@ const AgentMessageParams = Type.Object({
     Type.String({
       minLength: 1,
       maxLength: 120,
-      description: `Only when the message changes what the agent does next: its new status, as ${STATUS_RULE} ("Cambiando la cita al jueves…").`,
+      description: `Only when the message changes what the agent does next: its new status, as ${STATUS_RULE}.`,
     }),
   ),
 });
