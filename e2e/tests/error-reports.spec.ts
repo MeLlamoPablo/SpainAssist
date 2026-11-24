@@ -40,6 +40,9 @@ test('uncaught errors and logged warnings reach the error report server', async 
   harness: h,
 }) => {
   await h.app.evaluate(() => {
+    // With no other listener, the SDK shows Electron's modal error box after reporting, which
+    // blocks main until someone closes it, so the app could never quit.
+    process.on('uncaughtException', () => {});
     setTimeout(() => {
       throw new Error('e2e: uncaught in main');
     });
