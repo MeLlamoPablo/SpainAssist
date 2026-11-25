@@ -23,6 +23,7 @@ import { activityLabel } from '../../lib/activity';
 import { cn } from '../../lib/cn';
 import { formatDay } from '../../lib/format';
 import { useAppStore } from '../../store/app';
+import { useChatStore } from '../../store/chat';
 import { useProcedureStore } from '../../store/procedures';
 import { useVaultStore } from '../../store/vault';
 import { chatDict } from './i18n';
@@ -85,12 +86,13 @@ export const UserMessage = memo(function UserMessage({
 export const AssistantMessage = memo(function AssistantMessage({ item }: { item: AssistantItem }) {
   const t = useT(chatDict);
   const streaming = item.status === 'streaming';
+  const stalled = useChatStore((s) => s.stalled.has(item.id));
   return (
     <div className="flex">
       <div className="min-w-0 flex-1">
         <span className="sr-only">{t.assistant}:</span>
         {item.text ? (
-          <Markdown text={item.text} streaming={streaming} />
+          <Markdown text={item.text} streaming={streaming && !stalled} />
         ) : streaming ? (
           <p className="flex h-6 items-center gap-1">
             <span className="sr-only">{t.writing}</span>
