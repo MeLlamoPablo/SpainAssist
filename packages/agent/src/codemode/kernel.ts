@@ -184,6 +184,8 @@ export const KERNEL = String.raw`
 
   var COMPONENTS = boot.components;
   var INTRINSIC = new Set(COMPONENTS);
+  // () => {}, (v) => {}, async () => {}, function () {}: comments and whitespace only.
+  var EMPTY_FN = /^(async\s*)?(function\s*\w*\s*)?(\([^)]*\)|\w+)\s*(=>)?\s*\{(\s|\/\*[\s\S]*?\*\/|\/\/[^\n]*\n)*\}$/;
   var FRAGMENT = '__sa_Fragment';
   var uiIn = stateIn.ui || {};
   var openUis = new Map();
@@ -235,6 +237,9 @@ export const KERNEL = String.raw`
       var v = el.props[name];
       if (v === undefined) continue;
       if (typeof v === 'function') {
+        // onChange={() => {}} drops what the user does: never a placeholder for a real handler.
+        if (EMPTY_FN.test(Function.prototype.toString.call(v)))
+          throw new TypeError('<' + el.type + '> ' + name + ' does nothing (an empty function): the user\'s input would be lost. Store it (onChange={setValue}) or act on it (onClick={() => api.ui.close(result)}).');
         var id = path + '#' + name;
         ui.handlers.set(id, v);
         nodeProps[name] = { $handler: id };

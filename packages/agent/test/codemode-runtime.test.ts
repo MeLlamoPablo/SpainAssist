@@ -300,7 +300,8 @@ describe('codemode runtime', () => {
   }
 
   it('refuses an interface the user cannot submit: one <Actions> with a Button, each with onClick', async () => {
-    const slot = '<Appointment slots={["2026-10-19T09:00"]} value="" onChange={() => {}} />';
+    const slot =
+      '<Appointment slots={["2026-10-19T09:00"]} value="" onChange={(v) => api.ui.close(v)} />';
     expect(await presentError(`<Form>${slot}</Form>`)).toMatch(/exactly one <Actions>.*found 0/);
     expect(await presentError(`<Form>${slot}<Actions></Actions></Form>`)).toMatch(
       /found 1 <Actions>, 0 Button/,
@@ -312,6 +313,27 @@ describe('codemode runtime', () => {
         '<Form><Actions><Button type="primary">Continuar</Button></Actions></Form>',
       ),
     ).toMatch(/the Button "Continuar" has no onClick/);
+  });
+
+  it('refuses a handler that does nothing, which would drop what the user does', async () => {
+    const ok = '<Actions><Button onClick={() => api.ui.close(1)}>OK</Button></Actions>';
+    for (const empty of [
+      '() => {}',
+      '(v) => { /* later */ }',
+      'async () => {}',
+      'function () {}',
+    ]) {
+      expect(
+        await presentError(
+          `<Form><TextField label="Nombre" value="" onChange={${empty}} />${ok}</Form>`,
+        ),
+      ).toMatch(/<TextField> onChange does nothing/);
+    }
+    expect(
+      await presentError(
+        '<Form><Actions><Button onClick={() => {}}>Continuar</Button></Actions></Form>',
+      ),
+    ).toMatch(/<Button> onClick does nothing/);
   });
 
   it('fails the run when a handler throws, so the agent sees the bug', async () => {
@@ -336,7 +358,7 @@ describe('codemode runtime', () => {
       import { Actions, Button } from '@spainassist/ui';
       export async function main(api) {
         try {
-          await api.ui.present('x', () => <Actions><Button onClick={() => {}}>Go</Button></Actions>);
+          await api.ui.present('x', () => <Actions><Button onClick={() => api.ui.close(1)}>Go</Button></Actions>);
         } catch (e) {
           return { code: e.code, message: e.message };
         }
@@ -361,7 +383,7 @@ describe('codemode runtime', () => {
       [
         "import { Actions, Button } from '@spainassist/ui';",
         'export async function main(api) {',
-        "  await api.ui.present('x', () => <Actions><Button onClick={() => {}}>Go</Button></Actions>);",
+        "  await api.ui.present('x', () => <Actions><Button onClick={() => api.ui.close(1)}>Go</Button></Actions>);",
         '}',
       ].join('\n'),
     );

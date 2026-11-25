@@ -327,6 +327,7 @@ function Gallery({ api }) {
     value: values[name] ?? initial,
     onChange: (value) => setValues((prev) => ({ ...prev, [name]: value })),
   });
+  const press = (button) => setValues((prev) => ({ ...prev, pressed: button }));
   return (
     <Form title="@spainassist/ui" description=${q('Cada componente que un agente puede usar, con sus variantes.', 'Every component an agent can use, with its variants.')}>
       <Section title="Text">
@@ -382,10 +383,10 @@ function Gallery({ api }) {
         <Appointment slots={["2026-12-02T09:10", "2026-12-02T09:40", "2026-12-04T12:20"]} allowMore {...bind("slot")} />
       </Section>
       <Actions>
-        <Button type="ghost" onClick={() => {}}>ghost</Button>
-        <Button type="danger" onClick={() => {}}>danger</Button>
-        <Button loading onClick={() => {}}>loading</Button>
-        <Button disabled onClick={() => {}}>disabled</Button>
+        <Button type="ghost" onClick={() => press("ghost")}>ghost</Button>
+        <Button type="danger" onClick={() => press("danger")}>danger</Button>
+        <Button loading onClick={() => press("loading")}>loading</Button>
+        <Button disabled onClick={() => press("disabled")}>disabled</Button>
         <Button type="primary" onClick={() => api.ui.close(values)}>primary</Button>
       </Actions>
     </Form>
