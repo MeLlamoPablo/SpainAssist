@@ -71,7 +71,7 @@ export interface CompanionDeps {
 }
 
 /** Close the phone approval after a quiet period, before its next-item timeout. */
-export const DNIE_LOGIN_IDLE_MS = 30_000;
+export const DNIE_LOGIN_IDLE_MS = 90_000;
 
 /** A `dnie_signature` prompt waiting in its `unlock` stage. */
 interface UnlockWaiter {

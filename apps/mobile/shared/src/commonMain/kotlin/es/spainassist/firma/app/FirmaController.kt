@@ -880,7 +880,7 @@ class FirmaController(
         /** Waiting for the card again after it moved. */
         const val CARD_AGAIN_MS = 2 * 60_000L
         /** Waiting for the desktop's next to-be-signed blob (triphase servers can be slow). */
-        const val NEXT_ITEM_MS = 60_000L
+        const val NEXT_ITEM_MS = 180_000L
         const val RESULT_MS = 6_000L
     }
 }
