@@ -54,6 +54,9 @@ What each rule asks, the weights and the harms come from the fixture as `@sa/eva
 ## Using it
 
 - The sidebar lists traces; a selected agent lists its turns. A turn is what one message set off.
+- The search box filters traces by their names and by their spans' ids and texts. A run id or tool
+  call id typed in full (`run_…`, `call_…`) opens its `codemode` call; <kbd>Enter</kbd> opens the first
+  span that contains the text.
 - Drag the time axis, double-click a span or press <kbd>Z</kbd> to zoom; <kbd>Esc</kbd> goes back.
 - <kbd>↑</kbd><kbd>↓</kbd> move, <kbd>←</kbd><kbd>→</kbd> fold and unfold, <kbd>Enter</kbd> opens a
   span's details: timing, tokens, cost, the error, the module, the output, the page before and after.

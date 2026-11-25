@@ -15,7 +15,9 @@ import { formatClock, formatCost, formatDuration, formatTokens } from '../lib/fo
 import {
   type BrowserTrace,
   failures,
+  findSpan,
   type Span,
+  spanMatches,
   type Trace,
   totalCost,
   totalTokens,
@@ -57,6 +59,16 @@ export function App() {
       if (theme) localStorage.setItem('sa-traces-theme', theme);
     } catch {}
   }, [theme]);
+
+  /** Searches the spans too: an exact id (a pasted run id) opens its span at once, Enter any match. */
+  const search = (q: string, jump: boolean) => {
+    setQuery(q);
+    const hit = opened && findSpan(opened.traces, q);
+    if (!hit || !(jump || hit.exact)) return;
+    setTraceId(hit.trace.id);
+    setFocusId(undefined);
+    setSelected(hit.span);
+  };
 
   const show = (o: Opened | undefined) => {
     setOpened(o);
@@ -176,9 +188,12 @@ export function App() {
           <label className="search">
             <Search size={13} />
             <input
-              placeholder="Filter traces"
+              placeholder="Filter traces, find a run id"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => search(e.target.value, false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') search(query, true);
+              }}
             />
           </label>
         )}
@@ -360,7 +375,10 @@ function relatedTrace(
 function matches(t: Trace, q: string): boolean {
   if (!q) return true;
   const s = q.toLowerCase();
-  return [t.title, t.subtitle, t.path].some((v) => v?.toLowerCase().includes(s));
+  return (
+    [t.title, t.subtitle, t.path].some((v) => v?.toLowerCase().includes(s)) ||
+    [...walk(t.root)].some((span) => spanMatches(span, q))
+  );
 }
 
 function TraceItem({

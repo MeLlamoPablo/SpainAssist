@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { consequence, type EvalRun, placeChecks } from '../src/lib/checks';
-import type { Span, SpanKind, Trace } from '../src/lib/model';
+import type { Trace } from '../src/lib/model';
 import { evalRun, type FixtureFacts, readEvalRun } from '../src/server/eval';
+import { span, t0, trace } from './spans';
 
-const t0 = Date.parse('2026-11-24T08:28:00.000Z');
 const iso = (ms: number) => new Date(t0 + ms).toISOString();
 
 /** One line of an eval run's events.jsonl, `ms` after t0. */
@@ -28,29 +28,6 @@ function outcome(ruleId: string, extra: object = {}) {
 /** A result.json of these rule outcomes. */
 function result(rules: ReturnType<typeof outcome>[], extra: object = {}) {
   return { runId: 'r1', fixtureId: 'f1', status: 'completed', score: 1, rules, ...extra };
-}
-
-function span(
-  kind: SpanKind,
-  name: string,
-  from: number,
-  to: number,
-  children: Span[] = [],
-  extra: Partial<Span> = {},
-): Span {
-  return { id: name, name, kind, status: 'ok', start: t0 + from, end: t0 + to, children, ...extra };
-}
-
-function trace(root: Span): Trace {
-  return {
-    id: root.id,
-    group: 'agent',
-    title: root.name,
-    path: root.id,
-    root,
-    procedures: [],
-    browser: [],
-  };
 }
 
 /** An agent whose codemode call `c1` ran a click from +1s to +2s. */
