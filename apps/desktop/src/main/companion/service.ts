@@ -215,6 +215,8 @@ export class CompanionService {
   private can?: string;
   /** CANs the card refused: not offered again while the app runs (also Mis datos' one). */
   private readonly refusedCans = new Set<string>();
+  /** PINs the user typed that the card hasn't accepted yet (not in the vault), by credential. */
+  private readonly typedPins = new Map<string, string>();
   private readonly unlocks = new Map<string, UnlockWaiter>();
   /** DNI login news for each procedure's agent (`takeLoginNotes`). */
   private readonly logins = new Map<string, { waiting?: string; notes: string[] }>();
@@ -363,7 +365,13 @@ export class CompanionService {
     let can = this.knownCan();
     let pin = needsPin ? await this.savedPin(credential) : undefined;
     // A PIN the user typed goes into the vault once the card accepts it (the first signature).
+    // Until then it is kept in memory: a login approval that ends before a handshake doesn't
+    // ask for it again.
     let typedPin = false;
+    if (needsPin && !pin) {
+      pin = this.typedPins.get(credential.id);
+      typedPin = !!pin;
+    }
     const first: DnieUnlock = { can: !can, pin: needsPin && !pin };
     const base: DnieSignaturePrompt = {
       kind: 'dnie_signature',
@@ -427,6 +435,7 @@ export class CompanionService {
       if (typed.pin) {
         pin = typed.pin;
         typedPin = true;
+        this.typedPins.set(credential.id, pin);
       }
       show(base);
     }
@@ -436,6 +445,7 @@ export class CompanionService {
     const onNeed = async (need: PhoneNeed): Promise<string | null> => {
       if (need.what === 'can') this.canRefused(can);
       else if (need.refused && !typedPin) await this.forgetPin(credential);
+      else if (need.refused) this.typedPins.delete(credential.id);
       const unlock: DnieUnlock = {
         can: need.what === 'can',
         pin: need.what === 'pin',
@@ -453,6 +463,7 @@ export class CompanionService {
       }
       pin = typed.pin;
       typedPin = true;
+      if (pin) this.typedPins.set(credential.id, pin);
       return pin ?? null;
     };
 
@@ -772,6 +783,7 @@ export class CompanionService {
   }
 
   private async savePin(credential: CredentialSummary, pin: string): Promise<void> {
+    this.typedPins.delete(credential.id);
     try {
       await this.deps.vault().setDniePin(credential.id, pin);
       this.deps.events.emit({ type: 'vault.changed' });
@@ -782,6 +794,7 @@ export class CompanionService {
 
   /** The card refused the saved PIN, or blocked: it isn't sent again until the user saves one. */
   private async forgetPin(credential: CredentialSummary): Promise<void> {
+    this.typedPins.delete(credential.id);
     try {
       if (!this.deps.vault().getCredential(credential.id)?.hasPin) return;
       await this.deps.vault().setDniePin(credential.id, null);

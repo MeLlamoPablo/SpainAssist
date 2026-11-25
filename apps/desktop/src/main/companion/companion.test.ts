@@ -207,8 +207,7 @@ describe('DNI signatures with the phone', () => {
     // An older phone sends only the certificate.
     sendOther = false;
     const approval = a.services.browser.approveSignature(procedureId, summary);
-    // The CAN stays; the PIN is saved only once the card has signed with it.
-    await typeUnlock(a, procedureId, { pin: PIN });
+    // The CAN and the PIN stay while the app runs: nothing is asked again.
     const second = (await approval) as ExternalSigningKey;
     expect(second.otherCertificates).toBeUndefined();
     second.release(false, 'no_match');
@@ -303,11 +302,12 @@ describe('DNI signatures with the phone', () => {
     const invalid = await sign({ can: '654321', pin: PIN });
     expect(invalid.shown).toMatchObject({ unlock: { can: true, pin: true } });
     expect(invalid.request).toMatchObject({ can: '654321', pin: PIN });
-    // The CAN typed is kept while the app runs. The PIN is saved only once the card accepts it.
+    // The CAN and the PIN typed are kept while the app runs. The PIN goes into the vault only
+    // once the card accepts it.
     expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
-    const again = await sign({ pin: 'Nuevo5678' });
-    expect(again.shown).toMatchObject({ unlock: { can: false, pin: true } });
-    expect(again.request).toMatchObject({ can: '654321', pin: 'Nuevo5678' });
+    const again = await sign();
+    expect(again.shown).toMatchObject({ stage: 'phone' });
+    expect(again.request).toMatchObject({ can: '654321', pin: PIN });
 
     // The PIN saved in Mis datos goes without asking; Mis datos' CAN isn't preferred over the
     // typed one.
@@ -743,6 +743,55 @@ it('ends login after inactivity and asks again for the next handshake', async ()
   await expect(
     key.sign(Buffer.alloc(32), 'SHA-256', 'sede.example.gob.es', signal),
   ).rejects.toThrow();
+});
+
+/** A phone that holds the card at once: it sends the certificate and signs every digest. */
+function cardPhone(relay: MemoryRelay, link: string) {
+  return phone(relay, link, (m, send) => {
+    if (m.type === 'sign.request')
+      send({
+        type: 'sign.certificate',
+        requestId: m.requestId,
+        certificates: [CERT.toString('base64')],
+      });
+    if (m.type === 'sign.toBeSigned')
+      send({
+        type: 'sign.signature',
+        requestId: m.requestId,
+        seq: m.seq,
+        signature: Buffer.alloc(256).toString('base64'),
+      });
+  });
+}
+
+it('asks for the PIN once, also when the first login approval ends before a handshake', async () => {
+  const { relay, app: a, procedureId, dnie } = await setup();
+  const companion = a.services.companion!;
+  // `browser.useCertificate` gets the approval before the site asks for the certificate.
+  const approval = companion.login(procedureId, dnie, 'https://ipce.seg-social.es');
+  await typeUnlock(a, procedureId);
+  await a.waitFor(() => companion.status().state === 'waiting');
+  const { received } = cardPhone(relay, (await a.invoke('companion.status')).link as string);
+  const key = (await approval)!.key as RemoteKey;
+  const signal = new AbortController().signal;
+
+  // No handshake signs before the approval ends.
+  vi.useFakeTimers();
+  await key.prepare('ipce.seg-social.es', signal);
+  await vi.advanceTimersByTimeAsync(DNIE_LOGIN_IDLE_MS + 1);
+  vi.useRealTimers();
+  await a.waitFor(() => received.some((m) => m.type === 'sign.done'));
+
+  // The site's handshake needs a new phone approval, but not the PIN again.
+  const prepared = key.prepare('idp.seg-social.es', signal);
+  await a.waitFor(() => a.pendingPrompt(procedureId) !== undefined);
+  expect(a.pendingPrompt(procedureId)?.prompt).not.toHaveProperty('unlock');
+  await prepared;
+  const requests = received.filter((m) => m.type === 'sign.request');
+  expect(requests.map((m) => m.pin)).toEqual([PIN, PIN]);
+  // The card accepts it: it goes into the vault.
+  await key.sign(Buffer.alloc(32), 'SHA-256', 'idp.seg-social.es', signal);
+  expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(true);
 });
 
 it('keeps one phone approval across the hosts of one organisation, and tells the agent', async () => {

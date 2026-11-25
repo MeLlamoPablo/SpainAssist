@@ -289,11 +289,7 @@ describe('the phone app of the paired phone', () => {
     const again = a.services.browser.approveSignature(procedureId, summary);
     await a.waitFor(() => stage(a, procedureId) !== undefined);
     expect(stage(a, procedureId)).not.toBe('update');
-    await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
-      kind: 'dnie_signature',
-      outcome: 'cancelled',
-    });
-    expect(await again).toBeNull();
+    ((await again) as ExternalSigningKey).release(true);
     // Mis datos still says there is a newer version.
     expect(companion.status()).toMatchObject({ phoneUpdate: true });
   });
@@ -382,7 +378,6 @@ describe('the phone app of the paired phone', () => {
       });
       // What the agent reads when a login does.
       const login = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
-      await typeUnlock(a, procedureId);
       expect(await login).toBeNull();
       expect(companion.takeLoginNotes(procedureId).join('\n')).toMatch(why);
       for (const p of phones.splice(0)) p.close();
