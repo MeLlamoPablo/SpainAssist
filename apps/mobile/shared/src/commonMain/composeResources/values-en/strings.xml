@@ -37,9 +37,9 @@
     <!-- Review -->
     <string name="review_title">Sign document</string>
     <string name="review_title_documents">Sign documents</string>
-    <string name="review_unknown_sign">We don’t recognise this site. Only sign if you trust it.</string>
-    <string name="review_unknown_login">We don’t recognise this site. Only log in if you trust it.</string>
-    <string name="review_unknown_certificate">We don’t recognise this site. Only continue if you trust it.</string>
+    <string name="review_unknown_sign">This site isn’t recognised. Only sign if you trust it.</string>
+    <string name="review_unknown_login">This site isn’t recognised. Only log in if you trust it.</string>
+    <string name="review_unknown_certificate">This site isn’t recognised. Only continue if you trust it.</string>
     <string name="review_open_pdf">Open the PDF</string>
     <string name="review_title_certificate">Continue on</string>
     <string name="review_certificate_body">Nothing will be signed yet.</string>

@@ -38,9 +38,9 @@
     <!-- Review -->
     <string name="review_title">Firmar documento</string>
     <string name="review_title_documents">Firmar documentos</string>
-    <string name="review_unknown_sign">No reconocemos este sitio. Firma solo si confías en él.</string>
-    <string name="review_unknown_login">No reconocemos este sitio. Entra solo si confías en él.</string>
-    <string name="review_unknown_certificate">No reconocemos este sitio. Continúa solo si confías en él.</string>
+    <string name="review_unknown_sign">No se reconoce este sitio. Firma solo si confías en él.</string>
+    <string name="review_unknown_login">No se reconoce este sitio. Entra solo si confías en él.</string>
+    <string name="review_unknown_certificate">No se reconoce este sitio. Continúa solo si confías en él.</string>
     <string name="review_open_pdf">Abrir el PDF</string>
     <string name="review_title_certificate">Continuar en</string>
     <string name="review_certificate_body">Aún no se va a firmar nada.</string>
@@ -87,7 +87,7 @@
     <string name="result_no_certificate">Tu DNI no tiene el certificado que necesita esta petición. Puedes activarlo en un punto de actualización del DNI en una comisaría.</string>
     <string name="result_certificate_expired">El certificado de tu DNI ha caducado. Puedes renovarlo en un punto de actualización del DNI en una comisaría.</string>
     <string name="result_wrong_card">Has acercado otro DNI distinto al del principio. Vuelve a intentarlo desde el ordenador con el mismo.</string>
-    <string name="result_mismatch">No hemos firmado: lo que llegó del ordenador no coincide con el documento.</string>
+    <string name="result_mismatch">No se ha firmado nada: lo que llegó del ordenador no coincide con el documento.</string>
     <string name="result_timeout">El ordenador ha tardado demasiado. Vuelve a intentarlo.</string>
     <string name="result_failed">No se ha podido firmar. Vuelve a intentarlo desde el ordenador.</string>
     <string name="result_ok">Vale</string>
