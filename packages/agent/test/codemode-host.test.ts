@@ -308,6 +308,8 @@ describe('the API declaration', () => {
     // The agent drives its own page and asks for approval only before binding steps.
     expect(prompt).toContain("You drive your procedure's page yourself.");
     expect(prompt).toContain('Nothing else needs approval');
+    // Terms and notices a site asks to accept never reach the user as a checkbox.
+    expect(prompt).toContain("are yours to accept in the user's name");
     expect(prompt).not.toMatch(/subagent|Act only as the user/);
     expect(prompt.endsWith(`${declarations}\n\`\`\``)).toBe(true);
     // The coordinator never asks: agents narrow the request down and create the procedures.
