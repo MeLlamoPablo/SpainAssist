@@ -245,8 +245,8 @@ export class DocumentScanner {
 
   private failureMessage() {
     return this.language() === 'en'
-      ? 'I couldn’t read the document. Check your AI connection and try again.'
-      : 'No he podido leer el documento. Comprueba tu conexión de IA y vuelve a intentarlo.';
+      ? 'The document couldn’t be read. Check your AI connection and try again.'
+      : 'No se ha podido leer el documento. Comprueba tu conexión de IA y vuelve a intentarlo.';
   }
 
   private logFailure(live: LiveScan, stage: string, error: unknown, attempt: number) {
@@ -441,7 +441,9 @@ export class DocumentScanner {
     const dataUrl = scanImageSchema.parse(input);
     const en = this.language() === 'en';
     if (this.busy || this.live)
-      throw new Error(en ? 'A document is already being read.' : 'Ya estoy leyendo un documento.');
+      throw new Error(
+        en ? 'A document is already being read.' : 'Ya se está leyendo un documento.',
+      );
     this.busy = true;
     try {
       const { runtime, model, effort } = await this.prepare();
@@ -483,8 +485,8 @@ export class DocumentScanner {
       // Provider errors can echo image data or extracted PII. Never log or forward them.
       throw new Error(
         en
-          ? 'I couldn’t read the document. Check your AI connection and try again.'
-          : 'No he podido leer el documento. Comprueba tu conexión de IA y vuelve a intentarlo.',
+          ? 'The document couldn’t be read. Check your AI connection and try again.'
+          : 'No se ha podido leer el documento. Comprueba tu conexión de IA y vuelve a intentarlo.',
       );
     } finally {
       this.busy = false;

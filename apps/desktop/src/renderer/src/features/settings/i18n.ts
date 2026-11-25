@@ -16,8 +16,8 @@ export const settingsDict = defineDict({
       disconnect: 'Desconectar',
       disconnected: 'IA desconectada',
       chatgptStillConnected:
-        'No pude avisar a ChatGPT. Quita Spain Assist en los ajustes de ChatGPT si ya no lo usas.',
-      notConfigured: 'Aún no has conectado ninguna IA. La necesito para empezar.',
+        'No se ha podido avisar a ChatGPT. Quita Spain Assist en los ajustes de ChatGPT si ya no lo usas.',
+      notConfigured: 'Aún no has conectado ninguna IA. Hace falta una para empezar.',
       error: 'Hay un problema con la conexión',
       chatgpt: {
         title: 'Usar IA de ChatGPT',
@@ -91,9 +91,9 @@ export const settingsDict = defineDict({
           `${images ? 'Ve imágenes' : 'Sin imágenes'} · ${reasoning ? 'Razona' : 'No razona'} · ${context} tokens de contexto`,
         checking: 'Consultando el servidor…',
         detected: (server: string) =>
-          `He consultado el servidor (${server}). Marco lo que he detectado; el resto son valores por defecto.`,
+          `Se ha consultado el servidor (${server}). Se marca lo detectado; el resto son valores por defecto.`,
         notReachable:
-          'No he podido consultar el servidor. Uso valores por defecto: cámbialos si sabes lo que puede hacer tu modelo.',
+          'No se ha podido consultar el servidor. Se usan valores por defecto: cámbialos si sabes lo que puede hacer tu modelo.',
         servers: {
           ollama: 'Ollama',
           lmstudio: 'LM Studio',
@@ -105,7 +105,7 @@ export const settingsDict = defineDict({
         imagesBody: 'Capturas de las webs y fotos de tus documentos.',
         noImagesTitle: 'Este modelo no ve imágenes',
         noImages:
-          'No podré mirar capturas de las webs ni fotos de tus documentos, ni escanearlos con la cámara. Trabajaré solo con el texto de las páginas, y algunas webs no se dejan usar así. Si tu modelo sí ve imágenes, actívalo abajo.',
+          'No se podrán mirar capturas de las webs ni fotos de tus documentos, ni escanearlos con la cámara. Solo se usará el texto de las páginas, y algunas webs no se dejan usar así. Si tu modelo sí ve imágenes, actívalo abajo.',
         reasoning: 'Razona antes de responder',
         reasoningBody: 'Si el modelo piensa paso a paso. Hace mejor los trámites, pero tarda más.',
         contextWindow: 'Contexto (tokens)',
@@ -118,7 +118,7 @@ export const settingsDict = defineDict({
     },
     language: {
       title: 'Idioma',
-      body: 'El idioma de la app y de mis respuestas.',
+      body: 'El idioma de la app y de las respuestas.',
     },
     learnings: {
       title: 'Compartir aprendizajes anónimos',
@@ -169,8 +169,8 @@ export const settingsDict = defineDict({
       disconnect: 'Disconnect',
       disconnected: 'AI disconnected',
       chatgptStillConnected:
-        'I couldn’t reach ChatGPT. Remove Spain Assist in ChatGPT’s settings if you no longer use it.',
-      notConfigured: 'You haven’t connected an AI yet. I need one to get started.',
+        'ChatGPT couldn’t be reached. Remove Spain Assist in ChatGPT’s settings if you no longer use it.',
+      notConfigured: 'You haven’t connected an AI yet. One is needed to get started.',
       error: 'There’s a problem with the connection',
       chatgpt: {
         title: 'Use ChatGPT’s AI',
@@ -242,9 +242,9 @@ export const settingsDict = defineDict({
           `${images ? 'Sees images' : 'No images'} · ${reasoning ? 'Reasons' : 'Doesn’t reason'} · ${context} tokens of context`,
         checking: 'Checking the server…',
         detected: (server: string) =>
-          `I checked the server (${server}). I mark what I detected; the rest are defaults.`,
+          `The server (${server}) was checked. What was detected is marked; the rest are defaults.`,
         notReachable:
-          'I couldn’t check the server. I’m using defaults: change them if you know what your model can do.',
+          'The server couldn’t be checked. Defaults are used: change them if you know what your model can do.',
         servers: {
           ollama: 'Ollama',
           lmstudio: 'LM Studio',
@@ -256,7 +256,7 @@ export const settingsDict = defineDict({
         imagesBody: 'Screenshots of websites and photos of your documents.',
         noImagesTitle: 'This model can’t see images',
         noImages:
-          'I won’t be able to look at screenshots of websites or photos of your documents, or scan them with the camera. I’ll work only with the text of pages, and some websites can’t be used that way. If your model does see images, turn it on below.',
+          'Screenshots of websites and photos of your documents can’t be looked at, or scanned with the camera. Only the text of pages will be used, and some websites can’t be used that way. If your model does see images, turn it on below.',
         reasoning: 'Reasons before answering',
         reasoningBody:
           'If the model thinks step by step. It handles procedures better, but is slower.',
@@ -270,7 +270,7 @@ export const settingsDict = defineDict({
     },
     language: {
       title: 'Language',
-      body: 'The language of the app and of my answers.',
+      body: 'The language of the app and of the answers.',
     },
     learnings: {
       title: 'Share anonymous learnings',

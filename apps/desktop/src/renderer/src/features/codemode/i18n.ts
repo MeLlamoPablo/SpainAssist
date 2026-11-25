@@ -12,7 +12,7 @@ export const codemodeDict = defineDict({
     dismiss: 'Descartar',
     dismissTitle: 'Descartar esta pregunta',
     dismissed: 'Pregunta descartada',
-    unshowable: 'Se lo he dicho al asistente para que te pregunte de otra forma.',
+    unshowable: 'Se ha avisado al asistente para que te pregunte de otra forma.',
     /** Procedure rows (the classic card's strings are in procedures/i18n.ts). */
     row: {
       needs: 'Necesitas',
@@ -23,11 +23,11 @@ export const codemodeDict = defineDict({
       plan: 'Plan',
     },
     meter: {
-      label: 'Lo que estoy haciendo',
+      label: 'Lo que se está haciendo',
       stop: 'Detener',
       more: (n: number) => (n === 1 ? 'Ver 1 más' : `Ver ${n} más`),
       less: 'Ver menos',
-      waiting: 'Necesito que hagas algo',
+      waiting: 'Hace falta que hagas algo',
       researching: 'Investigando',
     },
   },
@@ -41,7 +41,7 @@ export const codemodeDict = defineDict({
     dismiss: 'Dismiss',
     dismissTitle: 'Dismiss this question',
     dismissed: 'Question dismissed',
-    unshowable: 'I’ve told the assistant, so it can ask you another way.',
+    unshowable: 'The assistant has been told, so it can ask you another way.',
     row: {
       needs: 'You need',
       requirements: 'Requirements',
@@ -51,11 +51,11 @@ export const codemodeDict = defineDict({
       plan: 'Plan',
     },
     meter: {
-      label: 'What I am doing',
+      label: 'What’s being done',
       stop: 'Stop',
       more: (n: number) => (n === 1 ? 'See 1 more' : `See ${n} more`),
       less: 'See less',
-      waiting: 'I need you to do something',
+      waiting: 'You need to do something',
       researching: 'Researching',
     },
   },

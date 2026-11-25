@@ -27,19 +27,19 @@ export const scanDict = defineDict({
     keepStill: 'No muevas tu documento',
     aimPassport: 'Pon la página de la foto dentro del recuadro',
     reading: 'Leyendo…',
-    holdStill: 'Casi lo tengo, no lo muevas',
+    holdStill: 'Casi está, no lo muevas',
     slow: '¿No lo lee? Prueba con más luz, sin reflejos, o sube una foto.',
-    noCamera: 'No encuentro ninguna cámara.',
+    noCamera: 'No se encuentra ninguna cámara.',
     cameraDenied:
-      'No tengo permiso para usar la cámara. Activa el permiso en los ajustes del sistema y reinicia la app, o sube una foto.',
+      'No hay permiso para usar la cámara. Activa el permiso en los ajustes del sistema y reinicia la app, o sube una foto.',
     cameraRestricted:
       'El sistema tiene bloqueada la cámara. Comprueba las restricciones de tu dispositivo o sube una foto.',
     cameraSettings: 'Abrir ajustes de cámara',
     cameraPromptUnavailable:
-      'No he podido mostrar el permiso de cámara. Cierra y vuelve a abrir la app, o sube una foto.',
+      'No se ha podido mostrar el permiso de cámara. Cierra y vuelve a abrir la app, o sube una foto.',
     cameraWindowBlocked:
-      'No he podido acceder a la cámara. Cierra y vuelve a abrir la app, o sube una foto.',
-    cameraError: 'No he podido abrir la cámara.',
+      'No se ha podido acceder a la cámara. Cierra y vuelve a abrir la app, o sube una foto.',
+    cameraError: 'No se ha podido abrir la cámara.',
     cameraSource: 'Cámara',
     defaultCamera: 'La cámara del sistema',
     unnamedCamera: (n: number) => `Cámara ${n}`,
@@ -50,12 +50,12 @@ export const scanDict = defineDict({
     otherPhoto: 'Otra foto',
     nextPhoto: 'Subir la siguiente foto',
     readFailed:
-      'No he podido leerlo. Prueba con una foto más nítida, con buena luz, o hazlo más tarde.',
+      'No se ha podido leer. Prueba con una foto más nítida, con buena luz, o hazlo más tarde.',
     saving: 'Guardando tus datos…',
     retryScan: 'Volver a escanear',
     saved: 'Datos guardados en Mis datos',
     savedPartly: 'Datos guardados, salvo algunos',
-    notSaved: (labels: string) => `No he podido guardar: ${labels}.`,
+    notSaved: (labels: string) => `No se ha podido guardar: ${labels}.`,
     progress: (p: number) => `Leyendo… ${Math.round(p * 100)} %`,
   },
   en: {
@@ -84,17 +84,17 @@ export const scanDict = defineDict({
     reading: 'Reading…',
     holdStill: 'Almost there, hold it still',
     slow: 'Not working? Try more light and no glare, or upload a photo.',
-    noCamera: 'I can’t find a camera.',
+    noCamera: 'No camera found.',
     cameraDenied:
-      'I don’t have permission to use the camera. Allow it in system settings and restart the app, or upload a photo.',
+      'There’s no permission to use the camera. Allow it in system settings and restart the app, or upload a photo.',
     cameraRestricted:
       'The system has blocked the camera. Check your device restrictions or upload a photo.',
     cameraSettings: 'Open camera settings',
     cameraPromptUnavailable:
-      'I couldn’t show the camera permission prompt. Close and reopen the app, or upload a photo.',
+      'The camera permission prompt couldn’t be shown. Close and reopen the app, or upload a photo.',
     cameraWindowBlocked:
-      'I couldn’t access the camera. Close and reopen the app, or upload a photo.',
-    cameraError: 'I couldn’t open the camera.',
+      'The camera couldn’t be accessed. Close and reopen the app, or upload a photo.',
+    cameraError: 'The camera couldn’t be opened.',
     cameraSource: 'Camera',
     defaultCamera: 'System camera',
     unnamedCamera: (n: number) => `Camera ${n}`,
@@ -104,12 +104,12 @@ export const scanDict = defineDict({
     read: 'Read the document',
     otherPhoto: 'Another photo',
     nextPhoto: 'Upload the next photo',
-    readFailed: 'I couldn’t read it. Try a sharper photo with good light, or do this later.',
+    readFailed: 'It couldn’t be read. Try a sharper photo with good light, or do this later.',
     saving: 'Saving your details…',
     retryScan: 'Scan again',
     saved: 'Details saved in My data',
     savedPartly: 'Details saved, except a few',
-    notSaved: (labels: string) => `I couldn't save: ${labels}.`,
+    notSaved: (labels: string) => `Couldn't save: ${labels}.`,
     progress: (p: number) => `Reading… ${Math.round(p * 100)}%`,
   },
 });

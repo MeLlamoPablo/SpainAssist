@@ -163,7 +163,7 @@ describe('automatic macOS installation', () => {
     expect(await installMacApp(false)).toBe(true);
     expect(mocks.forgetInstaller).toHaveBeenCalled();
     expect(mocks.errorBox).toHaveBeenCalledWith(
-      'No hemos podido instalar Spain Assist',
+      'No se ha podido instalar Spain Assist',
       'Disk full',
     );
     expect(mocks.app.quit).toHaveBeenCalled();

@@ -48,8 +48,8 @@ const STRINGS = {
     en: 'The system didn’t allow using its certificate. Yours is still saved in Spain Assist.',
   },
   notSame: {
-    es: 'No he podido comprobar que el certificado del sistema operativo es el mismo. El tuyo sigue guardado en Spain Assist.',
-    en: 'I couldn’t check that the operating system’s certificate is the same one. Yours is still saved in Spain Assist.',
+    es: 'No se ha podido comprobar que el certificado del sistema operativo es el mismo. El tuyo sigue guardado en Spain Assist.',
+    en: 'It couldn’t be checked that the operating system’s certificate is the same one. Yours is still saved in Spain Assist.',
   },
 } as const satisfies Record<string, { es: string; en: string }>;
 

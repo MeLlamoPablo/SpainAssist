@@ -55,17 +55,17 @@ function changed(a: readonly unknown[] = [], b: readonly unknown[] = []): boolea
 
 const dict = defineDict({
   es: {
-    message: 'No puedo mostrar este mensaje.',
-    question: 'No puedo mostrar esta pregunta.',
-    procedure: 'No puedo mostrar este trámite.',
-    part: 'No puedo mostrar esta parte',
+    message: 'No se puede mostrar este mensaje.',
+    question: 'No se puede mostrar esta pregunta.',
+    procedure: 'No se puede mostrar este trámite.',
+    part: 'No se puede mostrar esta parte',
     partBody: 'Algo ha fallado al mostrarla. Tus datos están a salvo.',
   },
   en: {
-    message: 'I can’t show this message.',
-    question: 'I can’t show this question.',
-    procedure: 'I can’t show this procedure.',
-    part: 'I can’t show this part',
+    message: 'This message can’t be shown.',
+    question: 'This question can’t be shown.',
+    procedure: 'This procedure can’t be shown.',
+    part: 'This part can’t be shown',
     partBody: 'Something went wrong while showing it. Your data is safe.',
   },
 });

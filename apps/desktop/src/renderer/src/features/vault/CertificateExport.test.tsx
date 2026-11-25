@@ -252,7 +252,7 @@ describe('Mis datos: exporting a certificate', () => {
     // A copy can also be made from the Mac afterwards: no warning.
     expect(html).not.toContain('copia de seguridad');
     expect(html).not.toContain('automáticamente');
-    expect(html).toContain('Te pediré Touch ID para confirmar');
+    expect(html).toContain('Se te pedirá Touch ID para confirmar');
     expect(systemDict.es.externalHint(systemName('darwin', 'es'))).toBe(
       'Este certificado está instalado en tu Mac, no en Spain Assist.',
     );
@@ -285,12 +285,12 @@ describe('Mis datos: exporting a certificate', () => {
     expect(html.match(/type="password"/g)).toHaveLength(2);
     expect(html.match(/aria-label="Mostrar"/g)).toHaveLength(2);
     expect(html).toContain(
-      'La necesitarás para instalar el certificado en otro sitio. No la guardo, así que no podré recuperarla.',
+      'La necesitarás para instalar el certificado en otro sitio. No se guarda, así que no se podrá recuperar.',
     );
     expect(html).toContain('cualquiera puede identificarse y firmar como tú');
     expect(html).toContain('Exportar…');
     expect(html).not.toContain('Touch ID');
-    expect(dialog(true)).toContain('Te pediré Touch ID para confirmar');
+    expect(dialog(true)).toContain('Se te pedirá Touch ID para confirmar');
   });
 
   it('wants at least 8 characters, typed the same twice', () => {

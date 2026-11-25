@@ -19,7 +19,7 @@ const dict = defineDict({
       `Descargando la versión ${version}… ${percent} %`,
     ready: (version: string) =>
       `Instalando la versión ${version}. Spain Assist se abrirá solo en un momento.`,
-    failed: 'No he podido descargarla sola. Descárgala e instálala tú.',
+    failed: 'No se ha podido descargar sola. Descárgala e instálala tú.',
     download: 'Descargar la nueva versión',
     store: 'Actualízala desde Microsoft Store.',
     openStore: 'Abrir Microsoft Store',
@@ -32,7 +32,7 @@ const dict = defineDict({
       `Downloading version ${version}… ${percent}%`,
     ready: (version: string) =>
       `Installing version ${version}. Spain Assist will open again in a moment.`,
-    failed: 'I couldn’t download it myself. Download and install it yourself.',
+    failed: 'It couldn’t be downloaded automatically. Download and install it yourself.',
     download: 'Download the new version',
     store: 'Update it from the Microsoft Store.',
     openStore: 'Open the Microsoft Store',

@@ -82,13 +82,13 @@ const STRINGS = {
   },
   claveMissingTitle: { es: 'Añade tu Cl@ve Permanente', en: 'Add your Cl@ve Permanente' },
   claveMissingMessage: {
-    es: 'Para entrar necesito tu Cl@ve Permanente. Guárdala aquí: yo nunca veo la contraseña.',
-    en: 'To log in I need your Cl@ve Permanente. Save it here: I never see the password.',
+    es: 'Para entrar hace falta tu Cl@ve Permanente. Guárdala aquí: el asistente nunca ve la contraseña.',
+    en: 'To log in, your Cl@ve Permanente is needed. Save it here: the assistant never sees the password.',
   },
   claveRejectedTitle: { es: 'Revisa tu Cl@ve Permanente', en: 'Check your Cl@ve Permanente' },
   claveRejectedMessage: {
-    es: 'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y vuelvo a intentarlo: yo nunca veo la contraseña.',
-    en: "Cl@ve didn't accept the saved password. Correct it here and I'll try again: I never see the password.",
+    es: 'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y se volverá a intentar: el asistente nunca ve la contraseña.',
+    en: "Cl@ve didn't accept the saved password. Correct it here to try again: the assistant never sees the password.",
   },
   certificateTitle: { es: '¿Usar tu certificado digital?', en: 'Use your digital certificate?' },
   certificateMessage: {
@@ -177,8 +177,8 @@ const STRINGS = {
     en: '{host} asks you to sign, but you have no digital certificate saved. Add it in My data.',
   },
   fillFromUserNote: {
-    es: 'Lo escribiremos directamente en {host}. El asistente no verá lo que escribas.',
-    en: "We'll type it straight into {host}. The assistant won't see it.",
+    es: 'Se escribe directamente en {host}. El asistente no verá lo que escribas.',
+    en: "It's typed straight into {host}. The assistant won't see it.",
   },
   touchIdClave: { es: 'usar tu Cl@ve', en: 'use your Cl@ve' },
   touchIdCertificate: { es: 'usar tu certificado digital', en: 'use your digital certificate' },
@@ -430,16 +430,16 @@ const STRINGS = {
     en: 'This isn’t the Microsoft Store version.',
   },
   transcriptionUnavailable: {
-    es: 'Con tu forma de conexión a la IA no puedo transcribir llamadas. Escribe lo que te dijeron.',
-    en: 'I can’t transcribe calls with the way you connect to the AI. Write down what they told you.',
+    es: 'Con tu forma de conexión a la IA no se pueden transcribir llamadas. Escribe lo que te dijeron.',
+    en: 'Calls can’t be transcribed with the way you connect to the AI. Write down what they told you.',
   },
   transcriptionBudget: {
     es: 'No queda saldo para transcribir la llamada. Escribe lo que te dijeron.',
     en: 'There’s no credit left to transcribe the call. Write down what they told you.',
   },
   transcriptionFailed: {
-    es: 'No he podido transcribir la grabación. Vuelve a intentarlo o escribe lo que te dijeron.',
-    en: 'I couldn’t transcribe the recording. Try again or write down what they told you.',
+    es: 'No se ha podido transcribir la grabación. Vuelve a intentarlo o escribe lo que te dijeron.',
+    en: 'The recording couldn’t be transcribed. Try again or write down what they told you.',
   },
   badRecording: {
     es: 'La grabación no es válida o es demasiado larga.',

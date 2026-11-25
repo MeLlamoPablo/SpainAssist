@@ -41,7 +41,7 @@ export const companionDict = defineDict({
       canInvalid: 'El número CAN tiene 6 números.',
       canRefused: 'El número CAN no coincide con tu DNI. Míralo otra vez en la tarjeta.',
       pin: 'PIN del DNI',
-      pinHelp: 'De 8 a 16 letras y números. Si es correcto, lo guardo cifrado en Mis datos.',
+      pinHelp: 'De 8 a 16 letras y números. Si es correcto, se guarda cifrado en Mis datos.',
       pinInvalid: 'El PIN tiene entre 8 y 16 caracteres.',
       pinRefused: (tries: number) =>
         tries === 1
@@ -143,7 +143,7 @@ export const companionDict = defineDict({
       canInvalid: 'The CAN has 6 digits.',
       canRefused: "The CAN doesn't match your DNI. Check it again on the card.",
       pin: 'DNI PIN',
-      pinHelp: '8 to 16 letters and numbers. If it’s right, I save it encrypted in My data.',
+      pinHelp: '8 to 16 letters and numbers. If it’s right, it’s saved encrypted in My data.',
       pinInvalid: 'The PIN has 8 to 16 characters.',
       pinRefused: (tries: number) =>
         tries === 1

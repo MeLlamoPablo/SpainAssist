@@ -150,21 +150,21 @@ export function activityLabel(
       return {
         text: title
           ? es
-            ? `Me pongo con ${q(lang, title)}`
+            ? `Empezando con ${q(lang, title)}`
             : `Getting started on ${q(lang, title)}`
           : es
-            ? 'Me pongo con ello'
+            ? 'Empezando'
             : 'Getting started',
         icon: Rocket,
       };
     }
     case 'agent_message':
-      return { text: es ? 'Paso la información' : 'Passing it on', icon: Send };
+      return { text: es ? 'Pasando la información' : 'Passing it on', icon: Send };
     case 'agent_stop':
       return { text: es ? 'Parando el trabajo' : 'Stopping the work', icon: X };
     case 'agent_list':
       return {
-        text: es ? 'Repasando lo que tengo en marcha' : 'Reviewing work in progress',
+        text: es ? 'Repasando el trabajo en marcha' : 'Reviewing work in progress',
         icon: ClipboardList,
       };
     // --- the assistant (orchestrator) ---
@@ -173,17 +173,17 @@ export function activityLabel(
       return {
         text: title
           ? es
-            ? `Empiezo el trámite ${q(lang, title)}`
+            ? `Empezando el trámite ${q(lang, title)}`
             : `Starting ${q(lang, title)}`
           : es
-            ? 'Empiezo un trámite'
+            ? 'Empezando un trámite'
             : 'Starting a procedure',
         icon: Rocket,
       };
     }
     case 'procedure_message':
       return {
-        text: es ? 'Paso la información al trámite' : 'Passing it on to the procedure',
+        text: es ? 'Pasando la información al trámite' : 'Passing it on to the procedure',
         icon: Send,
       };
     case 'procedure_list':
@@ -330,11 +330,11 @@ export function activityLabel(
       return {
         text: label
           ? es
-            ? `Escribiendo lo que me des: ${label.toLowerCase()} (oculto)`
-            : `Typing what you give me: ${label.toLowerCase()} (hidden)`
+            ? `Escribiendo un dato tuyo: ${label.toLowerCase()} (oculto)`
+            : `Typing a detail from you: ${label.toLowerCase()} (hidden)`
           : es
-            ? 'Escribiendo un código que me des (oculto)'
-            : 'Typing a code you give me (hidden)',
+            ? 'Escribiendo un código tuyo (oculto)'
+            : 'Typing a code from you (hidden)',
         icon: KeyRound,
         secret: true,
       };

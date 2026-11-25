@@ -52,7 +52,7 @@ const dict = defineDict({
       skip: 'Ahora no',
       start: 'Empezar',
       saved: (n: number) =>
-        n === 1 ? 'He guardado 1 dato tuyo.' : `He guardado ${n} datos tuyos.`,
+        n === 1 ? 'Se ha guardado 1 dato tuyo.' : `Se han guardado ${n} datos tuyos.`,
       privacy:
         'Tus datos se guardan cifrados en tu ordenador. Tu proveedor de IA tendrá acceso para completar trámites, solo cuando sea necesario.',
       notKept: 'Tu proveedor de IA no los guarda.',
@@ -77,7 +77,7 @@ const dict = defineDict({
       scan: 'Scan document',
       skip: 'Not now',
       start: 'Start',
-      saved: (n: number) => (n === 1 ? 'I saved 1 detail.' : `I saved ${n} details.`),
+      saved: (n: number) => (n === 1 ? '1 detail saved.' : `${n} details saved.`),
       privacy:
         'Your details are stored encrypted on your computer. Your AI provider can see them to complete procedures, only when needed.',
       notKept: 'Your AI provider doesn’t keep them.',

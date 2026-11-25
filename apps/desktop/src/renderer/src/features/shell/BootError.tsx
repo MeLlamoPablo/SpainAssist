@@ -5,18 +5,19 @@ import { defineDict, useT } from '../../i18n';
 
 const dict = defineDict({
   es: {
-    title: 'No he podido arrancar',
+    title: 'Spain Assist no ha podido arrancar',
     body: 'Algo ha fallado al abrir Spain Assist. Tus datos están a salvo. Prueba a abrirlo de nuevo.',
     crashedTitle: 'Algo ha fallado',
-    crashedBody: 'No he podido mostrar Spain Assist. Tus datos están a salvo. Prueba a recargarlo.',
+    crashedBody:
+      'No se ha podido mostrar Spain Assist. Tus datos están a salvo. Prueba a recargarlo.',
     retry: 'Volver a intentarlo',
     details: 'Detalles técnicos',
   },
   en: {
-    title: 'I couldn’t start',
+    title: 'Spain Assist couldn’t start',
     body: 'Something went wrong while opening Spain Assist. Your data is safe. Please try again.',
     crashedTitle: 'Something went wrong',
-    crashedBody: 'I couldn’t show Spain Assist. Your data is safe. Please reload it.',
+    crashedBody: 'Spain Assist couldn’t be shown. Your data is safe. Please reload it.',
     retry: 'Try again',
     details: 'Technical details',
   },

@@ -95,7 +95,7 @@ describe('CallTranscriber', () => {
   it('explains when there is no gateway key, or no credit left', async () => {
     const noKey = transcriber(() => transcriptResponse('x'), null);
     expect(await noKey.client.available()).toBe(false);
-    await expect(noKey.client.transcribe(recording(1))).rejects.toThrow('no puedo transcribir');
+    await expect(noKey.client.transcribe(recording(1))).rejects.toThrow('no se pueden transcribir');
 
     const broke = transcriber(() =>
       jsonResponse(400, {
@@ -110,7 +110,7 @@ describe('CallTranscriber', () => {
       jsonResponse(500, { error: { message: 'boom sk-gateway-secret' } }),
     );
     const error = await client.transcribe(recording(1)).catch((err: Error) => err);
-    expect(String(error)).toContain('No he podido transcribir');
+    expect(String(error)).toContain('No se ha podido transcribir');
     expect(`${String(error)} ${logs.join('\n')}`).not.toContain('sk-gateway-secret');
   });
 });

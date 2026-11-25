@@ -12,7 +12,7 @@ export const phoneCallDict = defineDict({
     openingTitle: 'Para empezar puedes decir',
     record: {
       title: 'Graba la llamada',
-      hint: 'Pon el móvil en altavoz cerca del ordenador. Te paso la conversación a texto para que no tengas que tomar notas.',
+      hint: 'Pon el móvil en altavoz cerca del ordenador. La conversación se pasa a texto para que no tengas que tomar notas.',
       consent:
         'Al empezar, avisa de que grabas la llamada: «Le aviso de que voy a grabar la llamada para tomar notas».',
       start: 'Empezar a grabar',
@@ -21,15 +21,15 @@ export const phoneCallDict = defineDict({
       limit: (minutes: number) => `Máximo ${minutes} minutos`,
       limitReached: 'Has llegado al máximo de la grabación.',
       micDenied:
-        'No puedo usar el micrófono. Dale permiso en Ajustes del sistema › Privacidad › Micrófono.',
-      micFailed: 'No puedo usar el micrófono. Comprueba que hay uno conectado.',
+        'No se puede usar el micrófono. Dale permiso en Ajustes del sistema › Privacidad › Micrófono.',
+      micFailed: 'No se puede usar el micrófono. Comprueba que hay uno conectado.',
       transcribing: 'Pasando la llamada a texto…',
       transcribingHint: 'Tarda unos segundos por cada minuto de llamada.',
       retry: 'Reintentar',
       discard: 'Borrar la grabación',
       again: 'Grabar de nuevo',
       unavailable:
-        'Con tu forma de conexión a la IA no puedo pasar llamadas a texto. Apunta abajo lo que te digan.',
+        'Con tu forma de conexión a la IA no se pueden pasar llamadas a texto. Apunta abajo lo que te digan.',
     },
     transcript: {
       label: 'Lo que se dijo',
@@ -61,7 +61,7 @@ export const phoneCallDict = defineDict({
     openingTitle: 'You can start with',
     record: {
       title: 'Record the call',
-      hint: 'Put your phone on speaker next to the computer. I’ll turn the conversation into text so you don’t need to take notes.',
+      hint: 'Put your phone on speaker next to the computer. The conversation is turned into text so you don’t need to take notes.',
       consent:
         'When the call starts, tell them you’re recording: «Le aviso de que voy a grabar la llamada para tomar notas».',
       start: 'Start recording',
@@ -69,15 +69,16 @@ export const phoneCallDict = defineDict({
       recording: 'Recording',
       limit: (minutes: number) => `${minutes} minutes max`,
       limitReached: 'You reached the longest recording.',
-      micDenied: 'I can’t use the microphone. Allow it in System Settings › Privacy › Microphone.',
-      micFailed: 'I can’t use the microphone. Check that one is connected.',
+      micDenied:
+        'The microphone can’t be used. Allow it in System Settings › Privacy › Microphone.',
+      micFailed: 'The microphone can’t be used. Check that one is connected.',
       transcribing: 'Turning the call into text…',
       transcribingHint: 'It takes a few seconds per minute of call.',
       retry: 'Try again',
       discard: 'Delete the recording',
       again: 'Record again',
       unavailable:
-        'With the way you connect to the AI I can’t turn calls into text. Write down below what they tell you.',
+        'With the way you connect to the AI, calls can’t be turned into text. Write down below what they tell you.',
     },
     transcript: {
       label: 'What was said',

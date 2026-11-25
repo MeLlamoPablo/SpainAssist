@@ -15,7 +15,7 @@ const dict = defineDict({
     waiting: 'Esperando a que termine la desinstalación…',
     importing: 'Trayendo tus datos',
     reopening: 'Spain Assist se abrirá de nuevo en un momento.',
-    failed: 'No he podido traer tus datos.',
+    failed: 'No se han podido traer tus datos.',
     retry: 'Reintentar',
   },
   en: {
@@ -26,7 +26,7 @@ const dict = defineDict({
     waiting: 'Waiting for the uninstall to finish…',
     importing: 'Bringing your data over',
     reopening: 'Spain Assist will open again in a moment.',
-    failed: 'I couldn’t bring your data over.',
+    failed: 'Your data couldn’t be brought over.',
     retry: 'Try again',
   },
 });

@@ -441,7 +441,7 @@ describe('the vault with external certificates', () => {
     const key = store.identities[0]!.key;
     store.identities[0]!.key = (await readPkcs12(person().p12, 'x')).privateKey;
     await expect(service.moveCertificateToSystem(saved.id)).rejects.toThrow(
-      /No he podido comprobar que el certificado del sistema operativo es el mismo/,
+      /No se ha podido comprobar que el certificado del sistema operativo es el mismo/,
     );
     kept();
     store.identities[0]!.key = key;

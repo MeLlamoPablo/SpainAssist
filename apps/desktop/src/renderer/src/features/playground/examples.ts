@@ -273,8 +273,8 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
     credential: 'clave_permanente',
     title: t('Añade tu Cl@ve Permanente', 'Add your Cl@ve Permanente'),
     message: t(
-      'Para entrar en la sede de ejemplo necesito tu Cl@ve Permanente. Guárdala aquí: yo nunca veo la contraseña.',
-      'To log in to the example site I need your Cl@ve Permanente. Save it here: I never see the password.',
+      'Para entrar en la sede de ejemplo hace falta tu Cl@ve Permanente. Guárdala aquí: el asistente nunca ve la contraseña.',
+      'To log in to the example site, your Cl@ve Permanente is needed. Save it here: the assistant never sees the password.',
     ),
   });
   addPrompt(
@@ -287,8 +287,8 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       credential: 'clave_permanente',
       title: t('Revisa tu Cl@ve Permanente', 'Check your Cl@ve Permanente'),
       message: t(
-        'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y vuelvo a intentarlo: yo nunca veo la contraseña.',
-        "Cl@ve didn't accept the saved password. Correct it here and I'll try again: I never see the password.",
+        'Cl@ve no ha aceptado la contraseña guardada. Corrígela aquí y se volverá a intentar: el asistente nunca ve la contraseña.',
+        "Cl@ve didn't accept the saved password. Correct it here to try again: the assistant never sees the password.",
       ),
       replaceId: 'cred-clave',
     },

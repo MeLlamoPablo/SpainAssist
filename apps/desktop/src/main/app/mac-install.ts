@@ -50,7 +50,7 @@ export async function installMacApp(e2e: boolean): Promise<boolean> {
   } catch (error) {
     await forgetInstaller(userData);
     dialog.showErrorBox(
-      'No hemos podido instalar Spain Assist',
+      'No se ha podido instalar Spain Assist',
       error instanceof Error ? error.message : String(error),
     );
     app.quit();
