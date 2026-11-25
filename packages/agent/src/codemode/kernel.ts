@@ -268,6 +268,30 @@ export const KERNEL = String.raw`
     return { type: 'Root', props: {}, children: children };
   }
 
+  // A form the user can't submit waits forever: exactly one <Actions> with a Button, and every
+  // Button has an onClick (checked on the first render, so present() throws in the module).
+  function checkActions(tree, key) {
+    var actions = 0, buttonsInActions = 0, dead = [];
+    (function walk(node, inActions) {
+      if (typeof node === 'string') return;
+      if (node.type === 'Actions') actions++;
+      if (node.type === 'Button') {
+        if (inActions) buttonsInActions++;
+        if (!node.props.onClick) dead.push(JSON.stringify(textOf(node) || 'Button'));
+      }
+      for (var i = 0; i < node.children.length; i++) walk(node.children[i], inActions || node.type === 'Actions');
+    })(tree, false);
+    var where = 'ui.present("' + key + '"): ';
+    if (dead.length) throw new TypeError(where + 'the Button ' + dead.join(', ') + ' has no onClick. Every Button needs one; the one that submits calls api.ui.close(result).');
+    if (actions !== 1 || buttonsInActions === 0)
+      throw new TypeError(where + 'an interface needs exactly one <Actions> with at least one <Button onClick={…}> (found ' + actions + ' <Actions>, ' + buttonsInActions + ' Button in them). The user submits with a Button whose onClick calls api.ui.close(result).');
+  }
+
+  function textOf(node) {
+    if (typeof node === 'string') return node;
+    return node.children.map(textOf).join('').trim();
+  }
+
   function failUi(ui, error) {
     if (!ui.open) return;
     ui.open = false;
@@ -377,7 +401,7 @@ export const KERNEL = String.raw`
         origin: new Error('').stack,
       };
       var tree;
-      try { tree = renderUi(ui); } catch (e) { reject(e); return; }
+      try { tree = renderUi(ui); checkActions(tree, key); } catch (e) { reject(e); return; }
       ui.lastJson = JSON.stringify(tree);
       ui.rev++;
       openUis.set(key, ui);

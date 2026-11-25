@@ -64,12 +64,12 @@ function program(random: () => number): { source: string; keys: string[]; uis: s
       const ui = `q${g}`;
       uis.push(ui);
       lines.push(
-        `  out.push(await api.ui.present('${ui}', () => <Button onClick={() => api.ui.close('${ui}-answer')}>OK</Button>));`,
+        `  out.push(await api.ui.present('${ui}', () => <Actions><Button onClick={() => api.ui.close('${ui}-answer')}>OK</Button></Actions>));`,
       );
     }
   }
   return {
-    source: `import { Button } from '@spainassist/ui';\nexport async function main(api) {\n  const out = [];\n${lines.join('\n')}\n  return out;\n}`,
+    source: `import { Actions, Button } from '@spainassist/ui';\nexport async function main(api) {\n  const out = [];\n${lines.join('\n')}\n  return out;\n}`,
     keys,
     uis,
   };

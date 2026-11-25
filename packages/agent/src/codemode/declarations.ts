@@ -75,7 +75,8 @@ interface Ui {
 //  <Map options={[{value,label,address}]} value onChange/> (places; address = street, number, town; the app
 //    locates and sorts them by distance; present throws code "bad_request" listing addresses it can't find)
 //  <Appointment slots={["YYYY-MM-DDTHH:MM"]} value onChange allowMore?/> ("more" = none suits)
-//  <Actions><Button type?="primary"|"secondary"|"danger"|"ghost" disabled? loading? onClick/></Actions>
+//  <Actions><Button type?="primary"|"secondary"|"danger"|"ghost" disabled? loading? onClick/></Actions> (exactly one
+//    <Actions> per interface, with at least one Button; every Button needs onClick, present throws otherwise)
 // vaultKey="email" (a ${l('Mis datos', 'My data')} key, or "custom.<slug>") on TextField, Select, Choice or Province: when the
 //   interface closes, the app saves the field's value to ${l('Mis datos', 'My data')} itself (unless it has an error). Never add a
 //   "save my data" checkbox or call api.vault.save for these answers. Prefill value from api.vault.read.

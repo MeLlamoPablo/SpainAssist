@@ -382,10 +382,10 @@ function Gallery({ api }) {
         <Appointment slots={["2026-12-02T09:10", "2026-12-02T09:40", "2026-12-04T12:20"]} allowMore {...bind("slot")} />
       </Section>
       <Actions>
-        <Button type="ghost">ghost</Button>
-        <Button type="danger">danger</Button>
-        <Button loading>loading</Button>
-        <Button disabled>disabled</Button>
+        <Button type="ghost" onClick={() => {}}>ghost</Button>
+        <Button type="danger" onClick={() => {}}>danger</Button>
+        <Button loading onClick={() => {}}>loading</Button>
+        <Button disabled onClick={() => {}}>disabled</Button>
         <Button type="primary" onClick={() => api.ui.close(values)}>primary</Button>
       </Actions>
     </Form>
@@ -401,7 +401,7 @@ export async function main(api) {
       id: 'rechazada',
       label: t('Interfaz rechazada', 'Refused interface'),
       code: 'uiTreeProblem → bad_request',
-      source: `import { Form, Text, Link } from "@spainassist/ui";
+      source: `import { Form, Text, Link, Actions, Button } from "@spainassist/ui";
 
 // Main checks every tree before the user sees it: links must be https, so present() throws
 // a CodemodeError (code "bad_request") that says which component is wrong. The run fails here
@@ -411,6 +411,9 @@ export async function main(api) {
     <Form title=${q('Dónde lo he leído', 'Where I read it')}>
       <Text>${t('Los requisitos están en la web del ayuntamiento.', 'The requirements are on the town hall’s website.')}</Text>
       <Link href="http://www.sevilla.org/padron">sevilla.org</Link>
+      <Actions>
+        <Button type="primary" onClick={() => api.ui.close(true)}>${t('Entendido', 'Got it')}</Button>
+      </Actions>
     </Form>
   ));
 }

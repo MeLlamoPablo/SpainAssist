@@ -155,14 +155,14 @@ describe('codemode runtime', () => {
 
   it('lets the render function given to present call hooks itself', async () => {
     const started = startRun(`
-      import { Form, TextField, Button } from '@spainassist/ui';
+      import { Form, TextField, Actions, Button } from '@spainassist/ui';
       export async function main(api) {
         return api.ui.present('code', () => {
           const [code, setCode] = api.ui.useDurableState('code', '');
           return (
             <Form title="Código">
               <TextField label="Código" value={code} onChange={setCode} />
-              <Button onClick={() => api.ui.close({ code })}>Seguir</Button>
+              <Actions><Button onClick={() => api.ui.close({ code })}>Seguir</Button></Actions>
             </Form>
           );
         });
@@ -193,10 +193,10 @@ describe('codemode runtime', () => {
     store.closeNote = 'Mis datos did not save: dniExpiry (invalid_date).';
     const started = startRun(
       `
-      import { Form, Button } from '@spainassist/ui';
+      import { Form, Actions, Button } from '@spainassist/ui';
       export async function main(api) {
         return api.ui.present('datos', () => (
-          <Form title="Datos"><Button onClick={() => api.ui.close('ok')}>Seguir</Button></Form>
+          <Form title="Datos"><Actions><Button onClick={() => api.ui.close('ok')}>Seguir</Button></Actions></Form>
         ));
       }
     `,
@@ -229,10 +229,10 @@ describe('codemode runtime', () => {
 
   it('resumes an open interface after a restart with its durable state, and reuses closed ones', async () => {
     const source = `
-      import { Form, Choice, Button } from '@spainassist/ui';
+      import { Form, Choice, Actions, Button } from '@spainassist/ui';
       function Pick({ api, k }) {
         const [v, setV] = api.ui.useDurableState('v', 'a');
-        return <Form><Choice options={[{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]} value={v} onChange={setV} /><Button onClick={() => api.ui.close(k + ':' + v)}>OK</Button></Form>;
+        return <Form><Choice options={[{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }]} value={v} onChange={setV} /><Actions><Button onClick={() => api.ui.close(k + ':' + v)}>OK</Button></Actions></Form>;
       }
       export async function main(api) {
         const first = await api.ui.present('first', () => <Pick api={api} k="first" />);
@@ -287,11 +287,38 @@ describe('codemode runtime', () => {
     if (outcome.status === 'failed') expect(outcome.error).toMatch(/showed nothing/);
   });
 
+  /** Presents `jsx` and returns the run's error; the user never sees the interface. */
+  async function presentError(jsx: string): Promise<string> {
+    const started = startRun(`
+      export async function main(api) {
+        await api.ui.present('form', () => ${jsx});
+      }`);
+    const outcome = await started.done;
+    expect(started.store.trees.has('form')).toBe(false);
+    expect(outcome.status).toBe('failed');
+    return outcome.status === 'failed' ? outcome.error : '';
+  }
+
+  it('refuses an interface the user cannot submit: one <Actions> with a Button, each with onClick', async () => {
+    const slot = '<Appointment slots={["2026-10-19T09:00"]} value="" onChange={() => {}} />';
+    expect(await presentError(`<Form>${slot}</Form>`)).toMatch(/exactly one <Actions>.*found 0/);
+    expect(await presentError(`<Form>${slot}<Actions></Actions></Form>`)).toMatch(
+      /found 1 <Actions>, 0 Button/,
+    );
+    const ok = '<Actions><Button onClick={() => api.ui.close(1)}>OK</Button></Actions>';
+    expect(await presentError(`<Form>${ok}${ok}</Form>`)).toMatch(/found 2 <Actions>/);
+    expect(
+      await presentError(
+        '<Form><Actions><Button type="primary">Continuar</Button></Actions></Form>',
+      ),
+    ).toMatch(/the Button "Continuar" has no onClick/);
+  });
+
   it('fails the run when a handler throws, so the agent sees the bug', async () => {
     const started = startRun(`
-      import { Button } from '@spainassist/ui';
+      import { Actions, Button } from '@spainassist/ui';
       export async function main(api) {
-        await api.ui.present('x', () => <Button onClick={() => { throw new Error('boom'); }}>Go</Button>);
+        await api.ui.present('x', () => <Actions><Button onClick={() => { throw new Error('boom'); }}>Go</Button></Actions>);
       }`);
     await until(() => started.store.trees.has('x'));
     const t = started.store.trees.get('x');
@@ -306,10 +333,10 @@ describe('codemode runtime', () => {
 
   it('throws at the line that presented an interface the app could not draw', async () => {
     const started = startRun(`
-      import { Button } from '@spainassist/ui';
+      import { Actions, Button } from '@spainassist/ui';
       export async function main(api) {
         try {
-          await api.ui.present('x', () => <Button onClick={() => {}}>Go</Button>);
+          await api.ui.present('x', () => <Actions><Button onClick={() => {}}>Go</Button></Actions>);
         } catch (e) {
           return { code: e.code, message: e.message };
         }
@@ -332,9 +359,9 @@ describe('codemode runtime', () => {
   it('points an uncaught failure of an interface at the line that presented it', async () => {
     const started = startRun(
       [
-        "import { Button } from '@spainassist/ui';",
+        "import { Actions, Button } from '@spainassist/ui';",
         'export async function main(api) {',
-        "  await api.ui.present('x', () => <Button onClick={() => {}}>Go</Button>);",
+        "  await api.ui.present('x', () => <Actions><Button onClick={() => {}}>Go</Button></Actions>);",
         '}',
       ].join('\n'),
     );
@@ -357,7 +384,7 @@ describe('codemode runtime', () => {
           const [code] = useDurableState('code', 'X7K2');
           return (
             <Form title="Código">
-              <Button onClick={() => api.ui.close({ code })}>Seguir</Button>
+              <Actions><Button onClick={() => api.ui.close({ code })}>Seguir</Button></Actions>
             </Form>
           );
         });

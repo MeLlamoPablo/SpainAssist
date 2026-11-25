@@ -64,7 +64,7 @@ describe('RunEngine', () => {
       source: `export async function main(api) {
   await api.procedures.getOrCreate({ id: 'tramite', title: 'Trámite' });
   try {
-    await api.ui.present('q', () => <Form title="¿Seguro?" />);
+    await api.ui.present('q', () => <Form title="¿Seguro?"><Actions><Button onClick={() => api.ui.close(true)}>Sí</Button></Actions></Form>);
     return 'answered';
   } catch (e) {
     return 'heard: ' + e.message;

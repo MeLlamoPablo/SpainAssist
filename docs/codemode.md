@@ -113,7 +113,9 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
 - `api.ui`: `present(key, render)`, `close(result, key?)`, hooks `useDurableState`, `useState`,
   `useMemo`; components from `@spainassist/ui`: Form, Section, Text, Callout, Facts, Link, Divider,
   Progress, TextField, Select, Choice, MultiChoice, Checkbox, Province, DocumentPicker, Map,
-  Appointment, Actions, Button. JSX, no other imports. A field that asks for personal data
+  Appointment, Actions, Button. JSX, no other imports. The user submits with a Button: the
+  first render needs exactly one `<Actions>` with a Button, and every Button an `onClick`, or
+  `present` throws in the module (in evals, forms with no button waited for ever). A field that asks for personal data
   (TextField, Select, Choice, Province) carries a `vaultKey` ("email", "custom.<slug>"; never the
   CAN or a PIN): when its interface closes, however it closes, main saves the field's value to
   Mis datos (`uiTreeAnswers`, from the last tree; skipped when the field has an `error` or the
