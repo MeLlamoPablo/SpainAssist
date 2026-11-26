@@ -3,6 +3,44 @@
 What changed in each release of Spain Assist, newest first. Built from the commit history
 (`git log vA..vB`); each line names its commits.
 
+## 0.5.3 (2026-11-26)
+
+The desktop app goes from 0.5.1 to 0.5.3, to align with the phone app, which already shipped
+0.5.2 (Android library updates only). What changed since 0.5.1.
+
+### App
+
+- **Certificates only where a site uses them.** The agent uses a certificate or the DNI only
+  inside `page.withCertificate`, which names the certificate. The app asks the user only when a
+  site uses it, and the certificate goes off when the block ends, so the DNI approval on the
+  phone no longer stays open after the agent finishes. Signatures name their certificate too, so
+  the certificate picker is gone; the agent asks which certificate when the user has several.
+  (99919748, 4fd14e56, 4dfb1424, 9fe5c5b1, 43e2de49, 6c642b0f)
+- **DNIe asks less.** The app keeps a typed PIN in memory until the card accepts it, saves the
+  CAN the card accepts in Mis datos, and waits 90 s (was 30 s) before an idle phone approval
+  ends. (c53a729b, b3230387, d3057cb7)
+- **Agents finish more procedures.** Agents accept a site's terms, privacy notices and cookie
+  banners themselves. Forms with no way to close them, or with empty handlers, fail before the
+  user sees them. (5226db1e, e2978b01, d7ff53e8)
+- **Smaller fixes:**
+  - The app no longer speaks in the first person. (35dd20cf)
+  - The chat caret stops when a message's text stops arriving. (aa780128)
+  - Feedback no longer redacts the municipality or the birthplace. (69d0e0c2, 4656ef9f)
+  - Shorter Exa web search text in Settings. (418c3b69)
+
+### Phone app
+
+- The phone keeps the card open for all the requests of one certificate block, so the user
+  holds the DNI once (companion protocol 7; older phone apps sign as before). (4fd14e56)
+- The phone waits 180 s (was 60 s) for the next item to sign. (d3057cb7)
+- The app no longer speaks as "we". (8b7dc748)
+- 0.5.2: kotlinx-serialization 1.13.0 and Gradle 9.9.1. (2978a434)
+
+### Maintenance
+
+- Trace viewer: the search box finds a span by its run id or tool call id. (eb8ba1be)
+- Version 0.5.3 everywhere, the phone app included.
+
 ## 0.5.1 (2026-11-24)
 
 Installed apps update to it, except on macOS: 0.3.0 to 0.5.0 on macOS can't update themselves,
