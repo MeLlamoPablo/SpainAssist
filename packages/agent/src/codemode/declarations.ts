@@ -233,7 +233,7 @@ interface Locator {
 interface Page {
   readonly procedureId: string;
   /** Same locators as Locator, plus ref("e12") for refs of snapshot(). */
-  locator(selector: string): Locator; getByRole(role: string, o?: { name?: string; exact?: boolean }): Locator; getByText(t: string, o?: { exact?: boolean }): Locator;
+  locator(selector: string): Locator; getByRole(role: string, o?: { name?: string | RegExp; exact?: boolean }): Locator; getByText(t: string, o?: { exact?: boolean }): Locator;
   getByLabel(t: string, o?: { exact?: boolean }): Locator; getByPlaceholder(t: string): Locator; getByTitle(t: string): Locator; ref(ref: string): Locator;
   goto(url: string, o?: { newTab?: boolean }): Promise<ActionResult>; goBack(): Promise<ActionResult>; reload(): Promise<ActionResult>;
   url(): Promise<string>; title(): Promise<string>;
