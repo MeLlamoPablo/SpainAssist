@@ -22,6 +22,7 @@ const NON_IDENTIFYING_KEYS = new Set([
   'addressCountry',
   'addressProvince',
   'addressMunicipality',
+  'birthPlace',
   'maritalStatus',
 ]);
 
