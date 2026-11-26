@@ -374,7 +374,7 @@ describe('env', () => {
 });
 
 describe('scrubbable known values', () => {
-  it('drops categories and very short values', () => {
+  it('drops categories, the municipality and very short values', () => {
     const values = scrubbableKnownValues({
       knownSensitiveValues: () => ['Lucía', 'DNI', 'M', '12345678Z', 'España', 'Madrid'],
       listPersonal: () => [
@@ -385,6 +385,6 @@ describe('scrubbable known values', () => {
         { key: 'addressMunicipality', value: 'Madrid' },
       ],
     });
-    expect(values).toEqual(['Lucía', '12345678Z', 'Madrid']);
+    expect(values).toEqual(['Lucía', '12345678Z']);
   });
 });

@@ -21,6 +21,7 @@ const NON_IDENTIFYING_KEYS = new Set([
   'nationality',
   'addressCountry',
   'addressProvince',
+  'addressMunicipality',
   'maritalStatus',
 ]);
 
@@ -33,7 +34,7 @@ const norm = (v: string) =>
 
 /**
  * Values to remove from any text that leaves the device: everything the vault considers
- * sensitive, minus very short values and pure categories ("DNI", "M", "España"...), which would
+ * sensitive, minus very short values and pure categories ("DNI", "M", "España", "Madrid"...), which would
  * otherwise destroy useful text without protecting anyone.
  */
 export function scrubbableKnownValues(vault: {
