@@ -1885,8 +1885,15 @@ export class PlaywrightBrowserService implements BrowserService {
   }
 
   private async waitForBackgroundWork(s: Session): Promise<void> {
-    if (s.pending.size && !(await settleAll(s.pending, 20_000))) {
-      s.notes.push('A download is still in progress; it will be reported in a later observation.');
+    // Work can start more work (an inline PDF's viewer sub-request): wait until none is left.
+    const deadline = Date.now() + 20_000;
+    while (s.pending.size) {
+      if (!(await settleAll(s.pending, Math.max(1, deadline - Date.now())))) {
+        s.notes.push(
+          'A download is still in progress; it will be reported in a later observation.',
+        );
+        break;
+      }
     }
     if (s.afirmaInFlight.size) {
       const done = await settleAll(s.afirmaInFlight, this.signatureWait);
@@ -2083,11 +2090,20 @@ export class PlaywrightBrowserService implements BrowserService {
     if (disposition && /^\s*attachment/i.test(disposition)) return; // a download event follows
     const type = response.request().resourceType();
     if (type !== 'document' && type !== 'other') return;
+    // If this body is the viewer's wrapper, the viewer's sub-request can start after the page
+    // looks settled (slow machines): stay pending until it arrives, so this observation reports
+    // the PDF. Listen now: it can arrive before this body is read.
+    const viewer =
+      type === 'document' ? page.waitForResponse(isViewerPdf, { timeout: 10_000 }) : undefined;
+    viewer?.catch(noop);
     this.track(
       s,
       (async () => {
         const body = await response.body().catch(() => null);
-        if (body?.subarray(0, 5).toString('latin1') !== '%PDF-') return;
+        if (body?.subarray(0, 5).toString('latin1') !== '%PDF-') {
+          await viewer?.catch(noop);
+          return;
+        }
         const hash = sha256(body);
         if (s.pdfHashes.has(hash)) {
           // The same PDF again: no second download, but the page still shows a PDF, not nothing.
@@ -2502,6 +2518,14 @@ function pdfSourceUrl(response: Response, page: Page): string {
     // no frame (service worker)
   }
   return page.url();
+}
+
+/** The viewer's stream request: it carries the PDF's bytes (see captureInlinePdf). */
+function isViewerPdf(response: Response): boolean {
+  return (
+    response.request().resourceType() === 'other' &&
+    /application\/(?:x-)?pdf/i.test(response.headers()['content-type'] ?? '')
+  );
 }
 
 function errorMessage(err: unknown): string {
