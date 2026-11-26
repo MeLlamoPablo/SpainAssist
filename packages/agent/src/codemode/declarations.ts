@@ -180,7 +180,8 @@ interface Documents {
    *  <div class="columns"><div>…</div><div>…</div></div> sets blocks side by side (signatures). */
   create(name: string, markdown: string): Promise<{ name: string; pages: number }>;
   /** Signs a saved PDF with the user's certificate or DNI (credentialId: its id in
-   *  api.vault.read().credentials), no website needed: the user places the
+   *  api.vault.read().credentials; with several and no word from the user about which, ask
+   *  them in an interface first), no website needed: the user places the
    *  visible signature and approves it in the app (signed: false if they didn't). The signed PDF
    *  replaces the document (same name). */
   sign(name: string, o: { credentialId: string }): Promise<{ name: string; signed: boolean }>;
@@ -256,7 +257,8 @@ interface Page {
   fillFromUser(target: Locator | string, o: { title: string; label: string; message?: string; submit?: boolean }): Promise<ActionResult>;
   /** Every use of the user's certificate${dnie ? ' or DNI' : ''} on a site: the block holds only the click that starts it ("Firmar", "Acceder"), never the
    *  steps before or after. Without the block the click throws. credentialId: the certificate${dnie ? ' or DNI' : ''} to use, from the vault's
-   *  credentials; it is all an AutoFirma signature or login needs. origins: only for a TLS client-certificate login, and only
+   *  credentials (which one is the user's choice: with several and no word from them or the site about which, ask them in an
+   *  interface first; with one, use it without asking); it is all an AutoFirma signature or login needs. origins: only for a TLS client-certificate login, and only
    *  when the app said a site asked for a certificate and got none (it names the origin). Opening the block asks the user
    *  nothing: the app asks when the site uses the credential. When the block ends, the app waits for the signatures and the
    *  login, then stops using it: a later page that asks again needs a new block. Resolves with the block's value. */
