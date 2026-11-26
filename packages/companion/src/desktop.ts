@@ -14,6 +14,7 @@
 import crypto from 'node:crypto';
 import {
   COMPANION_PROTOCOL,
+  COMPANION_PROTOCOL_MIN,
   CompanionHello,
   type CompanionWelcome,
   type DesktopToPhone,
@@ -41,6 +42,18 @@ import { RelaySocket, type RelaySocketOptions, type RelayState } from './relay-s
 
 export const PAIRING_LIFETIME_MS = 72 * 60 * 60 * 1000;
 const CHALLENGE_TTL_MS = 2 * 60 * 1000;
+
+/**
+ * `message` as a phone on `protocol` reads it. Protocol 6 has no sessions: it gets neither their
+ * end (undefined) nor the request's `session`.
+ */
+function spokenTo(protocol: number, message: DesktopToPhone): DesktopToPhone | undefined {
+  if (protocol >= 7) return message;
+  if (message.type === 'session.end') return undefined;
+  if (message.type !== 'sign.request' || !message.session) return message;
+  const { session: _none, ...rest } = message;
+  return rest;
+}
 
 export type PairingEndReason = 'unpaired' | 'phone_unpaired' | 'expired' | 'relay_refused';
 
@@ -153,7 +166,9 @@ export class DesktopPairing {
   send(message: DesktopToPhone): boolean {
     const session = this.session;
     if (!session) return false;
-    for (const frame of sealMessage(session.sealer, message)) {
+    const spoken = spokenTo(this.phone?.protocol ?? COMPANION_PROTOCOL, message);
+    if (!spoken) return true;
+    for (const frame of sealMessage(session.sealer, spoken)) {
       if (!this.socket.send(frame)) {
         this.dropSession();
         return false;
@@ -254,12 +269,14 @@ export class DesktopPairing {
     // One challenge, one session.
     this.challenge = undefined;
     const sealer = new Sealer(keys.desktopToPhone, 'desktopToPhone');
-    const compatible = hello.data.protocol === COMPANION_PROTOCOL;
+    // An older phone the desktop still speaks to gets its own version back, and stays on it.
+    const compatible =
+      hello.data.protocol >= COMPANION_PROTOCOL_MIN && hello.data.protocol <= COMPANION_PROTOCOL;
     // The first phone to pair gets the pairing's own secret; the QR's stops working.
     const session = compatible && this.qr ? crypto.randomBytes(SECRET_BYTES) : undefined;
     const welcome: CompanionWelcome = {
       type: 'welcome',
-      protocol: COMPANION_PROTOCOL,
+      protocol: compatible ? hello.data.protocol : COMPANION_PROTOCOL,
       app: this.opts.appVersion,
       expiresAt: new Date(this.expiresAt).toISOString(),
       ...(session ? { session: session.toString('base64') } : {}),

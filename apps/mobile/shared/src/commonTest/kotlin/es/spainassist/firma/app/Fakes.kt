@@ -40,11 +40,16 @@ class FakeCardReader : CardReader {
     var waiting = 0
         private set
 
+    /** How many times the app asked the user to hold a card. */
+    var asked = 0
+        private set
+
     fun present(card: Card) {
         cards.trySend(card)
     }
 
     override suspend fun awaitCard(): Card {
+        asked++
         waiting++
         try {
             return cards.receive()

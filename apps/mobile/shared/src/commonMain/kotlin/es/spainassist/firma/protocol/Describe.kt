@@ -12,6 +12,7 @@ fun describe(message: DesktopToPhone): String = when (message) {
         "prehashed=${message.prehashed == true} check=${message.check != null}"
     is SignDone -> "sign.done ${message.requestId}"
     is SignCancel -> "sign.cancel ${message.requestId} reason=${message.reason.name}"
+    is SessionEnd -> "session.end ${message.session}"
     DesktopBye -> "bye"
 }
 

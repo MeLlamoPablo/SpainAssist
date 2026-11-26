@@ -23,9 +23,19 @@ holding the key (`docs/research/dnie.md` §2).
   per-launch key Chromium trusts (`launchArgs`, an SPKI pin), and talks to the real host itself
   with the platform's verifier and the client certificate. Requests are forwarded over
   HTTP/1.1 (TLS 1.2 renegotiation works).
-- Remote keys (the DNIe) only do RSA PKCS#1 v1.5, so they stay on TLS 1.2. Before each new
-  upstream connection the sidecar calls `prepare` (the user may approve on the phone), then
-  `sign` during the handshake. Each signature is checked against the certificate.
+- Remote keys (the DNIe) only do RSA PKCS#1 v1.5, so they stay on TLS 1.2. The sidecar calls
+  `prepare` (the user may approve on the phone) before a new upstream connection to a host that
+  asks for a certificate in its handshake (the same probe), then `sign` during the handshake.
+  Each signature is checked against the certificate. A host that asks for no certificate costs
+  no call. When a server asks later (a renegotiation, or a host the probe missed), the sidecar
+  calls `prepare` inside that handshake.
+- Lazy identities: `configure` takes an identity without a `chain`, and `prepare` resolves with
+  it (`SidecarCertificate`), plus the `key` when the sidecar keeps it in memory (a `.p12`). With
+  a key, the sidecar signs in memory from then on and calls the app no more. So the app asks
+  the user for nothing until a site asks for the certificate.
+- When a session's certificate goes off or changes, idle intercepted connections close at once.
+  One with a request in flight closes when that request has its answer (30 s at most), so the
+  page that was loading still loads. Tunnels to hosts that are now intercepted close at once.
 - Few signatures: upstream connections are kept and reused, handshakes to a host are serialized,
   and TLS sessions are resumed when the server allows it. Each full handshake is one card
   operation.

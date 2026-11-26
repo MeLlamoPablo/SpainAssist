@@ -89,7 +89,12 @@ it('logs in with the phone companion and signs each TLS digest without hashing i
     );
     // The CAN from the scanned DNI; the PIN the user types on the desktop.
     await app.vault.setPersonal([{ key: 'dniAccessNumber', value: '123456' }], 'manual');
-    const signing = app.services.companion!.login(procedureId, credential, sede.certUrl);
+    // Nothing reaches the phone until the browser's connection asks for the certificate.
+    const identity = app.services.companion!.login(procedureId, credential, {
+      session: crypto.randomUUID(),
+      origins: [sede.certUrl],
+    });
+    const loggedIn = login('dnie', identity);
     await app.waitFor(() => {
       const prompt = app.pendingPrompt(procedureId)?.prompt;
       return prompt?.kind === 'dnie_signature' && prompt.stage === 'unlock';
@@ -136,9 +141,7 @@ it('logs in with the phone companion and signs each TLS digest without hashing i
         }
       },
     });
-    const identity = await signing;
-    expect(identity).toBeTruthy();
-    await login('dnie', identity!);
+    await loggedIn;
     expect(requests.size).toBe(1);
     expect(handshakes.size).toBe(1);
   } finally {

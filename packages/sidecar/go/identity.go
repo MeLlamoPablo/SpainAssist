@@ -41,15 +41,23 @@ const (
 // identity is a session's client certificate and its upstream connections. Its pool keeps
 // connections open and serializes handshakes per host, so a login costs as few signatures as
 // possible: each full handshake is one card operation, and a resumed one is none.
+//
+// A lazy identity starts without a certificate: the app sends it in the reply to a "prepare"
+// call, with the key when the sidecar keeps it in memory. So the app asks the user for nothing
+// until a site asks for the certificate.
 type identity struct {
 	p       *proxy
 	session string
 	spec    identitySpec
-	chain   [][]byte
-	leaf    *x509.Certificate
-	// signer is the key in memory; nil for a remote key.
+	cache   tls.ClientSessionCache
+
+	// mu guards the certificate and the key: a "prepare" reply can set them.
+	mu    sync.Mutex
+	chain [][]byte
+	leaf  *x509.Certificate
+	// signer is the key in memory; nil for a remote key, and for a lazy identity before its
+	// first "prepare" reply.
 	signer crypto.Signer
-	cache  tls.ClientSessionCache
 
 	transport *http.Transport
 	proxy     *httputil.ReverseProxy
@@ -57,54 +65,24 @@ type identity struct {
 }
 
 func (p *proxy) newIdentity(session string, spec identitySpec) (*identity, error) {
-	if spec.ID == "" || len(spec.Chain) == 0 {
+	if spec.ID == "" || (len(spec.Chain) == 0 && spec.Key != "") {
 		return nil, errors.New("an identity needs an id and a certificate")
-	}
-	chain := make([][]byte, 0, len(spec.Chain))
-	for _, c := range spec.Chain {
-		der, err := base64.StdEncoding.DecodeString(c)
-		if err != nil {
-			return nil, fmt.Errorf("bad certificate: %w", err)
-		}
-		chain = append(chain, der)
-	}
-	leaf, err := x509.ParseCertificate(chain[0])
-	if err != nil {
-		return nil, fmt.Errorf("bad certificate: %w", err)
 	}
 	id := &identity{
 		p:       p,
 		session: session,
 		spec:    spec,
-		chain:   chain,
-		leaf:    leaf,
 		cache:   tls.NewLRUClientSessionCache(64),
 	}
+	if err := id.load(spec.Chain, spec.Key); err != nil {
+		return nil, err
+	}
 	maxConns := spec.MaxConns
-	if spec.Key != "" {
-		der, err := base64.StdEncoding.DecodeString(spec.Key)
-		if err != nil {
-			return nil, errors.New("bad key")
-		}
-		parsed, err := x509.ParsePKCS8PrivateKey(der)
-		if err != nil {
-			return nil, errors.New("bad key")
-		}
-		signer, ok := parsed.(crypto.Signer)
-		if !ok || !samePublicKey(signer.Public(), leaf.PublicKey) {
-			return nil, errors.New("the key doesn't match the certificate")
-		}
-		id.signer = signer
-		if maxConns <= 0 {
-			maxConns = 6
-		}
-	} else {
-		if _, ok := leaf.PublicKey.(*rsa.PublicKey); !ok {
-			return nil, errors.New("remote keys must be RSA")
-		}
-		if maxConns <= 0 {
-			maxConns = 2
-		}
+	if maxConns <= 0 && spec.Key != "" {
+		maxConns = 6
+	}
+	if maxConns <= 0 {
+		maxConns = 2
 	}
 	id.transport = &http.Transport{
 		DialTLSContext:        id.dialTLS,
@@ -122,6 +100,60 @@ func (p *proxy) newIdentity(session string, spec identitySpec) (*identity, error
 		ErrorLog:      quiet,
 	}
 	return id, nil
+}
+
+// load sets the certificate (chain: Base64 DER, leaf first) and the key in memory (key: Base64
+// PKCS#8), from the session's message or from a "prepare" reply. An empty chain keeps the
+// certificate the identity has; an empty key keeps a remote key remote.
+func (id *identity) load(chain []string, key string) error {
+	id.mu.Lock()
+	defer id.mu.Unlock()
+	ders, leaf := id.chain, id.leaf
+	if len(chain) > 0 {
+		ders = make([][]byte, 0, len(chain))
+		for _, c := range chain {
+			der, err := base64.StdEncoding.DecodeString(c)
+			if err != nil {
+				return fmt.Errorf("bad certificate: %w", err)
+			}
+			ders = append(ders, der)
+		}
+		parsed, err := x509.ParseCertificate(ders[0])
+		if err != nil {
+			return fmt.Errorf("bad certificate: %w", err)
+		}
+		leaf = parsed
+	}
+	signer := id.signer
+	if key != "" {
+		der, err := base64.StdEncoding.DecodeString(key)
+		if err != nil {
+			return errors.New("bad key")
+		}
+		parsed, err := x509.ParsePKCS8PrivateKey(der)
+		if err != nil {
+			return errors.New("bad key")
+		}
+		s, ok := parsed.(crypto.Signer)
+		if !ok || leaf == nil || !samePublicKey(s.Public(), leaf.PublicKey) {
+			return errors.New("the key doesn't match the certificate")
+		}
+		signer = s
+	}
+	if leaf != nil && signer == nil {
+		if _, ok := leaf.PublicKey.(*rsa.PublicKey); !ok {
+			return errors.New("remote keys must be RSA")
+		}
+	}
+	id.chain, id.leaf, id.signer = ders, leaf, signer
+	return nil
+}
+
+// current is the certificate and the key in memory, as the last "prepare" reply left them.
+func (id *identity) current() (chain [][]byte, leaf *x509.Certificate, signer crypto.Signer) {
+	id.mu.Lock()
+	defer id.mu.Unlock()
+	return id.chain, id.leaf, id.signer
 }
 
 func (id *identity) same(spec identitySpec) bool {
@@ -164,17 +196,25 @@ func (id *identity) lock(addr string) *sync.Mutex {
 	return l.(*sync.Mutex)
 }
 
-// dialTLS opens an upstream connection with the client certificate. Remote keys are prepared
-// first (the user may have to approve on the phone), outside any handshake, so slow approvals
-// never hit a server's handshake timeout.
+// dialTLS opens an upstream connection with the client certificate. Without the key in memory
+// (a remote key, or a lazy identity that has none yet), the app prepares it first when the host
+// asks for a certificate in its handshake (probe.go): the user may have to approve, on the phone
+// or in the app. That is outside any handshake, so slow approvals never hit a server's handshake
+// timeout. A host that doesn't ask costs the user nothing.
 func (id *identity) dialTLS(ctx context.Context, _, addr string) (net.Conn, error) {
 	hostname, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
 	}
-	if id.signer == nil {
-		if err := id.prepare(ctx, hostname); err != nil {
-			return nil, err
+	signed := false
+	var key *remoteKey
+	if _, _, signer := id.current(); signer == nil {
+		key = &remoteKey{id: id, ctx: ctx, host: hostname, signed: &signed}
+		if id.p.asksForCertificate(ctx, addr) {
+			if err := id.prepare(ctx, hostname); err != nil {
+				return nil, err
+			}
+			key.prepared = true
 		}
 	}
 	// One handshake at a time per host: the next one can resume the session of the first.
@@ -186,8 +226,6 @@ func (id *identity) dialTLS(ctx context.Context, _, addr string) (net.Conn, erro
 	if err != nil {
 		return nil, &certError{code: "unreachable", detail: err.Error()}
 	}
-	signed := false
-	cert, key := id.certificate(ctx, hostname, &signed)
 	config := &tls.Config{
 		ServerName:         hostname,
 		RootCAs:            id.p.roots,
@@ -198,10 +236,10 @@ func (id *identity) dialTLS(ctx context.Context, _, addr string) (net.Conn, erro
 		ClientSessionCache: id.cache,
 		NextProtos:         []string{"http/1.1"},
 		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			return cert, nil
+			return id.certificate(key, &signed)
 		},
 	}
-	if id.signer == nil {
+	if _, _, signer := id.current(); signer == nil {
 		config.MaxVersion = tls.VersionTLS12
 	}
 	conn := tls.Client(raw, config)
@@ -230,6 +268,8 @@ func (c *upstreamConn) Close() error {
 	return c.Conn.Close()
 }
 
+// prepare asks the app to get the key ready for a connection to hostname. The reply of a lazy
+// identity carries its certificate, and its key when the sidecar keeps it in memory.
 func (id *identity) prepare(ctx context.Context, hostname string) error {
 	ctx, cancel := context.WithTimeout(ctx, prepareTimeout)
 	defer cancel()
@@ -242,21 +282,40 @@ func (id *identity) prepare(ctx context.Context, hostname string) error {
 	if reply.Error != "" {
 		return &certError{code: reply.Error, detail: reply.Message}
 	}
+	if err := id.load(reply.Chain, reply.Key); err != nil {
+		return &certError{code: "failed", detail: err.Error()}
+	}
+	if _, leaf, _ := id.current(); leaf == nil {
+		return &certError{code: "unavailable", detail: "the app sent no certificate"}
+	}
 	return nil
 }
 
-// certificate is the client certificate for one connection; the remote key is nil for a key in
-// memory.
-func (id *identity) certificate(ctx context.Context, hostname string, signed *bool) (*tls.Certificate, *remoteKey) {
-	cert := &tls.Certificate{Certificate: id.chain, Leaf: id.leaf}
-	if id.signer != nil {
-		cert.PrivateKey = &localKey{Signer: id.signer, signed: signed}
+// certificate is the client certificate for one connection, when the server asks for it. key is
+// the connection's remote key (nil when the key was in memory at the dial). The app prepares the
+// key here, inside the handshake, when it didn't before the dial: the probe didn't see this host
+// ask, or the server asks in a renegotiation and the identity has no certificate yet.
+func (id *identity) certificate(key *remoteKey, signed *bool) (*tls.Certificate, error) {
+	chain, leaf, signer := id.current()
+	if signer == nil && key != nil && (leaf == nil || (key.lock == nil && !key.prepared)) {
+		if err := id.prepare(key.ctx, key.host); err != nil {
+			return nil, err
+		}
+		key.prepared = true
+		chain, leaf, signer = id.current()
+	}
+	cert := &tls.Certificate{Certificate: chain, Leaf: leaf}
+	if signer != nil {
+		cert.PrivateKey = &localKey{Signer: signer, signed: signed}
 		return cert, nil
 	}
-	key := &remoteKey{id: id, ctx: ctx, host: hostname, signed: signed}
+	if key == nil || leaf == nil {
+		return nil, &certError{code: "unavailable", detail: "the certificate has no key"}
+	}
+	key.leaf = leaf
 	cert.PrivateKey = key
 	cert.SupportedSignatureAlgorithms = pkcs1Schemes
-	return cert, key
+	return cert, nil
 }
 
 // localKey is a key in memory; it records that the handshake signed.
@@ -276,6 +335,10 @@ type remoteKey struct {
 	ctx    context.Context
 	host   string
 	signed *bool
+	// leaf is the certificate the connection presented with this key.
+	leaf *x509.Certificate
+	// prepared: the app prepared the key for this connection's first handshake.
+	prepared bool
 	// lock is the host's handshake lock, set once the connection is open: any later signature
 	// is for a renegotiation.
 	lock *sync.Mutex
@@ -291,7 +354,7 @@ func (k *remoteKey) renegotiation(lock *sync.Mutex) context.CancelFunc {
 	return cancel
 }
 
-func (k *remoteKey) Public() crypto.PublicKey { return k.id.leaf.PublicKey }
+func (k *remoteKey) Public() crypto.PublicKey { return k.leaf.PublicKey }
 
 func (k *remoteKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	if _, pss := opts.(*rsa.PSSOptions); pss {
@@ -328,7 +391,7 @@ func (k *remoteKey) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) ([]
 		return nil, &certError{code: "failed", detail: "bad signature"}
 	}
 	// A different card, or a broken signer: fail here with a clear reason.
-	pub := k.id.leaf.PublicKey.(*rsa.PublicKey)
+	pub := k.leaf.PublicKey.(*rsa.PublicKey)
 	if err := rsa.VerifyPKCS1v15(pub, hash, digest, signature); err != nil {
 		return nil, &certError{code: "failed", detail: "the signature doesn't match the certificate"}
 	}

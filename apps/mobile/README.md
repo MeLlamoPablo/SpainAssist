@@ -25,6 +25,14 @@ Compose Multiplatform. There is only an Android app. The shared module also comp
   desktop asked the user for them and may keep them in its vault: the CAN with the DNI's data,
   the PIN with the DNIe credential). They serve that request only, are never stored or cached
   on the phone, and are dropped when the request ends.
+- **Blocks.** Requests with the same `session` belong to one certificate block of the desktop
+  (`page.withCertificate`). When the desktop ends one of them (`sign.done`, or its own
+  `sign.cancel`), the app keeps the card open, with reader mode on, and the block's next request
+  uses it with no "hold your DNIe" step. Each request still shows its own review, except a login
+  for an origin the user already approved in the block. The app lets go of the card when the
+  block has had no request for 60 seconds, when a request ends any other way (the user declines
+  or cancels, a failure, a timeout), and when the block ends: with `session.end`, with a request
+  of another block or of none, when the user cancels a request, or with the pairing.
 - **The card moving (Autofirma's AA300103).** Reader mode checks presence every 2 seconds, not
   every 125 ms, and IsoDep waits up to 5 seconds per command. When the card does leave the field,
   `IsoDepConnection` flags it, and whatever jmulticard throws becomes "the card moved". The app
@@ -222,7 +230,8 @@ Login uses the AUTENTICACIÓN certificate; documents use FIRMA. A `login` review
 without a document. TLS digests arrive already hashed (`prehashed`); the card adapter wraps
 DigestInfo without hashing them again, while preserving PACE/CWA cryptography. After approval,
 cancel from the desktop. `COMPANION_PROTOCOL` in `protocol/Messages.kt` must match the one in
-`packages/shared/src/companion.ts`; when it changes, old apps must update.
+`packages/shared/src/companion.ts`. When it changes, old apps must update, unless the desktop
+still speaks their version (`COMPANION_PROTOCOL_MIN` there).
 
 ## Licence
 

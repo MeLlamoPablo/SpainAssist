@@ -55,7 +55,6 @@ const WAITS_FOR_USER: ReadonlySet<string> = new Set([
   'prompt.phoneCall',
   'browser.loginClave',
   'browser.fillFromUser',
-  'browser.useCertificate',
   // Waits for the block's signatures, which may wait for the user.
   'browser.endCertificate',
   'vault.signDocument',

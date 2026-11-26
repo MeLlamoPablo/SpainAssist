@@ -161,12 +161,30 @@ corrects it in the app's own form (the DNI/NIE prefilled when known). No tool as
 password alone. One-time codes and passwords of other sites are typed once from a native prompt
 and never saved. Client-certificate logins go through the sidecar after consent. Sites outside
 `OFFICIAL_DOMAINS` need independent official sources and the user's explicit approval.
-A site may use the user's certificates or DNI (AutoFirma signatures and logins, TLS
-client-certificate logins) only inside the agent's `page.withCertificate(options, block)`; the
+A site may use one of the user's certificates or the DNI (AutoFirma signatures and logins, TLS
+client-certificate logins) only inside the agent's
+`page.withCertificate({ credentialId, origins }, block)`, and only the one the block names; the
 block holds only the click that starts it. Main refuses a request outside a block, and the agent's
-action fails with the reason. When the block ends, main waits until its signatures and handshakes
-are over (2 s with none), then turns the certificate off and ends the phone's DNI login approval.
-A page that asks again later needs a new block (`browser/certificate-blocks.ts`).
+action fails with the reason. Opening a block asks the user nothing: main asks when a site uses
+the certificate. An AutoFirma request shows the signature's card (the block's certificate signs:
+the user picks none). A TLS login asks when a site first wants the certificate: the credential's
+consent card for a `.p12` or an external certificate, the approval on the phone for the DNI. A
+block that no site used asks nothing. When the block ends, main waits until its signatures and
+handshakes are over (2 s with none), then turns the certificate off, ends the phone's DNI login
+approval and tells the phone that the block ended. A page that asks again later needs a new block
+(`browser/certificate-blocks.ts`).
+
+The sidecar makes this possible with lazy identities. Main configures a block's identity with
+only its id. The sidecar calls `prepare` when a site asks for the certificate, and the reply
+carries the certificate chain, plus the key when the sidecar keeps it in memory (a `.p12`). After
+a reply with a key, the sidecar signs in memory and calls main no more. For a key that is not in
+memory, the sidecar calls `prepare` before it opens a connection only if the host asks for a
+client certificate in its handshake, which it knows from the probe it does once for each host.
+Thus a host that asks for no certificate causes no approval. If a server asks later (a
+renegotiation, or a host that the probe missed), the sidecar calls `prepare` inside that
+handshake. When main turns the certificate off, the sidecar closes idle intercepted connections
+at once; a connection with a request in flight closes when that request has its answer, or after
+30 seconds. Thus the end of a block does not stop a page that is loading.
 Mis datos can export a certificate, key and chain included, as a `.p12` under a password the user
 types twice and the app never keeps (Touch ID first when available, then the OS save dialog). The
 file uses 3DES and a SHA-1 MAC, since older macOS, Windows and Java (AutoFirma) reject AES ones

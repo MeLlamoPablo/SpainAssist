@@ -10,6 +10,7 @@ import es.spainassist.firma.protocol.CompanionJson
 import es.spainassist.firma.protocol.ErrorCode
 import es.spainassist.firma.protocol.PhoneBye
 import es.spainassist.firma.protocol.Purpose
+import es.spainassist.firma.protocol.SessionEnd
 import es.spainassist.firma.protocol.SignCancel
 import es.spainassist.firma.protocol.CancelReason
 import es.spainassist.firma.protocol.SignCertificate
@@ -78,10 +79,12 @@ class FirmaControllerTest {
             expiresIn: Long = 5 * 60_000,
             can: String = "123456",
             pin: String? = "secreto1",
+            origin: String = "https://sede.example.gob.es",
+            session: String? = null,
         ) = SignRequest(
             requestId = id,
             purpose = purpose,
-            origin = "https://sede.example.gob.es",
+            origin = origin,
             description = "Firmar solicitud.pdf",
             format = if (purpose == Purpose.Login) "" else "CAdES",
             documents = documents,
@@ -89,6 +92,7 @@ class FirmaControllerTest {
             expiresAt = Instant.fromEpochMilliseconds(platform.clock + expiresIn).toString(),
             can = can,
             pin = pin,
+            session = session,
         )
 
         /** Approve and hold [card]: up to the certificate. */
@@ -757,5 +761,223 @@ class FirmaControllerTest {
         assertTrue(h.link.closed)
         assertEquals(StartNotice.PairingEnded, (h.screen as Screen.Start).notice)
         assertNull(h.platform.store.get(FirmaController.KEY_PAIRING))
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // Blocks (`sign.request.session`)
+    // ------------------------------------------------------------------------------------------
+
+    /** The desktop's [n]th request, of [block] (null: of no block). */
+    private fun Harness.send(
+        n: Int,
+        purpose: Purpose = Purpose.Document,
+        block: String? = BLOCK,
+        origin: String = "https://sede.example.gob.es",
+    ): SignRequest = request(id = "0000000$n-2d4a-4f8b-9c1d-5e7a2b3c4d5e", purpose = purpose, origin = origin, session = block)
+        .also(link::deliver)
+
+    private fun Harness.done(request: SignRequest) = link.deliver(SignDone(request.requestId))
+
+    /** A login of [BLOCK] that the user approved with [card] and the desktop ended: the block keeps the card. */
+    private fun Harness.loginDone(card: FakeCard): SignRequest {
+        val login = send(1, Purpose.Login)
+        approveWith(card)
+        done(login)
+        assertFalse(card.closed, "the block keeps the card")
+        return login
+    }
+
+    private fun Harness.stagesOf(request: SignRequest) =
+        link.sentOf<SignProgress>().filter { it.requestId == request.requestId }.map { it.stage }.distinct()
+
+    @Test
+    fun holdsTheCardOnceForTheRequestsOfABlock() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val card = FakeCard()
+        h.loginDone(card)
+        assertTrue(h.controller.readingCard.value, "the reader stays on for the kept card")
+
+        // The document has its own review, then goes straight to the card the block kept.
+        val document = h.send(2)
+        assertEquals(Step.Review, h.screen.step())
+        h.controller.approve()
+        assertEquals(Purpose.Document, card.purposeRead)
+        assertEquals(listOf(Stage.Reviewing, Stage.Reading), h.stagesOf(document))
+        h.link.deliver(ToBeSigned(document.requestId, 1, Algorithm.Sha256, "AQID"))
+        assertEquals(1, card.signed.size)
+
+        // A request the desktop cancels leaves the card to the block too.
+        h.link.deliver(SignCancel(document.requestId, CancelReason.Failed))
+        assertEquals(Step.Result(Outcome.CancelledByDesktop), h.screen.step())
+        h.send(3)
+        h.controller.approve()
+        assertEquals(3, h.link.sentOf<SignCertificate>().size)
+        assertEquals(1, h.reader.asked, "the user held the card once")
+        assertFalse(card.closed)
+    }
+
+    @Test
+    fun readsTheCardAgainWhenTheKeptOneDoesNotOpen() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        // Opens for the login, then not again.
+        var opens = 0
+        val card = FakeCard(onOpen = { if (opens++ == 0) null else CardException.Failed("stale") })
+        h.loginDone(card)
+
+        h.send(2)
+        h.controller.approve()
+        assertTrue(card.closed)
+        assertFalse(h.controller.readingCard.value, "the reader goes off, to find the card anew")
+        advanceTimeBy(FirmaController.READER_RESTART_MS + 1)
+        runCurrent()
+        assertTrue(h.controller.readingCard.value)
+        assertEquals(Step.HoldCard(false), h.screen.step())
+        h.reader.present(FakeCard())
+        assertEquals(2, h.link.sentOf<SignCertificate>().size)
+    }
+
+    @Test
+    fun startsALoginApprovedBeforeInTheBlockWithoutTheReview() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val card = FakeCard()
+        h.loginDone(card)
+        val document = h.send(2)
+        h.controller.approve()
+        h.done(document)
+
+        val again = h.send(3, Purpose.Login)
+        assertEquals(Step.Working(reading = true, signed = 0), h.screen.step())
+        assertEquals(Purpose.Login, card.purposeRead)
+        assertEquals(listOf(Stage.Reading), h.stagesOf(again))
+        h.done(again)
+
+        // The user approved one site, not the next one.
+        h.send(4, Purpose.Login, origin = "https://otra.example.gob.es")
+        assertEquals(Step.Review, h.screen.step())
+    }
+
+    @Test
+    fun endsTheBlockWhenTheDesktopSaysSo() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val vectors = Json.parseToJsonElement(VECTORS_JSON).jsonObject.getValue("session").jsonObject
+        val login = CompanionJson.decodeFromString<DesktopToPhone>(vectors.getValue("request").toString()) as SignRequest
+        val end = CompanionJson.decodeFromString<DesktopToPhone>(vectors.getValue("end").toString()) as SessionEnd
+        assertEquals(login.session, end.session)
+        val card = FakeCard()
+        h.link.deliver(login)
+        h.approveWith(card)
+        h.done(login)
+
+        // The end of another block changes nothing.
+        h.link.deliver(SessionEnd(BLOCK))
+        assertFalse(card.closed)
+        h.link.deliver(end)
+        assertTrue(card.closed)
+        assertFalse(h.controller.readingCard.value)
+
+        // The same login again: the review and the card, like a first request.
+        h.link.deliver(login.copy(requestId = "00000002-2d4a-4f8b-9c1d-5e7a2b3c4d5e"))
+        assertEquals(Step.Review, h.screen.step())
+        h.controller.approve()
+        assertEquals(Step.HoldCard(false), h.screen.step())
+    }
+
+    @Test
+    fun keepsTheCardForItsOwnBlockOnly() = runTest {
+        for (other in listOf(null, "9d8c7b6a-1a2b-4c3d-9e8f-7a6b5c4d3e2f")) {
+            val h = Harness(this)
+            h.pairAndConnect()
+            val card = FakeCard()
+            h.loginDone(card)
+            h.send(2, Purpose.Login, block = other)
+            assertTrue(card.closed, "block=$other")
+            assertEquals(Step.Review, h.screen.step(), "block=$other")
+            h.controller.approve()
+            assertEquals(Step.HoldCard(false), h.screen.step(), "block=$other")
+        }
+    }
+
+    @Test
+    fun closesTheKeptCardWhenTheBlockHasNoRequestForAWhile() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val card = FakeCard()
+        h.loginDone(card)
+
+        // A request under review keeps the card open, however long the user reads.
+        val document = h.send(2)
+        advanceTimeBy(FirmaController.BLOCK_CARD_IDLE_MS + 1)
+        runCurrent()
+        assertFalse(card.closed)
+        h.controller.approve()
+        h.done(document)
+
+        advanceTimeBy(FirmaController.BLOCK_CARD_IDLE_MS + 1)
+        runCurrent()
+        assertTrue(card.closed)
+        assertFalse(h.controller.readingCard.value)
+
+        // The block goes on without the card: its login needs no review, only the card again.
+        h.send(3, Purpose.Login)
+        assertEquals(Step.HoldCard(false), h.screen.step())
+    }
+
+    @Test
+    fun closesTheKeptCardAfterARequestTheDesktopCancelledInItsReview() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val card = FakeCard()
+        h.loginDone(card)
+        val document = h.send(2)
+        h.link.deliver(SignCancel(document.requestId, CancelReason.Cancelled))
+        assertFalse(card.closed, "the block keeps the card")
+
+        advanceTimeBy(FirmaController.BLOCK_CARD_IDLE_MS + 1)
+        runCurrent()
+        assertTrue(card.closed)
+        assertFalse(h.controller.readingCard.value)
+    }
+
+    @Test
+    fun closesTheKeptCardWhenTheUserDeclines() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val card = FakeCard()
+        h.loginDone(card)
+        h.send(2)
+        h.controller.decline()
+        assertTrue(card.closed)
+        assertFalse(h.controller.readingCard.value)
+
+        // The block goes on: its login needs no review.
+        h.controller.dismissResult()
+        h.send(3, Purpose.Login)
+        assertEquals(Step.HoldCard(false), h.screen.step())
+    }
+
+    @Test
+    fun endsTheBlockWhenTheUserCancels() = runTest {
+        val h = Harness(this)
+        h.pairAndConnect()
+        val card = FakeCard()
+        h.loginDone(card)
+        h.send(2)
+        h.controller.approve()
+        h.controller.cancel()
+        assertEquals(Step.Result(Outcome.Cancelled), h.screen.step())
+        assertTrue(card.closed)
+        assertFalse(h.controller.readingCard.value)
+
+        h.controller.dismissResult()
+        h.send(3, Purpose.Login)
+        assertEquals(Step.Review, h.screen.step())
+    }
+
+    private companion object {
+        const val BLOCK = "3c5d7e9f-1a2b-4c3d-9e8f-7a6b5c4d3e2e"
     }
 }

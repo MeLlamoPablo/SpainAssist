@@ -4,6 +4,7 @@ import {
   CERTIFICATE_EXPORT_PASSWORD_MIN,
   type ChatItem,
   COMPANION_PROTOCOL,
+  COMPANION_PROTOCOL_MIN,
   type CompanionStatus,
   type ConversationState,
   type CredentialSummary,
@@ -345,7 +346,7 @@ export function createMockApi(params: URLSearchParams = new URLSearchParams()): 
                 expiresAt: pairedUntil,
                 outdated:
                   companionParam === 'outdated'
-                    ? { phone: COMPANION_PROTOCOL - 1, desktop: COMPANION_PROTOCOL }
+                    ? { phone: COMPANION_PROTOCOL_MIN - 1, desktop: COMPANION_PROTOCOL }
                     : { phone: COMPANION_PROTOCOL + 1, desktop: COMPANION_PROTOCOL },
               }
             : companionParam === 'stalled'

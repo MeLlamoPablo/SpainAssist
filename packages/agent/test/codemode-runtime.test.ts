@@ -638,22 +638,25 @@ describe('codemode runtime', () => {
 
     it('ends the block when it throws, and rethrows', async () => {
       const { outcome, ops } = await withPage(
-        `await page.withCertificate(async () => { throw new Error('no button'); });`,
+        `await page.withCertificate({ credentialId: 'c_1' }, async () => { throw new Error('no button'); });`,
       );
       expect(outcome.status === 'failed' && outcome.error).toMatch(/no button/);
       expect(ops).toEqual(['browser.useCertificate', 'browser.endCertificate']);
     });
 
-    it('needs the block, and says useCertificate is gone', async () => {
+    it('needs the credential and the block, and says useCertificate is gone', async () => {
       const { outcome, ops } = await withPage(
         `const errors = [];
-        for (const use of [() => page.withCertificate({ credentialId: 'c_1' }), () => page.useCertificate({ credentialId: 'c_1' })]) {
+        const click = () => page.getByRole('button').click();
+        for (const use of [() => page.withCertificate(click), () => page.withCertificate({}, click), () => page.withCertificate({ credentialId: 'c_1' }), () => page.useCertificate({ credentialId: 'c_1' })]) {
           try { await use(); } catch (e) { errors.push(e.code + ': ' + e.message); }
         }
         return errors;`,
       );
       const errors = JSON.parse(outcome.status === 'succeeded' ? (outcome.value ?? '[]') : '[]');
       expect(errors).toEqual([
+        expect.stringMatching(/^bad_request: page.withCertificate needs credentialId/),
+        expect.stringMatching(/^bad_request: page.withCertificate needs credentialId/),
         expect.stringMatching(/^bad_request: page.withCertificate needs the block/),
         expect.stringMatching(/^bad_request: page.useCertificate\(\) is gone/),
       ]);

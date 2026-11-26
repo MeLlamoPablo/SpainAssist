@@ -44,7 +44,7 @@ const CONFIRM_CODE: Record<ConfirmKind, string> = {
   payment: 'api.user.confirm({ kind: "payment" })',
   credential: 'page.loginClave() · policy "ask"',
   signature: 'locator.click() · firma',
-  certificate_site: 'page.useCertificate({ origins })',
+  certificate_site: 'page.withCertificate({ origins })',
 };
 
 /**
@@ -134,50 +134,34 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
         biometric: confirmKind === 'credential' || confirmKind === 'signature',
       },
     );
-  // What main asks before the agent presents a certificate or the DNI (browser_use_certificate).
-  const certificateUse = (dnie: boolean): Prompt => ({
-    kind: 'confirm',
-    confirmKind: 'credential',
-    title: dnie
-      ? t('¿Usar tu DNI?', 'Use your DNI?')
-      : t('¿Usar tu certificado digital?', 'Use your digital certificate?'),
-    message: dnie
-      ? t(
-          'El asistente quiere identificarte con tu DNI en las webs oficiales de este trámite. Cuando la web lo pida, el móvil leerá tu DNI.',
-          'The assistant wants to identify you with your DNI on the official websites for this procedure. When the site asks for it, your phone will read your DNI.',
-        )
-      : t(
-          'El asistente quiere identificarte con tu certificado digital en las webs oficiales de este trámite.',
-          'The assistant wants to identify you with your digital certificate on the official websites for this procedure.',
-        ),
-    details: [
-      { label: dnie ? 'DNI' : t('Certificado', 'Certificate'), value: 'LUCÍA MARTÍN ORTEGA' },
-      { label: t('Webs', 'Websites'), value: 'sede.example.gob.es' },
-    ],
-    confirmLabel: t('Usar', 'Use'),
-    rejectLabel: t('No usar', "Don't use"),
-    // The DNI has no Touch ID: the phone and the card are the second factor.
-    biometric: !dnie,
-  });
+  // What main asks when a site first wants the certificate of a page.withCertificate block.
   addPrompt(
     'confirm-certificate',
     'approvals',
     t('Usar el certificado', 'Use the certificate'),
-    'page.useCertificate()',
-    certificateUse(false),
-  );
-  addPrompt(
-    'confirm-certificate-dnie',
-    'approvals',
-    t('Usar el DNI', 'Use the DNI'),
-    'page.useCertificate() · DNI',
-    certificateUse(true),
+    'page.withCertificate()',
+    {
+      kind: 'confirm',
+      confirmKind: 'credential',
+      title: t('¿Usar tu certificado digital?', 'Use your digital certificate?'),
+      message: t(
+        'El asistente quiere identificarte con tu certificado digital en las webs oficiales de este trámite.',
+        'The assistant wants to identify you with your digital certificate on the official websites for this procedure.',
+      ),
+      details: [
+        { label: t('Certificado', 'Certificate'), value: 'LUCÍA MARTÍN ORTEGA' },
+        { label: t('Web', 'Website'), value: 'sede.example.gob.es' },
+      ],
+      confirmLabel: t('Usar', 'Use'),
+      rejectLabel: t('No usar', "Don't use"),
+      biometric: true,
+    },
   );
   addPrompt(
     'confirm-certificate_site',
     'approvals',
     t('Web nueva para el certificado', 'New website for the certificate'),
-    'page.useCertificate({ origins })',
+    'page.withCertificate({ origins })',
     {
       kind: 'confirm',
       confirmKind: 'certificate_site',
@@ -339,14 +323,20 @@ export function playgroundExamples(language: Language): PlaygroundExample[] {
       allowDismiss: false,
     },
   );
-  addPrompt('dnie-login', 'dnie', t('DNI · Acceso', 'DNI · Login'), 'page.useCertificate() · DNI', {
-    kind: 'dnie_signature',
-    purpose: 'login',
-    title: t('Entrar con el DNI', 'Log in with your DNI'),
-    message: t('Entrar con el DNI', 'Log in with your DNI'),
-    details: [{ label: t('Web', 'Website'), value: 'sede.example.gob.es' }],
-    stage: 'reviewing',
-  });
+  addPrompt(
+    'dnie-login',
+    'dnie',
+    t('DNI · Acceso', 'DNI · Login'),
+    'page.withCertificate() · DNI',
+    {
+      kind: 'dnie_signature',
+      purpose: 'login',
+      title: t('Entrar con el DNI', 'Log in with your DNI'),
+      message: t('Entrar con el DNI', 'Log in with your DNI'),
+      details: [{ label: t('Web', 'Website'), value: 'sede.example.gob.es' }],
+      stage: 'reviewing',
+    },
+  );
   const dnieSignature = (stage: DnieSignatureStage, unlock?: DnieUnlock): Prompt => ({
     kind: 'dnie_signature',
     purpose: 'document',

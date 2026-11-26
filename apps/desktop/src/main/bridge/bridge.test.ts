@@ -867,7 +867,7 @@ describe('bridge: browser and credentials', () => {
 });
 
 describe('bridge: client certificates', () => {
-  it('keeps the app usable and explains missing sidecar support before asking for approval', async () => {
+  it('keeps the app usable and explains missing sidecar support without asking anything', async () => {
     await app.close();
     app = await createTestApp({
       startSidecar: async () => {
@@ -876,12 +876,19 @@ describe('bridge: client certificates', () => {
     });
     const session = await app.procedureWithToken();
     const dnie = await app.invoke('vault.addDnie');
-    const response = await app.rpc(
+    const login = await app.rpc(
+      'browser.useCertificate',
+      { credentialId: dnie.id, origins: ['https://sede.seg-social.gob.es'] },
+      session.token,
+    );
+    expect(login.body.error?.message).toContain('sa-sidecar');
+    // AutoFirma needs no sidecar: the block opens for it.
+    const signing = await app.rpc(
       'browser.useCertificate',
       { credentialId: dnie.id },
       session.token,
     );
-    expect(response.body.error?.message).toContain('sa-sidecar');
+    expect(signing.body.result).toMatchObject({ enabled: false, origins: [] });
     expect(app.pendingPrompt(session.procedureId)).toBeUndefined();
     const opened = await app.rpc('browser.open', { url: 'https://example.gob.es' }, session.token);
     expect(opened.body.error).toBeUndefined();
@@ -903,17 +910,12 @@ describe('bridge: client certificates', () => {
     ).id;
   });
 
-  it('asks (default policy) and then enables the certificate for known + requested official origins', async () => {
-    const call = app.rpc(
+  it('enables the certificate for known + requested official origins and asks nothing, until a site wants it (default policy)', async () => {
+    const res = await app.rpc(
       'browser.useCertificate',
       { credentialId: certId, origins: ['https://www1.agenciatributaria.gob.es/wlpl/OVCT-CXEW/x'] },
       token,
     );
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    const prompt = app.pendingPrompt(procedureId)!;
-    expect(prompt.prompt).toMatchObject({ kind: 'confirm', confirmKind: 'credential' });
-    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
-    const res = await call;
     expect(res.body.result).toMatchObject({
       enabled: true,
       origins: ['https://pasarela-ident.clave.gob.es', 'https://www1.agenciatributaria.gob.es'],
@@ -922,17 +924,31 @@ describe('bridge: client certificates', () => {
       'https://pasarela-ident.clave.gob.es',
       'https://www1.agenciatributaria.gob.es',
     ]);
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
+
+    const asked = app.browser.siteAsksCertificate('www1.agenciatributaria.gob.es');
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    const prompt = app.pendingPrompt(procedureId)!;
+    expect(prompt.prompt).toMatchObject({
+      kind: 'confirm',
+      confirmKind: 'credential',
+      details: [
+        { label: 'Certificado', value: expect.any(String) },
+        { label: 'Web', value: 'www1.agenciatributaria.gob.es' },
+      ],
+    });
+    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
+    // The sidecar gets the certificate and its key only now.
+    expect(await asked).toMatchObject({ chain: expect.any(Array), key: expect.anything() });
+    // The block's other sites share the answer.
+    await app.browser.siteAsksCertificate('pasarela-ident.clave.gob.es');
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
     expect(JSON.stringify(res.body)).not.toContain('pw-123');
   });
 
   it('allows a p12 certificate to use built-in origins without an explicit target', async () => {
-    const call = app.rpc('browser.useCertificate', { credentialId: certId }, token);
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
-      kind: 'confirm',
-      approved: true,
-    });
-    expect((await call).body.result).toMatchObject({
+    const res = await app.rpc('browser.useCertificate', { credentialId: certId }, token);
+    expect(res.body.result).toMatchObject({
       enabled: true,
       origins: ['https://pasarela-ident.clave.gob.es'],
     });
@@ -1027,16 +1043,12 @@ describe('bridge: client certificates', () => {
     await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
     expect((await ask).body.result).toMatchObject({ approved: true });
 
-    const call = app.rpc(
+    const call = await app.rpc(
       'browser.useCertificate',
       { credentialId: certId, origins: [SEDE] },
       token,
     );
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    const credentialPrompt = app.pendingPrompt(procedureId)!;
-    expect(credentialPrompt.prompt).toMatchObject({ confirmKind: 'credential' });
-    await app.invoke('chat.respond', credentialPrompt.id, { kind: 'confirm', approved: true });
-    expect((await call).body.result).toMatchObject({ enabled: true });
+    expect(call.body.result).toMatchObject({ enabled: true });
     expect(app.browser.certificates.map((c) => c.origin)).toContain(SEDE);
 
     const other = await app.procedureWithToken();
@@ -1068,51 +1080,33 @@ describe('bridge: client certificates', () => {
     expect(res.body.error?.code).toBe('policy_denied');
   });
 
-  /** Asks browser.useCertificate for `credentialId`, declines its card and returns the card. */
-  async function certificateCard(credentialId: string) {
-    const call = app.rpc(
-      'browser.useCertificate',
-      { credentialId, origins: ['https://sede.seg-social.gob.es'] },
-      token,
-    );
+  it('shows the site that wants the certificate on its consent card, and a "no" fails the login', async () => {
+    await app.rpc('browser.useCertificate', { credentialId: certId }, token);
+    const asked = app.browser.siteAsksCertificate('pasarela-ident.clave.gob.es');
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
     const prompt = app.pendingPrompt(procedureId)!;
-    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: false });
-    expect((await call).body.error?.code).toBe('user_rejected');
-    if (prompt.prompt.kind !== 'confirm') throw new Error('expected a confirm prompt');
-    return prompt.prompt;
-  }
-
-  it('says DNI on the consent card of the DNI, and certificate on a certificate’s', async () => {
-    const dnie = await app.vault.addDnie();
-    const unread = await certificateCard(dnie.id);
-    expect(unread).toMatchObject({
+    expect(prompt.prompt).toMatchObject({
       confirmKind: 'credential',
-      title: '¿Usar tu DNI?',
-      details: [{ label: 'Webs', value: 'sede.seg-social.gob.es' }],
-      biometric: false,
+      title: '¿Usar tu certificado digital?',
+      details: [
+        { label: 'Certificado', value: expect.any(String) },
+        { label: 'Web', value: 'pasarela-ident.clave.gob.es' },
+      ],
     });
-    expect(unread.message).toContain('con tu DNI');
-    expect(JSON.stringify(unread)).not.toContain('ertificado');
+    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: false });
+    await expect(asked).rejects.toMatchObject({ code: 'declined' });
+    // The "no" stays for the block: its next connection does not ask again.
+    await expect(
+      app.browser.siteAsksCertificate('pasarela-ident.clave.gob.es'),
+    ).rejects.toMatchObject({ code: 'declined' });
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
+  });
 
-    await app.vault.setDnieCertificate(dnie.id, {
-      subject: 'CN=MARTIN ORTEGA LUCIA (AUTENTICACIÓN)',
-      issuer: 'AC DNIE 004',
-      serialNumber: '01',
-      validFrom: '2025-01-01T00:00:00.000Z',
-      validTo: '2030-01-01T00:00:00.000Z',
-      holderName: 'LUCÍA MARTÍN ORTEGA',
-      fingerprint: 'ab',
-    });
-    expect((await certificateCard(dnie.id)).details).toEqual([
-      { label: 'DNI', value: 'LUCÍA MARTÍN ORTEGA' },
-      { label: 'Webs', value: 'sede.seg-social.gob.es' },
-    ]);
-
-    const certificate = await certificateCard(certId);
-    expect(certificate).toMatchObject({ title: '¿Usar tu certificado digital?' });
-    expect(certificate.message).toContain('con tu certificado digital');
-    expect(certificate.details?.map((d) => d.label)).toEqual(['Certificado', 'Webs']);
+  it('asks nothing on the computer for the DNI: its consent is on the phone', async () => {
+    const dnie = await app.vault.addDnie();
+    const res = await app.rpc('browser.useCertificate', { credentialId: dnie.id }, token);
+    expect(res.body.result).toMatchObject({ enabled: true });
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
   });
 
   it('says DNI when it asks to allow an unlisted site for the DNI', async () => {
@@ -1172,18 +1166,45 @@ describe('bridge: certificate blocks (page.withCertificate)', () => {
 
   const click = () => app.rpc('browser.click', { ref: 'e1' }, token);
 
+  const addCertificate = () =>
+    app.vault.addCertificate({
+      fileName: 'fnmt.p12',
+      p12: readFileSync(
+        new URL(
+          '../../../../../packages/browser/test/fixtures/certs/rsa-legacy.p12',
+          import.meta.url,
+        ),
+      ),
+      passphrase: 'test',
+    });
+
   it("refuses AutoFirma outside a block and fails the agent's action, then asks inside one", async () => {
+    const cert = await addCertificate();
     expect(await siteAsksAutoFirma()).toBeNull();
     expect((await click()).body.error?.message).toMatch(/AutoFirma\) outside page.withCertificate/);
     // The refusal fails one action only.
     expect((await click()).body.error).toBeUndefined();
 
-    const block = await app.rpc('browser.useCertificate', {}, token);
-    expect(block.body.result).toMatchObject({ enabled: false, origins: [] });
+    const block = await app.rpc('browser.useCertificate', { credentialId: cert.id }, token);
+    expect(block.body.result).toMatchObject({ enabled: true });
+    // Opening the block asked nothing: the signature's card comes when the site asks.
+    expect(app.pendingPrompt(procedureId)).toBeUndefined();
     void siteAsksAutoFirma();
-    // No certificate is saved: the app says so on the card instead of asking.
-    await app.waitFor(() => app.services.procedures.transcript(procedureId).length > 0);
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    expect(app.pendingPrompt(procedureId)?.prompt).toMatchObject({ confirmKind: 'signature' });
     expect((await click()).body.error).toBeUndefined();
+  });
+
+  it("signs with the block's certificate: the user picks none", async () => {
+    const cert = await addCertificate();
+    await app.vault.addDnie();
+    await app.rpc('browser.useCertificate', { credentialId: cert.id }, token);
+    void siteAsksAutoFirma();
+    await app.waitFor(() => !!app.pendingPrompt(procedureId));
+    expect(app.pendingPrompt(procedureId)?.prompt).toMatchObject({
+      kind: 'confirm',
+      confirmKind: 'signature',
+    });
   });
 
   it('fails the action when a site asks for a client certificate outside a block', async () => {
@@ -1195,20 +1216,11 @@ describe('bridge: certificate blocks (page.withCertificate)', () => {
   });
 
   it('opens one block at a time, and turns its certificate off when it ends', async () => {
-    const cert = await app.vault.addCertificate({
-      fileName: 'fnmt.p12',
-      p12: readFileSync(
-        new URL(
-          '../../../../../packages/browser/test/fixtures/certs/rsa-legacy.p12',
-          import.meta.url,
-        ),
-      ),
-      passphrase: 'test',
-    });
-    await app.vault.setCredentialPolicy(cert.id, 'auto');
-    const block = await app.rpc('browser.useCertificate', { credentialId: cert.id }, token);
+    const cert = await addCertificate();
+    const use = { credentialId: cert.id };
+    const block = await app.rpc('browser.useCertificate', use, token);
     expect(app.browser.certificates).not.toEqual([]);
-    expect((await app.rpc('browser.useCertificate', {}, token)).body.error?.code).toBe('conflict');
+    expect((await app.rpc('browser.useCertificate', use, token)).body.error?.code).toBe('conflict');
 
     const ended = await app.rpc(
       'browser.endCertificate',
@@ -1217,7 +1229,7 @@ describe('bridge: certificate blocks (page.withCertificate)', () => {
     );
     expect(ended.body.result).toEqual({ ended: true });
     expect(app.browser.certificates).toEqual([]);
-    expect((await app.rpc('browser.useCertificate', {}, token)).body.error).toBeUndefined();
+    expect((await app.rpc('browser.useCertificate', use, token)).body.error).toBeUndefined();
   });
 });
 
@@ -1240,41 +1252,13 @@ describe('bridge: Touch ID', () => {
       p12: Buffer.from('x'),
       passphrase: 'pw',
     });
-    const call = app.rpc('browser.useCertificate', { credentialId: cert.id }, token);
+    await app.rpc('browser.useCertificate', { credentialId: cert.id }, token);
+    const asked = app.browser.siteAsksCertificate('pasarela-ident.clave.gob.es');
     await app.waitFor(() => !!app.pendingPrompt(procedureId));
     const prompt = app.pendingPrompt(procedureId)!;
     expect(prompt.prompt).toMatchObject({ biometric: true });
     await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
-    expect((await call).body.error?.code).toBe('user_rejected');
+    await expect(asked).rejects.toMatchObject({ code: 'declined' });
     expect(prompts).toBe(1);
-    expect(app.browser.certificates).toEqual([]);
-  });
-
-  it('does not ask for it to log in with the DNI: the phone and the card are the second factor', async () => {
-    await app.close();
-    let prompts = 0;
-    app = await createTestApp({
-      biometric: {
-        available: () => true,
-        prompt: async () => {
-          prompts++;
-          return false;
-        },
-      },
-    });
-    ({ procedureId, token } = await app.procedureWithToken());
-    const dnie = await app.vault.addDnie();
-    const call = app.rpc(
-      'browser.useCertificate',
-      { credentialId: dnie.id, origins: ['https://sede.seg-social.gob.es'] },
-      token,
-    );
-    await app.waitFor(() => !!app.pendingPrompt(procedureId));
-    const prompt = app.pendingPrompt(procedureId)!;
-    expect(prompt.prompt).toMatchObject({ biometric: false });
-    await app.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
-    // No paired phone here: the login stops after the consent, never at Touch ID.
-    expect((await call).body.error?.code).not.toBe('user_rejected');
-    expect(prompts).toBe(0);
   });
 });

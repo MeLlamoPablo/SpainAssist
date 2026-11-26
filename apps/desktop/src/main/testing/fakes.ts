@@ -515,7 +515,19 @@ export class FakeBrowser implements BrowserPort {
     this.calls.push({ method: 'input', procedureId, args: [event] });
   }
   certificates: { origin: string }[] = [];
+  /** What `useClientCertificate` turned on, until it is turned off. */
+  certificateUse: ClientCertificateUse | null = null;
   url = 'https://sede.example.gob.es/';
+
+  /**
+   * A site asks the browser for the client certificate: the sidecar asks the app for it. Resolves
+   * with what the app answers (a lazy identity's certificate).
+   */
+  async siteAsksCertificate(host: string) {
+    const key = this.certificateUse?.identity.key;
+    if (!key || !('prepare' in key)) throw new Error('no certificate is turned on');
+    return key.prepare(host, new AbortController().signal);
+  }
 
   private record(method: string, procedureId: string, ...args: unknown[]): BrowserObservation {
     this.calls.push({ method, procedureId, args });
@@ -612,6 +624,7 @@ export class FakeBrowser implements BrowserPort {
   }
   async useClientCertificate(procedureId: string, use: ClientCertificateUse | null) {
     this.certificates = use?.origins.map((origin) => ({ origin })) ?? [];
+    this.certificateUse = use;
     this.calls.push({
       method: 'useClientCertificate',
       procedureId,

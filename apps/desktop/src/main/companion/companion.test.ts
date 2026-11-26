@@ -4,6 +4,7 @@ import { MemoryRelay } from '@sa/companion/testing';
 import {
   type AfirmaSignatureSummary,
   COMPANION_PROTOCOL,
+  COMPANION_PROTOCOL_MIN,
   COMPANION_STALLED_MS,
   type DesktopToPhone,
   type ExternalSigningKey,
@@ -86,6 +87,22 @@ async function typeUnlock(
   const item = a.pendingPrompt(procedureId)!;
   await a.invoke('companion.unlock', item.id, values);
   return item.prompt;
+}
+
+/**
+ * A certificate block's DNI login, whose first approval starts when a site of `origin` asks for
+ * the certificate (`approval` settles with it). Await or assert `approval` in the test.
+ */
+function startLogin(a: TestApp, procedureId: string, dnie: { id: string }, origin: string) {
+  const credential = a.vault.getCredential(dnie.id);
+  if (!credential) throw new Error('the DNI is not saved');
+  const session = crypto.randomUUID();
+  const key = a.services.companion!.login(procedureId, credential, { session, origins: [origin] })
+    .key as RemoteKey;
+  const approval = key.prepare(new URL(origin).hostname, new AbortController().signal);
+  // A test that expects a refusal asserts it later.
+  approval.catch(() => {});
+  return { key, approval, session };
 }
 
 describe('DNI signatures with the phone', () => {
@@ -330,10 +347,15 @@ describe('DNI signatures with the phone', () => {
     expect(request).not.toHaveProperty('pin');
 
     // Logins too.
-    const login = a.services.companion!.login(procedureId, dnie, summary.origin);
+    const login = startLogin(a, procedureId, dnie, summary.origin);
     const loginRequest = await refuseNext();
-    expect(loginRequest).toMatchObject({ purpose: 'login', can: '654321', pin: 'Nuevo5678' });
-    expect(await login).toBeNull();
+    expect(loginRequest).toMatchObject({
+      purpose: 'login',
+      can: '654321',
+      pin: 'Nuevo5678',
+      session: login.session,
+    });
+    await expect(login.approval).rejects.toThrow('not approved');
   });
 
   it('takes only what the card asks for, validated, and only while it asks', async () => {
@@ -605,10 +627,10 @@ describe('a phone app that speaks another protocol version', () => {
     await typeUnlock(a, procedureId);
     await a.waitFor(() => a.services.companion!.status().state === 'waiting');
     const { link } = await a.invoke('companion.status');
-    phoneWith(relay, link as string, COMPANION_PROTOCOL - 1);
+    phoneWith(relay, link as string, COMPANION_PROTOCOL_MIN - 1);
     // Without waiting for the phone (10 minutes) or for its review (5 minutes).
     expect(await approval).toBeNull();
-    const outdated = { phone: COMPANION_PROTOCOL - 1, desktop: COMPANION_PROTOCOL };
+    const outdated = { phone: COMPANION_PROTOCOL_MIN - 1, desktop: COMPANION_PROTOCOL };
     const status = await a.invoke('companion.status');
     // The QR still works: the phone can pair once its app is updated.
     expect(status).toMatchObject({ state: 'waiting', outdated });
@@ -700,7 +722,7 @@ describe('a relay that cannot be reached', () => {
 
 it('ends login after inactivity and asks again for the next handshake', async () => {
   const { relay, app: a, procedureId, dnie } = await setup();
-  const approval = a.services.companion!.login(procedureId, dnie, summary.origin);
+  const { key, approval } = startLogin(a, procedureId, dnie, summary.origin);
   await typeUnlock(a, procedureId);
   await a.waitFor(() => a.services.companion!.status().state === 'waiting');
   const status = await a.invoke('companion.status');
@@ -719,8 +741,8 @@ it('ends login after inactivity and asks again for the next handshake', async ()
         signature: Buffer.alloc(256).toString('base64'),
       });
   });
-  const identity = await approval;
-  const key = identity!.key as RemoteKey;
+  // The approval gives the sidecar the card's certificate.
+  expect(await approval).toMatchObject({ chain: [expect.anything()] });
   const signal = new AbortController().signal;
   await key.sign(Buffer.alloc(32), 'SHA-256', 'sede.example.gob.es', signal);
   // The card accepted the PIN: the next approval doesn't ask for it.
@@ -767,12 +789,11 @@ function cardPhone(relay: MemoryRelay, link: string) {
 it('asks for the PIN once, also when the first login approval ends before a handshake', async () => {
   const { relay, app: a, procedureId, dnie } = await setup();
   const companion = a.services.companion!;
-  // `browser.useCertificate` gets the approval before the site asks for the certificate.
-  const approval = companion.login(procedureId, dnie, 'https://ipce.seg-social.es');
+  const { key, approval } = startLogin(a, procedureId, dnie, 'https://ipce.seg-social.es');
   await typeUnlock(a, procedureId);
   await a.waitFor(() => companion.status().state === 'waiting');
   const { received } = cardPhone(relay, (await a.invoke('companion.status')).link as string);
-  const key = (await approval)!.key as RemoteKey;
+  await approval;
   const signal = new AbortController().signal;
 
   // No handshake signs before the approval ends.
@@ -797,7 +818,7 @@ it('asks for the PIN once, also when the first login approval ends before a hand
 it('keeps one phone approval across the hosts of one organisation, and tells the agent', async () => {
   const { relay, app: a, procedureId, token, dnie } = await setup();
   const companion = a.services.companion!;
-  const approval = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
+  const { key, approval } = startLogin(a, procedureId, dnie, 'https://idp.seg-social.es');
   const prompt = await typeUnlock(a, procedureId);
   expect(prompt).toMatchObject({ purpose: 'login' });
   expect(prompt.kind === 'dnie_signature' && prompt.details).toEqual([
@@ -825,7 +846,7 @@ it('keeps one phone approval across the hosts of one organisation, and tells the
         signature: Buffer.alloc(256).toString('base64'),
       });
   });
-  const key = (await approval)!.key as RemoteKey;
+  await approval;
   const signal = new AbortController().signal;
   // Importass: idp → ipce → idp, all with the first approval.
   for (const host of ['idp.seg-social.es', 'ipce.seg-social.es', 'idp.seg-social.es']) {
@@ -865,7 +886,7 @@ it('waits for the user to open the phone app, then gives up with its own explana
   const companion = a.services.companion!;
   // Real time keeps flowing for the harness; the 10 minutes are skipped below.
   vi.useFakeTimers({ shouldAdvanceTime: true });
-  const approval = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
+  const { approval } = startLogin(a, procedureId, dnie, 'https://idp.seg-social.es');
   await typeUnlock(a, procedureId);
   await a.waitFor(() => {
     const p = a.pendingPrompt(procedureId)?.prompt;
@@ -879,7 +900,7 @@ it('waits for the user to open the phone app, then gives up with its own explana
   await vi.advanceTimersByTimeAsync(6 * 60_000);
   expect(a.pendingPrompt(procedureId)?.prompt.kind).toBe('dnie_signature');
   await vi.advanceTimersByTimeAsync(4 * 60_000);
-  expect(await approval).toBeNull();
+  await expect(approval).rejects.toThrow('not approved');
   expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
     type: 'notice',
     level: 'warning',
@@ -893,7 +914,7 @@ it('waits for the user to open the phone app, then gives up with its own explana
 it('keeps the login approval when the browser drops a connection', async () => {
   const { relay, app: a, procedureId, dnie } = await setup();
   const companion = a.services.companion!;
-  const approval = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
+  const { key, approval } = startLogin(a, procedureId, dnie, 'https://idp.seg-social.es');
   await typeUnlock(a, procedureId);
   await a.waitFor(() => companion.status().state === 'waiting');
   const status = await a.invoke('companion.status');
@@ -925,7 +946,7 @@ it('keeps the login approval when the browser drops a connection', async () => {
         signature: Buffer.alloc(256).toString('base64'),
       });
   };
-  const key = (await approval)!.key as RemoteKey;
+  await approval;
   const host = 'idp.seg-social.es';
 
   // A connection dropped while the card signs: only that handshake gives up.
@@ -952,7 +973,7 @@ it('keeps the login approval when the browser drops a connection', async () => {
   await expect(waits[0]).rejects.toThrow('dropped');
   expect(received.some((m) => m.type === 'sign.cancel')).toBe(false);
   answer(held.shift()!);
-  await expect(waits[1]).resolves.toBeUndefined();
+  await expect(waits[1]).resolves.toMatchObject({ chain: [expect.anything()] });
   expect(received.filter((m) => m.type === 'sign.request')).toHaveLength(2);
 
   // The request is cancelled once every connection waiting for it is gone.
@@ -972,82 +993,59 @@ it('keeps the login approval when the browser drops a connection', async () => {
   );
 });
 
-it.each([
-  { label: 'omitted', origins: undefined },
-  { label: 'empty', origins: [] },
-])(
-  'rejects a missing DNI login target ($label) before consent, pairing or browser work',
-  async ({ origins }) => {
-    const { relay, app: a, procedureId, token, dnie } = await setup();
-    for (const policy of ['ask', 'auto'] as const) {
-      await a.vault.setCredentialPolicy(dnie.id, policy);
-      const response = await a.rpc(
-        'browser.useCertificate',
-        { credentialId: dnie.id, origins },
-        token,
-      );
-      expect(response).toMatchObject({
-        status: 400,
-        body: {
-          ok: false,
-          error: { code: 'bad_request', message: expect.stringContaining('origins') },
-        },
-      });
-    }
-    expect(a.pendingPrompt(procedureId)).toBeUndefined();
-    expect(a.services.procedures.transcript(procedureId)).toEqual([]);
-    expect(relay.rooms.size).toBe(0);
-    expect(a.browser.calls).toEqual([]);
-    expect(a.vault.getCredential(dnie.id)?.lastUsedAt).toBeUndefined();
-  },
-);
-
-it('enables DNI browser login after origin policy, desktop consent and phone approval', async () => {
+it('opens a DNI block with no consent, pairing or phone work, until a site asks', async () => {
   const { relay, app: a, procedureId, token, dnie } = await setup();
-  await a.vault.setCredentialPolicy(dnie.id, 'ask');
-  const use = a.rpc(
+  const response = await a.rpc('browser.useCertificate', { credentialId: dnie.id }, token);
+  expect(response.body.result).toMatchObject({ enabled: true });
+  expect(a.pendingPrompt(procedureId)).toBeUndefined();
+  expect(a.services.procedures.transcript(procedureId)).toEqual([]);
+  expect(relay.rooms.size).toBe(0);
+  expect(a.vault.getCredential(dnie.id)?.lastUsedAt).toBeUndefined();
+
+  // A block that nothing used ends without a word to the phone.
+  await a.rpc('browser.endCertificate', { blockId: response.body.result.blockId }, token);
+  expect(relay.rooms.size).toBe(0);
+});
+
+it('logs in and signs with the DNI in one block: the phone gets one session, then its end', async () => {
+  const { relay, app: a, procedureId, token, dnie } = await setup();
+  const use = await a.rpc(
     'browser.useCertificate',
     { credentialId: dnie.id, origins: [summary.origin] },
     token,
   );
-  await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'confirm');
-  await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
-    kind: 'confirm',
-    approved: true,
-  });
-  // After the desktop consent, the CAN and the PIN.
-  expect(await typeUnlock(a, procedureId)).toMatchObject({ purpose: 'login', stage: 'unlock' });
-  await a.waitFor(() => a.services.companion!.status().state === 'waiting');
-  const status = await a.invoke('companion.status');
-  const { received } = phone(relay, status.link as string, (m, send) => {
-    if (m.type === 'sign.request') {
-      expect(m.purpose).toBe('login');
-      expect(m.origin).toBe(summary.origin);
-      expect(m.pin).toBe(PIN);
-      send({
-        type: 'sign.certificate',
-        requestId: m.requestId,
-        certificates: [CERT.toString('base64')],
-      });
-    }
-  });
-  const response = await use;
-  expect(response.body.result).toMatchObject({
+  expect(use.body.result).toMatchObject({
     enabled: true,
     origins: ['https://pasarela-ident.clave.gob.es', summary.origin],
   });
-  expect(a.browser.calls.at(-1)?.method).toBe('useClientCertificate');
+
+  // The site asks for the certificate: the phone approval is the consent (no card before it).
+  const login = a.browser.siteAsksCertificate(new URL(summary.origin).hostname);
+  expect(await typeUnlock(a, procedureId)).toMatchObject({ purpose: 'login', stage: 'unlock' });
+  await a.waitFor(() => a.services.companion!.status().state === 'waiting');
+  const { received } = cardPhone(relay, (await a.invoke('companion.status')).link as string);
+  expect(await login).toMatchObject({ chain: [expect.anything()] });
   expect(a.vault.getCredential(dnie.id)?.lastUsedAt).toBeDefined();
   expect(a.pendingPrompt(procedureId)?.prompt).toMatchObject({
     kind: 'dnie_signature',
     purpose: 'login',
   });
 
+  // The site's AutoFirma request in the same block: the DNI signs it, in the same session.
+  const block = a.services.browser.certificateBlocks.current(procedureId);
+  const signing = a.services.browser.approveSignature(procedureId, summary, undefined, block);
+  await a.waitFor(() => received.filter((m) => m.type === 'sign.request').length === 2);
+  (await signing)?.kind === 'external' && ((await signing) as ExternalSigningKey).release(true);
+  const requests = received.filter((m) => m.type === 'sign.request');
+  expect(requests.map((m) => m.purpose)).toEqual(['login', 'document']);
+  expect(requests.map((m) => m.origin)).toEqual([summary.origin, summary.origin]);
+  expect(requests.map((m) => m.session)).toEqual([block?.session, block?.session]);
+
   // The block ends: the card and the phone stop at once, and the browser presents no certificate.
-  const { blockId } = response.body.result;
-  await a.rpc('browser.endCertificate', { blockId }, token);
+  await a.rpc('browser.endCertificate', { blockId: use.body.result.blockId }, token);
   expect(a.pendingPrompt(procedureId)).toBeUndefined();
-  await a.waitFor(() => received.some((m) => m.type === 'sign.done'));
+  await a.waitFor(() => received.at(-1)?.type === 'session.end');
+  expect(received.at(-1)).toEqual({ type: 'session.end', session: block?.session });
   expect(a.browser.certificates).toEqual([]);
 });
 

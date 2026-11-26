@@ -312,13 +312,14 @@ export const BridgeParams = {
   'browser.screenshot': z.object({ fullPage: z.boolean().default(false) }),
   'browser.upload': z.object({ ref: Ref, documents: z.array(DocumentName).min(1).max(10) }),
   /**
-   * Opens a certificate block (`page.withCertificate`): the site may use the user's certificates
-   * (AutoFirma) until `browser.endCertificate`. With a credential, also enables its TLS
-   * client-certificate login for this procedure's browser (may ask the user).
+   * Opens a certificate block (`page.withCertificate`): until `browser.endCertificate`, the
+   * procedure's sites may use the credential (a certificate or the DNI) for AutoFirma signatures
+   * and TLS client-certificate logins. Opening it asks the user nothing: the app asks when a site
+   * uses the credential.
    */
   'browser.useCertificate': z.object({
-    credentialId: z.string().optional(),
-    /** Origins added to the built-in list. Required for DNIe; first is its intended login site. */
+    credentialId: z.string(),
+    /** Origins whose TLS logins get the certificate, added to the built-in list. */
     origins: z.array(z.string().url()).max(10).optional(),
     /** The codemode run of the block: its end closes the block if the module could not. */
     runId: z.string().max(64).optional(),

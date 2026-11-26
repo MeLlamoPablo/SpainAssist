@@ -163,7 +163,7 @@ describe('external certificates', () => {
     const os = osCertificates(store);
     await os.refresh();
     const identity = os.sidecarIdentity(os.list()[0]!.id);
-    expect(identity.chain.map((der) => Buffer.from(der).toString('hex'))).toEqual([
+    expect(identity.chain?.map((der) => Buffer.from(der).toString('hex'))).toEqual([
       lucia.certDer.toString('hex'),
       authorities[0]!.toString('hex'),
     ]);
@@ -482,13 +482,16 @@ describe('the app with an external certificate', () => {
       credentials: [{ id: external.id, kind: 'certificate', policy: 'ask' }],
     });
 
-    const call = a.rpc('browser.useCertificate', { credentialId: external.id }, token);
+    const call = await a.rpc('browser.useCertificate', { credentialId: external.id }, token);
+    expect(call.body.result).toMatchObject({ enabled: true });
+    expect(a.browser.certificates).toHaveLength(1);
+    // The card comes when a site wants the certificate.
+    const asked = a.browser.siteAsksCertificate('pasarela-ident.clave.gob.es');
     await a.waitFor(() => !!a.pendingPrompt(procedureId));
     const prompt = a.pendingPrompt(procedureId)!;
     expect(prompt.prompt).toMatchObject({ kind: 'confirm', confirmKind: 'credential' });
     await a.invoke('chat.respond', prompt.id, { kind: 'confirm', approved: true });
-    expect((await call).body.result).toMatchObject({ enabled: true });
-    expect(a.browser.certificates).toHaveLength(1);
+    await asked;
   });
 
   it('signs an AutoFirma XML batch with the key in the OS store, end to end', async () => {

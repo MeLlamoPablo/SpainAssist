@@ -118,6 +118,10 @@ func newSite(t *testing.T, maxVersion uint16, clientAuth tls.ClientAuthType, sui
 		if len(r.TLS.PeerCertificates) > 0 {
 			s.CN = r.TLS.PeerCertificates[0].Subject.CommonName
 		}
+		// A slow answer, e.g. "/?wait=300ms".
+		if wait, err := time.ParseDuration(r.URL.Query().Get("wait")); err == nil {
+			time.Sleep(wait)
+		}
 		_ = json.NewEncoder(w).Encode(s)
 	}))
 	srv.TLS = &tls.Config{ClientAuth: clientAuth, MaxVersion: maxVersion, CipherSuites: suites}
@@ -297,6 +301,23 @@ func spkiOf(der []byte) string {
 }
 
 func isHandshake(m outMessage) bool { return m.Type == "event" && m.Event == "handshake" }
+
+func isPrepare(m outMessage) bool { return m.Method == "prepare" }
+
+func isSign(m outMessage) bool { return m.Method == "sign" }
+
+// calls are the methods the sidecar called on the app, in order ("prepare,sign").
+func (d *fakeDesktop) calls() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var methods []string
+	for _, m := range d.sent {
+		if m.Method != "" {
+			methods = append(methods, m.Method)
+		}
+	}
+	return strings.Join(methods, ",")
+}
 
 // --- Tests ------------------------------------------------------------------------------------
 
@@ -579,7 +600,11 @@ func TestRemoteKeySignsRenegotiationsAfterTheDial(t *testing.T) {
 	}
 	dial, endRequest := context.WithCancel(context.Background())
 	signed := false
-	_, remote := id.certificate(dial, "sede.example", &signed)
+	// As dialTLS leaves it: the app prepared the key before the dial.
+	remote := &remoteKey{id: id, ctx: dial, host: "sede.example", signed: &signed, prepared: true}
+	if _, err := id.certificate(remote, &signed); err != nil {
+		t.Fatal(err)
+	}
 	closeConn := remote.renegotiation(id.lock("sede.example:443"))
 	endRequest()
 
@@ -587,14 +612,8 @@ func TestRemoteKeySignsRenegotiationsAfterTheDial(t *testing.T) {
 	if _, err := remote.Sign(rand.Reader, digest[:], crypto.SHA256); err != nil {
 		t.Fatalf("renegotiation signature: %v", err)
 	}
-	var methods []string
-	for _, m := range h.desk.sent {
-		if m.Method != "" {
-			methods = append(methods, m.Method)
-		}
-	}
-	if strings.Join(methods, ",") != "prepare,sign" {
-		t.Fatalf("calls: %v", methods)
+	if calls := h.desk.calls(); calls != "prepare,sign" {
+		t.Fatalf("calls: %v", calls)
 	}
 	h.desk.prepare = func(outMessage) inMessage { return inMessage{Error: "declined"} }
 	if _, err := remote.Sign(rand.Reader, digest[:], crypto.SHA256); err == nil || classify(err).code != "declined" {
@@ -604,6 +623,140 @@ func TestRemoteKeySignsRenegotiationsAfterTheDial(t *testing.T) {
 	closeConn()
 	if _, err := remote.Sign(rand.Reader, digest[:], crypto.SHA256); err == nil {
 		t.Fatal("a closed connection should not sign")
+	}
+}
+
+// A lazy identity has no certificate until a site asks for one: the app sends it in the reply
+// to "prepare". A site that asks for none costs no call to the app.
+func TestLazyIdentityGetsItsCertificateWhenASiteAsks(t *testing.T) {
+	up := newUpstream(t, 0)
+	public := newSite(t, 0, tls.NoClientCert)
+	h := newHarness(t, up.roots)
+	key := rsaKey(t)
+	cert := newClient(t, newCA(t), "PRUEBA DNIE", key)
+	h.desk.sign = signWith(key)
+	h.desk.prepare = func(outMessage) inMessage { return inMessage{Chain: []string{b64(cert.der)}} }
+	h.configure(t, "s1", []string{up.target, public.target}, &identitySpec{ID: "dnie-1"})
+
+	c := h.client("s1", password)
+	resp, s, body := c.fetch(t, public.URL+"/")
+	if resp.StatusCode != 200 || s.CN != "" || c.lastSPKI() != h.p.spki {
+		t.Fatalf("public site: got %d %s", resp.StatusCode, body)
+	}
+	if calls := h.desk.calls(); calls != "" {
+		t.Fatalf("a site that asks for no certificate called the app: %s", calls)
+	}
+	resp, s, body = c.fetch(t, up.URL+"/")
+	if resp.StatusCode != 200 || s.CN != "PRUEBA DNIE" || s.Version != tls.VersionTLS12 {
+		t.Fatalf("got %d %s", resp.StatusCode, body)
+	}
+	if calls := h.desk.calls(); calls != "prepare,sign" {
+		t.Fatalf("calls: %s", calls)
+	}
+}
+
+// A "prepare" reply with the key (a .p12's): the sidecar signs in memory from then on, and
+// never asks the app again.
+func TestLazyIdentityKeepsAKeyFromPrepareInMemory(t *testing.T) {
+	up, other := newUpstream(t, 0), newUpstream(t, 0)
+	h := newHarness(t, up.roots)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	cert := newClient(t, newCA(t), "PRUEBA EC", key)
+	h.desk.prepare = func(outMessage) inMessage {
+		return inMessage{Chain: []string{b64(cert.der)}, Key: pkcs8(t, key)}
+	}
+	h.configure(t, "s1", []string{up.target, other.target}, &identitySpec{ID: "cert-1"})
+
+	c := h.client("s1", password)
+	for _, site := range []*upstream{up, other, up} {
+		if resp, s, body := c.fetch(t, site.URL+"/"); resp.StatusCode != 200 || s.CN != "PRUEBA EC" {
+			t.Fatalf("got %d %s", resp.StatusCode, body)
+		}
+		// The next request needs a new upstream connection.
+		h.p.session("s1").current().close()
+	}
+	if calls := h.desk.calls(); calls != "prepare" {
+		t.Fatalf("calls: %s", calls)
+	}
+	if n := h.desk.count(isHandshake); n != 3 {
+		t.Fatalf("upstream handshakes: %d, want 3", n)
+	}
+}
+
+func TestLazyIdentityWithoutACertificateShowsAnErrorPage(t *testing.T) {
+	up := newUpstream(t, 0)
+	h := newHarness(t, up.roots)
+	h.configure(t, "s1", []string{up.target}, &identitySpec{ID: "dnie-1"})
+	c := h.client("s1", password)
+	for _, reply := range []struct {
+		inMessage
+		code string
+	}{
+		{inMessage{Error: "declined", Message: "the user said no"}, "declined"},
+		{inMessage{}, "unavailable"},
+		{inMessage{Chain: []string{b64(newClient(t, newCA(t), "PRUEBA EC", newCA(t).key).der)}}, "failed"}, // not RSA
+	} {
+		h.desk.prepare = func(outMessage) inMessage { return reply.inMessage }
+		resp, _, body := c.fetch(t, up.URL+"/")
+		if resp.StatusCode != http.StatusBadGateway || resp.Header.Get("X-Sa-Certificate-Error") != reply.code {
+			t.Fatalf("%s: got %d %q %s", reply.code, resp.StatusCode, resp.Header.Get("X-Sa-Certificate-Error"), body)
+		}
+	}
+	if n := h.desk.count(isSign); n != 0 {
+		t.Fatal("nothing should be signed")
+	}
+}
+
+// The probe can miss a host that asks (it timed out, or the site changed): the app then
+// prepares the key inside the handshake, when the server asks.
+func TestLazyIdentityIsPreparedInTheHandshakeWhenTheProbeMissed(t *testing.T) {
+	up := newUpstream(t, 0)
+	h := newHarness(t, up.roots)
+	missed := &probe{done: make(chan struct{})}
+	close(missed.done)
+	h.p.probes[up.target] = missed
+	key := rsaKey(t)
+	cert := newClient(t, newCA(t), "PRUEBA DNIE", key)
+	h.desk.sign = signWith(key)
+	h.desk.prepare = func(outMessage) inMessage { return inMessage{Chain: []string{b64(cert.der)}} }
+	h.configure(t, "s1", []string{up.target}, &identitySpec{ID: "dnie-1"})
+
+	resp, s, body := h.client("s1", password).fetch(t, up.URL+"/")
+	if resp.StatusCode != 200 || s.CN != "PRUEBA DNIE" {
+		t.Fatalf("got %d %s", resp.StatusCode, body)
+	}
+	if calls := h.desk.calls(); calls != "prepare,sign" {
+		t.Fatalf("calls: %s", calls)
+	}
+}
+
+// Like TestRemoteKeySignsRenegotiationsAfterTheDial, for a lazy identity on a host that asked
+// for no certificate in its first handshake: the renegotiation gets the certificate first.
+func TestLazyIdentityGetsItsCertificateInARenegotiation(t *testing.T) {
+	h := newHarness(t)
+	key := rsaKey(t)
+	cert := newClient(t, newCA(t), "PRUEBA DNIE", key)
+	h.desk.sign = signWith(key)
+	h.desk.prepare = func(outMessage) inMessage { return inMessage{Chain: []string{b64(cert.der)}} }
+	id, err := h.p.newIdentity("s1", identitySpec{ID: "dnie-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := false
+	remote := &remoteKey{id: id, ctx: context.Background(), host: "sede.example", signed: &signed}
+	defer remote.renegotiation(id.lock("sede.example:443"))()
+
+	presented, err := id.certificate(remote, &signed)
+	if err != nil || presented.Leaf.Subject.CommonName != "PRUEBA DNIE" {
+		t.Fatalf("certificate: %v", err)
+	}
+	digest := sha256.Sum256([]byte("handshake"))
+	if _, err := presented.PrivateKey.(crypto.Signer).Sign(rand.Reader, digest[:], crypto.SHA256); err != nil {
+		t.Fatalf("renegotiation signature: %v", err)
+	}
+	// Once for the certificate, once more before the signature, as every renegotiation.
+	if calls := h.desk.calls(); calls != "prepare,prepare,sign" {
+		t.Fatalf("calls: %s", calls)
 	}
 }
 
@@ -646,6 +799,87 @@ func TestEnablingAHostClosesItsConnections(t *testing.T) {
 	if _, s, _ := c.fetch(t, up.URL+"/"); s.CN != "" {
 		t.Fatalf("expected no certificate after disabling, got %+v", s)
 	}
+}
+
+// The end of a certificate block must not cut a page that is still loading.
+func TestDisablingAHostLetsTheRequestInFlightFinish(t *testing.T) {
+	up := newUpstream(t, 0)
+	h := newHarness(t, up.roots)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	cert := newClient(t, newCA(t), "PRUEBA EC", key)
+	h.configure(t, "s1", []string{up.target}, &identitySpec{ID: "cert-1", Chain: []string{b64(cert.der)}, Key: pkcs8(t, key)})
+	c := h.client("s1", password)
+
+	slow := make(chan string, 1)
+	go func() {
+		resp, err := c.Get(up.URL + "/?wait=400ms")
+		if err != nil {
+			slow <- err.Error()
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		slow <- string(body)
+	}()
+	time.Sleep(150 * time.Millisecond)
+	h.configure(t, "s1", nil, nil)
+	if body := <-slow; !strings.Contains(body, `"cn":"PRUEBA EC"`) {
+		t.Fatalf("the request in flight should get its answer, got %s", body)
+	}
+	// Then the connection closes: the next request presents no certificate.
+	time.Sleep(50 * time.Millisecond)
+	if _, s, _ := c.fetch(t, up.URL+"/"); s.CN != "" {
+		t.Fatalf("expected no certificate after disabling, got %+v", s)
+	}
+}
+
+func TestRetiringConnectionsCloseAfterTheDrainLimit(t *testing.T) {
+	limit := drainTimeout
+	drainTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { drainTimeout = limit })
+	up := newUpstream(t, 0)
+	h := newHarness(t, up.roots)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	cert := newClient(t, newCA(t), "PRUEBA EC", key)
+	h.configure(t, "s1", []string{up.target}, &identitySpec{ID: "cert-1", Chain: []string{b64(cert.der)}, Key: pkcs8(t, key)})
+	c := h.client("s1", password)
+
+	failed := make(chan error, 1)
+	go func() {
+		resp, err := c.Get(up.URL + "/?wait=2s")
+		if err == nil {
+			resp.Body.Close()
+		}
+		failed <- err
+	}()
+	time.Sleep(150 * time.Millisecond)
+	h.configure(t, "s1", nil, nil)
+	select {
+	case err := <-failed:
+		if err == nil {
+			t.Fatal("the connection should close at the drain limit, before the answer")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the connection stayed open after the drain limit")
+	}
+}
+
+// A request that reaches a retiring connection gets no answer (the browser sends it again on a
+// new connection), not the "certificate is no longer enabled" page.
+func TestRetiringConnectionsAnswerNoNewRequest(t *testing.T) {
+	h := newHarness(t)
+	h.addr("s1")
+	mc := &mitmConn{Conn: &net.TCPConn{}, session: "s1", target: "sede.example:443"}
+	mc.retire()
+	req := httptest.NewRequest("GET", "https://sede.example/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), mitmKey{}, mc))
+	rec := httptest.NewRecorder()
+	defer func() {
+		if recover() != http.ErrAbortHandler || rec.Body.Len() != 0 {
+			t.Fatalf("expected the request to be dropped, got %d %s", rec.Code, rec.Body)
+		}
+	}()
+	h.p.handleIntercepted(rec, req)
 }
 
 func TestEnablingAHostClosesItsTunnels(t *testing.T) {
@@ -709,7 +943,7 @@ func TestBadIdentitiesAreRejected(t *testing.T) {
 	for name, spec := range map[string]identitySpec{
 		"mismatched key": {ID: "c", Chain: []string{b64(cert.der)}, Key: pkcs8(t, otherKey)},
 		"remote EC key":  {ID: "c", Chain: []string{b64(cert.der)}},
-		"no chain":       {ID: "c"},
+		"key alone":      {ID: "c", Key: pkcs8(t, key)},
 	} {
 		spec := spec
 		h.p.configure(inMessage{Type: "session", ID: 9, Session: "s1", Hosts: []string{"a.example:443"}, Identity: &spec})

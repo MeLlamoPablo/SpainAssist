@@ -76,6 +76,8 @@ export interface PhoneSignRequest {
   can: string;
   /** The DNIe PIN; left out for `certificate` requests. */
   pin?: string;
+  /** The desktop's certificate block the request belongs to (`CompanionSignRequest.session`). */
+  session?: string;
   /**
    * The phone needs a new CAN or PIN (the card refused it, or a re-sent request came without
    * it). Resolves with what the user typed, or null to cancel the request. The request's timers
@@ -240,6 +242,7 @@ export class PhoneSigner {
         expiresAt: new Date(Date.now() + reviewMs).toISOString(),
         can: req.can,
         ...(req.pin ? { pin: req.pin } : {}),
+        ...(req.session ? { session: req.session } : {}),
       });
       if (!this.sendRequest(active)) this.armAway(active);
     });
@@ -326,6 +329,14 @@ export class PhoneSigner {
     active.delivered = false;
     clearTimeout(active.timer);
     this.armAway(active);
+  }
+
+  /**
+   * The desktop's certificate block ended: the phone lets go of the card (`session.end`). Sent
+   * after the end of the block's last request; a phone that misses it lets go on its own.
+   */
+  endSession(session: string): void {
+    this.link.send({ type: 'session.end', session });
   }
 
   /** The pairing ended: nothing more can arrive. */

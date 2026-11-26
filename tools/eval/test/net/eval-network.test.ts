@@ -648,15 +648,23 @@ describe('EvalNetwork: lifecycle', () => {
   });
 
   it('has no certificate logins and its own random proxy credentials', async () => {
+    // The identity of a `page.withCertificate` block: the app gives its certificate only when a
+    // host asks for it, and no host of the world does.
+    let asked = 0;
     const identity = {
       id: 'cert-1',
-      chain: [new Uint8Array([1])],
-      key: crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey,
+      key: {
+        prepare: async () => {
+          asked++;
+        },
+        sign: async () => Buffer.alloc(0),
+      },
     };
     await expect(
       network.configure('s1', ['pasarela-ident.clave.gob.es'], identity),
-    ).rejects.toThrow(/not available/);
-    // Turning certificates off (the app moving a procedure to the headed browser) is fine.
+    ).resolves.toBeUndefined();
+    expect(asked).toBe(0);
+    // Turning certificates off (the block's end) is fine too.
     await expect(network.configure('s1', [], null)).resolves.toBeUndefined();
     const other = new EvalNetwork({
       upstream: bench.origin,

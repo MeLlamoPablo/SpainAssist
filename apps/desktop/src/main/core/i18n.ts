@@ -95,16 +95,8 @@ const STRINGS = {
     es: 'El asistente quiere identificarte con tu certificado digital en las webs oficiales de este trámite.',
     en: 'The assistant wants to identify you with your digital certificate on the official websites for this procedure.',
   },
-  /** The same consent for the DNI, which the phone reads when the site asks for it. */
-  dnieUseTitle: { es: '¿Usar tu DNI?', en: 'Use your DNI?' },
-  dnieUseMessage: {
-    es: 'El asistente quiere identificarte con tu DNI en las webs oficiales de este trámite. Cuando la web lo pida, el móvil leerá tu DNI.',
-    en: 'The assistant wants to identify you with your DNI on the official websites for this procedure. When the site asks for it, your phone will read your DNI.',
-  },
-  detailDnie: { es: 'DNI', en: 'DNI' },
   detailCredential: { es: 'Credencial', en: 'Credential' },
   detailWebsite: { es: 'Web', en: 'Website' },
-  detailWebsites: { es: 'Webs', en: 'Websites' },
   detailCertificate: { es: 'Certificado', en: 'Certificate' },
   certificateSiteTitle: {
     es: '¿Permitir tu certificado en {host}?',

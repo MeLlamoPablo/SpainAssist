@@ -10,7 +10,9 @@ describe('vectors/v1.json', () => {
   });
 
   it('holds messages the desktop accepts, as the Kotlin tests decode and encode them', async () => {
-    const { login } = await buildVectors();
+    const { login, session } = await buildVectors();
+    expect(DesktopToPhone.parse(session.request)).toEqual(session.request);
+    expect(DesktopToPhone.parse(session.end)).toEqual(session.end);
     expect(DesktopToPhone.parse(login.request)).toEqual(login.request);
     expect(DesktopToPhone.parse(login.toBeSigned)).toEqual(login.toBeSigned);
     expect(DesktopToPhone.parse(login.unlock)).toEqual(login.unlock);

@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonClassDiscriminator
  * The desktop validates with strict schemas, so the phone never sends fields it doesn't know
  * and leaves out empty optional ones.
  */
-const val COMPANION_PROTOCOL = 6
+const val COMPANION_PROTOCOL = 7
 
 /** Largest decrypted message, after joining fragments (same as the desktop). */
 const val MAX_MESSAGE_BYTES = 24 * 1024 * 1024
@@ -126,6 +126,11 @@ data class SignRequest(
      * tried again once the card refuses it ([SignNeed]).
      */
     val pin: String? = null,
+    /**
+     * The desktop's certificate block the request belongs to. The phone keeps the card open
+     * between a block's requests and remembers the logins approved in it, until [SessionEnd].
+     */
+    val session: String? = null,
 ) : DesktopToPhone
 
 /** The CAN or PIN the phone asked for with [SignNeed], typed on the desktop. */
@@ -158,6 +163,11 @@ data class SignDone(val requestId: String) : DesktopToPhone
 @Serializable
 @SerialName("sign.cancel")
 data class SignCancel(val requestId: String, val reason: CancelReason) : DesktopToPhone
+
+/** The desktop's certificate block ended: the phone lets go of its card and forgets its logins. */
+@Serializable
+@SerialName("session.end")
+data class SessionEnd(val session: String) : DesktopToPhone
 
 @Serializable
 @SerialName("bye")

@@ -1,11 +1,13 @@
+import crypto from 'node:crypto';
 import { encodePairingLink, PhoneClient } from '@sa/companion';
 import { MemoryRelay } from '@sa/companion/testing';
 import {
   type AfirmaSignatureSummary,
-  COMPANION_PROTOCOL,
+  COMPANION_PROTOCOL_MIN,
   type DesktopToPhone,
   type ExternalSigningKey,
 } from '@sa/shared';
+import type { RemoteKey } from '@sa/sidecar';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../core/i18n';
 import { createFakeFetch, createTestApp, jsonResponse, type TestApp } from '../testing/harness';
@@ -362,7 +364,7 @@ describe('the phone app of the paired phone', () => {
       await a.waitFor(() => reads() === 1);
       const { link } = await a.invoke('companion.pair');
       await a.waitFor(() => companion.status().state === 'waiting');
-      phone(relay, link as string, '0.2.0', COMPANION_PROTOCOL - 1);
+      phone(relay, link as string, '0.2.0', COMPANION_PROTOCOL_MIN - 1);
       await a.waitFor(() => !!companion.status().outdated);
       const status = await a.invoke('companion.status');
       if (answer === LATEST) expect(status).toMatchObject({ phoneApp: PHONE_APP });
@@ -377,8 +379,13 @@ describe('the phone app of the paired phone', () => {
         text: t('es', notice),
       });
       // What the agent reads when a login does.
-      const login = companion.login(procedureId, dnie, 'https://idp.seg-social.es');
-      expect(await login).toBeNull();
+      const login = companion.login(procedureId, dnie, {
+        session: crypto.randomUUID(),
+        origins: ['https://idp.seg-social.es'],
+      }).key as RemoteKey;
+      await expect(
+        login.prepare('idp.seg-social.es', new AbortController().signal),
+      ).rejects.toThrow('not approved');
       expect(companion.takeLoginNotes(procedureId).join('\n')).toMatch(why);
       for (const p of phones.splice(0)) p.close();
       await a.close();

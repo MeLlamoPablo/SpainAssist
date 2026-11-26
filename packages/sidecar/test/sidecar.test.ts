@@ -122,6 +122,49 @@ describe('Sidecar', () => {
     expect(JSON.parse(res.body).cn).toBe('PRUEBA DNIE');
   });
 
+  it('asks a lazy identity for its certificate only when a site asks for one', async () => {
+    const sidecar = await start();
+    const log: string[] = [];
+    const phone = phoneKey(log);
+    await sidecar.configure('s1', [site.hostPort, plainSite.hostPort], {
+      id: 'dnie-1',
+      key: {
+        ...phone,
+        prepare: async (host) => {
+          await phone.prepare(host);
+          return { chain: [pki.client.certDer] };
+        },
+      },
+    });
+    const open = await getThrough(sidecar, 's1', `${plainSite.url}/`);
+    expect(open.spki).toBe(sidecar.spki);
+    expect(log).toEqual([]);
+    const res = await getThrough(sidecar, 's1', `${site.url}/`);
+    expect(JSON.parse(res.body)).toEqual({ cn: 'PRUEBA DNIE', authorized: true });
+    expect(log).toEqual(['prepare 127.0.0.1', 'sign SHA-256 127.0.0.1']);
+  });
+
+  it('keeps the key a lazy identity resolves with (.p12) in memory', async () => {
+    const sidecar = await start();
+    const log: string[] = [];
+    await sidecar.configure('s1', [site.hostPort], {
+      id: 'p12-1',
+      maxConns: 6,
+      key: {
+        prepare: async (host) => {
+          log.push(`prepare ${host}`);
+          return { chain: [pki.client.certDer], key: pki.client.key };
+        },
+        sign: async () => {
+          throw new SidecarError('failed', 'the sidecar has the key');
+        },
+      },
+    });
+    const res = await getThrough(sidecar, 's1', `${site.url}/`);
+    expect(JSON.parse(res.body)).toEqual({ cn: 'PRUEBA DNIE', authorized: true });
+    expect(log).toEqual(['prepare 127.0.0.1']);
+  });
+
   it('shows why when the user declines on the phone', async () => {
     const events: SidecarEvent[] = [];
     const sidecar = await start(events);

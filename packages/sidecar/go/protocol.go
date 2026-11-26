@@ -10,7 +10,8 @@ package main
 //	    → {"type":"ack", "id", "port", "error"?}   (the first one opens the session's port)
 //	{"type":"end", "session"}
 //	{"type":"language", "language"}   (the app's language changed: "es" or "en", for error pages)
-//	{"type":"reply", "id", "signature"? | "error", "message"}  (answers a "call")
+//	{"type":"reply", "id", "signature"? | "chain"?, "key"? | "error", "message"}  (answers a "call")
+//	    "chain" and "key": a lazy identity's certificate and key, in a "prepare" reply
 //
 // Sidecar → app:
 //
@@ -46,13 +47,19 @@ type inMessage struct {
 	Signature string `json:"signature,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Message   string `json:"message,omitempty"`
+
+	// reply to "prepare": a lazy identity's certificate, with Key (above) when the sidecar keeps
+	// the key in memory.
+	Chain []string `json:"chain,omitempty"`
 }
 
 // identitySpec is a client certificate for a session's hosts.
 type identitySpec struct {
 	// ID names the certificate in calls (the vault credential id).
 	ID string `json:"id"`
-	// Chain: Base64 DER certificates, leaf first.
+	// Chain: Base64 DER certificates, leaf first. Empty (with no Key): a lazy identity, whose
+	// certificate arrives in the reply to a "prepare" call, with its key when the sidecar keeps
+	// it in memory. The app then asks the user for nothing until a site asks for the certificate.
 	Chain []string `json:"chain"`
 	// Key: Base64 PKCS#8 of a key kept in memory (a .p12). Empty: a remote key that signs through
 	// "sign" calls (the DNIe in the phone). Remote keys are RSA PKCS#1 v1.5 only, over TLS 1.2.

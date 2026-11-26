@@ -86,10 +86,10 @@ describe('host operations', () => {
     });
     const signal = new AbortController().signal;
     const procedureId = 'p_aaaaaaaaaaaaaaaa';
-    await call('browser.useCertificate', { procedureId }, { signal });
+    await call('browser.useCertificate', { procedureId, credentialId: 'c_1' }, { signal });
     await call('browser.endCertificate', { procedureId, blockId: 'b_1' }, { signal });
     expect(calls.map((c) => [c.method, c.params])).toEqual([
-      ['browser.useCertificate', { runId: 'r_1' }],
+      ['browser.useCertificate', { credentialId: 'c_1', runId: 'r_1' }],
       ['browser.endCertificate', { blockId: 'b_1' }],
     ]);
   });

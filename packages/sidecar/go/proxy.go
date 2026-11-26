@@ -120,6 +120,7 @@ func newProxy(cfg inMessage, desk desktop) (*proxy, error) {
 	intercepted := &http.Server{
 		Handler:           http.HandlerFunc(p.handleIntercepted),
 		ConnContext:       mitmContext,
+		ConnState:         mitmState,
 		ReadHeaderTimeout: 2 * time.Minute,
 		IdleTimeout:       2 * time.Minute,
 		ErrorLog:          quiet,
@@ -335,6 +336,11 @@ func (p *proxy) handleIntercepted(w http.ResponseWriter, r *http.Request) {
 	if s != nil {
 		id = s.identityFor(mc.target)
 	}
+	if id == nil && mc.retired() {
+		// The certificate went off as this request arrived: no answer, so the browser sends it
+		// again on a new connection.
+		panic(http.ErrAbortHandler)
+	}
 	if id == nil {
 		writeCertError(w, p.language(), hostname, &certError{code: "unavailable", detail: "the certificate is no longer enabled for this site"})
 		return
@@ -414,11 +420,12 @@ func (p *proxy) endSession(id string) {
 	delete(p.sessions, id)
 	p.mu.Unlock()
 	if s != nil {
+		s.closeServer()
+		// First: set would let the requests in flight finish.
+		s.closeAll()
 		if old := s.set(nil, nil); old != nil {
 			old.close()
 		}
-		s.closeServer()
-		s.closeAll()
 	}
 }
 
@@ -488,6 +495,49 @@ type mitmConn struct {
 	anonymous bool
 	untrack   func()
 	once      sync.Once
+
+	mu sync.Mutex
+	// active: a request is in flight (the intercepted server's ConnState).
+	active bool
+	// retiring: the session's configuration changed, so the connection closes when the request
+	// in flight ends.
+	retiring bool
+}
+
+// drainTimeout is how long a retiring connection waits for its request in flight.
+var drainTimeout = 30 * time.Second
+
+// retire closes the connection because the session handles its host in another way now. An
+// idle connection closes at once. One with a request in flight closes when that request has
+// its answer (drainTimeout at most), so the end of a certificate block never cuts a page load.
+func (c *mitmConn) retire() {
+	c.mu.Lock()
+	c.retiring = true
+	active := c.active
+	c.mu.Unlock()
+	if !active {
+		c.Close()
+		return
+	}
+	time.AfterFunc(drainTimeout, func() { c.Close() })
+}
+
+func (c *mitmConn) retired() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.retiring
+}
+
+// setState follows the intercepted server's view of the connection. On a retiring connection
+// every change closes it: the request in flight ended, or a new one arrived.
+func (c *mitmConn) setState(state http.ConnState) {
+	c.mu.Lock()
+	c.active = state == http.StateActive
+	retiring := c.retiring
+	c.mu.Unlock()
+	if retiring {
+		c.Close()
+	}
 }
 
 func (c *mitmConn) Close() error {
@@ -505,6 +555,12 @@ func mitmContext(ctx context.Context, c net.Conn) context.Context {
 		return context.WithValue(ctx, mitmKey{}, mc)
 	}
 	return ctx
+}
+
+func mitmState(c net.Conn, state http.ConnState) {
+	if mc, ok := c.(*mitmConn); ok {
+		mc.setState(state)
+	}
 }
 
 // connListener hands intercepted connections to an http.Server.

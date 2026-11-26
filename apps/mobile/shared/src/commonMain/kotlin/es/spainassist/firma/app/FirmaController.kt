@@ -15,6 +15,7 @@ import es.spainassist.firma.protocol.Need
 import es.spainassist.firma.protocol.Hello
 import es.spainassist.firma.protocol.PhoneToDesktop
 import es.spainassist.firma.protocol.Purpose
+import es.spainassist.firma.protocol.SessionEnd
 import es.spainassist.firma.protocol.SignCancel
 import es.spainassist.firma.protocol.SignCertificate
 import es.spainassist.firma.protocol.SignOtherCertificate
@@ -80,6 +81,12 @@ typealias LinkFactory = (pairing: PairingLink, hello: Hello, listener: LinkListe
  * waits for `sign.unlock`; a CAN or PIN the card refused is never tried again while the app runs),
  * the desktop may cancel or reconnect (everything it may have missed is sent again; duplicates are
  * answered from cache, never signed twice).
+ *
+ * Blocks: requests with the same `session` belong to one certificate block of the desktop
+ * ([Block]). The controller keeps the card open between them, so the user holds it once, and a
+ * login the user approved in the block starts again without the review. Every other request
+ * shows its review. The block ends with `session.end`, with a request of another block or of
+ * none, when the user cancels a request, or with the pairing.
  */
 @OptIn(ExperimentalTime::class)
 class FirmaController(
@@ -114,6 +121,7 @@ class FirmaController(
     private var proposed: PairingLink? = null
     private var notice: StartNotice? = null
     private var active: Active? = null
+    private var block: Block? = null
 
     /**
      * SHA-256 of every CAN and PIN the card refused while the app runs (memory only): they are
@@ -302,6 +310,7 @@ class FirmaController(
         link = null
         if (sendBye) current?.unpair() else current?.close()
         clearPairing()
+        endBlock()
         active?.let { stopActive(it, Outcome.Cancelled, sendError = null) }
         active = null
         linkStatus = LinkStatus.Connecting
@@ -349,6 +358,90 @@ class FirmaController(
         val finished get() = step is Step.Result
     }
 
+    /**
+     * A certificate block of the desktop (`sign.request.session`): the card of its last request,
+     * kept open for its next one, and the logins the user approved in it.
+     */
+    private class Block(val id: String) {
+        var card: Card? = null
+
+        /** Closes [card] when the block has had no request for [BLOCK_CARD_IDLE_MS]. */
+        var idle: Job? = null
+
+        /** The origins of the logins the user approved. */
+        val logins = HashSet<String>()
+    }
+
+    /** The current block, when [r] belongs to it. */
+    private fun blockOf(r: Active): Block? = block?.takeIf { it.id == r.request.session }
+
+    /** A login the user approved before in the block of [r]: it starts without the review. */
+    private fun approvedBefore(r: Active): Boolean =
+        r.request.purpose == Purpose.Login && blockOf(r)?.logins?.contains(r.request.origin) == true
+
+    private fun endBlock() {
+        val ended = block ?: return
+        log("block ${ended.id} ended")
+        block = null
+        closeKeptCard(ended)
+    }
+
+    /** No request uses a kept card, so the reader goes off with it. */
+    private fun closeKeptCard(b: Block) {
+        b.idle?.cancel()
+        b.idle = null
+        val card = b.card ?: return
+        log("closing the card kept for block ${b.id}")
+        b.card = null
+        card.closeQuietly()
+        _readingCard.value = false
+    }
+
+    /** The card the block of [r] kept from its last request, if any. */
+    private fun takeKeptCard(r: Active): Card? {
+        val b = blockOf(r) ?: return null
+        val card = b.card ?: return null
+        b.idle?.cancel()
+        b.idle = null
+        b.card = null
+        return card
+    }
+
+    /** The desktop ended the request (or took the next one after `sign.done`): its block goes on. */
+    private fun endedByDesktop(outcome: Outcome?) =
+        outcome == Outcome.Signed || outcome == Outcome.CertificateShared || outcome == Outcome.CancelledByDesktop
+
+    /**
+     * [r] is done with [card]. When the desktop ended [r], its block keeps the card open for its
+     * next request, until it has had none for [BLOCK_CARD_IDLE_MS]. Otherwise the card closes.
+     */
+    private fun leaveCard(r: Active, card: Card?) {
+        val keeper = blockOf(r)?.takeIf { card != null && endedByDesktop((r.step as? Step.Result)?.outcome) }
+        if (keeper == null) {
+            card?.closeQuietly()
+            _readingCard.value = false
+            return
+        }
+        log("card kept for block ${keeper.id}")
+        keeper.card = card
+        watchIdle(keeper)
+    }
+
+    /**
+     * Counts [BLOCK_CARD_IDLE_MS] for the card that [b] keeps, then closes it. A request of the
+     * block that is not finished stops the count: the card waits for it.
+     */
+    private fun watchIdle(b: Block) {
+        b.idle?.cancel()
+        b.idle = null
+        if (b.card == null || active?.let { !it.finished && blockOf(it) === b } == true) return
+        b.idle = scope.launch {
+            delay(BLOCK_CARD_IDLE_MS)
+            log("block ${b.id} had no request in ${BLOCK_CARD_IDLE_MS / 1000} s")
+            closeKeptCard(b)
+        }
+    }
+
     private enum class Prepared { Ready, Declined, NoNfc }
 
     private sealed interface Action {
@@ -387,6 +480,7 @@ class FirmaController(
         log("user $action ${current.request.requestId}")
         if (action == Action.Cancel) {
             if (current.request.purpose == Purpose.Login) return@launch log("cancel ignored: login")
+            endBlock()
             stopActive(current, Outcome.Cancelled, ErrorCode.Cancelled)
             return@launch
         }
@@ -416,6 +510,10 @@ class FirmaController(
                 log("desktop cancelled ${message.requestId}: ${message.reason}")
                 stopActive(current, Outcome.CancelledByDesktop, sendError = null)
             }
+            is SessionEnd -> {
+                if (block?.id != message.session) return log("ignored ${describe(message)}: not the current block")
+                endBlock()
+            }
             DesktopBye -> Unit // PhoneLink ends the pairing itself.
         }
     }
@@ -427,7 +525,8 @@ class FirmaController(
         log(
             "request ${request.requestId}: ${request.purpose} host=${hostOf(request.origin)} " +
                 "format=${request.format.ifEmpty { "-" }} documents=${request.documents.size} " +
-                "signatures=${request.signatures} verifiable=${request.verifiable} expires=${request.expiresAt}",
+                "signatures=${request.signatures} verifiable=${request.verifiable} expires=${request.expiresAt} " +
+                "block=${request.session ?: "-"}",
         )
         val current = active
         if (current != null && current.request.requestId == request.requestId) {
@@ -492,10 +591,20 @@ class FirmaController(
         )
         // Reading the certificate needs no PIN.
         val pin = request.pin?.takeIf { request.purpose != Purpose.Certificate }
+        if (block?.id != request.session) {
+            endBlock()
+            block = request.session?.let(::Block)
+        }
+        block?.idle?.cancel()
         val next = Active(request.copy(can = "", pin = null), review, request.can, pin, expiresAt)
+        // Never on the screen: a login approved before starts without its review.
+        if (approvedBefore(next)) next.step = Step.Working(reading = true, signed = 0)
+        // The request before may still be using the card: it leaves it first.
+        val previous = current?.job
         active = next
         next.job = scope.launch {
             try {
+                previous?.join()
                 run(next)
             } catch (e: CancellationException) {
                 throw e
@@ -509,10 +618,14 @@ class FirmaController(
     }
 
     private suspend fun run(r: Active) {
-        progress(r, Stage.Reviewing)
-        setStep(r, Step.Review)
+        val approved = approvedBefore(r)
+        if (approved) log("login approved before in this block: no review")
+        if (!approved) {
+            progress(r, Stage.Reviewing)
+            setStep(r, Step.Review)
+        }
         val prepared = withTimeoutOrNull(r.deadline - platform.now()) {
-            if (r.actions.receive() != Action.Approve) return@withTimeoutOrNull Prepared.Declined
+            if (!approved && r.actions.receive() != Action.Approve) return@withTimeoutOrNull Prepared.Declined
             if (cardReader.nfc.value == NfcAvailability.Missing) return@withTimeoutOrNull Prepared.NoNfc
             Prepared.Ready
         }
@@ -528,6 +641,7 @@ class FirmaController(
             }
             Prepared.Ready -> Unit
         }
+        if (r.request.purpose == Purpose.Login) blockOf(r)?.logins?.add(r.request.origin)
         readAndSign(r)
     }
 
@@ -562,6 +676,8 @@ class FirmaController(
         r.waiting = need
         log("asking the computer for the $what (refused=${need.refused} triesLeft=${need.triesLeft})")
         send(need)
+        // The reader goes off while the user types: a kept card would leave with it.
+        blockOf(r)?.let(::closeKeptCard)
         _readingCard.value = false
         setStep(r, Step.WaitForComputer(what, need.refused, need.triesLeft))
         try {
@@ -608,13 +724,17 @@ class FirmaController(
                         log("request deadline passed before the card was read")
                         return finish(r, Outcome.Expired, ErrorCode.Timeout)
                     }
-                    setStep(r, Step.HoldCard(moved))
-                    progress(r, Stage.Card)
+                    // The block's last request left the card open: no need to hold it again.
+                    val kept = takeKeptCard(r)
+                    if (kept == null) {
+                        setStep(r, Step.HoldCard(moved))
+                        progress(r, Stage.Card)
+                    }
                     // On until the card is no longer needed: turning reader mode off drops the
                     // tag, so it can't go off as soon as the card shows up.
                     _readingCard.value = true
-                    log("waiting for the card (moved=$moved)")
-                    val held = if (r.certificates == null) {
+                    log(if (kept == null) "waiting for the card (moved=$moved)" else "using the card the block kept")
+                    val held = kept ?: if (r.certificates == null) {
                         withTimeoutOrNull(r.deadline - platform.now()) { cardReader.awaitCard() } ?: kotlin.run {
                             log("no card before the request deadline")
                             return finish(r, Outcome.Expired, ErrorCode.Timeout)
@@ -636,6 +756,14 @@ class FirmaController(
                     } catch (e: CardException) {
                         held.closeQuietly()
                         card = null
+                        if (kept != null && (e is CardException.Failed || e is CardException.Unsupported)) {
+                            // The card the block kept did not open again. It may still be on the
+                            // phone: the reader goes off and on, and finds it anew.
+                            log("the kept card did not open (${e::class.simpleName}): reading it again")
+                            _readingCard.value = false
+                            delay(READER_RESTART_MS)
+                            continue
+                        }
                         when (e) {
                             is CardException.Lost -> {
                                 log("card lost while opening: hold it again")
@@ -762,8 +890,7 @@ class FirmaController(
                 }
             }
         } finally {
-            card?.closeQuietly()
-            _readingCard.value = false
+            leaveCard(r, card)
         }
     }
 
@@ -783,9 +910,11 @@ class FirmaController(
     /** Ends [r] from outside its runner (user or desktop cancel, pairing ended). */
     private fun stopActive(r: Active, outcome: Outcome, sendError: ErrorCode?) {
         if (!r.finished) log("stopping ${r.request.requestId}")
-        r.job?.cancel()
-        _readingCard.value = false
+        // A block may keep the card, and with it the reader, when the runner leaves it.
+        if (blockOf(r) == null) _readingCard.value = false
+        // The result first: the runner reads it to know whether its block keeps the card.
         finish(r, outcome, sendError)
+        r.job?.cancel()
     }
 
     private fun finish(r: Active, outcome: Outcome, sendError: ErrorCode?) {
@@ -794,12 +923,16 @@ class FirmaController(
         r.waiting = null
         if (r.finished) return
         log("finish ${r.request.requestId}: $outcome, sending ${sendError ?: "no error"}")
+        // The user or a failure ended it: the next request of the block asks for the card again.
+        if (!endedByDesktop(outcome)) blockOf(r)?.let(::closeKeptCard)
         if (sendError != null) {
             val error = SignError(r.request.requestId, sendError)
             r.error = error
             send(error)
         }
         setStep(r, Step.Result(outcome))
+        // A request that ended before it took the card the block keeps: the count starts again.
+        blockOf(r)?.let(::watchIdle)
         if (active === r) {
             scope.launch {
                 delay(RESULT_MS)
@@ -877,6 +1010,10 @@ class FirmaController(
         const val ROOM_MISSING_MAX_MS = 24 * 60 * 60_000L
         /** Waiting for the user to type a CAN or PIN on the desktop. */
         const val UNLOCK_WAIT_MS = 5 * 60_000L
+        /** How long a block keeps the card open with no request. */
+        const val BLOCK_CARD_IDLE_MS = 60_000L
+        /** How long the reader stays off before it looks again for a kept card that did not open. */
+        const val READER_RESTART_MS = 300L
         /** Waiting for the card again after it moved. */
         const val CARD_AGAIN_MS = 2 * 60_000L
         /** Waiting for the desktop's next to-be-signed blob (triphase servers can be slow). */

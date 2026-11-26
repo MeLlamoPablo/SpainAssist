@@ -19,8 +19,16 @@ import { DniAccessNumber, DniePin } from './vault';
  *   ◀─ sign.need, when the card refused the CAN or the PIN: the desktop asks the user and
  *      answers with sign.unlock ─▶, and the request goes on
  *   sign.done ─▶  (or sign.cancel from the desktop, sign.error from the phone, at any point)
+ *
+ * Requests that carry the same `session` belong to one certificate block of the desktop: the
+ * phone keeps the card open between them, until session.end ─▶ (protocol 7).
  */
-export const COMPANION_PROTOCOL = 6;
+export const COMPANION_PROTOCOL = 7;
+/**
+ * The oldest phone protocol the desktop still speaks: it answers such a phone with the phone's
+ * version and leaves out what that version doesn't have (6: no sessions).
+ */
+export const COMPANION_PROTOCOL_MIN = 6;
 
 /** Standard Base64 (with padding), as both JSON encoders produce it. */
 const Base64 = (max: number) =>
@@ -147,6 +155,14 @@ export const CompanionSignRequest = z.strictObject({
    * phone then asks for it with `sign.need`.
    */
   pin: DniePin.optional(),
+  /**
+   * The desktop's certificate block (`page.withCertificate`) the request belongs to (protocol 7).
+   * The phone keeps the card open between a session's requests, so the user holds it once, and
+   * remembers the logins approved in it: another login request for the same `origin` starts
+   * without the review. Every other request gets its own review. A session ends with
+   * `session.end`, with a request of another session or of none, or with the pairing.
+   */
+  session: RequestId.optional(),
 });
 export type CompanionSignRequest = z.infer<typeof CompanionSignRequest>;
 
@@ -218,6 +234,15 @@ export const CompanionSignCancel = z.strictObject({
   reason: CompanionCancelReason,
 });
 
+/**
+ * The desktop's certificate block ended (protocol 7): the phone lets go of the card and forgets
+ * the logins approved in the session. It has no answer.
+ */
+export const CompanionSessionEnd = z.strictObject({
+  type: z.literal('session.end'),
+  session: RequestId,
+});
+
 /** Either side ends the pairing ("Desvincular"). */
 export const CompanionBye = z.strictObject({ type: z.literal('bye') });
 
@@ -227,6 +252,7 @@ export const DesktopToPhone = z.discriminatedUnion('type', [
   CompanionToBeSigned,
   CompanionSignDone,
   CompanionSignCancel,
+  CompanionSessionEnd,
   CompanionBye,
 ]);
 export type DesktopToPhone = z.infer<typeof DesktopToPhone>;

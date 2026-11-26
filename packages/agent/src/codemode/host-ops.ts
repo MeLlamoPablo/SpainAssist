@@ -299,9 +299,7 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
         return bridge.call(
           'browser.useCertificate',
           {
-            ...(a.credentialId !== undefined
-              ? { credentialId: str(a.credentialId, 'credentialId', 120) }
-              : {}),
+            credentialId: str(a.credentialId, 'credentialId', 120),
             ...(Array.isArray(a.origins) ? { origins: a.origins as string[] } : {}),
             ...(deps.runId ? { runId: deps.runId } : {}),
           },

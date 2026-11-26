@@ -42,7 +42,7 @@ export function certificateFailedNote(host: string, code: string, detail: string
 
 /** A page that loaded AutoFirma's JavaScript client (the app's shim answers it). */
 export function afirmaPageNote(host: string): string {
-  return `${host || 'This page'} uses AutoFirma. The app replaces it: when a button on this page signs or logs in with a certificate through AutoFirma, the app asks the user to approve and pick their certificate or DNI, and signs. Click the button inside page.withCertificate(async () => …), with no options: the user picks the certificate.`;
+  return `${host || 'This page'} uses AutoFirma. The app replaces it: when a button on this page signs or logs in with a certificate through AutoFirma, the app asks the user to approve, and signs with the certificate or DNI you chose. Click the button inside page.withCertificate({ credentialId }, async () => …), with no origins.`;
 }
 
 /** A page that loaded FNMT's certificate request script (the app's shim answers it). */

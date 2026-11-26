@@ -172,16 +172,16 @@ export class EvalNetwork implements CertificateProxy {
   }
 
   /**
-   * Client certificates do not exist in evaluation runs. Turning them off (`null`, as the app does
-   * when it moves a procedure to the headed browser) clears nothing and succeeds.
+   * Client certificates do not exist in evaluation runs: no host of the world asks for one. The
+   * app turns one on for every `page.withCertificate` block (the block's AutoFirma signatures
+   * need no proxy) and asks for nothing until a host wants it, so turning it on, or off (`null`),
+   * changes nothing and succeeds.
    */
   async configure(
     _session: string,
     _hosts: readonly string[],
-    identity: Parameters<CertificateProxy['configure']>[2],
-  ): Promise<void> {
-    if (identity) throw new Error('Certificate logins are not available in evaluation runs.');
-  }
+    _identity: Parameters<CertificateProxy['configure']>[2],
+  ): Promise<void> {}
 
   /** The browser context is gone: its proxy closes. */
   endSession(session: string): void {

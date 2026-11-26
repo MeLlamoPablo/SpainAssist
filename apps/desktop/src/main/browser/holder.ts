@@ -3,7 +3,6 @@ import type {
   BrowserServiceOptions,
   CaptureOptions,
   CertificateProxy,
-  ClientCertificateUse,
   CrlSetComponent,
   DownloadedFile,
   LiveInput,
@@ -20,7 +19,7 @@ import {
   type SignaturePlacement,
   type SigningKey,
 } from '@sa/shared';
-import type { RemoteKey } from '@sa/sidecar';
+import { type RemoteKey, SidecarError, type SidecarIdentity } from '@sa/sidecar';
 import { openP12 } from '@sa/signer';
 import type { PromptManager } from '../chat/prompts';
 import type { CompanionService } from '../companion/service';
@@ -33,7 +32,7 @@ import type { MediaStore } from '../media/store';
 import type { OsCertificates } from '../os-certificates/service';
 import type { Biometric, BrowserFactory, SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
-import { CertificateBlocks } from './certificate-blocks';
+import { type CertificateBlock, CertificateBlocks } from './certificate-blocks';
 import { DownloadStore, documentFileName } from './downloads';
 import { RoutedBrowser } from './routed';
 
@@ -115,9 +114,9 @@ export class BrowserHolder {
   private readonly live = new Map<string, () => Promise<void>>();
   readonly downloads: DownloadStore;
   /** `page.withCertificate`: when the procedures' sites may use the user's certificates. */
-  readonly certificateBlocks = new CertificateBlocks((procedureId, tls) =>
-    this.stopCertificate(procedureId, tls),
-  );
+  readonly certificateBlocks = new CertificateBlocks((block) => this.stopCertificate(block));
+  /** Withdraws the consent a block's login still waits for, when the block ends. */
+  private readonly blockEnds = new Map<string, AbortController>();
 
   constructor(private readonly deps: BrowserHolderDeps) {
     this.downloads = new DownloadStore(join(deps.downloadsDir, 'kept'));
@@ -127,37 +126,85 @@ export class BrowserHolder {
     return this.deps.certificateLoginsAvailable !== false;
   }
 
-  async certificateIdentity(
-    procedureId: string,
+  /**
+   * The certificate a block's TLS logins present. Nothing is asked or read here: the sidecar
+   * asks for it when a site first wants a certificate (`RemoteKey.prepare`). Then `consent` (the
+   * credential's policy: a card in the chat) comes first; a `.p12`'s key goes to the sidecar, an
+   * external one stays in the OS store, and the DNI's is approved on the phone.
+   */
+  certificateIdentity(
+    block: CertificateBlock,
     credential: CredentialSummary,
-    origin: string,
-  ): Promise<ClientCertificateUse['identity']> {
+    options: { origins: string[]; consent?: (host: string, signal: AbortSignal) => Promise<void> },
+  ): SidecarIdentity {
+    const { procedureId } = block;
+    // The block's end waits for the approvals and the handshakes in progress.
+    const busy = <T>(p: () => Promise<T>) => {
+      const done = this.certificateBlocks.busy(procedureId);
+      return p().finally(done);
+    };
+    const waits = (key: RemoteKey): RemoteKey => ({
+      prepare: (host, signal) => busy(() => key.prepare(host, signal)),
+      sign: (digest, hash, host, signal) => busy(() => key.sign(digest, hash, host, signal)),
+    });
     if (credential.kind === 'dnie') {
-      const identity = await this.deps.companion?.login(procedureId, credential, origin);
-      if (!identity) throw new Error('DNI login was cancelled or unavailable.');
-      // The block's end waits for the handshakes the phone is signing.
-      const key = identity.key as RemoteKey;
-      const busy = <T>(p: () => Promise<T>) => {
-        const done = this.certificateBlocks.busy(procedureId);
-        return p().finally(done);
-      };
-      return {
-        ...identity,
-        key: {
-          prepare: (host, signal) => busy(() => key.prepare(host, signal)),
-          sign: (digest, hash, host, signal) => busy(() => key.sign(digest, hash, host, signal)),
-        },
-      };
+      if (!this.deps.companion) throw new Error('DNI login is unavailable.');
+      const identity = this.deps.companion.login(procedureId, credential, {
+        session: block.session,
+        origins: options.origins,
+      });
+      return { ...identity, key: waits(identity.key as RemoteKey) };
     }
+    // Asked once for the block: its connections share the answer, and a "no" stays a "no".
+    let consented: Promise<void> | undefined;
+    const consent = (host: string) => {
+      consented ??= (async () => {
+        const ended = new AbortController();
+        this.blockEnds.set(block.id, ended);
+        try {
+          await options.consent?.(host, ended.signal);
+        } catch (err) {
+          throw new SidecarError('declined', errorMessage(err));
+        }
+        await this.deps.vault().markCredentialUsed(credential.id);
+        this.deps.events.emit({ type: 'vault.changed' });
+      })();
+      return consented;
+    };
     if (credential.external) {
       if (!this.deps.osCertificates) throw new Error('External certificates are unavailable.');
-      return this.deps.osCertificates.sidecarIdentity(credential.id);
+      const identity = this.deps.osCertificates.sidecarIdentity(credential.id);
+      const key = identity.key as RemoteKey;
+      return {
+        ...identity,
+        key: waits({
+          prepare: async (host, signal) => {
+            await consent(host);
+            return key.prepare(host, signal);
+          },
+          sign: key.sign,
+        }),
+      };
     }
-    const secret = await this.deps.vault().getCredentialSecret(credential.id);
-    if (secret.kind !== 'certificate') throw new Error('Unexpected credential type');
-    this.deps.logger.addSecret(secret.passphrase);
-    const identity = openP12(secret.p12, secret.passphrase);
-    return { id: credential.id, chain: identity.chainDer, key: identity.privateKey };
+    return {
+      id: credential.id,
+      // The key will be in the sidecar's memory: no need for a remote key's two connections.
+      maxConns: 6,
+      key: waits({
+        prepare: async (host) => {
+          await consent(host);
+          const secret = await this.deps.vault().getCredentialSecret(credential.id);
+          if (secret.kind !== 'certificate') throw new Error('Unexpected credential type');
+          this.deps.logger.addSecret(secret.passphrase);
+          const identity = openP12(secret.p12, secret.passphrase);
+          return { chain: identity.chainDer, key: identity.privateKey };
+        },
+        // The sidecar signs with the key `prepare` gave it.
+        sign: async () => {
+          throw new SidecarError('unavailable', 'The certificate was not approved.');
+        },
+      }),
+    };
   }
 
   /** News of the procedure's DNI logins for the agent's next observation. */
@@ -369,14 +416,16 @@ export class BrowserHolder {
   }
 
   /**
-   * A site's AutoFirma request: refused outside a certificate block (the agent's action fails),
-   * and the block's end waits for it, until the phone's key is released.
+   * A site's AutoFirma request: refused outside a certificate block (the agent's action fails).
+   * Inside one it uses the block's certificate, and the block's end waits for it, until the
+   * phone's key is released.
    */
   private async approveInBlock(
     procedureId: string,
     summary: AfirmaSignatureSummary,
   ): Promise<SigningKey | null> {
-    if (!this.certificateBlocks.isOpen(procedureId)) {
+    const block = this.certificateBlocks.current(procedureId);
+    if (!block) {
       this.deps.logger.info('certificate request outside a block refused', {
         procedureId,
         host: hostOf(summary.origin),
@@ -386,7 +435,7 @@ export class BrowserHolder {
     }
     const done = this.certificateBlocks.busy(procedureId);
     try {
-      const key = await this.approveSignature(procedureId, summary);
+      const key = await this.approveSignature(procedureId, summary, undefined, block);
       if (key?.kind !== 'external') {
         done();
         return key;
@@ -405,9 +454,12 @@ export class BrowserHolder {
   }
 
   /** A certificate block ended: the browser stops presenting its certificate. */
-  private async stopCertificate(procedureId: string, tls: boolean): Promise<void> {
-    this.deps.companion?.endLoginOf(procedureId);
-    if (!tls || !this.service) return;
+  private async stopCertificate(block: CertificateBlock): Promise<void> {
+    const { procedureId } = block;
+    this.blockEnds.get(block.id)?.abort();
+    this.blockEnds.delete(block.id);
+    this.deps.companion?.endSession(procedureId, block.session);
+    if (!block.tls || !this.service) return;
     // biome-ignore lint/correctness/useHookAtTopLevel: turns the certificate off, not a React hook.
     await this.service.useClientCertificate(procedureId, null).catch((err) =>
       this.deps.logger.warn('could not turn the certificate off', {
@@ -418,7 +470,8 @@ export class BrowserHolder {
   }
 
   /**
-   * AutoFirma replacement approval: pick a certificate or the DNI (if several), then confirm
+   * AutoFirma replacement approval: the certificate block's certificate or DNI (`block`), or, for
+   * the user's own documents, the one they pick (if several); then confirm
    * with the details of what is signed (+ Touch ID when available). Signatures with a `.p12`
    * always ask, whatever the credential's policy. The DNI is approved on the phone instead
    * (`CompanionService.approve`), after the desktop asks for its CAN and PIN when it doesn't
@@ -429,6 +482,7 @@ export class BrowserHolder {
     procedureId: string,
     summary: AfirmaSignatureSummary,
     signal?: AbortSignal,
+    block?: CertificateBlock,
   ): Promise<SigningKey | null> {
     const { deps } = this;
     const lang = deps.lang();
@@ -438,9 +492,11 @@ export class BrowserHolder {
     const now = Date.now();
     const certificates = vault.listCredentials().filter(
       (c) =>
-        (c.kind === 'certificate' && !(c.certificate && Date.parse(c.certificate.validTo) < now)) ||
-        // The DNI may have been renewed since its certificate was last read.
-        (c.kind === 'dnie' && !!deps.companion),
+        (!block || c.id === block.credentialId) &&
+        ((c.kind === 'certificate' &&
+          !(c.certificate && Date.parse(c.certificate.validTo) < now)) ||
+          // The DNI may have been renewed since its certificate was last read.
+          (c.kind === 'dnie' && !!deps.companion)),
     );
     if (certificates.length === 0) {
       const notice = deps.companion ? 'noCertificate' : 'noCertificateOnly';
@@ -492,7 +548,9 @@ export class BrowserHolder {
           placement = placed.placement;
         }
         // The consent happens on the phone; the desktop asks for the CAN and the PIN.
-        const key = await deps.companion.approve(procedureId, summary, chosen);
+        const key = await deps.companion.approve(procedureId, summary, chosen, {
+          ...(block ? { session: block.session } : {}),
+        });
         return key ? { ...key, ...extras() } : null;
       }
       if (summary.placement) {

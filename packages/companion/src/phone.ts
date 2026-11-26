@@ -39,6 +39,8 @@ export type PhoneStatus =
 export interface PhoneClientOptions {
   link: string;
   hello: Omit<CompanionHello, 'type' | 'protocol'>;
+  /** Tests: an older app's protocol version (default: this one). */
+  protocol?: number;
   onStatus?(status: PhoneStatus): void;
   onMessage?(message: DesktopToPhone): void;
   onSession?(): void;
@@ -209,7 +211,7 @@ export class PhoneClient {
     const sealer = new Sealer(keys.phoneToDesktop, 'phoneToDesktop');
     const hello: CompanionHello = {
       type: 'hello',
-      protocol: COMPANION_PROTOCOL,
+      protocol: this.opts.protocol ?? COMPANION_PROTOCOL,
       ...this.opts.hello,
     };
     const prefix = Buffer.concat([
@@ -229,7 +231,7 @@ export class PhoneClient {
     const welcome = CompanionWelcome.safeParse(parseSingleRecord(pending.opener.open(frame, 1)));
     if (!welcome.success) throw new ChannelError('Bad welcome');
     this.pending = undefined;
-    if (welcome.data.protocol !== COMPANION_PROTOCOL) {
+    if (welcome.data.protocol !== (this.opts.protocol ?? COMPANION_PROTOCOL)) {
       this.setStatus({ state: 'outdated', desktopProtocol: welcome.data.protocol });
       return;
     }

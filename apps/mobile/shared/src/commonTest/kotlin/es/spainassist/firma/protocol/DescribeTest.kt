@@ -36,5 +36,6 @@ class DescribeTest {
             for (secret in secrets) assertFalse(secret in line, "\"$line\" quotes $secret")
         }
         assertEquals("sign.need r1 what=Pin refused=true triesLeft=2", lines.last())
+        assertEquals("session.end s1", describe(SessionEnd("s1")))
     }
 }

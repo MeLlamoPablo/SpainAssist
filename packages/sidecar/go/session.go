@@ -32,6 +32,18 @@ func (t *tracked) close() {
 	}
 }
 
+// retire closes the connection after a change of configuration: an intercepted connection lets
+// its request in flight finish first (mitmConn.retire), a tunnel closes at once.
+func (t *tracked) retire() {
+	for _, c := range t.closers {
+		if mc, ok := c.(*mitmConn); ok {
+			mc.retire()
+			continue
+		}
+		_ = c.Close()
+	}
+}
+
 func newSession(id string) *session {
 	return &session{id: id, hosts: map[string]bool{}, conns: map[*tracked]struct{}{}}
 }
@@ -103,7 +115,8 @@ func (s *session) track(target string, intercepted bool, closers ...io.Closer) f
 
 // set replaces the configuration and returns the previous identity. Connections whose handling
 // changes are closed, so the browser opens new ones: tunnels to hosts that are now intercepted,
-// and intercepted connections to hosts that aren't any more or now use another certificate.
+// and intercepted connections to hosts that aren't any more or now use another certificate. An
+// intercepted connection first lets its request in flight finish.
 func (s *session) set(hosts []string, ident *identity) *identity {
 	next := map[string]bool{}
 	if ident != nil {
@@ -125,7 +138,7 @@ func (s *session) set(hosts []string, ident *identity) *identity {
 	}
 	s.mu.Unlock()
 	for _, t := range stale {
-		t.close()
+		t.retire()
 	}
 	return old
 }

@@ -123,6 +123,21 @@ sign.done ───────────────────────�
   resolves with as `sign.unlock` (once, like the PIN; with a new `expiresAt`), or cancels the
   request on null. The phone keeps a hash of each refused CAN and PIN in memory and never tries
   one again. The phone never sends a CAN or a PIN.
+- **Blocks (protocol 7).** Requests that carry the same `session` belong to one certificate
+  block of the desktop (`page.withCertificate`). The desktop sends the first one only when a site
+  uses the DNI: nothing reaches the phone for a block that no site used. When the desktop ends a
+  request (`sign.done`, or its own `sign.cancel`), the phone keeps the card open, and the block's
+  next request uses it: the user holds the card once. Each request shows its own review. The only
+  exception is a `login` request for an `origin` that the user already approved in the block: it
+  starts without the review (a document signature ends the block's login, and the site's next
+  handshake asks for it again). The phone lets go of the card when the block has had no request
+  for 60 seconds, and when a request ends in any other way (the user declines or cancels, a
+  failure, a timeout). The block ends with `session.end`, with a request of another session or of
+  none, when the user cancels a request on the phone, or with the pairing. The phone then closes
+  the card and forgets the approved logins. `session.end` has no answer, the desktop sends it
+  once (`PhoneSigner.endSession`), and the phone ignores one for a session that is not the
+  current one. The CAN and the PIN still come with each request, and the `busy` rule does not
+  change.
 - **One request at a time.** A second request while one is active gets `busy`. A request that
   arrives right after `sign.done` (batches) replaces the finished one.
 - **Timeouts (desktop).** The phone gets requests only while its app is open (no push). While no
@@ -148,5 +163,10 @@ sends a pre-hashed TLS digest. The phone rejects this flag on document requests 
 on login requests. AUTENTICACIÓN is used for login, FIRMA for documents. `vectors/v1.json` also
 holds login wire messages (with a `can` and a `pin`), a `sign.need` and a `sign.unlock`.
 
-The application handshake carries `COMPANION_PROTOCOL` (6, in `@sa/shared`). Bump it when old
-apps can't follow; phone and desktop must then be released together.
+The application handshake carries `COMPANION_PROTOCOL` (7, in `@sa/shared`). The phone needs the
+desktop to answer with its own version. The desktop also speaks the versions down to
+`COMPANION_PROTOCOL_MIN` (6): it answers such a phone with the phone's version, and
+`DesktopPairing.send` leaves out what that version doesn't have (6: `session.end`, and the
+`session` of a request), so a phone app that is one release behind still signs, one request per
+use. Raise the minimum when old apps can't follow at all; phone and desktop must then be released
+together.

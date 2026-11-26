@@ -267,5 +267,23 @@ export async function buildVectors() {
         prehashed: true,
       },
     },
+    /** Protocol 7: a request of a desktop certificate block, and the block's end. */
+    session: {
+      request: {
+        type: 'sign.request',
+        requestId: '0b8e6c1a-7d2f-4a3b-8c9d-1e2f3a4b5c6d',
+        purpose: 'login',
+        origin: 'https://sede.example.gob.es',
+        description: 'Entrar en sede.example.gob.es',
+        format: '',
+        documents: [],
+        verifiable: false,
+        expiresAt: '2026-10-11T12:00:00.000Z',
+        can: '123456',
+        pin: '12345678',
+        session: '3c5d7e9f-1a2b-4c3d-9e8f-7a6b5c4d3e2f',
+      },
+      end: { type: 'session.end', session: '3c5d7e9f-1a2b-4c3d-9e8f-7a6b5c4d3e2f' },
+    },
   };
 }

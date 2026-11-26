@@ -32,13 +32,26 @@ export class SidecarError extends Error {
   }
 }
 
+/**
+ * What a lazy identity's `prepare` resolves with: its certificate, and its key when the sidecar
+ * keeps it in memory (a .p12's).
+ */
+export interface SidecarCertificate {
+  /** DER certificates, leaf first. */
+  chain: Uint8Array[];
+  key?: KeyObject;
+}
+
 /** A key outside the app: the DNIe in the paired phone. RSA PKCS#1 v1.5 only. */
 export interface RemoteKey {
   /**
-   * Before each new upstream connection. Resolves once `sign` can answer quickly (the user may
-   * approve on the phone first); rejects with a SidecarError to fail the request.
+   * Before a new upstream connection to a host that asks for a certificate, or when a server
+   * asks for one later. Resolves once `sign` can answer quickly (the user may approve on the
+   * phone first); rejects with a SidecarError to fail the request. A lazy identity resolves
+   * with its certificate. With a `key`, the sidecar signs in memory from then on and calls
+   * neither `prepare` nor `sign` again.
    */
-  prepare(host: string, signal: AbortSignal): Promise<void>;
+  prepare(host: string, signal: AbortSignal): Promise<SidecarCertificate | void>;
   /** PKCS#1 v1.5 signature over `digest` (already hashed with `hash`). */
   sign(digest: Buffer, hash: SidecarHash, host: string, signal: AbortSignal): Promise<Buffer>;
 }
@@ -46,8 +59,11 @@ export interface RemoteKey {
 export interface SidecarIdentity {
   /** Names the certificate in calls and logs (the vault credential id). */
   id: string;
-  /** DER certificates, leaf first. */
-  chain: Uint8Array[];
+  /**
+   * DER certificates, leaf first. Left out: `key.prepare` resolves with it (a lazy identity), so
+   * nothing asks the user until a site asks for the certificate.
+   */
+  chain?: Uint8Array[];
   /** A key the sidecar keeps in memory (a .p12's), or a remote one. */
   key: KeyObject | RemoteKey;
   /** Upstream connections per host (default 2 for remote keys, 6 otherwise). */
@@ -408,8 +424,13 @@ export class Sidecar {
       if (!identity || identity.id !== call.identity || identity.key instanceof KeyObject)
         throw new SidecarError('unavailable', 'the certificate is no longer enabled');
       if (call.method === 'prepare') {
-        await identity.key.prepare(call.host, controller.signal);
-        this.write({ type: 'reply', id: call.id });
+        const certificate = await identity.key.prepare(call.host, controller.signal);
+        this.write({
+          type: 'reply',
+          id: call.id,
+          ...(certificate ? { chain: base64(certificate.chain) } : {}),
+          ...(certificate?.key ? { key: pkcs8(certificate.key) } : {}),
+        });
       } else {
         if (!call.digest || !call.hash) throw new SidecarError('failed', 'bad sign call');
         const signature = await identity.key.sign(
@@ -441,13 +462,19 @@ export class Sidecar {
   }
 }
 
+function base64(chain: Uint8Array[]): string[] {
+  return chain.map((der) => Buffer.from(der).toString('base64'));
+}
+
+function pkcs8(key: KeyObject): string {
+  return key.export({ type: 'pkcs8', format: 'der' }).toString('base64');
+}
+
 function spec(identity: SidecarIdentity) {
   return {
     id: identity.id,
-    chain: identity.chain.map((der) => Buffer.from(der).toString('base64')),
-    ...(identity.key instanceof KeyObject
-      ? { key: identity.key.export({ type: 'pkcs8', format: 'der' }).toString('base64') }
-      : {}),
+    chain: base64(identity.chain ?? []),
+    ...(identity.key instanceof KeyObject ? { key: pkcs8(identity.key) } : {}),
     ...(identity.maxConns ? { maxConns: identity.maxConns } : {}),
   };
 }

@@ -204,6 +204,8 @@ export class CompanionService {
   private endLogin?: () => void;
   /** The procedure whose DNI login approval `endLogin` ends. */
   private loginProcedure?: string;
+  /** The certificate blocks that sent the phone a request: it hears when they end. */
+  private readonly sessions = new Set<string>();
   /** Why the last pairing ended on its own, until the user pairs again or unpairs. */
   private ended?: CompanionEndReason;
   /** The pairing has been `connecting` for `COMPANION_STALLED_MS` (no relay). */
@@ -309,9 +311,13 @@ export class CompanionService {
     go();
   }
 
-  /** Ends the procedure's DNI login approval, if it holds one: its certificate block ended. */
-  endLoginOf(procedureId: string): void {
+  /**
+   * The procedure's certificate block ended: its DNI login approval ends, if it holds one, and
+   * the phone lets go of the card it kept for the block's requests.
+   */
+  endSession(procedureId: string, session: string): void {
     if (this.loginProcedure === procedureId) this.endLogin?.();
+    if (this.sessions.delete(session)) this.signer.endSession(session);
   }
 
   shutdown(): void {
@@ -335,6 +341,8 @@ export class CompanionService {
     summary: AfirmaSignatureSummary,
     credential: CredentialSummary,
     options: {
+      /** The certificate block that asks: the phone keeps the card for its next requests. */
+      session?: string;
       login?: {
         /** What the user approves: the login's site, with all its hosts. */
         site: string;
@@ -344,7 +352,7 @@ export class CompanionService {
       };
     } = {},
   ): Promise<ExternalSigningKey | null> {
-    const { login } = options;
+    const { login, session } = options;
     if (!login) this.endLogin?.();
     const { deps } = this;
     const lang = deps.lang();
@@ -484,9 +492,11 @@ export class CompanionService {
     const known = this.pairing?.outdated;
     if (known) failOutdated(`${companionOutdatedSide(known)}_outdated`);
 
+    if (session) this.sessions.add(session);
     let key: PhoneKey;
     try {
       key = await this.signer.request({
+        ...(session ? { session } : {}),
         purpose,
         origin: summary.origin,
         description: summary.description,
@@ -565,28 +575,32 @@ export class CompanionService {
   }
 
   /**
-   * Authentication key for the browser sidecar; the private key stays on the phone. Called once
-   * `browser.useCertificate` has applied the credential's policy (its consent, without Touch ID).
-   * One phone approval covers the hosts of one site (`certificateSite`): a login that hops
-   * between them signs every handshake with the card already on the phone. Another site asks
-   * again.
+   * Authentication key for the browser sidecar, for a certificate block (`session`) whose TLS
+   * logins go to `origins`; the private key stays on the phone. Nothing reaches the phone here:
+   * the first site that asks for the certificate starts the approval (`prepare`), which is the
+   * user's consent, and gives the sidecar the card's certificate. One phone approval covers the
+   * hosts of one site (`certificateSite`): a login that hops between them signs every handshake
+   * with the card already on the phone. Another site asks again.
    */
-  async login(
+  login(
     procedureId: string,
     credential: CredentialSummary,
-    origin: string,
-  ): Promise<SidecarIdentity | null> {
-    this.endLogin?.();
+    options: { session: string; origins: string[] },
+  ): SidecarIdentity {
     const { logger } = this.deps;
     let active: ExternalSigningKey | undefined;
-    let currentOrigin = origin;
+    let currentOrigin: string | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // The phone approval that the browser's connections wait for; it is cancelled only when they
     // have all been dropped.
     let preparing: { done: Promise<void>; waiting: number; abort: AbortController } | undefined;
     let chain: Uint8Array[] | undefined;
     const siteOf = (host: string) => certificateSite(host).id;
-    const sameSite = (host: string) => siteOf(new URL(currentOrigin).hostname) === siteOf(host);
+    const sameSite = (host: string) =>
+      !!currentOrigin && siteOf(new URL(currentOrigin).hostname) === siteOf(host);
+    // The origin as the block has it (with its port, when it has one).
+    const originOf = (host: string) =>
+      options.origins.find((origin) => new URL(origin).hostname === host) ?? `https://${host}`;
     const end = (ok = true) => {
       clearTimeout(timer);
       timer = undefined;
@@ -616,6 +630,7 @@ export class CompanionService {
         },
         credential,
         {
+          session: options.session,
           login: {
             site: label,
             signal,
@@ -648,6 +663,7 @@ export class CompanionService {
       this.loginNews(procedureId).notes.push(
         `The user approved the DNI login for ${label} on their phone.`,
       );
+      await this.used(credential);
       chain = dnieChain(key.certificates.slice(0, 1), 'tls');
       active = key;
       currentOrigin = site;
@@ -655,21 +671,14 @@ export class CompanionService {
       this.loginProcedure = procedureId;
       idle();
     };
-    try {
-      await acquire(origin);
-    } catch {
-      return null;
-    }
     return {
       id: credential.id,
-      chain: chain!,
       key: {
         prepare: async (host, signal) => {
           if (signal.aborted) throw new SidecarError('declined');
           if (active && !sameSite(host)) end();
           if (!active) {
-            const site =
-              new URL(currentOrigin).hostname === host ? currentOrigin : `https://${host}`;
+            const site = originOf(host);
             if (!preparing) {
               const abort = new AbortController();
               const job = {
@@ -695,6 +704,7 @@ export class CompanionService {
             }
           }
           idle();
+          return { chain: chain as Uint8Array[] };
         },
         sign: async (digest, hash, host, signal) => {
           if (signal.aborted || !active || !sameSite(host))
@@ -868,8 +878,13 @@ export class CompanionService {
     } catch (err) {
       this.deps.logger.warn('dnie certificate not saved', { error: errorMessage(err) });
     }
+    await this.used(credential);
+  }
+
+  /** A signature or a login used the DNI: Mis datos shows when. */
+  private async used(credential: CredentialSummary): Promise<void> {
     try {
-      await vault.markCredentialUsed(credential.id);
+      await this.deps.vault().markCredentialUsed(credential.id);
       this.deps.events.emit({ type: 'vault.changed' });
     } catch (err) {
       this.deps.logger.warn('dnie credential not updated', { error: errorMessage(err) });

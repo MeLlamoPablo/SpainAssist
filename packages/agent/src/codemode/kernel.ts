@@ -680,10 +680,11 @@ export const KERNEL = String.raw`
     }
     /** The block runs while the site may use the certificate; its end waits for the signatures. */
     withCertificate(options, fn) {
-      if (typeof options === 'function') { fn = options; options = {}; }
-      if (typeof fn !== 'function') return Promise.reject(new CodemodeError({ code: 'bad_request', message: 'page.withCertificate needs the block: page.withCertificate({ credentialId, origins }, async () => { await page.getByRole("button", { name: "Acceder" }).click(); }).' }));
+      var usage = 'page.withCertificate({ credentialId, origins }, async () => { await page.getByRole("button", { name: "Acceder" }).click(); })';
+      if (typeof options === 'function' || !options || typeof options.credentialId !== 'string') return Promise.reject(new CodemodeError({ code: 'bad_request', message: 'page.withCertificate needs credentialId, the certificate or DNI to use (its id in api.vault.read().credentials): ' + usage + '.' }));
+      if (typeof fn !== 'function') return Promise.reject(new CodemodeError({ code: 'bad_request', message: 'page.withCertificate needs the block: ' + usage + '.' }));
       var page = this;
-      return this._op('useCertificate', options || {}).then(function (block) {
+      return this._op('useCertificate', options).then(function (block) {
         function end() { return page._op('endCertificate', { blockId: block.blockId }); }
         return Promise.resolve().then(fn).then(
           function (value) { return end().then(function () { return value; }); },

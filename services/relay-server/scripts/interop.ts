@@ -263,6 +263,8 @@ async function main(): Promise<void> {
   onRelayLog = () => {};
   console.log('interop: the relay refused the phone (no room yet); the desktop reconnects');
   desktopAway = false;
+  // The login belongs to a certificate block of the desktop (protocol 7).
+  const session = crypto.randomUUID();
   const login = await phoneSigner.request({
     purpose: 'login',
     origin: 'https://sede.example.gob.es',
@@ -272,6 +274,7 @@ async function main(): Promise<void> {
     verifiable: false,
     can: CAN,
     pin: PIN,
+    session,
     onNeed,
     reviewTimeoutMs: 180_000,
   });
@@ -281,6 +284,7 @@ async function main(): Promise<void> {
   if (!crypto.verify('sha256', handshake, publicKey, signature))
     throw new Error('Login digest was hashed twice');
   login.finish(true);
+  phoneSigner.endSession(session);
   console.log('interop: login digest verified');
   // Tells the phone we're done; its test ends when it sees the pairing end.
   pairing.unpair();

@@ -7,6 +7,7 @@ export { sidecarBinaryPath } from './layout';
 export {
   type RemoteKey,
   Sidecar,
+  type SidecarCertificate,
   SidecarError,
   type SidecarEvent,
   type SidecarHash,

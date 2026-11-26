@@ -62,9 +62,10 @@ function setup(relay = new MemoryRelay()) {
   const qr = pairing.link as string;
   const phoneMessages: DesktopToPhone[] = [];
   const phoneStatuses: PhoneStatus[] = [];
-  const connectPhone = (link = qr) => {
+  const connectPhone = (link = qr, protocol?: number) => {
     const phone = new PhoneClient({
       link,
+      ...(protocol ? { protocol } : {}),
       hello: { app: '1.0.0', platform: 'test', device: 'Test phone' },
       socket: fast(relay),
       onStatus: (s) => phoneStatuses.push(s),
@@ -251,8 +252,8 @@ describe('PhoneSigner', () => {
   const cert = crypto.randomBytes(300);
 
   /** A phone that approves and signs (with a fake signature = sha256 of the data). */
-  function autoPhone(t: ReturnType<typeof setup>) {
-    const phone = t.connectPhone();
+  function autoPhone(t: ReturnType<typeof setup>, protocol?: number) {
+    const phone = t.connectPhone(undefined, protocol);
     const signed: number[] = [];
     const seen: DesktopToPhone[] = [];
     let skip = 0;
@@ -378,6 +379,40 @@ describe('PhoneSigner', () => {
     for (const pin of ['1234567', '12345678901234567', 12345678])
       expect(DesktopToPhone.safeParse({ ...base, pin }).success, String(pin)).toBe(false);
     expect(DesktopToPhone.safeParse({ ...base, pin: '1234567890123456' }).success).toBe(true);
+  });
+
+  it("names the desktop's certificate block in a request, and tells the phone when it ends", async () => {
+    const t = setup();
+    const { seen } = autoPhone(t);
+    const session = crypto.randomUUID();
+    (await t.signer.request({ ...request, session })).finish(true);
+    t.signer.endSession(session);
+    await until(() => seen.some((m) => m.type === 'session.end'));
+    expect(seen.find((m) => m.type === 'sign.request')).toMatchObject({ session });
+    expect(seen.at(-1)).toEqual({ type: 'session.end', session });
+  });
+
+  it('speaks protocol 6 to an older phone, which has no sessions', async () => {
+    const t = setup();
+    const { phone, seen } = autoPhone(t, 6);
+    const session = crypto.randomUUID();
+    (await t.signer.request({ ...request, session })).finish(true);
+    t.signer.endSession(session);
+    await until(() => seen.some((m) => m.type === 'sign.done'));
+    expect(phone.current).toMatchObject({ state: 'connected', welcome: { protocol: 6 } });
+    expect(t.pairing.outdated).toBeUndefined();
+    expect(seen.find((m) => m.type === 'sign.request')).not.toHaveProperty('session');
+    expect(seen.map((m) => m.type)).not.toContain('session.end');
+  });
+
+  it('asks for an update when the phone is older than protocol 6, or newer than this desktop', async () => {
+    for (const protocol of [5, 8]) {
+      const t = setup();
+      const phone = t.connectPhone(undefined, protocol);
+      await until(() => t.pairing.outdated !== undefined);
+      expect(t.pairing.outdated).toEqual({ phone: protocol, desktop: 7 });
+      expect(phone.current).toEqual({ state: 'outdated', desktopProtocol: 7 });
+    }
   });
 
   it('tells the phone whether the site is an official one', async () => {

@@ -187,7 +187,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
    * factor.
    */
   async function approveCredentialUse(
-    ctx: BridgeContext,
+    ctx: Pick<BridgeContext, 'procedureId' | 'signal'>,
     cacheKey: string,
     prompt: Omit<ConfirmPrompt, 'kind' | 'confirmKind' | 'biometric'>,
     touchIdReason?: string,
@@ -771,22 +771,8 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
     },
     'browser.useCertificate': async (params, ctx) => {
       const blocks = deps.browser.certificateBlocks;
-      const openBlock = (tls: boolean) => {
-        const blockId = blocks.open(ctx.procedureId, tls, params.runId);
-        if (!blockId) throw new BridgeError('conflict', ONE_CERTIFICATE_BLOCK);
-        return blockId;
-      };
-      if (blocks.isOpen(ctx.procedureId)) throw new BridgeError('conflict', ONE_CERTIFICATE_BLOCK);
-      // AutoFirma only: the user picks the certificate when the site asks.
-      if (params.credentialId === undefined)
-        return { blockId: openBlock(false), enabled: false, origins: [] };
-      if (!deps.browser.certificateLoginsAvailable())
-        throw new BridgeError(
-          'browser_error',
-          'Certificate logins are unavailable: sa-sidecar is missing or could not start. Use another login method or install the bundled helper.',
-        );
+      if (blocks.current(ctx.procedureId)) throw new BridgeError('conflict', ONE_CERTIFICATE_BLOCK);
       const pid = ctx.procedureId;
-      const vault = deps.vault();
       const credential = requireCredential(params.credentialId);
       if (credential.kind !== 'certificate' && credential.kind !== 'dnie')
         throw new BridgeError('bad_request', 'This credential is not a digital certificate.');
@@ -794,12 +780,6 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
         throw new BridgeError(
           'bad_request',
           'This certificate has expired. Tell the user to renew it.',
-        );
-      // DNI consent is site-specific: the built-in origins do not identify the intended login.
-      if (credential.kind === 'dnie' && !params.origins?.length)
-        throw new BridgeError(
-          'bad_request',
-          'DNIe login requires a target site in origins. Pass the actual https origin that asks for the certificate first, even for a built-in site. No approval or PIN has been requested.',
         );
       const requested: string[] = [];
       for (const raw of params.origins ?? []) {
@@ -814,62 +794,58 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
             'policy_denied',
             block
               ? `The certificate can only be presented to official sites over https, and ${url.host} can't be one (${block})`
-              : `${url.host} is not on the app's list of official sites. The user can allow it, but first triple-check that it really is the official sede of the administration this procedure needs: with your research tools, find at least 3 independent official sources (e.g. the administration's own website, its diputación or the administration directory at administracion.gob.es) that link to this exact host for this procedure. Watch for look-alike addresses. If it checks out, call confirm_action with confirmKind "certificate_site", site "${url.origin}", sources (those URLs) and a message summarising what you checked, then call page.withCertificate again. If it doesn't check out, don't ask the user to allow it: tell them what you found`,
+              : `${url.host} is not on the app's list of official sites. Only a TLS client-certificate login needs origins: when the site signs or logs in through AutoFirma, call page.withCertificate({ credentialId }, …) without origins. For a TLS login, the user can allow the site, but first triple-check that it really is the official sede of the administration this procedure needs: with your research tools, find at least 3 independent official sources (e.g. the administration's own website, its diputación or the administration directory at administracion.gob.es) that link to this exact host for this procedure. Watch for look-alike addresses. If it checks out, call confirm_action with confirmKind "certificate_site", site "${url.origin}", sources (those URLs) and a message summarising what you checked, then call page.withCertificate again. If it doesn't check out, don't ask the user to allow it: tell them what you found`,
           );
         }
         requested.push(url.origin);
       }
-      const origins = [...new Set([...deps.certificateOrigins, ...requested])];
-      if (origins.length === 0)
+      // Without the sidecar the block still serves AutoFirma signatures and logins.
+      const tls = deps.browser.certificateLoginsAvailable();
+      if (!tls && requested.length)
         throw new BridgeError(
-          'bad_request',
-          'Pass the origin of the site that asks for the certificate.',
+          'browser_error',
+          'Certificate logins are unavailable: sa-sidecar is missing or could not start. Use another login method or install the bundled helper.',
         );
-      if (credential.policy === 'ask') {
-        const websites = requested.length
-          ? requested.map(hostOf).join(', ')
-          : origins.map(hostOf).join(', ');
-        const dnie = credential.kind === 'dnie';
-        // Before its first read the app doesn't know whose DNI it is: the title says DNI.
-        const holder = credential.certificate?.holderName ?? (dnie ? undefined : credential.label);
-        await approveCredentialUse(
-          ctx,
-          `${pid}:${credential.id}:${origins.join(',')}`,
-          {
-            title: t(lang(), dnie ? 'dnieUseTitle' : 'certificateTitle'),
-            message: t(lang(), dnie ? 'dnieUseMessage' : 'certificateMessage'),
-            details: [
-              ...(holder
-                ? [
+      const origins = tls ? [...new Set([...deps.certificateOrigins, ...requested])] : [];
+      const block = blocks.open(pid, credential.id, origins.length > 0, params.runId);
+      if (!block) throw new BridgeError('conflict', ONE_CERTIFICATE_BLOCK);
+      if (!block.tls) return { blockId: block.id, enabled: false, origins };
+      // The DNI's consent is its approval on the phone.
+      const consent =
+        credential.policy === 'ask' && credential.kind !== 'dnie'
+          ? (host: string, signal: AbortSignal) =>
+              approveCredentialUse(
+                { procedureId: pid, signal },
+                `${pid}:${credential.id}:${origins.join(',')}`,
+                {
+                  title: t(lang(), 'certificateTitle'),
+                  message: t(lang(), 'certificateMessage'),
+                  details: [
                     {
-                      label: t(lang(), dnie ? 'detailDnie' : 'detailCertificate'),
-                      value: holder.slice(0, 500),
+                      label: t(lang(), 'detailCertificate'),
+                      value: (credential.certificate?.holderName ?? credential.label).slice(0, 500),
                     },
-                  ]
-                : []),
-              { label: t(lang(), 'detailWebsites'), value: websites.slice(0, 500) },
-            ],
-          },
-          dnie ? undefined : t(lang(), 'touchIdCertificate'),
+                    { label: t(lang(), 'detailWebsite'), value: host.slice(0, 500) },
+                  ],
+                },
+                t(lang(), 'touchIdCertificate'),
+              )
+          : undefined;
+      try {
+        await browserCall((b) =>
+          b.useClientCertificate(pid, {
+            origins,
+            identity: deps.browser.certificateIdentity(block, credential, {
+              origins,
+              ...(consent ? { consent } : {}),
+            }),
+          }),
         );
+      } catch (err) {
+        blocks.drop(block.id);
+        throw err;
       }
-      await browserCall(async (b) => {
-        const identity = await deps.browser.certificateIdentity(
-          pid,
-          credential,
-          requested[0] ?? origins[0]!,
-        );
-        await b.useClientCertificate(pid, { origins, identity });
-      });
-      await vault.markCredentialUsed(credential.id);
-      vaultChanged();
-      return {
-        blockId: openBlock(true),
-        enabled: true,
-        origins,
-        message:
-          'Certificate enabled for these official sites. If a login was in progress, start it again from the site (e.g. its "Acceder" button).',
-      };
+      return { blockId: block.id, enabled: true, origins };
     },
     'browser.endCertificate': async (params) => ({
       ended: await deps.browser.certificateBlocks.close(params.blockId),
