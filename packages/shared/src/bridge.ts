@@ -216,7 +216,7 @@ export const BridgeParams = {
    * Sign a saved PDF with the user's certificate or DNI, with a visible signature: the user picks
    * where it goes and approves it in the app; the signed PDF replaces the document (same name).
    */
-  'vault.signDocument': z.object({ document: DocumentName }),
+  'vault.signDocument': z.object({ document: DocumentName, credentialId: z.string() }),
   /**
    * Fill in a saved PDF: each value goes where the agent pointed on the page (fractions of the
    * displayed page, from its top left), into the form field, box or line there. A blank gives a

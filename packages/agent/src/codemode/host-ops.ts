@@ -723,7 +723,10 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
       'documents.sign': (a, signal) =>
         bridge.call(
           'vault.signDocument',
-          { document: str(a.name, 'name', 255) },
+          {
+            document: str(a.name, 'name', 255),
+            credentialId: str(a.credentialId, 'credentialId', 120),
+          },
           { signal, procedureId: primary() },
         ),
       'feedback.search': async (a, signal) =>

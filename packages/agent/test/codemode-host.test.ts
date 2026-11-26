@@ -191,6 +191,17 @@ describe('host operations', () => {
     expect(calls).toEqual([]);
   });
 
+  it('sign a PDF with the certificate the agent names', async () => {
+    const { run, calls } = ops({ 'vault.signDocument': { name: 'Tasas.pdf', signed: true } });
+    expect(await run('documents.sign', { name: 'Tasas.pdf', credentialId: 'c_1' })).toEqual({
+      name: 'Tasas.pdf',
+      signed: true,
+    });
+    expect(calls.map((c) => [c.method, c.params])).toEqual([
+      ['vault.signDocument', { document: 'Tasas.pdf', credentialId: 'c_1' }],
+    ]);
+  });
+
   it('read a PDF page as text only for a model that cannot see images', async () => {
     const { run } = ops({ 'vault.document': PDF_DOCUMENT }, undefined, false);
     const page = await run('documents.read', { name: 'Tasas.pdf', page: 1 });

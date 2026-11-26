@@ -497,7 +497,7 @@ describe('the app with an external certificate', () => {
   it('signs an AutoFirma XML batch with the key in the OS store, end to end', async () => {
     sede = await startMockSede({ publicHost: '127.0.0.1' });
     const site = sede;
-    const { a, store, procedureId } = await start();
+    const { a, store, external, procedureId } = await start();
     const challenge = Buffer.from('CHALLENGE-0123456789ABCDEF').toString('base64');
     const batch = `<signbatch stoponerror="true" algorithm="SHA256withRSA"><singlesign Id="tx-os"><datasource>${challenge}</datasource><format>CAdES</format><suboperation>sign</suboperation><extraparams>${Buffer.from('mode=implicit\n').toString('base64')}</extraparams></singlesign></signbatch>`;
     const reply = afirmaHandler(
@@ -514,7 +514,8 @@ describe('the app with an external certificate', () => {
       },
       {
         procedureId,
-        approveSignature: (summary) => a.services.browser.approveSignature(procedureId, summary),
+        approveSignature: (summary) =>
+          a.services.browser.approveSignature(procedureId, summary, external.id),
         report: () => {},
         fetch: site.fetch,
       },

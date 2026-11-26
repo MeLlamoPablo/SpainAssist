@@ -154,10 +154,6 @@ const STRINGS = {
   detailSize: { es: 'Tamaño', en: 'Size' },
   signLabel: { es: 'Firmar', en: 'Sign' },
   dontSignLabel: { es: 'No firmar', en: "Don't sign" },
-  pickCertificateTitle: {
-    es: '¿Con qué certificado quieres firmar?',
-    en: 'Which certificate do you want to sign with?',
-  },
   continueLabel: { es: 'Continuar', en: 'Continue' },
   noCertificate: {
     es: '{host} te pide firmar, pero no tienes ningún certificado digital guardado. Añade un certificado o tu DNI en Mis datos.',

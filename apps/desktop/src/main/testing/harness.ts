@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import type { ChatGPTLoginPages } from '@sa/agent';
 import type { BrowserServiceOptions } from '@sa/browser';
 import {
+  type AfirmaSignatureSummary,
   ASSISTANT_AGENT_ID,
   type BridgeMethod,
   type FeatureFlags,
@@ -262,6 +263,13 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     return { procedureId: procedure.id, agentId: agent.id, token };
   }
 
+  /** A signature request with the saved DNI, as the agent that names it asks for. */
+  function signWithDnie(procedureId: string, summary: AfirmaSignatureSummary) {
+    const dnie = vault.listCredentials().find((c) => c.kind === 'dnie');
+    if (!dnie) throw new Error('no DNI is saved');
+    return services.browser.approveSignature(procedureId, summary, dnie.id);
+  }
+
   /** Waits until `predicate` holds (polling), for async background work. */
   async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
     const start = Date.now();
@@ -356,6 +364,7 @@ export async function createTestApp(opts: TestAppOptions = {}) {
     invoke,
     rpc,
     procedureWithToken,
+    signWithDnie,
     waitFor,
     pendingPrompt,
     agentFor,

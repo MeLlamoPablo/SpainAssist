@@ -54,6 +54,23 @@ describe('codemode runtime', () => {
       });
   });
 
+  it('signs a document only with the credential the module names', async () => {
+    const { done, calls } = startRun(`
+      export async function main(api) {
+        const signed = await api.documents.sign('Contrato.pdf', { credentialId: 'c_1' });
+        try { await api.documents.sign('Contrato.pdf'); } catch (e) {
+          return { signed: signed.args, refused: e.code + ': ' + e.message };
+        }
+      }
+    `);
+    const outcome = await done;
+    expect(outcome.status === 'succeeded' && JSON.parse(outcome.value ?? '')).toEqual({
+      signed: { name: 'Contrato.pdf', credentialId: 'c_1' },
+      refused: expect.stringMatching(/^bad_request: api.documents.sign needs credentialId/),
+    });
+    expect(calls.map((c) => c.op)).toEqual(['documents.sign']);
+  });
+
   it('memoizes by key: a resumed run reuses stored values and skips the work', async () => {
     const source = `export async function main(api) {
       const offices = await api.state.memo('offices', () => api.search('oficinas'));

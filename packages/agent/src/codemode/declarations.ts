@@ -179,10 +179,11 @@ interface Documents {
    *  per character of the answer, with room to write it by hand (a date in words: 25);
    *  <div class="columns"><div>…</div><div>…</div></div> sets blocks side by side (signatures). */
   create(name: string, markdown: string): Promise<{ name: string; pages: number }>;
-  /** Signs a saved PDF with the user's certificate or DNI, no website needed: the user places the
+  /** Signs a saved PDF with the user's certificate or DNI (credentialId: its id in
+   *  api.vault.read().credentials), no website needed: the user places the
    *  visible signature and approves it in the app (signed: false if they didn't). The signed PDF
    *  replaces the document (same name). */
-  sign(name: string): Promise<{ name: string; signed: boolean }>;
+  sign(name: string, o: { credentialId: string }): Promise<{ name: string; signed: boolean }>;
 }
 interface Image { imageId: string; mimeType: string; width?: number; height?: number }`;
 

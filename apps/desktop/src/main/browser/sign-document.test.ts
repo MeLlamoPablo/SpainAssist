@@ -29,6 +29,7 @@ function onePagePdf(): Buffer {
 let app: TestApp;
 let procedureId: string;
 let token: string;
+let certificate: { id: string };
 let touchIds: number;
 
 beforeEach(async () => {
@@ -45,7 +46,7 @@ beforeEach(async () => {
   });
   ({ procedureId, token } = await app.procedureWithToken());
   const demo = loadDemoIdentity();
-  await app.vault.addCertificate({
+  certificate = await app.vault.addCertificate({
     fileName: 'demo.p12',
     p12: demo.p12,
     passphrase: demo.passphrase,
@@ -66,9 +67,19 @@ async function addPdf() {
   return { pdf, doc };
 }
 
+/** The agent's api.documents.sign(name, { credentialId }), with the saved certificate. */
+function signDocument(name: string, credentialId = certificate.id, signal?: AbortSignal) {
+  return app.rpc(
+    'vault.signDocument',
+    { document: name, credentialId },
+    token,
+    signal ? { signal } : undefined,
+  );
+}
+
 it('shows the PDF to place the signature, then replaces the document with the signed one', async () => {
   const { pdf, doc } = await addPdf();
-  const call = app.rpc('vault.signDocument', { document: doc.name }, token);
+  const call = signDocument(doc.name);
   await app.waitFor(() => !!app.pendingPrompt(procedureId));
   const item = app.pendingPrompt(procedureId)!;
   const prompt = item.prompt as PdfSignaturePrompt;
@@ -130,7 +141,7 @@ it('lists no signatures for a PDF nobody signed', async () => {
 
 it('leaves the document as it was when the user does not sign', async () => {
   const { pdf, doc } = await addPdf();
-  const call = app.rpc('vault.signDocument', { document: doc.name }, token);
+  const call = signDocument(doc.name);
   await app.waitFor(() => !!app.pendingPrompt(procedureId));
   await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
     kind: 'pdf_signature',
@@ -147,9 +158,7 @@ it('leaves the document as it was when the user does not sign', async () => {
 it('withdraws the card when the agent stops waiting, so a retry shows only one', async () => {
   const { pdf, doc } = await addPdf();
   const controller = new AbortController();
-  const call = app
-    .rpc('vault.signDocument', { document: doc.name }, token, { signal: controller.signal })
-    .catch(() => undefined);
+  const call = signDocument(doc.name, certificate.id, controller.signal).catch(() => undefined);
   await app.waitFor(() => !!app.pendingPrompt(procedureId));
   controller.abort();
   await call;
@@ -165,6 +174,13 @@ it('refuses documents that are not PDFs', async () => {
     source: 'user',
     bytes: Buffer.from('jpeg'),
   });
-  const reply = await app.rpc('vault.signDocument', { document: doc.name }, token);
+  const reply = await signDocument(doc.name);
   expect(reply.body).toMatchObject({ ok: false, error: { code: 'bad_request' } });
+});
+
+it('refuses a certificate the user does not have, with no card', async () => {
+  const { doc } = await addPdf();
+  const reply = await signDocument(doc.name, 'no-such-certificate');
+  expect(reply.body).toMatchObject({ ok: false, error: { code: 'not_found' } });
+  expect(app.pendingPrompt(procedureId)).toBeUndefined();
 });

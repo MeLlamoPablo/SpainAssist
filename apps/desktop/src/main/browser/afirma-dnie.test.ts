@@ -60,7 +60,7 @@ it('signs an AutoFirma XML batch with the DNI in the phone, end to end', async (
     },
     {
       procedureId,
-      approveSignature: (summary) => a.services.browser.approveSignature(procedureId, summary),
+      approveSignature: (summary) => a.signWithDnie(procedureId, summary),
       report: (event) => reports.push(event),
       fetch: sede.fetch,
     },

@@ -195,7 +195,7 @@ describe('browser wiring', () => {
     expect(app.browser.certificates).toEqual([]);
   });
 
-  it('asks before signing, lets the user pick a certificate, and returns it only on approval', async () => {
+  it('asks before signing with the certificate the agent named, and returns it only on approval', async () => {
     app = await createTestApp();
     const { procedureId } = await app.procedureWithToken();
     const summary = {
@@ -209,7 +209,7 @@ describe('browser wiring', () => {
       verifiable: false,
     };
     // No certificate: a notice, no signature.
-    expect(await app.services.browser.approveSignature(procedureId, summary)).toBeNull();
+    expect(await app.services.browser.approveSignature(procedureId, summary, 'none')).toBeNull();
     expect(app.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
       type: 'notice',
       level: 'warning',
@@ -225,16 +225,7 @@ describe('browser wiring', () => {
       p12: Buffer.from('BBB'),
       passphrase: 'pb',
     });
-    const approval = app.services.browser.approveSignature(procedureId, summary);
-    await app.waitFor(() => !!app!.pendingPrompt(procedureId));
-    const pick = app.pendingPrompt(procedureId)!;
-    expect(pick.prompt).toMatchObject({ kind: 'form', fields: [{ type: 'select' }] });
-    await app.invoke('chat.respond', pick.id, {
-      kind: 'form',
-      values: { certificate: b.id },
-      dismissed: false,
-      savedToVault: [],
-    });
+    const approval = app.services.browser.approveSignature(procedureId, summary, b.id);
     await app.waitFor(() => app!.pendingPrompt(procedureId)?.prompt.kind === 'confirm');
     const confirm = app.pendingPrompt(procedureId)!;
     expect(confirm.prompt).toMatchObject({ kind: 'confirm', confirmKind: 'signature' });
@@ -253,15 +244,14 @@ describe('browser wiring', () => {
     expect(app.vault.getCredential(a.id)?.lastUsedAt).toBeUndefined();
 
     // Declined -> null; the procedure deleted meanwhile -> null.
-    await app.vault.deleteCredential(a.id);
-    const declined = app.services.browser.approveSignature(procedureId, summary);
+    const declined = app.services.browser.approveSignature(procedureId, summary, b.id);
     await app.waitFor(() => !!app!.pendingPrompt(procedureId));
     await app.invoke('chat.respond', app.pendingPrompt(procedureId)!.id, {
       kind: 'confirm',
       approved: false,
     });
     expect(await declined).toBeNull();
-    const aborted = app.services.browser.approveSignature(procedureId, summary);
+    const aborted = app.services.browser.approveSignature(procedureId, summary, b.id);
     await app.waitFor(() => !!app!.pendingPrompt(procedureId));
     await app.invoke('procedures.delete', procedureId);
     expect(await aborted).toBeNull();

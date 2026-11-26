@@ -91,7 +91,7 @@ Why these TSAs, what was verified and what is open: docs/research/pades-ltv.md.
 
 ## The handler
 
-- `ctx.approveSignature(summary)` must show a native approval and choose the certificate.
+- `ctx.approveSignature(summary)` must show a native approval and give the certificate.
   Returning null produces AutoFirma's cancellation error; the handler reports
   signed/rejected/failed.
 - The summary contains origin, method, format, size and SHA-256; the approval UI uses its own

@@ -435,7 +435,9 @@ export class BrowserHolder {
     }
     const done = this.certificateBlocks.busy(procedureId);
     try {
-      const key = await this.approveSignature(procedureId, summary, undefined, block);
+      const key = await this.approveSignature(procedureId, summary, block.credentialId, {
+        session: block.session,
+      });
       if (key?.kind !== 'external') {
         done();
         return key;
@@ -470,19 +472,19 @@ export class BrowserHolder {
   }
 
   /**
-   * AutoFirma replacement approval: the certificate block's certificate or DNI (`block`), or, for
-   * the user's own documents, the one they pick (if several); then confirm
+   * AutoFirma replacement approval with the certificate or DNI the agent named (`credentialId`,
+   * of a certificate block or of `api.documents.sign`): confirm
    * with the details of what is signed (+ Touch ID when available). Signatures with a `.p12`
    * always ask, whatever the credential's policy. The DNI is approved on the phone instead
-   * (`CompanionService.approve`), after the desktop asks for its CAN and PIN when it doesn't
-   * have them. Returns null when declined / cancelled / no certificate. `signal` withdraws the
-   * desktop's cards when whoever asked stops waiting.
+   * (`CompanionService.approve`, in the block's `session`), after the desktop asks for its CAN
+   * and PIN when it doesn't have them. Returns null when declined / cancelled / no certificate.
+   * `signal` withdraws the desktop's cards when whoever asked stops waiting.
    */
   async approveSignature(
     procedureId: string,
     summary: AfirmaSignatureSummary,
-    signal?: AbortSignal,
-    block?: CertificateBlock,
+    credentialId: string,
+    { signal, session }: { signal?: AbortSignal; session?: string } = {},
   ): Promise<SigningKey | null> {
     const { deps } = this;
     const lang = deps.lang();
@@ -490,48 +492,20 @@ export class BrowserHolder {
     const host = hostOf(summary.origin);
     const vault = deps.vault();
     const now = Date.now();
-    const certificates = vault.listCredentials().filter(
+    const chosen = vault.listCredentials().find(
       (c) =>
-        (!block || c.id === block.credentialId) &&
+        c.id === credentialId &&
         ((c.kind === 'certificate' &&
           !(c.certificate && Date.parse(c.certificate.validTo) < now)) ||
           // The DNI may have been renewed since its certificate was last read.
           (c.kind === 'dnie' && !!deps.companion)),
     );
-    if (certificates.length === 0) {
+    if (!chosen) {
       const notice = deps.companion ? 'noCertificate' : 'noCertificateOnly';
       deps.procedures.addNotice(procedureId, 'warning', t(lang, notice, { host }));
       return null;
     }
     try {
-      let chosen: CredentialSummary | undefined = certificates[0];
-      if (certificates.length > 1) {
-        const pick = await deps.prompts.ask(
-          procedureId,
-          {
-            kind: 'form',
-            title: t(lang, 'pickCertificateTitle'),
-            fields: [
-              {
-                key: 'certificate',
-                label: t(lang, 'detailCertificate'),
-                type: 'select',
-                required: true,
-                options: certificates.map((c) => ({
-                  value: c.id,
-                  label: describeCertificate(c, lang),
-                })),
-              },
-            ],
-            submitLabel: t(lang, 'continueLabel'),
-            allowDismiss: false,
-          },
-          { signal },
-        );
-        if (pick.kind !== 'form' || pick.dismissed) return null;
-        chosen = certificates.find((c) => c.id === pick.values?.certificate);
-      }
-      if (!chosen) return null;
       const displayName = this.signerName(chosen);
       // A visible PDF signature: the card shows the document and its box (and places it).
       let placement: SignaturePlacement | null | undefined;
@@ -549,7 +523,7 @@ export class BrowserHolder {
         }
         // The consent happens on the phone; the desktop asks for the CAN and the PIN.
         const key = await deps.companion.approve(procedureId, summary, chosen, {
-          ...(block ? { session: block.session } : {}),
+          ...(session ? { session } : {}),
         });
         return key ? { ...key, ...extras() } : null;
       }
@@ -673,13 +647,14 @@ export class BrowserHolder {
 
   /**
    * Signs a PDF of Mis documentos with a visible signature, with no site involved (the agent's
-   * `api.documents.sign`): the user picks the certificate, places the signature and approves it,
+   * `api.documents.sign`): the user places the signature and approves it with `credentialId`,
    * then the signed PDF replaces the document (same id and name; the original is still inside it,
    * before the signature's incremental update).
    */
   async signDocument(
     procedureId: string,
     documentId: string,
+    credentialId: string,
     signal?: AbortSignal,
   ): Promise<DocumentMeta> {
     const { deps } = this;
@@ -713,7 +688,8 @@ export class BrowserHolder {
         verifiable: false,
         placement: { mode: 'choose', initial, appearance: 'handwritten' },
       },
-      signal,
+      credentialId,
+      { signal },
     );
     if (!key) throw new UserError(t(lang, 'documentNotSigned'), 'cancelled');
     // The agent stopped waiting while Touch ID or the phone answered: don't sign behind its back.

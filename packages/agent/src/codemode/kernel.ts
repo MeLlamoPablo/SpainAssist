@@ -822,7 +822,10 @@ export const KERNEL = String.raw`
       rename: function (name, newName) { return call('documents.rename', { name: name, newName: newName }); },
       fill: function (name, values, options) { return call('documents.fill', { name: name, values: values, copyName: (options || {}).name }); },
       create: function (name, markdown) { return call('documents.create', { name: name, markdown: markdown }); },
-      sign: function (name) { return call('documents.sign', { name: name }); },
+      sign: function (name, options) {
+        if (!options || typeof options.credentialId !== 'string') return Promise.reject(new CodemodeError({ code: 'bad_request', message: 'api.documents.sign needs credentialId, the certificate or DNI to sign with (its id in api.vault.read().credentials): api.documents.sign(name, { credentialId }).' }));
+        return call('documents.sign', { name: name, credentialId: options.credentialId });
+      },
     },
     feedback: {
       search: function (input) { return call('feedback.search', typeof input === 'string' ? { query: input } : input); },

@@ -238,6 +238,7 @@ is pending) and opens the document in full screen, with a sidebar of its pages, 
 signature: where the site put it, or where the user drags it when the site asks
 (`visibleSignature=want|optional`). The agent can also sign a PDF of Mis documentos with no
 site involved (`api.documents.sign` → bridge `vault.signDocument` → `BrowserHolder.signDocument`):
+with the certificate or DNI the agent names (`credentialId`, as in a block: the user picks none),
 always visible, placed by the user, and the signed PDF replaces the document in place (same id,
 `signedAt`). Nothing of the original is lost: a PAdES signature is an incremental update, so the
 signed file still starts with the original bytes.

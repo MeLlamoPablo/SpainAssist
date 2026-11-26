@@ -108,7 +108,7 @@ function startLogin(a: TestApp, procedureId: string, dnie: { id: string }, origi
 describe('DNI signatures with the phone', () => {
   it('pairs on demand, shows the phone progress and signs through the phone', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     // The desktop asks for the CAN and the PIN first.
     expect(await typeUnlock(a, procedureId)).toMatchObject({
       stage: 'unlock',
@@ -188,7 +188,7 @@ describe('DNI signatures with the phone', () => {
   it("hands over the card's other certificate and explains a refusal by the site's filters", async () => {
     const { relay, app: a, procedureId } = await setup();
     const other = crypto.randomBytes(240);
-    const first = a.services.browser.approveSignature(procedureId, summary);
+    const first = a.signWithDnie(procedureId, summary);
     await typeUnlock(a, procedureId);
     await a.waitFor(() => a.services.companion!.status().state === 'waiting');
     let sendOther = true;
@@ -223,7 +223,7 @@ describe('DNI signatures with the phone', () => {
 
     // An older phone sends only the certificate.
     sendOther = false;
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     // The CAN and the PIN stay while the app runs: nothing is asked again.
     const second = (await approval) as ExternalSigningKey;
     expect(second.otherCertificates).toBeUndefined();
@@ -235,7 +235,7 @@ describe('DNI signatures with the phone', () => {
 
   it('cancels on the desktop, and tells the phone', async () => {
     const { relay, app: a, procedureId } = await setup();
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await typeUnlock(a, procedureId);
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     const { link } = await a.invoke('companion.status');
@@ -260,7 +260,7 @@ describe('DNI signatures with the phone', () => {
   it('explains a blocked PIN, forgets the saved one, and deleting the procedure cancels', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
     await a.invoke('vault.setDniePin', dnie.id, PIN);
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     expect(await typeUnlock(a, procedureId, { can: CAN })).toMatchObject({
       unlock: { can: true, pin: false },
     });
@@ -279,7 +279,7 @@ describe('DNI signatures with the phone', () => {
 
     // A blocked card forgets the PIN: asked again (not the CAN, which the card accepted).
     expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
-    const stopped = a.services.browser.approveSignature(procedureId, summary);
+    const stopped = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     expect(a.pendingPrompt(procedureId)?.prompt).toMatchObject({
       stage: 'unlock',
@@ -307,7 +307,7 @@ describe('DNI signatures with the phone', () => {
       return m;
     };
     const sign = async (values?: { can?: string; pin?: string }) => {
-      const approval = a.services.browser.approveSignature(procedureId, summary);
+      const approval = a.signWithDnie(procedureId, summary);
       await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
       const shown = a.pendingPrompt(procedureId)!.prompt;
       if (values) await typeUnlock(a, procedureId, values);
@@ -336,7 +336,7 @@ describe('DNI signatures with the phone', () => {
     expect(JSON.stringify(a.services.companion!.status())).not.toContain('654321');
 
     // Reading the certificate needs no PIN.
-    const read = a.services.browser.approveSignature(procedureId, {
+    const read = a.signWithDnie(procedureId, {
       ...summary,
       method: 'selectCertificate',
       documents: [],
@@ -360,7 +360,7 @@ describe('DNI signatures with the phone', () => {
 
   it('takes only what the card asks for, validated, and only while it asks', async () => {
     const { app: a, procedureId } = await setup();
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => a.pendingPrompt(procedureId)?.prompt.kind === 'dnie_signature');
     const item = a.pendingPrompt(procedureId)!;
     for (const bad of [
@@ -389,7 +389,7 @@ describe('DNI signatures with the phone', () => {
   it('asks again when the card refuses the CAN or the PIN, and never offers them again', async () => {
     const { relay, app: a, procedureId, dnie } = await setup();
     await a.vault.setPersonal([{ key: 'dniAccessNumber', value: '111111' }], 'manual');
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await typeUnlock(a, procedureId, { pin: 'Malo1234' });
     const { received } = phone(relay, a.services.companion!.status().link as string, (m, send) => {
       if (m.type === 'sign.request')
@@ -442,7 +442,7 @@ describe('DNI signatures with the phone', () => {
     expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(true);
     expect(await a.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: PIN });
     // The next request carries what the card accepted, without asking.
-    const next = a.services.browser.approveSignature(procedureId, summary);
+    const next = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => received.filter((m) => m.type === 'sign.request').length === 2);
     expect(received.filter((m) => m.type === 'sign.request').at(-1)).toMatchObject({
       can: CAN,
@@ -459,7 +459,7 @@ describe('DNI signatures with the phone', () => {
     const { relay, app: a, procedureId, dnie } = await setup();
     await a.vault.setPersonal([{ key: 'dniAccessNumber', value: CAN }], 'manual');
     await a.invoke('vault.setDniePin', dnie.id, 'Viejo1234');
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => !!a.services.companion!.status().link);
     phone(relay, a.services.companion!.status().link as string, (m, send) => {
       if (m.type === 'sign.request')
@@ -483,7 +483,7 @@ describe('DNI signatures with the phone', () => {
     const { procedureId } = await app.procedureWithToken();
     await app.invoke('vault.addDnie');
     expect(await app.invoke('companion.status')).toEqual({ state: 'unavailable' });
-    expect(await app.services.browser.approveSignature(procedureId, summary)).toBeNull();
+    expect(await app.signWithDnie(procedureId, summary)).toBeNull();
     expect(app.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
       type: 'notice',
       level: 'warning',
@@ -499,7 +499,7 @@ describe('DNI signatures with the phone', () => {
 
 it('shows the QR only until a phone pairs, and pairs another phone without failing a signature', async () => {
   const { relay, app: a, procedureId } = await setup();
-  const approval = a.services.browser.approveSignature(procedureId, summary);
+  const approval = a.signWithDnie(procedureId, summary);
   await typeUnlock(a, procedureId);
   await a.waitFor(() => a.services.companion!.status().state === 'waiting');
   const first = (await a.invoke('companion.status')).link as string;
@@ -534,7 +534,7 @@ describe('a pairing that ends on its own', () => {
   async function signing(need = false) {
     const ctx = await setup();
     const { relay, app: a, procedureId } = ctx;
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await typeUnlock(a, procedureId);
     await a.waitFor(() => a.services.companion!.status().state === 'waiting');
     const { link } = await a.invoke('companion.status');
@@ -623,7 +623,7 @@ describe('a phone app that speaks another protocol version', () => {
 
   it('says the phone app is out of date and fails a waiting signature at once', async () => {
     const { relay, app: a, procedureId } = await setup();
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await typeUnlock(a, procedureId);
     await a.waitFor(() => a.services.companion!.status().state === 'waiting');
     const { link } = await a.invoke('companion.status');
@@ -661,7 +661,7 @@ describe('a phone app that speaks another protocol version', () => {
     expect(await a.invoke('companion.status')).toMatchObject({
       outdated: { phone: COMPANION_PROTOCOL + 1, desktop: COMPANION_PROTOCOL },
     });
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await typeUnlock(a, procedureId);
     expect(await approval).toBeNull();
     expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({
@@ -1033,19 +1033,22 @@ it('logs in and signs with the DNI in one block: the phone gets one session, the
 
   // The site's AutoFirma request in the same block: the DNI signs it, in the same session.
   const block = a.services.browser.certificateBlocks.current(procedureId);
-  const signing = a.services.browser.approveSignature(procedureId, summary, undefined, block);
+  if (!block) throw new Error('the block is not open');
+  const signing = a.services.browser.approveSignature(procedureId, summary, dnie.id, {
+    session: block.session,
+  });
   await a.waitFor(() => received.filter((m) => m.type === 'sign.request').length === 2);
   (await signing)?.kind === 'external' && ((await signing) as ExternalSigningKey).release(true);
   const requests = received.filter((m) => m.type === 'sign.request');
   expect(requests.map((m) => m.purpose)).toEqual(['login', 'document']);
   expect(requests.map((m) => m.origin)).toEqual([summary.origin, summary.origin]);
-  expect(requests.map((m) => m.session)).toEqual([block?.session, block?.session]);
+  expect(requests.map((m) => m.session)).toEqual([block.session, block.session]);
 
   // The block ends: the card and the phone stop at once, and the browser presents no certificate.
   await a.rpc('browser.endCertificate', { blockId: use.body.result.blockId }, token);
   expect(a.pendingPrompt(procedureId)).toBeUndefined();
   await a.waitFor(() => received.at(-1)?.type === 'session.end');
-  expect(received.at(-1)).toEqual({ type: 'session.end', session: block?.session });
+  expect(received.at(-1)).toEqual({ type: 'session.end', session: block.session });
   expect(a.browser.certificates).toEqual([]);
 });
 

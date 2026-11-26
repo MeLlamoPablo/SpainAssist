@@ -181,6 +181,19 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
     return credential;
   }
 
+  /** The certificate or DNI the agent named to log in or sign with. */
+  function requireCertificate(id: string): CredentialSummary {
+    const credential = requireCredential(id);
+    if (credential.kind !== 'certificate' && credential.kind !== 'dnie')
+      throw new BridgeError('bad_request', 'This credential is not a digital certificate.');
+    if (credential.kind === 'certificate' && isExpired(credential))
+      throw new BridgeError(
+        'bad_request',
+        'This certificate has expired. Tell the user to renew it.',
+      );
+    return credential;
+  }
+
   /**
    * In-app confirmation for credentials set to "ask", plus Touch ID when available and a
    * `touchIdReason` is given. The DNI passes none: its phone approval and card are the second
@@ -582,8 +595,14 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       if (meta.mimeType !== 'application/pdf') {
         throw new BridgeError('bad_request', 'Only PDF documents can be signed.');
       }
+      const credential = requireCertificate(params.credentialId);
       try {
-        const signed = await deps.browser.signDocument(ctx.procedureId, meta.id, ctx.signal);
+        const signed = await deps.browser.signDocument(
+          ctx.procedureId,
+          meta.id,
+          credential.id,
+          ctx.signal,
+        );
         return { name: signed.name, signed: true };
       } catch (err) {
         if (err instanceof UserError && err.code === 'cancelled') {
@@ -773,14 +792,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       const blocks = deps.browser.certificateBlocks;
       if (blocks.current(ctx.procedureId)) throw new BridgeError('conflict', ONE_CERTIFICATE_BLOCK);
       const pid = ctx.procedureId;
-      const credential = requireCredential(params.credentialId);
-      if (credential.kind !== 'certificate' && credential.kind !== 'dnie')
-        throw new BridgeError('bad_request', 'This credential is not a digital certificate.');
-      if (credential.kind === 'certificate' && isExpired(credential))
-        throw new BridgeError(
-          'bad_request',
-          'This certificate has expired. Tell the user to renew it.',
-        );
+      const credential = requireCertificate(params.credentialId);
       const requested: string[] = [];
       for (const raw of params.origins ?? []) {
         const url = new URL(raw);

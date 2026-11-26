@@ -270,7 +270,7 @@ describe('the phone app of the paired phone', () => {
 
   it('offers the update before a DNI request, and goes on without it when the user says so', async () => {
     const { app: a, companion, procedureId, received } = await paired('0.3.4');
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => stage(a, procedureId) === 'update');
     // Nothing goes to the phone, and nothing is asked, until the update is settled.
     expect(received).toEqual([]);
@@ -288,7 +288,7 @@ describe('the phone app of the paired phone', () => {
     await expect(a.invoke('companion.skipUpdate', 'no-such-prompt')).rejects.toThrow();
 
     // The version the user went on without isn't offered again while the app runs.
-    const again = a.services.browser.approveSignature(procedureId, summary);
+    const again = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => stage(a, procedureId) !== undefined);
     expect(stage(a, procedureId)).not.toBe('update');
     ((await again) as ExternalSigningKey).release(true);
@@ -298,7 +298,7 @@ describe('the phone app of the paired phone', () => {
 
   it('goes on by itself once the updated phone app connects', async () => {
     const { relay, app: a, companion, procedureId, client } = await paired('0.3.4');
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => stage(a, procedureId) === 'update');
     // The phone installs the update: its app closes (the offer stays), then opens as 0.3.5.
     const pairing = encodePairingLink(client.pairing);
@@ -319,7 +319,7 @@ describe('the phone app of the paired phone', () => {
 
   it('cancels a request that waits for the update', async () => {
     const { app: a, procedureId, received } = await paired('0.3.4');
-    const approval = a.services.browser.approveSignature(procedureId, summary);
+    const approval = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => stage(a, procedureId) === 'update');
     await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
       kind: 'dnie_signature',
@@ -339,7 +339,7 @@ describe('the phone app of the paired phone', () => {
       ['0.3.4', STORE],
     ] as const) {
       const { app: a, procedureId } = await paired(version, () => jsonResponse(200, answer));
-      const approval = a.services.browser.approveSignature(procedureId, summary);
+      const approval = a.signWithDnie(procedureId, summary);
       await a.waitFor(() => stage(a, procedureId) !== undefined);
       expect(stage(a, procedureId)).toBe('unlock');
       await a.invoke('chat.respond', a.pendingPrompt(procedureId)!.id, {
@@ -371,7 +371,7 @@ describe('the phone app of the paired phone', () => {
       else expect(status).not.toHaveProperty('phoneApp');
 
       // What the user reads when a signature fails for it.
-      const approval = a.services.browser.approveSignature(procedureId, summary);
+      const approval = a.signWithDnie(procedureId, summary);
       await typeUnlock(a, procedureId);
       expect(await approval).toBeNull();
       expect(a.services.procedures.transcript(procedureId).at(-1)).toMatchObject({

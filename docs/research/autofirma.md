@@ -590,9 +590,10 @@ The shim, the handler and the format engines are described in `packages/signer/R
   `extraData='{"filename": "…"}'` as a string (§1.3). `http(s)://` → downloaded, but only from
   the calling frame's own origin (AutoFirma downloads any URL).
 - **Triphase calls:** one cookie jar per operation and an `Origin` header like AutoFirma's (§4.1).
-- **Certificates:** the app's approval picks the certificate (`approveSignature` in
-  `apps/desktop/src/main/browser/holder.ts`): every unexpired stored certificate, plus the DNIe
-  when a phone is paired. The DNIe signs on the phone through an `ExternalSigningKey`
+- **Certificates:** the agent names the certificate (`credentialId` of its certificate block);
+  the app's approval uses it (`approveSignature` in
+  `apps/desktop/src/main/browser/holder.ts`): an unexpired stored certificate, or the DNIe
+  when the app can pair a phone. The DNIe signs on the phone through an `ExternalSigningKey`
   (`packages/signer/src/key.ts`). The site's `filters` / `filters.N` extraParams (§3.3) are
   **ignored**. If they are added, `dnie:` should match the DNIe (`dnie.md` §4.1).
 - **Not built:** the in-page `WebSocket` override fallback for `wss://127.0.0.1:*` (§2.3, item 10).
