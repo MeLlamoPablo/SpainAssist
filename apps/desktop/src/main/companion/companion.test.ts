@@ -173,16 +173,18 @@ describe('DNI signatures with the phone', () => {
       response: { kind: 'dnie_signature', outcome: 'signed' },
     });
     expect(a.vault.getCredential(dnie.id)?.lastUsedAt).toBeDefined();
+    // The CAN the card accepted is in Mis datos, so that a new start of the app has it.
+    expect(a.vault.getPersonal('dniAccessNumber')).toMatchObject({ value: CAN });
     // Never in prompts, transcripts, events, logs or the QR link.
     const seen = JSON.stringify([
       a.services.procedures.transcript(procedureId),
       a.events,
       a.logLines,
-      await a.invoke('vault.overview'),
       await a.invoke('companion.status'),
     ]);
     expect(seen).not.toContain(PIN);
     expect(seen).not.toContain(CAN);
+    expect(JSON.stringify(await a.invoke('vault.overview'))).not.toContain(PIN);
   });
 
   it("hands over the card's other certificate and explains a refusal by the site's filters", async () => {
@@ -319,8 +321,8 @@ describe('DNI signatures with the phone', () => {
     const invalid = await sign({ can: '654321', pin: PIN });
     expect(invalid.shown).toMatchObject({ unlock: { can: true, pin: true } });
     expect(invalid.request).toMatchObject({ can: '654321', pin: PIN });
-    // The CAN and the PIN typed are kept while the app runs. The PIN goes into the vault only
-    // once the card accepts it.
+    // The CAN and the PIN typed are kept while the app runs. They go into the vault only
+    // once the card accepts them.
     expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(false);
     const again = await sign();
     expect(again.shown).toMatchObject({ stage: 'phone' });
@@ -441,6 +443,8 @@ describe('DNI signatures with the phone', () => {
     // The PIN the card accepted is saved in the vault (not the refused one).
     expect(a.vault.getCredential(dnie.id)?.hasPin).toBe(true);
     expect(await a.vault.getCredentialSecret(dnie.id)).toEqual({ kind: 'dnie', pin: PIN });
+    // So is the CAN, in Mis datos, in place of the refused one.
+    expect(a.vault.getPersonal('dniAccessNumber')).toMatchObject({ value: CAN });
     // The next request carries what the card accepted, without asking.
     const next = a.signWithDnie(procedureId, summary);
     await a.waitFor(() => received.filter((m) => m.type === 'sign.request').length === 2);

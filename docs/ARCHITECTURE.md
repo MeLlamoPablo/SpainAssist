@@ -287,7 +287,8 @@ user can discard it with its key.
 Offered to everyone ("Lo tengo" in Mis datos). The user pairs the phone with a one-time QR.
 Signatures and certificate logins then go to the phone over the relay, end-to-end encrypted, and
 the phone reads the card over NFC after the user approves.
-- The CAN and the PIN are typed on the desktop and kept there (the PIN in the vault). They reach
+- The CAN and the PIN are typed on the desktop and kept there (in the vault once the card
+  accepts them: the CAN in Mis datos, the PIN on the DNI credential). They reach
   the phone only inside the encrypted channel, per request.
 - Agents have no path to either.
 - While Google Play reviews the phone app, the relay can offer the APK Google Play signs

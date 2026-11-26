@@ -215,7 +215,7 @@ export class CompanionService {
   private readonly onOutdated = new Set<(code: RefusalCode) => void>();
   private readonly signer: PhoneSigner;
   private readonly relayUrl?: string;
-  /** The CAN the user typed, while the app runs. */
+  /** The CAN the user typed, until the card accepts it and it goes into Mis datos. */
   private can?: string;
   /** CANs the card refused: not offered again while the app runs (also Mis datos' one). */
   private readonly refusedCans = new Set<string>();
@@ -529,6 +529,8 @@ export class CompanionService {
       this.onOutdated.delete(failOutdated);
     }
 
+    // The card gave its certificates: it accepted the CAN.
+    await this.saveCan(can as string);
     if (!login) await this.remember(credential, key.certificates[0] as Buffer);
     deps.logger.info('dnie signature approved', { procedureId, host, format: summary.format });
     let released = false;
@@ -764,8 +766,8 @@ export class CompanionService {
   }
 
   /**
-   * The CAN the user typed, or Mis datos' one (scanned with the DNI), unless the card refused it.
-   * Never logged.
+   * The CAN the user typed, or Mis datos' one (scanned with the DNI, or typed and accepted by
+   * the card), unless the card refused it. Never logged.
    */
   private knownCan(): string | undefined {
     if (this.can) return this.can;
@@ -777,6 +779,18 @@ export class CompanionService {
     } catch {
       // The vault can't be read: the user types it.
       return undefined;
+    }
+  }
+
+  /** The card accepted this CAN: it goes into Mis datos, with the DNI's data, for later runs. */
+  private async saveCan(can: string): Promise<void> {
+    try {
+      const vault = this.deps.vault();
+      if (vault.getPersonal('dniAccessNumber')?.value === can) return;
+      await vault.setPersonal([{ key: 'dniAccessNumber', value: can }], 'manual');
+      this.deps.events.emit({ type: 'vault.changed' });
+    } catch (err) {
+      this.deps.logger.warn('dnie can not saved', { error: errorMessage(err) });
     }
   }
 
