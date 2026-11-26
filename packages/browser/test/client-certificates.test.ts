@@ -126,7 +126,8 @@ describe('client certificates through the sidecar', () => {
     expect(obs.snapshot).toContain('003002');
     // The sidecar answered the request with no certificate: Chromium showed no picker.
     expect(obs.notes.join('\n')).toContain('asked for a client certificate and none was presented');
-    expect(obs.notes.join('\n')).toContain(`with origins ["${server.origin}"]`);
+    expect(obs.notes.join('\n')).toContain(`origins: ["${server.origin}"]`);
+    expect(obs.certificateRequested).toEqual([new URL(server.origin).host]);
 
     await t.service.useClientCertificate('cert', {
       origins: [server.origin],

@@ -44,7 +44,8 @@ export interface ResearchLog {
   add(): void;
 }
 
-export interface EngineDeps extends Omit<HostOpsDeps, 'procedures' | 'images' | 'bridge'> {
+export interface EngineDeps
+  extends Omit<HostOpsDeps, 'procedures' | 'images' | 'bridge' | 'runId'> {
   bridge: BridgeTransport;
   images: ImageStore;
   /** Return after this long even without an interface (steering stays possible). */
@@ -311,6 +312,7 @@ export class RunEngine {
     const searches: Search[] = [];
     const baseOps = createHostOps({
       ...this.deps,
+      runId,
       procedures: () => procedures,
       researched: () => researched,
     });

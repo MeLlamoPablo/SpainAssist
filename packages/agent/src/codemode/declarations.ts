@@ -253,8 +253,13 @@ interface Page {
   loginClave(o: { username: Locator | string; password: Locator | string; rejected?: boolean; message?: string }): Promise<ActionResult>;
   /** One-time codes and non-Cl@ve passwords, asked from the user and typed by the app. */
   fillFromUser(target: Locator | string, o: { title: string; label: string; message?: string; submit?: boolean }): Promise<ActionResult>;
-  /** TLS client-certificate logins only (signatures and AutoFirma logins need nothing: click "Firmar").${dnie ? ' DNIe: credentialId of the DNIe, origins required.' : ''} */
-  useCertificate(o: { credentialId: string; origins?: string[] }): Promise<{ enabled: boolean; origins: string[]; message?: string }>;
+  /** Every use of the user's certificate${dnie ? ' or DNI' : ''} on a site: the block holds only the click that starts it ("Firmar", "Acceder"), never the
+   *  steps before or after. Without the block the click throws. When the block ends, the app waits for the signatures and the
+   *  login, then stops using the certificate: a later page that asks again needs a new block. AutoFirma signatures and logins
+   *  need no options (the user picks the certificate); a TLS client-certificate login needs credentialId (and the origin that
+   *  asks for it in origins, when not built in).${dnie ? ' DNIe: credentialId of the DNIe, origins required.' : ''} Resolves with the block's value. */
+  withCertificate<R>(o: { credentialId?: string; origins?: string[] }, fn: () => Promise<R>): Promise<R>;
+  withCertificate<R>(fn: () => Promise<R>): Promise<R>;
   /** This procedure's downloads not saved yet, from this run or earlier ones (each PDF once). */
   downloads(): Promise<{ downloadId: string; name: string; mimeType: string }[]>;
 }`;

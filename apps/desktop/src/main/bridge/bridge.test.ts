@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PROCEDURE_HEADER } from '@sa/shared';
+import { type AfirmaSignatureSummary, PROCEDURE_HEADER } from '@sa/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { signerLib } from '../app/libs';
+import { silentLogger } from '../core/logger';
 import { createTestApp, type TestApp } from '../testing/harness';
 
 let app: TestApp;
@@ -1140,6 +1142,82 @@ describe('bridge: client certificates', () => {
     const card = await allowSite();
     expect(card.title).toBe('¿Permitir tu DNI en rocafort.sede.dival.example?');
     expect(card.message).toContain('con tu DNI');
+  });
+});
+
+describe('bridge: certificate blocks (page.withCertificate)', () => {
+  const SIGNATURE: AfirmaSignatureSummary = {
+    method: 'sign',
+    format: 'CAdES',
+    algorithm: 'SHA256withRSA',
+    origin: 'https://sede.example.gob.es',
+    description: 'Firmar un texto.',
+    documents: [],
+    verifiable: true,
+  };
+
+  beforeEach(async () => {
+    await app.close();
+    app = await createTestApp({ signer: signerLib(silentLogger) });
+    ({ procedureId, token } = await app.procedureWithToken());
+    await app.rpc('browser.open', { url: SIGNATURE.origin }, token);
+  });
+
+  /** The site's AutoFirma request, as the browser hands it to the app. */
+  function siteAsksAutoFirma() {
+    const afirma = app.browserOptions.at(-1)?.afirma;
+    if (!afirma) throw new Error('the browser has no AutoFirma shim');
+    return afirma.context(procedureId).approveSignature(SIGNATURE);
+  }
+
+  const click = () => app.rpc('browser.click', { ref: 'e1' }, token);
+
+  it("refuses AutoFirma outside a block and fails the agent's action, then asks inside one", async () => {
+    expect(await siteAsksAutoFirma()).toBeNull();
+    expect((await click()).body.error?.message).toMatch(/AutoFirma\) outside page.withCertificate/);
+    // The refusal fails one action only.
+    expect((await click()).body.error).toBeUndefined();
+
+    const block = await app.rpc('browser.useCertificate', {}, token);
+    expect(block.body.result).toMatchObject({ enabled: false, origins: [] });
+    void siteAsksAutoFirma();
+    // No certificate is saved: the app says so on the card instead of asking.
+    await app.waitFor(() => app.services.procedures.transcript(procedureId).length > 0);
+    expect((await click()).body.error).toBeUndefined();
+  });
+
+  it('fails the action when a site asks for a client certificate outside a block', async () => {
+    const asked = { ...app.browser.observation(), certificateRequested: ['ipce.seg-social.es'] };
+    app.browser.observation = () => asked;
+    const error = (await click()).body.error;
+    expect(error?.code).toBe('browser_error');
+    expect(error?.message).toContain('origins: ["https://ipce.seg-social.es"]');
+  });
+
+  it('opens one block at a time, and turns its certificate off when it ends', async () => {
+    const cert = await app.vault.addCertificate({
+      fileName: 'fnmt.p12',
+      p12: readFileSync(
+        new URL(
+          '../../../../../packages/browser/test/fixtures/certs/rsa-legacy.p12',
+          import.meta.url,
+        ),
+      ),
+      passphrase: 'test',
+    });
+    await app.vault.setCredentialPolicy(cert.id, 'auto');
+    const block = await app.rpc('browser.useCertificate', { credentialId: cert.id }, token);
+    expect(app.browser.certificates).not.toEqual([]);
+    expect((await app.rpc('browser.useCertificate', {}, token)).body.error?.code).toBe('conflict');
+
+    const ended = await app.rpc(
+      'browser.endCertificate',
+      { blockId: block.body.result.blockId },
+      token,
+    );
+    expect(ended.body.result).toEqual({ ended: true });
+    expect(app.browser.certificates).toEqual([]);
+    expect((await app.rpc('browser.useCertificate', {}, token)).body.error).toBeUndefined();
   });
 });
 

@@ -134,7 +134,7 @@ The full declaration is generated for agents (`declarations.ts`, 17 k characters
   `getByRole`, `getByLabel`, `getByText`, `locator`, `filter`, `nth`…; actions: `click`, `fill`,
   `selectOption`, `check`, `setInputFiles(names)`; reads: `textContent`, `count`,
   `allTextContents`, `evaluate`…; `snapshot()`, the one way to look at a page; the app-typed secrets
-  `fillFromVault`, `loginClave`, `fillFromUser`; `useCertificate`), `api.user.confirm`,
+  `fillFromVault`, `loginClave`, `fillFromUser`; `withCertificate`), `api.user.confirm`,
   `requestAction`, `requestCredential`, `phoneCall`.
 - No `api.agents`: only the coordinator starts agents, with its own tools.
 

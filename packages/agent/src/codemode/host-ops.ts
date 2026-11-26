@@ -53,6 +53,8 @@ export function createImageStore(max = 20): ImageStore {
 
 export interface HostOpsDeps {
   bridge: BridgeTransport;
+  /** The run the operations belong to (its end closes the certificate blocks it left open). */
+  runId?: string;
   images: ImageStore;
   /** The run's procedures, the one touched last first (prompts and documents go to it). */
   procedures(): string[];
@@ -297,9 +299,18 @@ export function createHostOps(deps: HostOpsDeps): HostOp {
         return bridge.call(
           'browser.useCertificate',
           {
-            credentialId: str(a.credentialId, 'credentialId', 120),
+            ...(a.credentialId !== undefined
+              ? { credentialId: str(a.credentialId, 'credentialId', 120) }
+              : {}),
             ...(Array.isArray(a.origins) ? { origins: a.origins as string[] } : {}),
+            ...(deps.runId ? { runId: deps.runId } : {}),
           },
+          opts,
+        );
+      case 'endCertificate':
+        return bridge.call(
+          'browser.endCertificate',
+          { blockId: str(a.blockId, 'blockId', 64) },
           opts,
         );
       case 'screenshot': {

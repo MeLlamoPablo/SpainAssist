@@ -89,6 +89,8 @@ export const BrowserObservation = z.object({
   pageErrors: z.array(z.string()).default([]),
   /** Short notes from the app, e.g. "Client certificate requested by www1.agenciatributaria.gob.es". */
   notes: z.array(z.string()).default([]),
+  /** Hosts that asked for a TLS client certificate and got none, since the last observation. */
+  certificateRequested: z.array(z.string()).optional(),
   /** Media id of a low-res screenshot for the UI (not sent to the model). */
   imageId: z.string().optional(),
 });
@@ -309,12 +311,20 @@ export const BridgeParams = {
   }),
   'browser.screenshot': z.object({ fullPage: z.boolean().default(false) }),
   'browser.upload': z.object({ ref: Ref, documents: z.array(DocumentName).min(1).max(10) }),
-  /** Enable TLS client-certificate login for this procedure's browser (may ask the user). */
+  /**
+   * Opens a certificate block (`page.withCertificate`): the site may use the user's certificates
+   * (AutoFirma) until `browser.endCertificate`. With a credential, also enables its TLS
+   * client-certificate login for this procedure's browser (may ask the user).
+   */
   'browser.useCertificate': z.object({
-    credentialId: z.string(),
+    credentialId: z.string().optional(),
     /** Origins added to the built-in list. Required for DNIe; first is its intended login site. */
     origins: z.array(z.string().url()).max(10).optional(),
+    /** The codemode run of the block: its end closes the block if the module could not. */
+    runId: z.string().max(64).optional(),
   }),
+  /** Closes a certificate block once its signatures and handshakes are over. */
+  'browser.endCertificate': z.object({ blockId: z.string().max(64) }),
   'browser.close': z.object({}),
   'browser.reopenHeaded': z.object({}),
 
@@ -540,7 +550,13 @@ export interface BridgeResults {
   'browser.tabs': { tabs: BrowserTab[] };
   'browser.screenshot': { mimeType: 'image/jpeg' | 'image/png'; dataBase64: string };
   'browser.upload': BrowserObservation;
-  'browser.useCertificate': { enabled: boolean; origins: string[]; message?: string };
+  'browser.useCertificate': {
+    blockId: string;
+    enabled: boolean;
+    origins: string[];
+    message?: string;
+  };
+  'browser.endCertificate': { ended: boolean };
   'browser.close': { closed: boolean };
   'browser.reopenHeaded': BrowserObservation;
   'feedback.search': { results: import('./services').FeedbackEntry[] };

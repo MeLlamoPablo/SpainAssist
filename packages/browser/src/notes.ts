@@ -7,9 +7,9 @@ export const CLIENT_CERT_NET_ERROR = /ERR_BAD_SSL_CLIENT_AUTH_CERT|ERR_SSL_CLIEN
 
 export function certificateRequestedNote(host: string): string {
   const call = host
-    ? `call browser_use_certificate with origins ["https://${host}"]`
-    : 'call browser_use_certificate with the origin of the site in origins';
-  return `${host || 'The site'} asked for a client certificate and none was presented. If the user has a digital certificate or a DNI, ${call}, then open the page again.`;
+    ? `do the click that opened it again inside page.withCertificate({ credentialId, origins: ["https://${host}"] }, …)`
+    : 'do the click that opened it again inside page.withCertificate({ credentialId, origins }, …) with the origin of the site';
+  return `${host || 'The site'} asked for a client certificate and none was presented. If the user has a digital certificate or a DNI, ${call}.`;
 }
 
 /**
@@ -24,7 +24,7 @@ export function certificateFailedNote(host: string, code: string, detail: string
     case 'cancelled':
       return `The user did not approve the certificate login to ${site}. Ask whether they want to try again, or to log in another way (e.g. Cl@ve).`;
     case 'unavailable':
-      return `The certificate is not available for ${site} right now${why}. Call browser_use_certificate again if the user still wants to use it.`;
+      return `The certificate is not available for ${site} right now${why}. Use page.withCertificate again if the user still wants to use it.`;
     case 'timeout':
       return `The certificate login to ${site} timed out${why}. With a DNI, the user must keep the card on the phone until the page loads. Then try again.`;
     case 'rejected':
@@ -42,7 +42,7 @@ export function certificateFailedNote(host: string, code: string, detail: string
 
 /** A page that loaded AutoFirma's JavaScript client (the app's shim answers it). */
 export function afirmaPageNote(host: string): string {
-  return `${host || 'This page'} uses AutoFirma. The app replaces it: when a button on this page signs or logs in with a certificate through AutoFirma, the app asks the user to approve and pick their certificate or DNI, and signs. Just click the button and wait; browser_use_certificate is not needed for it (that tool is only for logins where the browser itself asks for a client certificate).`;
+  return `${host || 'This page'} uses AutoFirma. The app replaces it: when a button on this page signs or logs in with a certificate through AutoFirma, the app asks the user to approve and pick their certificate or DNI, and signs. Click the button inside page.withCertificate(async () => …), with no options: the user picks the certificate.`;
 }
 
 /** A page that loaded FNMT's certificate request script (the app's shim answers it). */
@@ -93,12 +93,12 @@ export function detectPageNotes(input: NoteInput): string[] {
     CLAVE_NO_CERT.test(input.text)
   ) {
     notes.push(
-      `This page says no client certificate was presented${host ? ` (${host})` : ''}. If the user has a digital certificate, call browser_use_certificate, then start the login again from the site's own "Acceder" button.`,
+      `This page says no client certificate was presented${host ? ` (${host})` : ''}. If the user has a digital certificate, click the site's own "Acceder" button again inside page.withCertificate({ credentialId, origins }, …).`,
     );
   }
   if (/\/Sede\/errores\/erro4033\.html$/i.test(pathname)) {
     notes.push(
-      'Agencia Tributaria returned its 403 page: certificate access needs a client certificate and none was presented. If the user has one, call browser_use_certificate and retry from the AEAT access selector.',
+      'Agencia Tributaria returned its 403 page: certificate access needs a client certificate and none was presented. If the user has one, retry from the AEAT access selector inside page.withCertificate({ credentialId, origins }, …).',
     );
   }
 

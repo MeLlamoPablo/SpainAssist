@@ -612,6 +612,55 @@ describe('codemode runtime', () => {
     expect(started.calls).toEqual([]);
   });
 
+  describe('page.withCertificate', () => {
+    /** Runs `body` with a page, a host that opens block "b_1", and the ops it called. */
+    async function withPage(body: string) {
+      const started = startRun(
+        `export async function main(api) {
+          const page = await api.browser.currentPage();
+          ${body}
+        }`,
+        {
+          procedures: ['p_1'],
+          call: async (op) => (op === 'browser.useCertificate' ? { blockId: 'b_1' } : 'ok'),
+        },
+      );
+      return { outcome: await started.done, ops: started.calls.map((c) => c.op) };
+    }
+
+    it('opens the block, runs it, then ends it and returns its value', async () => {
+      const { outcome, ops } = await withPage(
+        `return page.withCertificate({ credentialId: 'c_1' }, () => page.getByRole('button').click());`,
+      );
+      expect(outcome.status === 'succeeded' && outcome.value).toBe('"ok"');
+      expect(ops).toEqual(['browser.useCertificate', 'browser.click', 'browser.endCertificate']);
+    });
+
+    it('ends the block when it throws, and rethrows', async () => {
+      const { outcome, ops } = await withPage(
+        `await page.withCertificate(async () => { throw new Error('no button'); });`,
+      );
+      expect(outcome.status === 'failed' && outcome.error).toMatch(/no button/);
+      expect(ops).toEqual(['browser.useCertificate', 'browser.endCertificate']);
+    });
+
+    it('needs the block, and says useCertificate is gone', async () => {
+      const { outcome, ops } = await withPage(
+        `const errors = [];
+        for (const use of [() => page.withCertificate({ credentialId: 'c_1' }), () => page.useCertificate({ credentialId: 'c_1' })]) {
+          try { await use(); } catch (e) { errors.push(e.code + ': ' + e.message); }
+        }
+        return errors;`,
+      );
+      const errors = JSON.parse(outcome.status === 'succeeded' ? (outcome.value ?? '[]') : '[]');
+      expect(errors).toEqual([
+        expect.stringMatching(/^bad_request: page.withCertificate needs the block/),
+        expect.stringMatching(/^bad_request: page.useCertificate\(\) is gone/),
+      ]);
+      expect(ops).toEqual([]);
+    });
+  });
+
   it('gives agents the browser, and no agents of their own', async () => {
     const agent = await startRun(
       `export async function main(api) {

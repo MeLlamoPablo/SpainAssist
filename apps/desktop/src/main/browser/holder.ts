@@ -20,6 +20,7 @@ import {
   type SignaturePlacement,
   type SigningKey,
 } from '@sa/shared';
+import type { RemoteKey } from '@sa/sidecar';
 import { openP12 } from '@sa/signer';
 import type { PromptManager } from '../chat/prompts';
 import type { CompanionService } from '../companion/service';
@@ -32,6 +33,7 @@ import type { MediaStore } from '../media/store';
 import type { OsCertificates } from '../os-certificates/service';
 import type { Biometric, BrowserFactory, SignerLib, VaultPort } from '../ports';
 import type { ProcedureService } from '../procedures/service';
+import { CertificateBlocks } from './certificate-blocks';
 import { DownloadStore, documentFileName } from './downloads';
 import { RoutedBrowser } from './routed';
 
@@ -112,6 +114,10 @@ export class BrowserHolder {
   /** Live views being streamed to the renderer: their stop function, by procedure. */
   private readonly live = new Map<string, () => Promise<void>>();
   readonly downloads: DownloadStore;
+  /** `page.withCertificate`: when the procedures' sites may use the user's certificates. */
+  readonly certificateBlocks = new CertificateBlocks((procedureId, tls) =>
+    this.stopCertificate(procedureId, tls),
+  );
 
   constructor(private readonly deps: BrowserHolderDeps) {
     this.downloads = new DownloadStore(join(deps.downloadsDir, 'kept'));
@@ -129,7 +135,19 @@ export class BrowserHolder {
     if (credential.kind === 'dnie') {
       const identity = await this.deps.companion?.login(procedureId, credential, origin);
       if (!identity) throw new Error('DNI login was cancelled or unavailable.');
-      return identity;
+      // The block's end waits for the handshakes the phone is signing.
+      const key = identity.key as RemoteKey;
+      const busy = <T>(p: () => Promise<T>) => {
+        const done = this.certificateBlocks.busy(procedureId);
+        return p().finally(done);
+      };
+      return {
+        ...identity,
+        key: {
+          prepare: (host, signal) => busy(() => key.prepare(host, signal)),
+          sign: (digest, hash, host, signal) => busy(() => key.sign(digest, hash, host, signal)),
+        },
+      };
     }
     if (credential.external) {
       if (!this.deps.osCertificates) throw new Error('External certificates are unavailable.');
@@ -292,7 +310,7 @@ export class BrowserHolder {
               handler: signer.handler,
               context: (procedureId: string) => ({
                 approveSignature: (summary: AfirmaSignatureSummary) =>
-                  this.approveSignature(procedureId, summary),
+                  this.approveInBlock(procedureId, summary),
                 ...(deps.fetch ? { fetch: deps.fetch } : {}),
               }),
             },
@@ -348,6 +366,55 @@ export class BrowserHolder {
       t(deps.lang(), 'downloadSaved', { name: meta.name }),
     );
     return meta;
+  }
+
+  /**
+   * A site's AutoFirma request: refused outside a certificate block (the agent's action fails),
+   * and the block's end waits for it, until the phone's key is released.
+   */
+  private async approveInBlock(
+    procedureId: string,
+    summary: AfirmaSignatureSummary,
+  ): Promise<SigningKey | null> {
+    if (!this.certificateBlocks.isOpen(procedureId)) {
+      this.deps.logger.info('certificate request outside a block refused', {
+        procedureId,
+        host: hostOf(summary.origin),
+      });
+      this.certificateBlocks.refuse(procedureId);
+      return null;
+    }
+    const done = this.certificateBlocks.busy(procedureId);
+    try {
+      const key = await this.approveSignature(procedureId, summary);
+      if (key?.kind !== 'external') {
+        done();
+        return key;
+      }
+      return {
+        ...key,
+        release: (ok, refusal) => {
+          done();
+          key.release(ok, refusal);
+        },
+      };
+    } catch (err) {
+      done();
+      throw err;
+    }
+  }
+
+  /** A certificate block ended: the browser stops presenting its certificate. */
+  private async stopCertificate(procedureId: string, tls: boolean): Promise<void> {
+    this.deps.companion?.endLoginOf(procedureId);
+    if (!tls || !this.service) return;
+    // biome-ignore lint/correctness/useHookAtTopLevel: turns the certificate off, not a React hook.
+    await this.service.useClientCertificate(procedureId, null).catch((err) =>
+      this.deps.logger.warn('could not turn the certificate off', {
+        procedureId,
+        error: errorMessage(err),
+      }),
+    );
   }
 
   /**

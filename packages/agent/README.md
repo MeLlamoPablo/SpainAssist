@@ -131,7 +131,7 @@ await client.stop();                       // stdin close → SIGTERM → SIGKIL
 - **Abort.** The bridge connection of a pending `prompt.*` / `browser.*` request is closed: mark
   the PromptItem cancelled.
 - **Bridge timeouts (host side).** None for `prompt.*`, `browser.loginClave`,
-  `browser.fillFromUser`, `browser.useCertificate` and `run.events` (they may wait for the
+  `browser.fillFromUser`, `browser.useCertificate`, `browser.endCertificate` and `run.events` (they may wait for the
   user); 3 min for
   other `browser.*` calls (so a click must not block on a signature approval); 60 s for
   research/feedback; 30 s otherwise. Requests use plain `node:http` (no undici 300 s limits).

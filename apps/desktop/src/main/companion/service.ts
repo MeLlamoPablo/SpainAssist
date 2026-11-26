@@ -202,6 +202,8 @@ function toCheck(binding: SignatureBinding | undefined): CompanionCheck | undefi
 export class CompanionService {
   private pairing?: DesktopPairing;
   private endLogin?: () => void;
+  /** The procedure whose DNI login approval `endLogin` ends. */
+  private loginProcedure?: string;
   /** Why the last pairing ended on its own, until the user pairs again or unpairs. */
   private ended?: CompanionEndReason;
   /** The pairing has been `connecting` for `COMPANION_STALLED_MS` (no relay). */
@@ -305,6 +307,11 @@ export class CompanionService {
     this.skippedUpdate = this.phoneApp?.version;
     this.deps.logger.info('phone app update skipped', { version: this.skippedUpdate });
     go();
+  }
+
+  /** Ends the procedure's DNI login approval, if it holds one: its certificate block ended. */
+  endLoginOf(procedureId: string): void {
+    if (this.loginProcedure === procedureId) this.endLogin?.();
   }
 
   shutdown(): void {
@@ -645,6 +652,7 @@ export class CompanionService {
       active = key;
       currentOrigin = site;
       this.endLogin = end;
+      this.loginProcedure = procedureId;
       idle();
     };
     try {

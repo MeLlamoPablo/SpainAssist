@@ -1019,7 +1019,7 @@ it('enables DNI browser login after origin policy, desktop consent and phone app
   expect(await typeUnlock(a, procedureId)).toMatchObject({ purpose: 'login', stage: 'unlock' });
   await a.waitFor(() => a.services.companion!.status().state === 'waiting');
   const status = await a.invoke('companion.status');
-  phone(relay, status.link as string, (m, send) => {
+  const { received } = phone(relay, status.link as string, (m, send) => {
     if (m.type === 'sign.request') {
       expect(m.purpose).toBe('login');
       expect(m.origin).toBe(summary.origin);
@@ -1042,6 +1042,13 @@ it('enables DNI browser login after origin policy, desktop consent and phone app
     kind: 'dnie_signature',
     purpose: 'login',
   });
+
+  // The block ends: the card and the phone stop at once, and the browser presents no certificate.
+  const { blockId } = response.body.result;
+  await a.rpc('browser.endCertificate', { blockId }, token);
+  expect(a.pendingPrompt(procedureId)).toBeUndefined();
+  await a.waitFor(() => received.some((m) => m.type === 'sign.done'));
+  expect(a.browser.certificates).toEqual([]);
 });
 
 it('offers the DNI to every agent, before the user saves one', async () => {

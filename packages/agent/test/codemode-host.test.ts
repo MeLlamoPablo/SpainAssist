@@ -75,6 +75,25 @@ describe('encodeTarget', () => {
 });
 
 describe('host operations', () => {
+  it("open a certificate block in the run's name, and end it", async () => {
+    const { bridge, calls } = stubBridge({ 'browser.useCertificate': { blockId: 'b_1' } });
+    const call = createHostOps({
+      bridge,
+      images: createImageStore(),
+      procedures: () => ['p_aaaaaaaaaaaaaaaa'],
+      imagesSupported: true,
+      runId: 'r_1',
+    });
+    const signal = new AbortController().signal;
+    const procedureId = 'p_aaaaaaaaaaaaaaaa';
+    await call('browser.useCertificate', { procedureId }, { signal });
+    await call('browser.endCertificate', { procedureId, blockId: 'b_1' }, { signal });
+    expect(calls.map((c) => [c.method, c.params])).toEqual([
+      ['browser.useCertificate', { runId: 'r_1' }],
+      ['browser.endCertificate', { blockId: 'b_1' }],
+    ]);
+  });
+
   it('read a PDF whole, or one page with its image', async () => {
     const { run, images } = ops({ 'vault.document': PDF_DOCUMENT });
     const whole = (await run('documents.read', { name: 'Tasas' })) as Record<string, unknown>;

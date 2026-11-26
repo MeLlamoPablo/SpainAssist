@@ -56,6 +56,8 @@ const WAITS_FOR_USER: ReadonlySet<string> = new Set([
   'browser.loginClave',
   'browser.fillFromUser',
   'browser.useCertificate',
+  // Waits for the block's signatures, which may wait for the user.
+  'browser.endCertificate',
   'vault.signDocument',
   // Codemode: a poll waits for the user.
   'run.events',

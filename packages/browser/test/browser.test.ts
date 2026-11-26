@@ -524,10 +524,10 @@ describe('notes, state and lifecycle', () => {
   it('adds notes for certificate error pages and CAPTCHAs', async () => {
     let obs = await t.service.open('notes', `${a.origin}/clave-error`);
     expect(obs.notes.join('\n')).toMatch(
-      /no client certificate was presented.*browser_use_certificate/,
+      /no client certificate was presented.*page.withCertificate/,
     );
     obs = await t.service.open('notes', `${a.origin}/Sede/errores/erro4033.html`);
-    expect(obs.notes.join('\n')).toMatch(/Agencia Tributaria.*browser_use_certificate/);
+    expect(obs.notes.join('\n')).toMatch(/Agencia Tributaria.*page.withCertificate/);
     obs = await t.service.open('notes', `${a.origin}/captcha`);
     expect(obs.notes.join('\n')).toContain('CAPTCHA');
     obs = await t.service.open('notes', `${a.origin}/form`);

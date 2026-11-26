@@ -112,6 +112,8 @@ export function createCodemodeHandlers(deps: CodemodeHandlerDeps): CodemodeHandl
     },
     'run.events': (params, ctx) => runs.events(ctx.agentId, params.runId, params.after, ctx.signal),
     'run.end': async (params, ctx) => {
+      // A cancelled or crashed module could not end its certificate blocks.
+      deps.browser.certificateBlocks.closeRun(params.runId);
       await runs.end(ctx.agentId, params.runId, params.outcome, params.deliver);
       return {};
     },

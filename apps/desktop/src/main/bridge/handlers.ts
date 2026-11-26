@@ -33,6 +33,8 @@ import type { BridgeContext, CapabilityHandlers } from './server';
 
 /** Largest saved document `vault.document` sends to an agent (it travels base64 over the bridge). */
 const MAX_READ_DOCUMENT_BYTES = 25 * 1024 * 1024;
+const ONE_CERTIFICATE_BLOCK =
+  'A page.withCertificate block is already open for this page: open one at a time, never nested.';
 
 export interface BridgeHandlerDeps {
   procedures: ProcedureService;
@@ -123,6 +125,11 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
     fn: (b: BrowserPort) => Promise<BrowserObservation>,
   ): Promise<BrowserObservation> {
     const observation = await browserCall(fn);
+    const refusal = deps.browser.certificateBlocks.refusal(
+      procedureId,
+      observation.certificateRequested,
+    );
+    if (refusal) throw new BridgeError('browser_error', refusal);
     const notes = deps.browser.loginNotes(procedureId);
     return notes.length ? { ...observation, notes: [...observation.notes, ...notes] } : observation;
   }
@@ -763,6 +770,16 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       return observe(ctx.procedureId, (b) => b.upload(ctx.procedureId, params.ref, files));
     },
     'browser.useCertificate': async (params, ctx) => {
+      const blocks = deps.browser.certificateBlocks;
+      const openBlock = (tls: boolean) => {
+        const blockId = blocks.open(ctx.procedureId, tls, params.runId);
+        if (!blockId) throw new BridgeError('conflict', ONE_CERTIFICATE_BLOCK);
+        return blockId;
+      };
+      if (blocks.isOpen(ctx.procedureId)) throw new BridgeError('conflict', ONE_CERTIFICATE_BLOCK);
+      // AutoFirma only: the user picks the certificate when the site asks.
+      if (params.credentialId === undefined)
+        return { blockId: openBlock(false), enabled: false, origins: [] };
       if (!deps.browser.certificateLoginsAvailable())
         throw new BridgeError(
           'browser_error',
@@ -797,7 +814,7 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
             'policy_denied',
             block
               ? `The certificate can only be presented to official sites over https, and ${url.host} can't be one (${block})`
-              : `${url.host} is not on the app's list of official sites. The user can allow it, but first triple-check that it really is the official sede of the administration this procedure needs: with your research tools, find at least 3 independent official sources (e.g. the administration's own website, its diputación or the administration directory at administracion.gob.es) that link to this exact host for this procedure. Watch for look-alike addresses. If it checks out, call confirm_action with confirmKind "certificate_site", site "${url.origin}", sources (those URLs) and a message summarising what you checked, then call browser_use_certificate again. If it doesn't check out, don't ask the user to allow it: tell them what you found`,
+              : `${url.host} is not on the app's list of official sites. The user can allow it, but first triple-check that it really is the official sede of the administration this procedure needs: with your research tools, find at least 3 independent official sources (e.g. the administration's own website, its diputación or the administration directory at administracion.gob.es) that link to this exact host for this procedure. Watch for look-alike addresses. If it checks out, call confirm_action with confirmKind "certificate_site", site "${url.origin}", sources (those URLs) and a message summarising what you checked, then call page.withCertificate again. If it doesn't check out, don't ask the user to allow it: tell them what you found`,
           );
         }
         requested.push(url.origin);
@@ -847,12 +864,16 @@ export function createBridgeHandlers(deps: BridgeHandlerDeps): CapabilityHandler
       await vault.markCredentialUsed(credential.id);
       vaultChanged();
       return {
+        blockId: openBlock(true),
         enabled: true,
         origins,
         message:
           'Certificate enabled for these official sites. If a login was in progress, start it again from the site (e.g. its "Acceder" button).',
       };
     },
+    'browser.endCertificate': async (params) => ({
+      ended: await deps.browser.certificateBlocks.close(params.blockId),
+    }),
     'browser.close': async (_params, ctx) => {
       try {
         await deps.browser.close(ctx.procedureId);

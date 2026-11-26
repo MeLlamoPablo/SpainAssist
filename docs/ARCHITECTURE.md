@@ -161,6 +161,12 @@ corrects it in the app's own form (the DNI/NIE prefilled when known). No tool as
 password alone. One-time codes and passwords of other sites are typed once from a native prompt
 and never saved. Client-certificate logins go through the sidecar after consent. Sites outside
 `OFFICIAL_DOMAINS` need independent official sources and the user's explicit approval.
+A site may use the user's certificates or DNI (AutoFirma signatures and logins, TLS
+client-certificate logins) only inside the agent's `page.withCertificate(options, block)`; the
+block holds only the click that starts it. Main refuses a request outside a block, and the agent's
+action fails with the reason. When the block ends, main waits until its signatures and handshakes
+are over (2 s with none), then turns the certificate off and ends the phone's DNI login approval.
+A page that asks again later needs a new block (`browser/certificate-blocks.ts`).
 Mis datos can export a certificate, key and chain included, as a `.p12` under a password the user
 types twice and the app never keeps (Touch ID first when available, then the OS save dialog). The
 file uses 3DES and a SHA-1 MAC, since older macOS, Windows and Java (AutoFirma) reject AES ones

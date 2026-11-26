@@ -209,6 +209,8 @@ interface Session {
   /** Origins whose FNMT certificate request note the agent already got. */
   fnmtOrigins: Set<string>;
   notes: string[];
+  /** Hosts that asked for a client certificate and got none, since the last observation. */
+  certificateRequested: string[];
   /** Downloads / inline PDF captures / certificate checks in progress. */
   pending: Set<Promise<unknown>>;
   /** AutoFirma and FNMT calls in progress (usually waiting for the user's approval). */
@@ -1469,7 +1471,7 @@ export class PlaywrightBrowserService implements BrowserService {
       ended(navigationOutcome(msg));
       if (/Download is starting/i.test(msg)) return; // handled by the download listener
       if (CLIENT_CERT_NET_ERROR.test(msg)) {
-        s.notes.push(certificateRequestedNote(hostOf(url)));
+        this.certificateRequested(s, hostOf(url));
         return;
       }
       if (/net::ERR_ABORTED|frame was detached|navigation .*interrupted/i.test(msg)) return;
@@ -1851,6 +1853,9 @@ export class PlaywrightBrowserService implements BrowserService {
       dialogs: s.dialogs.splice(0).map(mask),
       pageErrors: s.pageErrors.splice(0).map(mask),
       notes: [...new Set(notes.map(mask))],
+      ...(s.certificateRequested.length
+        ? { certificateRequested: s.certificateRequested.splice(0) }
+        : {}),
       imageId,
     };
   }
@@ -2044,7 +2049,7 @@ export class PlaywrightBrowserService implements BrowserService {
       // sees the request: it would open its own certificate picker).
       try {
         if (response.request().isNavigationRequest() && response.frame() === page.mainFrame())
-          s.notes.push(certificateRequestedNote(hostOf(response.url())));
+          this.certificateRequested(s, hostOf(response.url()));
       } catch {
         // The frame is gone.
       }
@@ -2122,7 +2127,12 @@ export class PlaywrightBrowserService implements BrowserService {
     } catch {
       return;
     }
-    if (navigation) s.notes.push(certificateRequestedNote(hostOf(request.url())));
+    if (navigation) this.certificateRequested(s, hostOf(request.url()));
+  }
+
+  private certificateRequested(s: Session, host: string): void {
+    s.notes.push(certificateRequestedNote(host));
+    if (!s.certificateRequested.includes(host)) s.certificateRequested.push(host);
   }
 
   /** Hands a staged file to the app, records it for the next observation, deletes what's left. */
@@ -2467,6 +2477,7 @@ function newSession(id: string): Session {
     afirmaOrigins: new Set(),
     fnmtOrigins: new Set(),
     notes: [],
+    certificateRequested: [],
     pending: new Set(),
     afirmaInFlight: new Set(),
     pdfHashes: new Map(),
